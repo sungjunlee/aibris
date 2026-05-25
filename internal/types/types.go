@@ -32,5 +32,4 @@ type PruneOptions struct {
 	All         bool
 	DryRun      bool
 	Interactive bool
-	Force       bool
 }

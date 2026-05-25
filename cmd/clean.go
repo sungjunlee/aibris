@@ -69,7 +69,8 @@ var cleanCmd = &cobra.Command{
 		}
 
 		if opts.Interactive {
-			interactiveClean(targets)
+			total := interactiveClean(targets)
+			fmt.Printf("\nFreed: %s\n", cleaner.FormatSize(total))
 			return
 		}
 
@@ -82,14 +83,15 @@ var cleanCmd = &cobra.Command{
 }
 
 func init() {
-	cleanCmd.Flags().StringVarP(&cleanAge, "age", "a", "168h", "Max age (e.g. 24h, 168h, 720h)")
+	cleanCmd.Flags().StringVarP(&cleanAge, "age", "a", "168h", "Max age in Go duration format (168h = 7 days, 720h = 30 days)")
 	cleanCmd.Flags().StringVarP(&cleanTools, "tool", "t", "", "Comma-separated tools (codex,claude,cursor)")
 	cleanCmd.Flags().BoolVar(&cleanAll, "all", false, "Target all tools")
 	cleanCmd.Flags().BoolVar(&cleanDryRun, "dry-run", false, "Preview without deleting")
 	cleanCmd.Flags().BoolVarP(&cleanInteractive, "interactive", "i", false, "Confirm each deletion")
 }
 
-func interactiveClean(targets []types.WorktreeInfo) {
+func interactiveClean(targets []types.WorktreeInfo) int64 {
+	var total int64
 	for _, w := range targets {
 		fmt.Printf("Remove %s (%s) [%s]? [y/N]: ", w.ID, w.Tool, cleaner.FormatSize(w.Size))
 		var response string
@@ -99,9 +101,11 @@ func interactiveClean(targets []types.WorktreeInfo) {
 				fmt.Fprintf(os.Stderr, "  error: %v\n", err)
 				continue
 			}
+			total += w.Size
 			fmt.Printf("  removed\n")
 		} else {
 			fmt.Printf("  skipped\n")
 		}
 	}
+	return total
 }
