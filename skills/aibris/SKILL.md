@@ -30,7 +30,9 @@ aibris scan --json
 
 ### Step 2: 분석 및 제시
 
-JSON 결과를 파싱해 **크기 순으로 정렬**하여 사용자에게 보여준다:
+JSON 결과를 파싱해 **크기 순으로 정렬**하여 사용자에게 보여준다.
+- worktree는 `project` 필드로 그룹핑해서 보여준다
+- `by_category`에 없는 카테고리는 출력에서 제외한다
 
 ```markdown
 📦 전체: {total_count}개 항목 | {total_size}
@@ -111,7 +113,7 @@ aibris clean --age 72h --dry-run       # 3일 이상
 aibris clean --age 720h --dry-run      # 30일 이상
 aibris clean --age 0h --dry-run        # 전체
 
-# interactive (항목별 확인)
+# interactive (항목별로 y/N 확인, dry-run 내장)
 aibris clean --interactive
 
 # 실제 실행 (사용자 재승인 후)
