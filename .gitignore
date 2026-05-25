@@ -1,0 +1,7 @@
+/aibris
+/aibris.exe
+/dist/
+*.test
+*.out
+*.prof
+cover.html
