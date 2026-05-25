@@ -14,6 +14,9 @@ import (
 var providers = []adapter.WorktreeProvider{
 	&adapter.CodexAdapter{},
 	&adapter.ClaudeAdapter{},
+	&adapter.NodeModulesAdapter{},
+	&adapter.BuildCacheAdapter{},
+	&adapter.PipCacheAdapter{},
 }
 
 func Scan(ctx context.Context) (*types.ScanResult, error) {
