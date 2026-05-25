@@ -5,13 +5,14 @@ import "time"
 type Tool string
 
 const (
-	ToolCodex    Tool = "codex"
-	ToolClaude   Tool = "claude"
-	ToolCursor       Tool = "cursor"
-	ToolWindsurf     Tool = "windsurf"
-	ToolNodeModules  Tool = "node_modules"
-	ToolBuildCache   Tool = "build-cache"
-	ToolPipCache     Tool = "pip-cache"
+	ToolCodex       Tool = "codex"
+	ToolClaude      Tool = "claude"
+	ToolCursor      Tool = "cursor"
+	ToolWindsurf    Tool = "windsurf"
+	ToolNodeModules Tool = "node_modules"
+	ToolBuildCache  Tool = "build-cache"
+	ToolPipCache    Tool = "pip-cache"
+	ToolAILogs      Tool = "ai-logs"
 )
 
 type Category string
@@ -21,7 +22,19 @@ const (
 	CategoryNodeModules Category = "node_modules"
 	CategoryBuildCache  Category = "build-cache"
 	CategoryOtherCache  Category = "other-cache"
+	CategoryAILogs      Category = "ai-logs"
 )
+
+func (c Category) IsRisky() bool {
+	switch c {
+	case CategoryWorktree, CategoryNodeModules, CategoryBuildCache, CategoryOtherCache:
+		return false
+	case "": // backward compat: pre-Category entries are safe
+		return false
+	default:
+		return true
+	}
+}
 
 type WorktreeInfo struct {
 	Tool     Tool
@@ -57,4 +70,5 @@ type PruneOptions struct {
 	Tools       []Tool
 	DryRun      bool
 	Interactive bool
+	Risky       bool
 }
