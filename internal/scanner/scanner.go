@@ -17,8 +17,13 @@ var providers = []adapter.WorktreeProvider{
 }
 
 func Scan(ctx context.Context) (*types.ScanResult, error) {
-	result := &types.ScanResult{}
+	result := &types.ScanResult{
+		ByCategory: make(map[types.Category]types.CategorySummary),
+		ByTool:     make(map[types.Tool]types.ToolSummary),
+	}
+	catByTool := make(map[types.Tool]types.Category)
 	for _, p := range providers {
+		catByTool[p.Name()] = p.Category()
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -38,6 +43,19 @@ func Scan(ctx context.Context) (*types.ScanResult, error) {
 	result.TotalCount = len(result.Worktrees)
 	for _, w := range result.Worktrees {
 		result.TotalSize += w.Size
+		cat := w.Category
+		if cat == "" {
+			cat = catByTool[w.Tool]
+		}
+		s := result.ByCategory[cat]
+		s.Count++
+		s.Size += w.Size
+		result.ByCategory[cat] = s
+
+		t := result.ByTool[w.Tool]
+		t.Count++
+		t.Size += w.Size
+		result.ByTool[w.Tool] = t
 	}
 
 	sort.Slice(result.Worktrees, func(i, j int) bool {

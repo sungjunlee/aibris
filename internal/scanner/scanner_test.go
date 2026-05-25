@@ -22,6 +22,10 @@ func (m *mockProvider) Name() types.Tool {
 	return m.name
 }
 
+func (m *mockProvider) Category() types.Category {
+	return types.CategoryWorktree
+}
+
 func (m *mockProvider) Scan(_ context.Context) ([]types.WorktreeInfo, error) {
 	return m.worktrees, m.err
 }
