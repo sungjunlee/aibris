@@ -17,6 +17,8 @@ var providers = []adapter.WorktreeProvider{
 	&adapter.NodeModulesAdapter{},
 	&adapter.BuildCacheAdapter{},
 	&adapter.PipCacheAdapter{},
+	&adapter.CursorAdapter{},
+	&adapter.AILogsAdapter{},
 }
 
 func Scan(ctx context.Context) (*types.ScanResult, error) {
