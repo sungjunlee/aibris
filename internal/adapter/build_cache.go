@@ -61,7 +61,7 @@ func (a *BuildCacheAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, err
 			Category: types.CategoryBuildCache,
 			ID:       c.id,
 			Path:     c.path,
-			Size:     estimateDirSize(c.path),
+			Size:     estimateDirSize(ctx, c.path),
 			ModTime:  info.ModTime(),
 		})
 	}

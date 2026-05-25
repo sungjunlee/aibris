@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -82,13 +83,14 @@ func TestIsHiddenDir(t *testing.T) {
 }
 
 func TestEstimateDirSize(t *testing.T) {
+	ctx := context.Background()
 	dir := t.TempDir()
 	f1 := filepath.Join(dir, "a.txt")
 	os.WriteFile(f1, make([]byte, 100), 0644)
 	f2 := filepath.Join(dir, "b.txt")
 	os.WriteFile(f2, make([]byte, 200), 0644)
 
-	got := estimateDirSize(dir)
+	got := estimateDirSize(ctx, dir)
 	want := int64(300)
 	if got != want {
 		t.Errorf("estimateDirSize(%q) = %d; want %d", dir, got, want)
@@ -96,21 +98,23 @@ func TestEstimateDirSize(t *testing.T) {
 }
 
 func TestEstimateDirSize_Empty(t *testing.T) {
+	ctx := context.Background()
 	dir := t.TempDir()
-	got := estimateDirSize(dir)
+	got := estimateDirSize(ctx, dir)
 	if got != 0 {
 		t.Errorf("estimateDirSize() = %d; want 0", got)
 	}
 }
 
 func TestEstimateDirSize_Nested(t *testing.T) {
+	ctx := context.Background()
 	dir := t.TempDir()
 	sub := filepath.Join(dir, "subdir")
 	os.MkdirAll(sub, 0755)
 	os.WriteFile(filepath.Join(sub, "a.txt"), make([]byte, 150), 0644)
 	os.WriteFile(filepath.Join(dir, "b.txt"), make([]byte, 50), 0644)
 
-	got := estimateDirSize(dir)
+	got := estimateDirSize(ctx, dir)
 	want := int64(200)
 	if got != want {
 		t.Errorf("estimateDirSize(nested) = %d; want %d", got, want)
@@ -118,7 +122,8 @@ func TestEstimateDirSize_Nested(t *testing.T) {
 }
 
 func TestEstimateDirSize_NonExistent(t *testing.T) {
-	got := estimateDirSize("/nonexistent-path-xyzzy")
+	ctx := context.Background()
+	got := estimateDirSize(ctx, "/nonexistent-path-xyzzy")
 	if got != 0 {
 		t.Errorf("estimateDirSize(non-existent) = %d; want 0", got)
 	}

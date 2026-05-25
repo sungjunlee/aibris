@@ -18,7 +18,7 @@ func TestContainsTool(t *testing.T) {
 		tool  types.Tool
 		want  bool
 	}{
-		{"empty list", []types.Tool{}, types.ToolCodex, true},
+		{"empty list", []types.Tool{}, types.ToolCodex, false},
 		{"found", []types.Tool{types.ToolCodex, types.ToolClaude}, types.ToolCodex, true},
 		{"not found", []types.Tool{types.ToolClaude}, types.ToolCodex, false},
 		{"multiple", []types.Tool{types.ToolClaude, types.ToolCursor}, types.ToolCursor, true},
@@ -153,8 +153,8 @@ func TestDryRun_Empty(t *testing.T) {
 	output := captureStdout(func() {
 		DryRun(nil)
 	})
-	if !strings.Contains(output, "0 worktrees") {
-		t.Errorf("output missing 0 count; got: %s", output)
+	if !strings.Contains(output, "0 items") {
+		t.Errorf("output missing 0 items; got: %s", output)
 	}
 }
 

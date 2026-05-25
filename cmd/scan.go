@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -17,9 +19,11 @@ var scanJSON bool
 
 var scanCmd = &cobra.Command{
 	Use:   "scan",
-	Short: "Scan for AI tool worktrees",
+	Short: "Scan for AI tool debris (worktrees, caches, node_modules, logs)",
 	Run: func(cmd *cobra.Command, args []string) {
-		ctx := context.Background()
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer cancel()
+
 		result, err := scanner.Scan(ctx)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -32,7 +36,7 @@ var scanCmd = &cobra.Command{
 		}
 
 		if result.TotalCount == 0 {
-			fmt.Println("No AI tool worktrees found.")
+			fmt.Println("No AI tool debris found.")
 			return
 		}
 
@@ -55,7 +59,7 @@ var scanCmd = &cobra.Command{
 					w.ID, project, cleaner.FormatSize(w.Size), ageString(age))
 			}
 		}
-		fmt.Printf("\nTotal: %d worktrees | %s\n", result.TotalCount, cleaner.FormatSize(result.TotalSize))
+		fmt.Printf("\nTotal: %d items | %s\n", result.TotalCount, cleaner.FormatSize(result.TotalSize))
 	},
 }
 

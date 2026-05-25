@@ -53,7 +53,7 @@ func (a *PipCacheAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error
 			Category: types.CategoryOtherCache,
 			ID:       p.id,
 			Path:     p.path,
-			Size:     estimateDirSize(p.path),
+			Size:     estimateDirSize(ctx, p.path),
 			ModTime:  info.ModTime(),
 		})
 	}

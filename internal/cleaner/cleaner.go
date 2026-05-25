@@ -8,6 +8,7 @@ import (
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
+// Filter returns worktrees matching the given PruneOptions.
 func Filter(worktrees []types.WorktreeInfo, opts types.PruneOptions) []types.WorktreeInfo {
 	cutoff := time.Now().Add(-opts.Age)
 	var filtered []types.WorktreeInfo
@@ -22,26 +23,37 @@ func Filter(worktrees []types.WorktreeInfo, opts types.PruneOptions) []types.Wor
 	return filtered
 }
 
+// DryRun prints what would be deleted without actually removing anything.
 func DryRun(worktrees []types.WorktreeInfo) {
 	var total int64
 	for _, w := range worktrees {
-		fmt.Printf("[DRY-RUN] would remove: %s (%s) — %s (%s ago)\n",
-			w.ID, w.Tool, FormatSize(w.Size), time.Since(w.ModTime).Round(time.Hour).String())
+		age := time.Since(w.ModTime).Round(time.Hour)
+		ageDisplay := "today"
+		if age.Hours() >= 24 {
+			ageDisplay = fmt.Sprintf("%dd ago", int(age.Hours()/24))
+		}
+		fmt.Printf("[DRY-RUN] would remove: %s (%s) — %s (%s)\n",
+			w.ID, w.Tool, FormatSize(w.Size), ageDisplay)
 		total += w.Size
 	}
-	fmt.Printf("\n[DRY-RUN] Total: %d worktrees | %s would be freed\n",
+	fmt.Printf("\n[DRY-RUN] Total: %d items | %s would be freed\n",
 		len(worktrees), FormatSize(total))
 }
 
+// Execute removes the given worktrees from disk.
 func Execute(worktrees []types.WorktreeInfo) (int64, error) {
 	var total int64
+	var errs []error
 	for _, w := range worktrees {
 		if err := os.RemoveAll(w.Path); err != nil {
-			fmt.Fprintf(os.Stderr, "error removing %s: %v\n", w.Path, err)
+			errs = append(errs, fmt.Errorf("removing %s: %w", w.Path, err))
 			continue
 		}
 		total += w.Size
 		fmt.Printf("removed: %s (%s) — %s\n", w.ID, w.Tool, FormatSize(w.Size))
+	}
+	if len(errs) > 0 {
+		return total, fmt.Errorf("failed to remove %d item(s): %w", len(errs), errs[0])
 	}
 	return total, nil
 }
@@ -61,9 +73,10 @@ func containsTool(tools []types.Tool, tool types.Tool) bool {
 			return true
 		}
 	}
-	return len(tools) == 0
+	return false
 }
 
+// FormatSize formats a byte count as a human-readable string (e.g. "1.5 GB").
 func FormatSize(bytes int64) string {
 	const unit = 1024
 	if bytes < unit {
@@ -74,5 +87,9 @@ func FormatSize(bytes int64) string {
 		div *= unit
 		exp++
 	}
-	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+	const units = "KMGTPEZY"
+	if exp >= len(units) {
+		return fmt.Sprintf("%.1f ?B", float64(bytes)/float64(div))
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), units[exp])
 }

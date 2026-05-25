@@ -53,7 +53,7 @@ func (a *ClaudeAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) 
 			ID:       filepath.Base(match),
 			Path:     match,
 			Project:  filepath.Base(root),
-			Size:     estimateDirSize(match),
+			Size:     estimateDirSize(ctx, match),
 			ModTime:  info.ModTime(),
 		}
 		results = append(results, w)

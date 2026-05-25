@@ -1,15 +1,19 @@
 package adapter
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 )
 
-func estimateDirSize(path string) int64 {
+func estimateDirSize(ctx context.Context, path string) int64 {
 	var total int64
 	filepath.WalkDir(path, func(_ string, d os.DirEntry, err error) error {
 		if err != nil {
 			return filepath.SkipDir
+		}
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 		info, err := d.Info()
 		if err == nil && !info.IsDir() {

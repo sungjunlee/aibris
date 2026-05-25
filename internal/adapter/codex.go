@@ -59,7 +59,7 @@ func (a *CodexAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) {
 			Category: types.CategoryWorktree,
 			ID:       entry.Name(),
 			Path:     filepath.Join(base, entry.Name()),
-			Size:     estimateDirSize(filepath.Join(base, entry.Name())),
+			Size:     estimateDirSize(ctx, filepath.Join(base, entry.Name())),
 			ModTime:  info.ModTime(),
 		}
 		w.Project = detectProjectName(filepath.Join(base, entry.Name()))

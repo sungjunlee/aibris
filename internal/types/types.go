@@ -2,6 +2,7 @@ package types
 
 import "time"
 
+// Tool identifies the AI tool that created the debris.
 type Tool string
 
 const (
@@ -15,6 +16,7 @@ const (
 	ToolAILogs      Tool = "ai-logs"
 )
 
+// Category classifies the type of debris.
 type Category string
 
 const (
@@ -25,6 +27,8 @@ const (
 	CategoryAILogs      Category = "ai-logs"
 )
 
+// IsRisky reports whether this category requires explicit --risky opt-in.
+// AI logs and unknown categories default to risky (safe-by-default).
 func (c Category) IsRisky() bool {
 	switch c {
 	case CategoryWorktree, CategoryNodeModules, CategoryBuildCache, CategoryOtherCache:
@@ -36,6 +40,7 @@ func (c Category) IsRisky() bool {
 	}
 }
 
+// WorktreeInfo describes a single debris item found during scanning.
 type WorktreeInfo struct {
 	Tool     Tool
 	Category Category
@@ -46,6 +51,7 @@ type WorktreeInfo struct {
 	ModTime  time.Time
 }
 
+// ScanResult aggregates all debris found by all adapters.
 type ScanResult struct {
 	Worktrees  []WorktreeInfo
 	TotalCount int
@@ -54,16 +60,19 @@ type ScanResult struct {
 	ByTool     map[Tool]ToolSummary
 }
 
+// CategorySummary reports aggregate stats for a single category.
 type CategorySummary struct {
 	Count int
 	Size  int64
 }
 
+// ToolSummary reports aggregate stats for a single tool.
 type ToolSummary struct {
 	Count int
 	Size  int64
 }
 
+// PruneOptions configures the filtering and deletion behavior of a clean operation.
 type PruneOptions struct {
 	Age         time.Duration
 	Categories  []Category
@@ -71,4 +80,5 @@ type PruneOptions struct {
 	DryRun      bool
 	Interactive bool
 	Risky       bool
+	Force       bool
 }

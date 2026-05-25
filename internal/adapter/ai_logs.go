@@ -55,7 +55,7 @@ func (a *AILogsAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) 
 			Category: types.CategoryAILogs,
 			ID:       c.id,
 			Path:     c.path,
-			Size:     estimateDirSize(c.path),
+			Size:     estimateDirSize(ctx, c.path),
 			ModTime:  info.ModTime(),
 		})
 	}

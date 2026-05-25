@@ -6,14 +6,24 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var rootCmd = &cobra.Command{
-	Use:   "aibris",
-	Short: "Clean up worktree debris left by AI coding tools",
-	Long: `aibris detects and removes git worktree directories
-created by AI coding tools like Codex CLI, Claude Code, and Cursor.
+const version = "0.2.0"
 
-These tools create worktree copies for session isolation but often
-leave them behind, consuming significant disk space over time.`,
+var rootCmd = &cobra.Command{
+	Version: version,
+	Use:     "aibris",
+	Short:   "Clean up AI coding tool debris (worktrees, caches, node_modules, logs)",
+	Long: `aibris detects and removes disk debris left by AI coding tools
+like Codex CLI, Claude Code, Cursor, and Windsurf.
+
+Scans for:
+  - worktrees (Codex, Claude)
+  - node_modules (from ~/projects)
+  - build caches (Go, Xcode, Gradle, npm, Cargo)
+  - pip/uv caches
+  - AI logs (Codex, Claude, Cursor — requires --risky)
+
+Run "aibris scan" first to see what's taking space,
+then "aibris clean --dry-run" to preview deletions.`,
 }
 
 func Execute() {
