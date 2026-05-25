@@ -15,6 +15,12 @@ func (a *ClaudeAdapter) Name() types.Tool {
 }
 
 func (a *ClaudeAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, err
@@ -27,6 +33,11 @@ func (a *ClaudeAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) 
 		return nil, err
 	}
 	for _, match := range matches {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
 		info, err := os.Stat(match)
 		if err != nil || !info.IsDir() {
 			continue

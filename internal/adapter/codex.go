@@ -15,6 +15,12 @@ func (a *CodexAdapter) Name() types.Tool {
 }
 
 func (a *CodexAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, err
@@ -31,6 +37,11 @@ func (a *CodexAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) {
 
 	var results []types.WorktreeInfo
 	for _, entry := range entries {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
 		if !entry.IsDir() {
 			continue
 		}

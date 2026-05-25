@@ -16,6 +16,11 @@ var providers = []adapter.WorktreeProvider{
 func Scan(ctx context.Context) (*types.ScanResult, error) {
 	result := &types.ScanResult{}
 	for _, p := range providers {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
 		worktrees, err := p.Scan(ctx)
 		if err != nil {
 			continue
