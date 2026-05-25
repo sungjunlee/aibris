@@ -2,6 +2,9 @@ package scanner
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"os"
 	"sort"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
@@ -23,6 +26,10 @@ func Scan(ctx context.Context) (*types.ScanResult, error) {
 		}
 		worktrees, err := p.Scan(ctx)
 		if err != nil {
+			fmt.Fprintf(os.Stderr, "scan:%s:%v\n", p.Name(), err)
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return nil, err
+			}
 			continue
 		}
 		result.Worktrees = append(result.Worktrees, worktrees...)
