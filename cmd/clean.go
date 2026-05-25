@@ -15,8 +15,8 @@ import (
 
 var (
 	cleanAge         string
+	cleanCategory    string
 	cleanTools       string
-	cleanAll         bool
 	cleanDryRun      bool
 	cleanInteractive bool
 )
@@ -38,8 +38,18 @@ var cleanCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		var categories []types.Category
+		if cleanCategory != "" {
+			for _, c := range strings.Split(cleanCategory, ",") {
+				c = strings.TrimSpace(c)
+				if c != "" {
+					categories = append(categories, types.Category(c))
+				}
+			}
+		}
+
 		var tools []types.Tool
-		if cleanTools != "" && !cleanAll {
+		if cleanTools != "" {
 			for _, t := range strings.Split(cleanTools, ",") {
 				t = strings.TrimSpace(t)
 				if t != "" {
@@ -50,8 +60,8 @@ var cleanCmd = &cobra.Command{
 
 		opts := types.PruneOptions{
 			Age:         age,
+			Categories:  categories,
 			Tools:       tools,
-			All:         cleanAll || len(tools) == 0,
 			DryRun:      cleanDryRun,
 			Interactive: cleanInteractive,
 		}
@@ -84,8 +94,8 @@ var cleanCmd = &cobra.Command{
 
 func init() {
 	cleanCmd.Flags().StringVarP(&cleanAge, "age", "a", "168h", "Max age in Go duration format (168h = 7 days, 720h = 30 days)")
+	cleanCmd.Flags().StringVarP(&cleanCategory, "category", "c", "", "Comma-separated categories (worktree,node_modules)")
 	cleanCmd.Flags().StringVarP(&cleanTools, "tool", "t", "", "Comma-separated tools (codex,claude,cursor)")
-	cleanCmd.Flags().BoolVar(&cleanAll, "all", false, "Target all tools")
 	cleanCmd.Flags().BoolVar(&cleanDryRun, "dry-run", false, "Preview without deleting")
 	cleanCmd.Flags().BoolVarP(&cleanInteractive, "interactive", "i", false, "Confirm each deletion")
 }

@@ -57,8 +57,8 @@ func TestScanCmd_WithWorktrees(t *testing.T) {
 
 func resetCleanFlags() {
 	cleanAge = "168h"
+	cleanCategory = ""
 	cleanTools = ""
-	cleanAll = false
 	cleanDryRun = false
 	cleanInteractive = false
 }
@@ -88,7 +88,7 @@ func TestCleanCmd_DryRun(t *testing.T) {
 	os.Chtimes(wtPath, past, past)
 
 	output := captureOutput(func() {
-		rootCmd.SetArgs([]string{"clean", "--dry-run", "--all", "--age=1h"})
+		rootCmd.SetArgs([]string{"clean", "--dry-run", "--age=1h"})
 		rootCmd.Execute()
 	})
 	if !strings.Contains(output, "[DRY-RUN]") {
@@ -106,7 +106,7 @@ func TestCleanCmd_Execute(t *testing.T) {
 	os.Chtimes(wtPath, past, past)
 
 	output := captureOutput(func() {
-		rootCmd.SetArgs([]string{"clean", "--all", "--age=1h"})
+		rootCmd.SetArgs([]string{"clean", "--age=1h"})
 		rootCmd.Execute()
 	})
 	if !strings.Contains(output, "removed:") {
