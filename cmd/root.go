@@ -25,5 +25,5 @@ func Execute() {
 
 func init() {
 	rootCmd.AddCommand(scanCmd)
-	rootCmd.AddCommand(pruneCmd)
+	rootCmd.AddCommand(cleanCmd)
 }

@@ -1,0 +1,107 @@
+package cmd
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/spf13/cobra"
+	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/scanner"
+	"github.com/sungjunlee/aibris/internal/types"
+)
+
+var (
+	cleanAge         string
+	cleanTools       string
+	cleanAll         bool
+	cleanDryRun      bool
+	cleanInteractive bool
+)
+
+var cleanCmd = &cobra.Command{
+	Use:   "clean",
+	Short: "Clean up old AI tool worktrees",
+	Run: func(cmd *cobra.Command, args []string) {
+		age, err := time.ParseDuration(cleanAge)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "invalid age: %s\n", cleanAge)
+			os.Exit(1)
+		}
+
+		ctx := context.Background()
+		result, err := scanner.Scan(ctx)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+
+		var tools []types.Tool
+		if cleanTools != "" && !cleanAll {
+			for _, t := range strings.Split(cleanTools, ",") {
+				t = strings.TrimSpace(t)
+				if t != "" {
+					tools = append(tools, types.Tool(t))
+				}
+			}
+		}
+
+		opts := types.PruneOptions{
+			Age:         age,
+			Tools:       tools,
+			All:         cleanAll || len(tools) == 0,
+			DryRun:      cleanDryRun,
+			Interactive: cleanInteractive,
+		}
+
+		targets := cleaner.Filter(result.Worktrees, opts)
+
+		if len(targets) == 0 {
+			fmt.Println("No worktrees to clean.")
+			return
+		}
+
+		if opts.DryRun {
+			cleaner.DryRun(targets)
+			return
+		}
+
+		if opts.Interactive {
+			interactiveClean(targets)
+			return
+		}
+
+		total, err := cleaner.Execute(targets)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error during cleanup: %v\n", err)
+		}
+		fmt.Printf("\nFreed: %s\n", cleaner.FormatSize(total))
+	},
+}
+
+func init() {
+	cleanCmd.Flags().StringVarP(&cleanAge, "age", "a", "168h", "Max age (e.g. 24h, 168h, 720h)")
+	cleanCmd.Flags().StringVarP(&cleanTools, "tool", "t", "", "Comma-separated tools (codex,claude,cursor)")
+	cleanCmd.Flags().BoolVar(&cleanAll, "all", false, "Target all tools")
+	cleanCmd.Flags().BoolVar(&cleanDryRun, "dry-run", false, "Preview without deleting")
+	cleanCmd.Flags().BoolVarP(&cleanInteractive, "interactive", "i", false, "Confirm each deletion")
+}
+
+func interactiveClean(targets []types.WorktreeInfo) {
+	for _, w := range targets {
+		fmt.Printf("Remove %s (%s) [%s]? [y/N]: ", w.ID, w.Tool, cleaner.FormatSize(w.Size))
+		var response string
+		fmt.Scanln(&response)
+		if response == "y" || response == "Y" {
+			if err := os.RemoveAll(w.Path); err != nil {
+				fmt.Fprintf(os.Stderr, "  error: %v\n", err)
+				continue
+			}
+			fmt.Printf("  removed\n")
+		} else {
+			fmt.Printf("  skipped\n")
+		}
+	}
+}

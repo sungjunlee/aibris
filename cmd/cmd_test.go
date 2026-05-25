@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/sungjunlee/aibris/internal/types"
 )
 
 func captureOutput(fn func()) string {
@@ -57,31 +55,30 @@ func TestScanCmd_WithWorktrees(t *testing.T) {
 	}
 }
 
-func resetPruneFlags() {
-	pruneAge = "168h"
-	pruneTools = ""
-	pruneAll = false
-	pruneDryRun = false
-	pruneForce = false
-	pruneInteractive = false
+func resetCleanFlags() {
+	cleanAge = "168h"
+	cleanTools = ""
+	cleanAll = false
+	cleanDryRun = false
+	cleanInteractive = false
 }
 
-func TestPruneCmd_NoWorktrees(t *testing.T) {
-	resetPruneFlags()
+func TestCleanCmd_NoWorktrees(t *testing.T) {
+	resetCleanFlags()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
 	output := captureOutput(func() {
-		rootCmd.SetArgs([]string{"prune"})
+		rootCmd.SetArgs([]string{"clean"})
 		rootCmd.Execute()
 	})
-	if !strings.Contains(output, "No worktrees to prune") {
-		t.Errorf("output = %q; want 'No worktrees to prune'", output)
+	if !strings.Contains(output, "No worktrees to clean") {
+		t.Errorf("output = %q; want 'No worktrees to clean'", output)
 	}
 }
 
-func TestPruneCmd_DryRun(t *testing.T) {
-	resetPruneFlags()
+func TestCleanCmd_DryRun(t *testing.T) {
+	resetCleanFlags()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	wtPath := filepath.Join(home, ".codex", "worktrees", "hash1")
@@ -91,7 +88,7 @@ func TestPruneCmd_DryRun(t *testing.T) {
 	os.Chtimes(wtPath, past, past)
 
 	output := captureOutput(func() {
-		rootCmd.SetArgs([]string{"prune", "--dry-run", "--all", "--age=1h"})
+		rootCmd.SetArgs([]string{"clean", "--dry-run", "--all", "--age=1h"})
 		rootCmd.Execute()
 	})
 	if !strings.Contains(output, "[DRY-RUN]") {
@@ -99,8 +96,8 @@ func TestPruneCmd_DryRun(t *testing.T) {
 	}
 }
 
-func TestPruneCmd_Force(t *testing.T) {
-	resetPruneFlags()
+func TestCleanCmd_Execute(t *testing.T) {
+	resetCleanFlags()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	wtPath := filepath.Join(home, ".codex", "worktrees", "hash1")
@@ -109,7 +106,7 @@ func TestPruneCmd_Force(t *testing.T) {
 	os.Chtimes(wtPath, past, past)
 
 	output := captureOutput(func() {
-		rootCmd.SetArgs([]string{"prune", "--force", "--all", "--age=1h"})
+		rootCmd.SetArgs([]string{"clean", "--all", "--age=1h"})
 		rootCmd.Execute()
 	})
 	if !strings.Contains(output, "removed:") {
@@ -120,23 +117,6 @@ func TestPruneCmd_Force(t *testing.T) {
 	}
 	if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
 		t.Error("worktree should be removed")
-	}
-}
-
-func TestSumSizes(t *testing.T) {
-	got := sumSizes([]types.WorktreeInfo{
-		{ID: "a", Size: 100},
-		{ID: "b", Size: 200},
-	})
-	if got != 300 {
-		t.Errorf("sumSizes = %d; want 300", got)
-	}
-}
-
-func TestSumSizes_Empty(t *testing.T) {
-	got := sumSizes(nil)
-	if got != 0 {
-		t.Errorf("sumSizes(nil) = %d; want 0", got)
 	}
 }
 
