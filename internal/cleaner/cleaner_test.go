@@ -43,8 +43,8 @@ func TestFilter(t *testing.T) {
 		{ID: "old-claude", Tool: types.ToolClaude, ModTime: old},
 	}
 
-	t.Run("all tools", func(t *testing.T) {
-		opts := types.PruneOptions{Age: 168 * time.Hour, All: true}
+	t.Run("all categories", func(t *testing.T) {
+		opts := types.PruneOptions{Age: 168 * time.Hour}
 		filtered := Filter(worktrees, opts)
 		if len(filtered) != 2 {
 			t.Errorf("got %d; want 2", len(filtered))
@@ -67,7 +67,7 @@ func TestFilter(t *testing.T) {
 		youngWorktrees := []types.WorktreeInfo{
 			{ID: "young", Tool: types.ToolCodex, ModTime: young},
 		}
-		opts := types.PruneOptions{Age: 1 * time.Hour, All: true}
+		opts := types.PruneOptions{Age: 1 * time.Hour}
 		filtered := Filter(youngWorktrees, opts)
 		if len(filtered) != 0 {
 			t.Errorf("got %d; want 0", len(filtered))
@@ -75,14 +75,14 @@ func TestFilter(t *testing.T) {
 	})
 }
 
-func TestFilter_AllFalseNoTools(t *testing.T) {
-	opts := types.PruneOptions{Age: 168 * time.Hour, All: false}
+func TestFilter_NoFilter(t *testing.T) {
+	opts := types.PruneOptions{Age: 168 * time.Hour}
 	worktrees := []types.WorktreeInfo{
 		{ID: "a", Tool: types.ToolCodex, ModTime: time.Now().Add(-200 * time.Hour)},
 	}
 	filtered := Filter(worktrees, opts)
 	if len(filtered) != 1 {
-		t.Errorf("got %d; want 1 (containsTool empty = all)", len(filtered))
+		t.Errorf("got %d; want 1 (empty categories + tools = all)", len(filtered))
 	}
 }
 

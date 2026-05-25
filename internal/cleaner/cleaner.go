@@ -12,10 +12,10 @@ func Filter(worktrees []types.WorktreeInfo, opts types.PruneOptions) []types.Wor
 	cutoff := time.Now().Add(-opts.Age)
 	var filtered []types.WorktreeInfo
 	for _, w := range worktrees {
-		if opts.All || containsTool(opts.Tools, w.Tool) {
-			if w.ModTime.Before(cutoff) {
-				filtered = append(filtered, w)
-			}
+		matchCat := len(opts.Categories) == 0 || containsCategory(opts.Categories, w.Category)
+		matchTool := len(opts.Tools) == 0 || containsTool(opts.Tools, w.Tool)
+		if matchCat && matchTool && w.ModTime.Before(cutoff) {
+			filtered = append(filtered, w)
 		}
 	}
 	return filtered
@@ -43,6 +43,15 @@ func Execute(worktrees []types.WorktreeInfo) (int64, error) {
 		fmt.Printf("removed: %s (%s) — %s\n", w.ID, w.Tool, FormatSize(w.Size))
 	}
 	return total, nil
+}
+
+func containsCategory(categories []types.Category, cat types.Category) bool {
+	for _, c := range categories {
+		if c == cat {
+			return true
+		}
+	}
+	return false
 }
 
 func containsTool(tools []types.Tool, tool types.Tool) bool {
