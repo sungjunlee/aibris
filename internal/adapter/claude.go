@@ -31,10 +31,12 @@ func (a *ClaudeAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) 
 		if err != nil || !info.IsDir() {
 			continue
 		}
+		root := filepath.Dir(filepath.Dir(filepath.Dir(match)))
 		w := types.WorktreeInfo{
 			Tool:    types.ToolClaude,
 			ID:      filepath.Base(match),
 			Path:    match,
+			Project: filepath.Base(root),
 			Size:    estimateDirSize(match),
 			ModTime: info.ModTime(),
 		}
