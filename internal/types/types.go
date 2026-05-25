@@ -12,13 +12,12 @@ const (
 )
 
 type WorktreeInfo struct {
-	Tool       Tool
-	ID         string
-	Project    string
-	Path       string
-	Size       int64
-	ModTime    time.Time
-	LastCommit *time.Time
+	Tool    Tool
+	ID      string
+	Project string
+	Path    string
+	Size    int64
+	ModTime time.Time
 }
 
 type ScanResult struct {
