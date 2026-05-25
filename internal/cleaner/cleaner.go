@@ -14,7 +14,8 @@ func Filter(worktrees []types.WorktreeInfo, opts types.PruneOptions) []types.Wor
 	for _, w := range worktrees {
 		matchCat := len(opts.Categories) == 0 || containsCategory(opts.Categories, w.Category)
 		matchTool := len(opts.Tools) == 0 || containsTool(opts.Tools, w.Tool)
-		if matchCat && matchTool && w.ModTime.Before(cutoff) {
+		riskyOk := opts.Risky || !w.Category.IsRisky()
+		if matchCat && matchTool && riskyOk && w.ModTime.Before(cutoff) {
 			filtered = append(filtered, w)
 		}
 	}

@@ -38,9 +38,9 @@ func TestFilter(t *testing.T) {
 	recent := now.Add(-1 * time.Hour)
 
 	worktrees := []types.WorktreeInfo{
-		{ID: "old-codex", Tool: types.ToolCodex, ModTime: old},
-		{ID: "recent-codex", Tool: types.ToolCodex, ModTime: recent},
-		{ID: "old-claude", Tool: types.ToolClaude, ModTime: old},
+		{ID: "old-codex", Tool: types.ToolCodex, Category: types.CategoryWorktree, ModTime: old},
+		{ID: "recent-codex", Tool: types.ToolCodex, Category: types.CategoryWorktree, ModTime: recent},
+		{ID: "old-claude", Tool: types.ToolClaude, Category: types.CategoryWorktree, ModTime: old},
 	}
 
 	t.Run("all categories", func(t *testing.T) {
@@ -65,7 +65,7 @@ func TestFilter(t *testing.T) {
 	t.Run("no match", func(t *testing.T) {
 		young := now.Add(-30 * time.Minute)
 		youngWorktrees := []types.WorktreeInfo{
-			{ID: "young", Tool: types.ToolCodex, ModTime: young},
+			{ID: "young", Tool: types.ToolCodex, Category: types.CategoryWorktree, ModTime: young},
 		}
 		opts := types.PruneOptions{Age: 1 * time.Hour}
 		filtered := Filter(youngWorktrees, opts)
@@ -73,6 +73,41 @@ func TestFilter(t *testing.T) {
 			t.Errorf("got %d; want 0", len(filtered))
 		}
 	})
+}
+
+func TestFilter_RiskyExcludedByDefault(t *testing.T) {
+	now := time.Now()
+	old := now.Add(-200 * time.Hour)
+	opts := types.PruneOptions{Age: 168 * time.Hour}
+
+	worktrees := []types.WorktreeInfo{
+		{ID: "safe", Category: types.CategoryWorktree, ModTime: old},
+		{ID: "risky", Category: types.CategoryAILogs, ModTime: old},
+	}
+
+	filtered := Filter(worktrees, opts)
+	if len(filtered) != 1 {
+		t.Fatalf("expected 1 (risky excluded), got %d", len(filtered))
+	}
+	if filtered[0].ID != "safe" {
+		t.Errorf("got %s; want safe (risky should be excluded)", filtered[0].ID)
+	}
+}
+
+func TestFilter_RiskyIncludedWithFlag(t *testing.T) {
+	now := time.Now()
+	old := now.Add(-200 * time.Hour)
+	opts := types.PruneOptions{Age: 168 * time.Hour, Risky: true}
+
+	worktrees := []types.WorktreeInfo{
+		{ID: "safe", Category: types.CategoryWorktree, ModTime: old},
+		{ID: "risky", Category: types.CategoryAILogs, ModTime: old},
+	}
+
+	filtered := Filter(worktrees, opts)
+	if len(filtered) != 2 {
+		t.Fatalf("expected 2 (risky included via flag), got %d", len(filtered))
+	}
 }
 
 func TestFilter_NoFilter(t *testing.T) {

@@ -19,6 +19,7 @@ var (
 	cleanTools       string
 	cleanDryRun      bool
 	cleanInteractive bool
+	cleanRisky       bool
 )
 
 var cleanCmd = &cobra.Command{
@@ -64,6 +65,7 @@ var cleanCmd = &cobra.Command{
 			Tools:       tools,
 			DryRun:      cleanDryRun,
 			Interactive: cleanInteractive,
+			Risky:       cleanRisky,
 		}
 
 		targets := cleaner.Filter(result.Worktrees, opts)
@@ -98,6 +100,7 @@ func init() {
 	cleanCmd.Flags().StringVarP(&cleanTools, "tool", "t", "", "Comma-separated tools (codex,claude,cursor)")
 	cleanCmd.Flags().BoolVar(&cleanDryRun, "dry-run", false, "Preview without deleting")
 	cleanCmd.Flags().BoolVarP(&cleanInteractive, "interactive", "i", false, "Confirm each deletion")
+	cleanCmd.Flags().BoolVar(&cleanRisky, "risky", false, "Include risky categories (ai-logs)")
 }
 
 func interactiveClean(targets []types.WorktreeInfo) int64 {
