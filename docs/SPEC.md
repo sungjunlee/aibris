@@ -261,3 +261,9 @@ docs/
 - `goreleaser` / Homebrew formula 수정 (기존 파일 유지)
 - `README.md` 수정
 - `main.go` 수정
+
+## Phase 2: Category System
+
+See [docs/CATEGORY.md](CATEGORY.md) for the full category system design — generalized
+cleanup beyond just worktrees (node_modules, build caches, etc.), JSON output for agent
+integration, and multi-adapter category architecture.
