@@ -72,15 +72,16 @@ skills/
 
 ## 경로 규칙
 
-| Tool | Category | 기본 경로 |
-|------|----------|---------|
-| codex | worktree | `~/.codex/worktrees/<hash>/` |
-| claude | worktree | `~/*/.claude/worktrees/<name>/` |
-| cursor | worktree | (TBD) |
-| windsurf | worktree | (TBD) |
-| node_modules | node_modules | `~/projects/**/node_modules/` |
-| build-cache | build-cache | `~/.cache/go-build/`, `~/Library/Caches/Xcode/` |
-| pip-cache | other-cache | `~/.cache/pip/`, `~/.cache/uv/` |
+| Tool | Category | clean 기본 | 기본 경로 |
+|------|----------|-----------|---------|
+| codex | worktree | ✅ | `~/.codex/worktrees/<hash>/` |
+| claude | worktree | ✅ | `~/*/.claude/worktrees/<name>/` |
+| cursor | ai-logs | 🚫 `--risky` | `~/.cursor/projects/<name>/` |
+| windsurf | ai-logs | 🚫 `--risky` | `~/.codeium/windsurf/` |
+| node_modules | node_modules | ✅ | `~/projects/**/node_modules/` |
+| build-cache | build-cache | ✅ | `~/.cache/go-build/`, `~/.gradle/caches/`, `~/.npm/_cacache/`, `~/.cargo/registry/`, `~/Library/Caches/Xcode/` |
+| pip-cache | other-cache | ✅ | `~/.cache/pip/`, `~/.cache/uv/` |
+| ai-logs | ai-logs | 🚫 `--risky` | `~/.codex/logs_2.sqlite`, `~/.codex/archived_sessions/`, `~/.claude/command-audit.log`, `~/.claude/file-history/` |
 
 ## 빌드
 
