@@ -76,6 +76,114 @@ func TestBuildCacheAdapter_FileNotDir(t *testing.T) {
 	}
 }
 
+func TestBuildCacheAdapter_Gradle(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	gradleDir := filepath.Join(home, ".gradle", "caches")
+	os.MkdirAll(filepath.Join(gradleDir, "8.14", "some-cache"), 0755)
+	os.WriteFile(filepath.Join(gradleDir, "8.14", "some-cache", "artifact.bin"), make([]byte, 200), 0644)
+
+	a := &BuildCacheAdapter{}
+	results, err := a.Scan(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, r := range results {
+		if r.ID == "gradle" {
+			found = true
+			if r.Size <= 0 {
+				t.Errorf("gradle Size = %d; want > 0", r.Size)
+			}
+		}
+	}
+	if !found {
+		t.Error("gradle not found in results")
+	}
+}
+
+func TestBuildCacheAdapter_Npm(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	npmDir := filepath.Join(home, ".npm", "_cacache")
+	os.MkdirAll(filepath.Join(npmDir, "content"), 0755)
+	os.WriteFile(filepath.Join(npmDir, "content", "pkg.tgz"), make([]byte, 100), 0644)
+
+	a := &BuildCacheAdapter{}
+	results, err := a.Scan(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, r := range results {
+		if r.ID == "npm" {
+			found = true
+			if r.Size <= 0 {
+				t.Errorf("npm Size = %d; want > 0", r.Size)
+			}
+		}
+	}
+	if !found {
+		t.Error("npm not found in results")
+	}
+}
+
+func TestBuildCacheAdapter_Cargo(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cargoDir := filepath.Join(home, ".cargo", "registry")
+	os.MkdirAll(filepath.Join(cargoDir, "src"), 0755)
+	os.WriteFile(filepath.Join(cargoDir, "src", "crate.tar.gz"), make([]byte, 150), 0644)
+
+	a := &BuildCacheAdapter{}
+	results, err := a.Scan(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, r := range results {
+		if r.ID == "cargo" {
+			found = true
+			if r.Size <= 0 {
+				t.Errorf("cargo Size = %d; want > 0", r.Size)
+			}
+		}
+	}
+	if !found {
+		t.Error("cargo not found in results")
+	}
+}
+
+func TestBuildCacheAdapter_Multiple(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	os.MkdirAll(filepath.Join(home, ".cache", "go-build", "e1"), 0755)
+	os.WriteFile(filepath.Join(home, ".cache", "go-build", "e1", "a.out"), make([]byte, 10), 0644)
+	os.MkdirAll(filepath.Join(home, ".gradle", "caches", "8.14"), 0755)
+	os.WriteFile(filepath.Join(home, ".gradle", "caches", "8.14", "cache.bin"), make([]byte, 20), 0644)
+	os.MkdirAll(filepath.Join(home, ".npm", "_cacache", "content"), 0755)
+	os.WriteFile(filepath.Join(home, ".npm", "_cacache", "content", "pkg"), make([]byte, 30), 0644)
+
+	a := &BuildCacheAdapter{}
+	results, err := a.Scan(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := map[string]bool{}
+	for _, r := range results {
+		found[r.ID] = true
+	}
+	if !found["go-build"] {
+		t.Error("go-build not found")
+	}
+	if !found["gradle"] {
+		t.Error("gradle not found")
+	}
+	if !found["npm"] {
+		t.Error("npm not found")
+	}
+}
+
 func TestBuildCacheAdapter_ContextCancellation(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

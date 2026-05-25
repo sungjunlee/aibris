@@ -40,6 +40,9 @@ func (a *BuildCacheAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, err
 	}{
 		{id: "go-build", path: filepath.Join(home, ".cache", "go-build")},
 		{id: "xcode", path: filepath.Join(home, "Library", "Caches", "Xcode"), os: "darwin"},
+		{id: "gradle", path: filepath.Join(home, ".gradle", "caches")},
+		{id: "npm", path: filepath.Join(home, ".npm", "_cacache")},
+		{id: "cargo", path: filepath.Join(home, ".cargo", "registry")},
 	}
 
 	for _, c := range candidates {
