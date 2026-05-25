@@ -11,25 +11,47 @@ const (
 	ToolWindsurf Tool = "windsurf"
 )
 
+type Category string
+
+const (
+	CategoryWorktree    Category = "worktree"
+	CategoryNodeModules Category = "node_modules"
+	CategoryBuildCache  Category = "build-cache"
+	CategoryOtherCache  Category = "other-cache"
+)
+
 type WorktreeInfo struct {
-	Tool    Tool
-	ID      string
-	Project string
-	Path    string
-	Size    int64
-	ModTime time.Time
+	Tool     Tool
+	Category Category
+	ID       string
+	Project  string
+	Path     string
+	Size     int64
+	ModTime  time.Time
 }
 
 type ScanResult struct {
 	Worktrees  []WorktreeInfo
-	TotalSize  int64
 	TotalCount int
+	TotalSize  int64
+	ByCategory map[Category]CategorySummary
+	ByTool     map[Tool]ToolSummary
+}
+
+type CategorySummary struct {
+	Count int
+	Size  int64
+}
+
+type ToolSummary struct {
+	Count int
+	Size  int64
 }
 
 type PruneOptions struct {
 	Age         time.Duration
+	Categories  []Category
 	Tools       []Tool
-	All         bool
 	DryRun      bool
 	Interactive bool
 }

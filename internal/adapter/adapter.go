@@ -8,5 +8,6 @@ import (
 
 type WorktreeProvider interface {
 	Name() types.Tool
+	Category() types.Category
 	Scan(ctx context.Context) ([]types.WorktreeInfo, error)
 }
