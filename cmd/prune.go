@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -40,8 +41,11 @@ var pruneCmd = &cobra.Command{
 
 		var tools []types.Tool
 		if pruneTools != "" && !pruneAll {
-			for _, t := range splitAndTrim(pruneTools, ",") {
-				tools = append(tools, types.Tool(t))
+			for _, t := range strings.Split(pruneTools, ",") {
+				t = strings.TrimSpace(t)
+				if t != "" {
+					tools = append(tools, types.Tool(t))
+				}
 			}
 		}
 
@@ -97,41 +101,6 @@ func init() {
 	pruneCmd.Flags().BoolVar(&pruneDryRun, "dry-run", false, "Preview without deleting")
 	pruneCmd.Flags().BoolVarP(&pruneForce, "force", "f", false, "Skip confirmation")
 	pruneCmd.Flags().BoolVarP(&pruneInteractive, "interactive", "i", false, "Confirm each deletion")
-}
-
-func splitAndTrim(s, sep string) []string {
-	var result []string
-	for _, part := range split(s, sep) {
-		t := trimSpace(part)
-		if t != "" {
-			result = append(result, t)
-		}
-	}
-	return result
-}
-
-func split(s, sep string) []string {
-	var result []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if string(s[i]) == sep {
-			result = append(result, s[start:i])
-			start = i + 1
-		}
-	}
-	result = append(result, s[start:])
-	return result
-}
-
-func trimSpace(s string) string {
-	start, end := 0, len(s)
-	for start < end && (s[start] == ' ' || s[start] == '\t') {
-		start++
-	}
-	for end > start && (s[end-1] == ' ' || s[end-1] == '\t') {
-		end--
-	}
-	return s[start:end]
 }
 
 func interactivePrune(targets []types.WorktreeInfo) int64 {
