@@ -14,6 +14,10 @@ func (a *CodexAdapter) Name() types.Tool {
 	return types.ToolCodex
 }
 
+func (a *CodexAdapter) Category() types.Category {
+	return types.CategoryWorktree
+}
+
 func (a *CodexAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) {
 	select {
 	case <-ctx.Done():
@@ -51,11 +55,12 @@ func (a *CodexAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) {
 		}
 
 		w := types.WorktreeInfo{
-			Tool:    types.ToolCodex,
-			ID:      entry.Name(),
-			Path:    filepath.Join(base, entry.Name()),
-			Size:    estimateDirSize(filepath.Join(base, entry.Name())),
-			ModTime: info.ModTime(),
+			Tool:     types.ToolCodex,
+			Category: types.CategoryWorktree,
+			ID:       entry.Name(),
+			Path:     filepath.Join(base, entry.Name()),
+			Size:     estimateDirSize(filepath.Join(base, entry.Name())),
+			ModTime:  info.ModTime(),
 		}
 		w.Project = detectProjectName(filepath.Join(base, entry.Name()))
 		results = append(results, w)

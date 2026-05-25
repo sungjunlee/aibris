@@ -14,6 +14,10 @@ func (a *ClaudeAdapter) Name() types.Tool {
 	return types.ToolClaude
 }
 
+func (a *ClaudeAdapter) Category() types.Category {
+	return types.CategoryWorktree
+}
+
 func (a *ClaudeAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) {
 	select {
 	case <-ctx.Done():
@@ -44,12 +48,13 @@ func (a *ClaudeAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) 
 		}
 		root := filepath.Dir(filepath.Dir(filepath.Dir(match)))
 		w := types.WorktreeInfo{
-			Tool:    types.ToolClaude,
-			ID:      filepath.Base(match),
-			Path:    match,
-			Project: filepath.Base(root),
-			Size:    estimateDirSize(match),
-			ModTime: info.ModTime(),
+			Tool:     types.ToolClaude,
+			Category: types.CategoryWorktree,
+			ID:       filepath.Base(match),
+			Path:     match,
+			Project:  filepath.Base(root),
+			Size:     estimateDirSize(match),
+			ModTime:  info.ModTime(),
 		}
 		results = append(results, w)
 	}
