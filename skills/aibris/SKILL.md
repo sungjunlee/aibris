@@ -25,59 +25,61 @@ brew install sungjunlee/tap/aibris
 aibris scan --json
 ```
 
+**실패 처리**: 명령어가 실패하면 (tool 미설치, permission 에러 등) 사용자에게 구체적 에러를 보여주고 설치 안내 후 중단한다.
+**빈 결과 처리**: `total_count`가 0이면 "정리할 항목이 없습니다" 알리고 `/clear` 안내 후 중단한다.
+
 ### Step 2: 분석 및 제시
 
-JSON 결과를 파싱해 다음과 같이 사용자에게 보여준다:
+JSON 결과를 파싱해 **크기 순으로 정렬**하여 사용자에게 보여준다:
 
 ```markdown
-📦 전체: 23개 항목 | 6.0 GB
+📦 전체: {total_count}개 항목 | {total_size}
 
-[워크트리] 18개 | 5.9 GB
-  • beopjalal: 3개 (2.2 GB) — 최신 today, 가장 오래된 것 2d ago
-  • dev-relay: 4개 (13 MB) — 모두 1d ago
-  • tamgu_note: 1개 (3.2 GB) — 2d ago
-  ...
+[워크트리] {count}개 | {size}
+  • {project}: {count}개 ({size}) — 최신 {relative_time}, 가장 오래된 것 {relative_time}
 
-[node_modules] 2개 | 15 MB
-  • proj-a/node_modules — 10 MB
-  • proj-b/node_modules — 5 MB
+[node_modules] {count}개 | {size}
+  • {path} — {size}
 
-[build-cache] 1개 | 500 MB
-  • go-build — 500 MB
+[build-cache] {count}개 | {size}
+  • {cache_name} — {size}
 
-[기타 캐시] 2개 | 120 MB
-  • pip — 100 MB
-  • uv — 20 MB
+[기타 캐시] {count}개 | {size}
+  • {cache_name} — {size}
 ```
+
+실제 프로젝트명과 수치를 위 템플릿에 채워서 보여준다.
 
 ### Step 3: 질문
 
-사용자 상황에 맞는 질문을 던진다:
+**가장 큰 항목부터 우선 질문한다.** 카테고리 순서보다 전체 크기 기준으로 정렬한다:
 
-- **worktree**: "beopjalal 워크트리가 3개나 됩니다 (2.2 GB). 가장 최근 게 오늘 작업한 건데, 나머지 2개는 2일 전 거예요. 지워도 될까요?"
-- **node_modules**: "proj-a의 node_modules가 10MB인데, 이 프로젝트 아직 사용 중인가요?"
-- **build-cache**: "go-build 캐시가 500MB 쌓여있는데, go clean -cache로 정리해도 될까요? (단, 다음 빌드 시 다시 다운로드)"
-- **pip-cache**: "pip 캐시 100MB, uv 캐시 20MB — 지우시겠어요?"
+- **worktree**: "{project} 워크트리가 {count}개 ({size}) 있습니다. 가장 최근 게 {relative_time} 작업한 건데, 가장 오래된 건 {relative_time} 전이에요. 지워도 될까요?"
+- **node_modules**: "{path}의 node_modules가 {size}인데, 이 프로젝트 아직 사용 중인가요?"
+- **build-cache**: "{cache_name} 캐시가 {size} 쌓였는데, 지우시겠어요? (단, 다음 빌드 시 다시 다운로드)"
+- **pip-cache**: "{cache_name} 캐시 {size} — 지우시겠어요?"
+
+**모두 거절 시**: "모두 유지합니다. `/clear`로 마무리할게요." 라고 안내하고 `/clear` 권장 후 중단.
 
 ### Step 4: 실행
 
-답변을 바탕으로 적절한 CLI 명령어를 조합한다:
+**규칙: 절대 --dry-run 없이 실제 삭제를 실행하지 않는다.**
+
+사용자가 특정 항목 삭제를 승인하면 먼저 `--dry-run`으로 대상 목록을 보여준다:
 
 ```bash
-# worktree 중 codex의 3일 이상 된 것만 미리보기
+# 1. 미리보기
 aibris clean --category worktree --tool codex --age 72h --dry-run
+```
 
-# node_modules 전체 미리보기
-aibris clean --category node_modules --dry-run
+사용자가 미리보기를 확인하고 실제 삭제를 재승인하면 `--dry-run`을 제거한다:
 
-# 특정 category만 캐시 정리
-aibris clean --category build-cache,other-cache --dry-run
-
-# 확인 후 실제 실행 (--dry-run 제거)
+```bash
+# 2. 사용자 재승인 후 실제 실행
 aibris clean --category worktree --tool codex --age 72h
 ```
 
-> **중요**: 실제 삭제 전에는 항상 `--dry-run`으로 미리보기를 먼저 실행한다.
+> **중요**: `--dry-run` → 사용자 확인 → 실제 실행, 이 순서를 반드시 지킨다.
 
 ## CLI 옵션 레퍼런스
 
@@ -91,7 +93,7 @@ aibris scan --json    # JSON 출력 (스킬이 파싱할 때 사용)
 ### clean
 
 ```bash
-# 미리보기
+# 미리보기 (항상 먼저 실행)
 aibris clean --dry-run
 
 # category 필터 (여러 개: 쉼표)
@@ -112,10 +114,10 @@ aibris clean --age 0h --dry-run        # 전체
 # interactive (항목별 확인)
 aibris clean --interactive
 
-# 실제 실행 (confirm 필요)
+# 실제 실행 (사용자 재승인 후)
 aibris clean --category node_modules
-# 또는 confirm 생략
-aibris clean --force --category node_modules
+# confirm 생략 (주의: 사용자 동의 없이 삭제)
+# aibris clean --force --category node_modules
 ```
 
 ### categories
