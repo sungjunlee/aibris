@@ -1,6 +1,21 @@
 # AGENTS.md
 
-`aibris` (AI + debris). AI 코딩 도구들의 작업 잔해(worktree)를 탐지+정리하는 Go CLI.
+`aibris` (AI + debris). AI 코딩 도구들의 작업 잔해(worktree, node_modules, build cache)를
+탐지+정리하는 Go CLI.
+
+## AI-guided 정리 워크플로우 (사용자 요청 시)
+
+사용자가 "디스크 정리", "오래된 워크트리 삭제" 등을 요청하면
+`skills/aibris/SKILL.md`의 워크플로우에 따라 진행한다:
+
+```
+1. aibris scan --json  → 전체 현황 파악
+2. 항목별 분석 제시     (프로젝트/크기/경과시간)
+3. 질문으로 의도 구체화  (이거 지워도 되나요?)
+4. aibris clean --flag  → 적절한 옵션으로 실행
+```
+
+CLI 자체는 dumb executor. Q&A와 판단은 AI 스킬이负责.
 
 ## 동작 원리
 
@@ -45,27 +60,32 @@
 ## 구조
 
 ```
-cmd/         → cobra commands (root, scan, prune)
+cmd/         → cobra commands (root, scan, clean)
 internal/
   adapter/   → WorktreeProvider 인터페이스 + codex, claude 등 구현
   scanner/   → Scan(): 전체 adapter 순회하며 수집
   cleaner/   → Filter(): 조건에 따라 필터, DryRun(), Execute() 삭제
   types/     → WorktreeInfo, ScanResult, PruneOptions
+skills/
+  aibris/    → AI-assisted 정리 워크플로우 (SKILL.md)
 ```
 
 ## 경로 규칙
 
-| Tool | 기본 경로 |
-|------|---------|
-| codex | `~/.codex/worktrees/<hash>/` |
-| claude | `~/*/.claude/worktrees/<name>/` |
-| cursor | (TBD) |
-| windsurf | (TBD) |
+| Tool | Category | 기본 경로 |
+|------|----------|---------|
+| codex | worktree | `~/.codex/worktrees/<hash>/` |
+| claude | worktree | `~/*/.claude/worktrees/<name>/` |
+| cursor | worktree | (TBD) |
+| windsurf | worktree | (TBD) |
+| node_modules | node_modules | `~/projects/**/node_modules/` |
+| build-cache | build-cache | `~/.cache/go-build/`, `~/Library/Caches/Xcode/` |
+| pip-cache | other-cache | `~/.cache/pip/`, `~/.cache/uv/` |
 
 ## 빌드
 
 ```bash
 go build -o aibris .
 ./aibris scan
-./aibris prune --dry-run
+./aibris clean --dry-run
 ```
