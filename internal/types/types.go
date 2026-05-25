@@ -7,8 +7,11 @@ type Tool string
 const (
 	ToolCodex    Tool = "codex"
 	ToolClaude   Tool = "claude"
-	ToolCursor   Tool = "cursor"
-	ToolWindsurf Tool = "windsurf"
+	ToolCursor       Tool = "cursor"
+	ToolWindsurf     Tool = "windsurf"
+	ToolNodeModules  Tool = "node_modules"
+	ToolBuildCache   Tool = "build-cache"
+	ToolPipCache     Tool = "pip-cache"
 )
 
 type Category string
