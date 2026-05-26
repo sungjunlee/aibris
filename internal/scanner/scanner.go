@@ -11,7 +11,7 @@ import (
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
-var providers = []adapter.WorktreeProvider{
+var defaultProviders = []adapter.WorktreeProvider{
 	&adapter.CodexAdapter{},
 	&adapter.ClaudeAdapter{},
 	&adapter.NodeModulesAdapter{},
@@ -21,13 +21,27 @@ var providers = []adapter.WorktreeProvider{
 	&adapter.AILogsAdapter{},
 }
 
+var DefaultScanner = New(defaultProviders)
+
+type Scanner struct {
+	Providers []adapter.WorktreeProvider
+}
+
+func New(providers []adapter.WorktreeProvider) *Scanner {
+	return &Scanner{Providers: providers}
+}
+
 func Scan(ctx context.Context) (*types.ScanResult, error) {
+	return DefaultScanner.Scan(ctx)
+}
+
+func (s *Scanner) Scan(ctx context.Context) (*types.ScanResult, error) {
 	result := &types.ScanResult{
 		ByCategory: make(map[types.Category]types.CategorySummary),
 		ByTool:     make(map[types.Tool]types.ToolSummary),
 	}
 	catByTool := make(map[types.Tool]types.Category)
-	for _, p := range providers {
+	for _, p := range s.Providers {
 		catByTool[p.Name()] = p.Category()
 		select {
 		case <-ctx.Done():
