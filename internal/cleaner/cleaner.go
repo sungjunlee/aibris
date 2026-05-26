@@ -1,6 +1,7 @@
 package cleaner
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -92,7 +93,7 @@ func Execute(worktrees []types.DebrisInfo) (int64, error) {
 		fmt.Printf("removed: %s (%s) — %s\n", w.ID, w.Tool, FormatSize(w.Size))
 	}
 	if len(errs) > 0 {
-		return total, fmt.Errorf("failed to remove %d item(s): %w", len(errs), errs[0])
+		return total, fmt.Errorf("failed to remove %d item(s): %w", len(errs), errors.Join(errs...))
 	}
 	return total, nil
 }
