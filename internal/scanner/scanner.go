@@ -19,6 +19,7 @@ var defaultProviders = []adapter.DebrisProvider{
 	&adapter.PipCacheAdapter{},
 	&adapter.CursorAdapter{},
 	&adapter.AILogsAdapter{},
+	&adapter.WindsurfAdapter{},
 }
 
 var DefaultScanner = New(defaultProviders)
