@@ -199,7 +199,7 @@ func TestPrintJSON_Empty(t *testing.T) {
 func TestPrintJSON_WithData(t *testing.T) {
 	now := time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC)
 	r := &types.ScanResult{
-		Worktrees: []types.WorktreeInfo{
+		Worktrees: []types.DebrisInfo{
 			{
 				Tool:     types.ToolCodex,
 				Category: types.CategoryWorktree,

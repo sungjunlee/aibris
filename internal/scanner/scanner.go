@@ -11,7 +11,7 @@ import (
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
-var defaultProviders = []adapter.WorktreeProvider{
+var defaultProviders = []adapter.DebrisProvider{
 	&adapter.CodexAdapter{},
 	&adapter.ClaudeAdapter{},
 	&adapter.NodeModulesAdapter{},
@@ -24,10 +24,10 @@ var defaultProviders = []adapter.WorktreeProvider{
 var DefaultScanner = New(defaultProviders)
 
 type Scanner struct {
-	Providers []adapter.WorktreeProvider
+	Providers []adapter.DebrisProvider
 }
 
-func New(providers []adapter.WorktreeProvider) *Scanner {
+func New(providers []adapter.DebrisProvider) *Scanner {
 	return &Scanner{Providers: providers}
 }
 

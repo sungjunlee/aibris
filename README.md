@@ -51,7 +51,7 @@ aibris clean → filters by age/category/tool → deletes safely
 
 Each AI tool leaves its debris in predictable locations. aibris scans these
 locations, measures disk usage, and cleans up what's no longer needed.
-New tools can be added by implementing the `WorktreeProvider` interface.
+New tools can be added by implementing the `DebrisProvider` interface.
 
 ### Contributing
 

@@ -26,15 +26,15 @@ See [AGENTS.md](AGENTS.md) for the full architecture overview and development ru
 ```
 cmd/         → cobra commands (root, scan, clean)
 internal/
-  adapter/   → WorktreeProvider interface + codex, claude, etc.
+  adapter/   → DebrisProvider interface + codex, claude, etc.
   scanner/   → Scan(): iterates all adapters, collects results
   cleaner/   → Filter(): filters by age/category/tool, DryRun(), Execute()
-  types/     → WorktreeInfo, ScanResult, PruneOptions
+  types/     → DebrisInfo, ScanResult, PruneOptions
 ```
 
 ## Adding a New Adapter
 
-1. Create `internal/adapter/<name>.go` implementing `WorktreeProvider`
+1. Create `internal/adapter/<name>.go` implementing `DebrisProvider`
 2. `Name()` returns kebab-case Tool constant
 3. `Scan()` respects context cancellation
 4. Use `estimateDirSize(ctx, path)` for size calculation

@@ -109,7 +109,7 @@ func TestFilter(t *testing.T) {
 	old := now.Add(-200 * time.Hour)
 	recent := now.Add(-1 * time.Hour)
 
-	worktrees := []types.WorktreeInfo{
+	worktrees := []types.DebrisInfo{
 		{ID: "old-codex", Tool: types.ToolCodex, Category: types.CategoryWorktree, ModTime: old},
 		{ID: "recent-codex", Tool: types.ToolCodex, Category: types.CategoryWorktree, ModTime: recent},
 		{ID: "old-claude", Tool: types.ToolClaude, Category: types.CategoryWorktree, ModTime: old},
@@ -136,7 +136,7 @@ func TestFilter(t *testing.T) {
 
 	t.Run("no match", func(t *testing.T) {
 		young := now.Add(-30 * time.Minute)
-		youngWorktrees := []types.WorktreeInfo{
+		youngWorktrees := []types.DebrisInfo{
 			{ID: "young", Tool: types.ToolCodex, Category: types.CategoryWorktree, ModTime: young},
 		}
 		opts := types.PruneOptions{Age: 1 * time.Hour}
@@ -152,7 +152,7 @@ func TestFilter_RiskyExcludedByDefault(t *testing.T) {
 	old := now.Add(-200 * time.Hour)
 	opts := types.PruneOptions{Age: 168 * time.Hour}
 
-	worktrees := []types.WorktreeInfo{
+	worktrees := []types.DebrisInfo{
 		{ID: "safe", Category: types.CategoryWorktree, ModTime: old},
 		{ID: "risky", Category: types.CategoryAILogs, ModTime: old},
 	}
@@ -171,7 +171,7 @@ func TestFilter_RiskyIncludedWithFlag(t *testing.T) {
 	old := now.Add(-200 * time.Hour)
 	opts := types.PruneOptions{Age: 168 * time.Hour, Risky: true}
 
-	worktrees := []types.WorktreeInfo{
+	worktrees := []types.DebrisInfo{
 		{ID: "safe", Category: types.CategoryWorktree, ModTime: old},
 		{ID: "risky", Category: types.CategoryAILogs, ModTime: old},
 	}
@@ -184,7 +184,7 @@ func TestFilter_RiskyIncludedWithFlag(t *testing.T) {
 
 func TestFilter_NoFilter(t *testing.T) {
 	opts := types.PruneOptions{Age: 168 * time.Hour}
-	worktrees := []types.WorktreeInfo{
+	worktrees := []types.DebrisInfo{
 		{ID: "a", Tool: types.ToolCodex, ModTime: time.Now().Add(-200 * time.Hour)},
 	}
 	filtered := Filter(worktrees, opts)
@@ -205,7 +205,7 @@ func captureStdout(fn func()) string {
 }
 
 func TestDryRun(t *testing.T) {
-	worktrees := []types.WorktreeInfo{
+	worktrees := []types.DebrisInfo{
 		{ID: "test-id", Tool: types.ToolCodex, Size: 1024, ModTime: time.Now().Add(-48 * time.Hour)},
 	}
 
@@ -237,7 +237,7 @@ func TestExecute(t *testing.T) {
 	os.MkdirAll(wtPath, 0755)
 	os.WriteFile(filepath.Join(wtPath, "file.txt"), []byte("data"), 0644)
 
-	worktrees := []types.WorktreeInfo{
+	worktrees := []types.DebrisInfo{
 		{ID: "hash1", Path: wtPath, Size: 4},
 	}
 
@@ -265,7 +265,7 @@ func TestExecute_UnsafePath(t *testing.T) {
 	wtPath := filepath.Join(home, "wt1")
 	os.MkdirAll(wtPath, 0755)
 
-	worktrees := []types.WorktreeInfo{
+	worktrees := []types.DebrisInfo{
 		{ID: "bad", Path: wtPath, Size: 100},
 	}
 
@@ -284,7 +284,7 @@ func TestExecute_UnsafePath(t *testing.T) {
 func TestExecute_NonExistent(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	worktrees := []types.WorktreeInfo{
+	worktrees := []types.DebrisInfo{
 		{ID: "ghost", Path: filepath.Join(home, ".codex", "worktrees", "ghost"), Size: 100},
 	}
 
@@ -307,7 +307,7 @@ func TestExecute_Multiple(t *testing.T) {
 	os.WriteFile(filepath.Join(wt1, "a.txt"), make([]byte, 10), 0644)
 	os.WriteFile(filepath.Join(wt2, "b.txt"), make([]byte, 20), 0644)
 
-	worktrees := []types.WorktreeInfo{
+	worktrees := []types.DebrisInfo{
 		{ID: "wt1", Path: wt1, Size: 10},
 		{ID: "wt2", Path: wt2, Size: 20},
 	}

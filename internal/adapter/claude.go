@@ -18,7 +18,7 @@ func (a *ClaudeAdapter) Category() types.Category {
 	return types.CategoryWorktree
 }
 
-func (a *ClaudeAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) {
+func (a *ClaudeAdapter) Scan(ctx context.Context) ([]types.DebrisInfo, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -30,7 +30,7 @@ func (a *ClaudeAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) 
 		return nil, err
 	}
 
-	var results []types.WorktreeInfo
+	var results []types.DebrisInfo
 	pattern := filepath.Join(home, "*", ".claude", "worktrees", "*")
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
@@ -47,7 +47,7 @@ func (a *ClaudeAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) 
 			continue
 		}
 		root := filepath.Dir(filepath.Dir(filepath.Dir(match)))
-		w := types.WorktreeInfo{
+		w := types.DebrisInfo{
 			Tool:     types.ToolClaude,
 			Category: types.CategoryWorktree,
 			ID:       filepath.Base(match),

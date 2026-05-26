@@ -24,12 +24,12 @@ CLI 자체는 dumb executor. Q&A와 판단은 AI 스킬이负责.
                                    → cleaner.Filter() + Execute()
 ```
 
-각 `adapter`는 `WorktreeProvider` 인터페이스를 구현하며, 새 AI 도구가 나오면 adapter만 추가하면 된다.
+각 `adapter`는 `DebrisProvider` 인터페이스를 구현하며, 새 AI 도구가 나오면 adapter만 추가하면 된다.
 
 ## 개발 규칙
 
 **1. Adapter 추가시 꼭 지킬 것**
-- `internal/adapter/<name>.go` 에 `WorktreeProvider` 구현
+- `internal/adapter/<name>.go` 에 `DebrisProvider` 구현
 - `Name()`은 kebab-case 단일 소문자 (e.g. `codex`, `claude`)
 - `Scan()`은 context 취소를 존중해야 함
 - 발견된 모든 경로의 크기를 `estimateDirSize()`로 계산 (WalkDir 기반)
@@ -62,10 +62,10 @@ CLI 자체는 dumb executor. Q&A와 판단은 AI 스킬이负责.
 ```
 cmd/         → cobra commands (root, scan, clean)
 internal/
-  adapter/   → WorktreeProvider 인터페이스 + codex, claude 등 구현
+  adapter/   → DebrisProvider 인터페이스 + codex, claude 등 구현
   scanner/   → Scan(): 전체 adapter 순회하며 수집
   cleaner/   → Filter(): 조건에 따라 필터, DryRun(), Execute() 삭제
-  types/     → WorktreeInfo, ScanResult, PruneOptions
+  types/     → DebrisInfo, ScanResult, PruneOptions
 skills/
   aibris/    → AI-assisted 정리 워크플로우 (SKILL.md)
 ```

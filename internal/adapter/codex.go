@@ -18,7 +18,7 @@ func (a *CodexAdapter) Category() types.Category {
 	return types.CategoryWorktree
 }
 
-func (a *CodexAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) {
+func (a *CodexAdapter) Scan(ctx context.Context) ([]types.DebrisInfo, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -39,7 +39,7 @@ func (a *CodexAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) {
 		return nil, err
 	}
 
-	var results []types.WorktreeInfo
+	var results []types.DebrisInfo
 	for _, entry := range entries {
 		select {
 		case <-ctx.Done():
@@ -54,7 +54,7 @@ func (a *CodexAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) {
 			continue
 		}
 
-		w := types.WorktreeInfo{
+		w := types.DebrisInfo{
 			Tool:     types.ToolCodex,
 			Category: types.CategoryWorktree,
 			ID:       entry.Name(),

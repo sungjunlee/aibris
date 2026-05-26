@@ -18,7 +18,7 @@ func (a *CursorAdapter) Category() types.Category {
 	return types.CategoryAILogs
 }
 
-func (a *CursorAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) {
+func (a *CursorAdapter) Scan(ctx context.Context) ([]types.DebrisInfo, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -39,7 +39,7 @@ func (a *CursorAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) 
 		return nil, err
 	}
 
-	var results []types.WorktreeInfo
+	var results []types.DebrisInfo
 	for _, entry := range entries {
 		select {
 		case <-ctx.Done():
@@ -53,7 +53,7 @@ func (a *CursorAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) 
 		if err != nil {
 			continue
 		}
-		results = append(results, types.WorktreeInfo{
+		results = append(results, types.DebrisInfo{
 			Tool:     types.ToolCursor,
 			Category: types.CategoryAILogs,
 			ID:       entry.Name(),

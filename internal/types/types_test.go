@@ -69,8 +69,8 @@ func TestCategoryConstants(t *testing.T) {
 	}
 }
 
-func TestWorktreeInfo_ZeroValue(t *testing.T) {
-	w := WorktreeInfo{}
+func TestDebrisInfo_ZeroValue(t *testing.T) {
+	w := DebrisInfo{}
 	if w.Tool != "" {
 		t.Errorf("zero Tool = %q; want empty", w.Tool)
 	}
@@ -120,9 +120,9 @@ func TestPruneOptions_Defaults(t *testing.T) {
 	}
 }
 
-func TestWorktreeInfo_Fields(t *testing.T) {
+func TestDebrisInfo_Fields(t *testing.T) {
 	now := time.Now()
-	w := WorktreeInfo{
+	w := DebrisInfo{
 		Tool:     ToolCodex,
 		Category: CategoryWorktree,
 		ID:       "abc123",

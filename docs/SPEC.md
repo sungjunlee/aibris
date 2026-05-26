@@ -174,7 +174,7 @@ if err != nil {
 **현재 상태:** `LastCommit *time.Time` 필드 정의됨, 어디서도 사용 안 함
 
 **해야 할 일:**
-- `WorktreeInfo`에서 `LastCommit` 필드 제거
+- `DebrisInfo`에서 `LastCommit` 필드 제거
 
 **수락 기준:**
 - 컴파일 에러 없음
@@ -214,7 +214,7 @@ cmd/
   prune.go       → prune subcommand, 플래그 파싱, confirm, execute
 internal/
   adapter/
-    adapter.go   → WorktreeProvider interface
+    adapter.go   → DebrisProvider interface
     codex.go     → CodexAdapter: ~/.codex/worktrees/<hash>/
     claude.go    → ClaudeAdapter: ~/*/.claude/worktrees/<name>/
     util.go      → estimateDirSize, detectProjectName, isHiddenDir
@@ -223,7 +223,7 @@ internal/
   cleaner/
     cleaner.go   → Filter, DryRun, Execute, FormatSize, containsTool
   types/
-    types.go     → Tool, WorktreeInfo, ScanResult, PruneOptions
+    types.go     → Tool, DebrisInfo, ScanResult, PruneOptions
 skills/
   aibris/
     SKILL.md     → npx skills 스킬 정의

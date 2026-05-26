@@ -134,7 +134,7 @@ func init() {
 	cleanCmd.Flags().BoolVarP(&cleanForce, "force", "f", false, "Skip confirmation prompt")
 }
 
-func interactiveClean(targets []types.WorktreeInfo) int64 {
+func interactiveClean(targets []types.DebrisInfo) int64 {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: getting home dir: %v\n", err)

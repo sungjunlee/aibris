@@ -14,7 +14,7 @@ import (
 
 type mockProvider struct {
 	name      types.Tool
-	worktrees []types.WorktreeInfo
+	worktrees []types.DebrisInfo
 	err       error
 }
 
@@ -26,12 +26,12 @@ func (m *mockProvider) Category() types.Category {
 	return types.CategoryWorktree
 }
 
-func (m *mockProvider) Scan(_ context.Context) ([]types.WorktreeInfo, error) {
+func (m *mockProvider) Scan(_ context.Context) ([]types.DebrisInfo, error) {
 	return m.worktrees, m.err
 }
 
 func TestScan_NoResults(t *testing.T) {
-	s := New([]adapter.WorktreeProvider{})
+	s := New([]adapter.DebrisProvider{})
 	result, err := s.Scan(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -45,10 +45,10 @@ func TestScan_NoResults(t *testing.T) {
 }
 
 func TestScan_SingleProvider(t *testing.T) {
-	s := New([]adapter.WorktreeProvider{
+	s := New([]adapter.DebrisProvider{
 		&mockProvider{
 			name: types.ToolCodex,
-			worktrees: []types.WorktreeInfo{
+			worktrees: []types.DebrisInfo{
 				{ID: "a", Tool: types.ToolCodex, Size: 100},
 			},
 		},
@@ -67,17 +67,17 @@ func TestScan_SingleProvider(t *testing.T) {
 }
 
 func TestScan_MultipleProviders(t *testing.T) {
-	s := New([]adapter.WorktreeProvider{
+	s := New([]adapter.DebrisProvider{
 		&mockProvider{
 			name: types.ToolCodex,
-			worktrees: []types.WorktreeInfo{
+			worktrees: []types.DebrisInfo{
 				{ID: "a", Size: 100},
 				{ID: "b", Size: 200},
 			},
 		},
 		&mockProvider{
 			name: types.ToolClaude,
-			worktrees: []types.WorktreeInfo{
+			worktrees: []types.DebrisInfo{
 				{ID: "c", Size: 300},
 			},
 		},
@@ -96,17 +96,17 @@ func TestScan_MultipleProviders(t *testing.T) {
 }
 
 func TestScan_SortedBySizeDesc(t *testing.T) {
-	s := New([]adapter.WorktreeProvider{
+	s := New([]adapter.DebrisProvider{
 		&mockProvider{
 			name: types.ToolCodex,
-			worktrees: []types.WorktreeInfo{
+			worktrees: []types.DebrisInfo{
 				{ID: "small", Size: 10},
 				{ID: "large", Size: 1000},
 			},
 		},
 		&mockProvider{
 			name: types.ToolClaude,
-			worktrees: []types.WorktreeInfo{
+			worktrees: []types.DebrisInfo{
 				{ID: "medium", Size: 100},
 			},
 		},
@@ -134,11 +134,11 @@ func TestScan_ProviderError(t *testing.T) {
 	oldStderr := os.Stderr
 	os.Stderr = w
 
-	s := New([]adapter.WorktreeProvider{
+	s := New([]adapter.DebrisProvider{
 		&mockProvider{name: types.ToolCodex, err: errors.New("boom")},
 		&mockProvider{
 			name: types.ToolClaude,
-			worktrees: []types.WorktreeInfo{{ID: "ok", Size: 50}},
+			worktrees: []types.DebrisInfo{{ID: "ok", Size: 50}},
 		},
 	})
 
@@ -159,10 +159,10 @@ func TestScan_ProviderError(t *testing.T) {
 }
 
 func TestScan_ContextCancelOnEntry(t *testing.T) {
-	s := New([]adapter.WorktreeProvider{
+	s := New([]adapter.DebrisProvider{
 		&mockProvider{
 			name: types.ToolCodex,
-			worktrees: []types.WorktreeInfo{{ID: "a", Size: 100}},
+			worktrees: []types.DebrisInfo{{ID: "a", Size: 100}},
 		},
 	})
 
@@ -176,7 +176,7 @@ func TestScan_ContextCancelOnEntry(t *testing.T) {
 }
 
 func TestScan_ProviderContextCancel(t *testing.T) {
-	s := New([]adapter.WorktreeProvider{
+	s := New([]adapter.DebrisProvider{
 		&mockProvider{
 			name: types.ToolCodex,
 			err:  context.Canceled,

@@ -38,9 +38,9 @@ func IsSafePath(home, target string) bool {
 }
 
 // Filter returns worktrees matching the given PruneOptions.
-func Filter(worktrees []types.WorktreeInfo, opts types.PruneOptions) []types.WorktreeInfo {
+func Filter(worktrees []types.DebrisInfo, opts types.PruneOptions) []types.DebrisInfo {
 	cutoff := time.Now().Add(-opts.Age)
-	var filtered []types.WorktreeInfo
+	var filtered []types.DebrisInfo
 	for _, w := range worktrees {
 		matchCat := len(opts.Categories) == 0 || containsCategory(opts.Categories, w.Category)
 		matchTool := len(opts.Tools) == 0 || containsTool(opts.Tools, w.Tool)
@@ -53,7 +53,7 @@ func Filter(worktrees []types.WorktreeInfo, opts types.PruneOptions) []types.Wor
 }
 
 // DryRun prints what would be deleted without actually removing anything.
-func DryRun(worktrees []types.WorktreeInfo) {
+func DryRun(worktrees []types.DebrisInfo) {
 	var total int64
 	for _, w := range worktrees {
 		age := time.Since(w.ModTime).Round(time.Hour)
@@ -70,7 +70,7 @@ func DryRun(worktrees []types.WorktreeInfo) {
 }
 
 // Execute removes the given worktrees from disk.
-func Execute(worktrees []types.WorktreeInfo) (int64, error) {
+func Execute(worktrees []types.DebrisInfo) (int64, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return 0, fmt.Errorf("getting home dir: %w", err)

@@ -18,7 +18,7 @@ func (a *PipCacheAdapter) Category() types.Category {
 	return types.CategoryOtherCache
 }
 
-func (a *PipCacheAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) {
+func (a *PipCacheAdapter) Scan(ctx context.Context) ([]types.DebrisInfo, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -30,7 +30,7 @@ func (a *PipCacheAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error
 		return nil, err
 	}
 
-	var results []types.WorktreeInfo
+	var results []types.DebrisInfo
 
 	paths := []struct {
 		id   string
@@ -48,7 +48,7 @@ func (a *PipCacheAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error
 		if err != nil || !info.IsDir() {
 			continue
 		}
-		results = append(results, types.WorktreeInfo{
+		results = append(results, types.DebrisInfo{
 			Tool:     types.ToolPipCache,
 			Category: types.CategoryOtherCache,
 			ID:       p.id,

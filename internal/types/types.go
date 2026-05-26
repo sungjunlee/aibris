@@ -40,8 +40,8 @@ func (c Category) IsRisky() bool {
 	}
 }
 
-// WorktreeInfo describes a single debris item found during scanning.
-type WorktreeInfo struct {
+// DebrisInfo describes a single debris item found during scanning.
+type DebrisInfo struct {
 	Tool     Tool
 	Category Category
 	ID       string
@@ -53,7 +53,7 @@ type WorktreeInfo struct {
 
 // ScanResult aggregates all debris found by all adapters.
 type ScanResult struct {
-	Worktrees  []WorktreeInfo
+	Worktrees  []DebrisInfo
 	TotalCount int
 	TotalSize  int64
 	ByCategory map[Category]CategorySummary
