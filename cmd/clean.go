@@ -36,6 +36,10 @@ var cleanCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		if age <= 0 {
+			fmt.Fprintf(os.Stderr, "error: --age must be positive (got %s)\n", cleanAge)
+			os.Exit(1)
+		}
 		if age < time.Hour {
 			fmt.Fprintf(os.Stderr, "Warning: --age %s will match ALL items including active ones.\n", cleanAge)
 		}

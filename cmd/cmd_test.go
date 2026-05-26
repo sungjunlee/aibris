@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -66,6 +67,24 @@ func resetCleanFlags() {
 	cleanInteractive = false
 	cleanRisky = false
 	cleanForce = false
+}
+
+func TestCleanCmd_NegativeAge(t *testing.T) {
+	if os.Getenv("GO_TEST_SUBPROCESS") == "1" {
+		resetCleanFlags()
+		rootCmd.SetArgs([]string{"clean", "--age=-168h"})
+		rootCmd.Execute()
+		return
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=TestCleanCmd_NegativeAge$")
+	cmd.Env = append(os.Environ(), "GO_TEST_SUBPROCESS=1")
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected exit error for negative age, got: %s", out)
+	}
+	if !strings.Contains(string(out), "--age must be positive") {
+		t.Errorf("expected '--age must be positive' in output, got: %s", out)
+	}
 }
 
 func TestCleanCmd_NoWorktrees(t *testing.T) {
