@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const version = "0.2.0"
+var version = "dev"
 
 var rootCmd = &cobra.Command{
 	Version: version,

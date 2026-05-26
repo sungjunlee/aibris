@@ -1,9 +1,11 @@
 .PHONY: build clean test install
 
 BINARY := aibris
+VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+LDFLAGS := -s -w -X github.com/sungjunlee/aibris/cmd.version=$(VERSION)
 
 build:
-	go build -o $(BINARY) .
+	go build -ldflags="$(LDFLAGS)" -o $(BINARY) .
 
 clean:
 	rm -f $(BINARY)
