@@ -2,12 +2,37 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![CI](https://github.com/sungjunlee/aibris/actions/workflows/ci.yml/badge.svg)](https://github.com/sungjunlee/aibris/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/sungjunlee/aibris)](https://goreportcard.com/report/github.com/sungjunlee/aibris)
 
 Scan and clean up disk debris left behind by AI coding tools — worktrees, caches,
 `node_modules`, and log files that silently consume gigabytes over time.
 
 Supports: **Codex CLI**, **Claude Code**, **Cursor**, **Windsurf** (worktrees + logs),
 plus **node_modules**, **Go/Gradle/npm/Cargo build caches**, and **pip/uv caches**.
+
+## Who is this for?
+
+- Developers who use AI coding tools (Codex CLI, Claude Code, Cursor, Windsurf)
+- Teams sharing development machines where worktrees accumulate
+- Anyone who wants to reclaim disk space from node_modules and build caches
+
+## When NOT to use this
+
+- On production servers (aibris is designed for development machines)
+- When you need fine-grained per-file control (use `du`/`ncdu`/`baobab` instead)
+- When you want to keep every AI session artifact indefinitely
+
+## Comparison to other tools
+
+| Tool | Scope | Safety | AI-aware | Dry-run |
+|------|-------|--------|----------|---------|
+| **aibris** | AI debris + caches | Age gates, risky flag, isSafePath | Yes (understands tool layout) | `--dry-run` |
+| **ncdu** | All files | Manual review | No | Interactive |
+| **du** | All files | None | No | No |
+| **bleachbit** | System caches | Whitelist-based | No (generic) | Preview |
+| **brew cleanup** | Homebrew only | Formula-aware | No | `--dry-run` |
+| **docker system prune** | Docker only | Container-aware | No | No |
 
 ### Install
 
@@ -21,7 +46,7 @@ go install github.com/sungjunlee/aibris@latest
 
 ```bash
 aibris scan                    # discover what's taking space
-aibris scan --json             # machine-readable output
+aibris scan --json             # machine-readable output (see docs/JSON_SCHEMA.md)
 
 aibris clean --dry-run         # preview without deleting
 aibris clean                   # requires confirmation (or --force)
@@ -41,6 +66,8 @@ aibris clean --force           # skip confirmation prompt
 - **`--interactive`** confirms each item
 - **`--risky`** must be explicitly set to delete AI logs
 - **Confirmation prompt** on every `clean` (use `--force` to skip)
+- **`isSafePath` validation** rejects deletions outside known-safe directories
+- **Negative age rejection** prevents accidental full-scope deletion
 
 ### How It Works
 
