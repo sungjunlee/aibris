@@ -131,9 +131,19 @@ func init() {
 }
 
 func interactiveClean(targets []types.WorktreeInfo) int64 {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: getting home dir: %v\n", err)
+		return 0
+	}
+
 	var total int64
 	scanner := bufio.NewScanner(os.Stdin)
 	for _, w := range targets {
+		if !cleaner.IsSafePath(home, w.Path) {
+			fmt.Fprintf(os.Stderr, "  error: unsafe path %q rejected\n", w.Path)
+			continue
+		}
 		fmt.Printf("Remove %s (%s) [%s]? [y/N]: ", w.ID, w.Tool, cleaner.FormatSize(w.Size))
 		if !scanner.Scan() {
 			break

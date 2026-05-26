@@ -11,6 +11,78 @@ import (
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
+func TestIsSafePath(t *testing.T) {
+	home := "/home/user"
+
+	tests := []struct {
+		name   string
+		target string
+		want   bool
+	}{
+		{"non-absolute path", "relative/path", false},
+		{"outside home", "/etc/passwd", false},
+		{"system dir", "/usr/local/bin", false},
+		{"codex worktree", home + "/.codex/worktrees/hash", true},
+		{"claude worktree under project", home + "/project/.claude/worktrees/session", true},
+		{"cursor projects", home + "/.cursor/projects/myproj", true},
+		{"go build cache", home + "/.cache/go-build", true},
+		{"npm cache", home + "/.npm/_cacache", true},
+		{"gradle cache", home + "/.gradle/caches", true},
+		{"cargo registry", home + "/.cargo/registry", true},
+		{"pip cache", home + "/.cache/pip", true},
+		{"Xcode cache", home + "/Library/Caches/Xcode", true},
+		{"node_modules under projects", home + "/projects/myapp/node_modules", true},
+		{"codeium windsurf", home + "/.codeium/windsurf", true},
+		{"ai logs", home + "/.codex/logs_2.sqlite", true},
+		{"archived sessions", home + "/.codex/archived_sessions", true},
+		{"claude command log", home + "/.claude/command-audit.log", true},
+		{"claude file history", home + "/.claude/file-history", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsSafePath(home, tt.target); got != tt.want {
+				t.Errorf("IsSafePath(%q, %q) = %v; want %v", home, tt.target, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsSafePath_EmptyHome(t *testing.T) {
+	if IsSafePath("", "/codex/worktrees/hash") {
+		t.Error("IsSafePath with empty home should reject")
+	}
+}
+
+func TestIsSafePath_NonExistentHome(t *testing.T) {
+	if IsSafePath("/nonexistent", "/nonexistent/codex/worktrees/hash") {
+		t.Error("IsSafePath with nonexistent home should reject")
+	}
+}
+
+func TestIsSafePath_RealHome(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("temp dir under home is unsafe", func(t *testing.T) {
+		dir := t.TempDir()
+		// TempDir is under os.TempDir(), which might be under /tmp, not home
+		if IsSafePath(home, dir) {
+			t.Error("temp dir should not be safe path under home")
+		}
+	})
+
+	t.Run("temp dir under projects is safe", func(t *testing.T) {
+		dir := filepath.Join(home, "projects", "test-safe", "node_modules")
+		os.MkdirAll(dir, 0755)
+		defer os.RemoveAll(filepath.Join(home, "projects", "test-safe"))
+		if !IsSafePath(home, dir) {
+			t.Error("node_modules under projects should be safe")
+		}
+	})
+}
+
 func TestContainsTool(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -159,13 +231,14 @@ func TestDryRun_Empty(t *testing.T) {
 }
 
 func TestExecute(t *testing.T) {
-	dir := t.TempDir()
-	wtPath := filepath.Join(dir, "worktree-test")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	wtPath := filepath.Join(home, ".codex", "worktrees", "hash1")
 	os.MkdirAll(wtPath, 0755)
 	os.WriteFile(filepath.Join(wtPath, "file.txt"), []byte("data"), 0644)
 
 	worktrees := []types.WorktreeInfo{
-		{ID: "test", Path: wtPath, Size: 4},
+		{ID: "hash1", Path: wtPath, Size: 4},
 	}
 
 	output := captureStdout(func() {
@@ -186,9 +259,33 @@ func TestExecute(t *testing.T) {
 	}
 }
 
-func TestExecute_NonExistent(t *testing.T) {
+func TestExecute_UnsafePath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	wtPath := filepath.Join(home, "wt1")
+	os.MkdirAll(wtPath, 0755)
+
 	worktrees := []types.WorktreeInfo{
-		{ID: "ghost", Path: "/nonexistent-path-xyzzy/worktree", Size: 100},
+		{ID: "bad", Path: wtPath, Size: 100},
+	}
+
+	total, err := Execute(worktrees)
+	if err == nil {
+		t.Error("expected error for unsafe path, got nil")
+	}
+	if total != 0 {
+		t.Errorf("total = %d; want 0", total)
+	}
+	if err != nil && !strings.Contains(err.Error(), "unsafe path") {
+		t.Errorf("error missing 'unsafe path'; got: %v", err)
+	}
+}
+
+func TestExecute_NonExistent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	worktrees := []types.WorktreeInfo{
+		{ID: "ghost", Path: filepath.Join(home, ".codex", "worktrees", "ghost"), Size: 100},
 	}
 
 	total, err := Execute(worktrees)
@@ -201,9 +298,10 @@ func TestExecute_NonExistent(t *testing.T) {
 }
 
 func TestExecute_Multiple(t *testing.T) {
-	dir := t.TempDir()
-	wt1 := filepath.Join(dir, "wt1")
-	wt2 := filepath.Join(dir, "wt2")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	wt1 := filepath.Join(home, ".codex", "worktrees", "wt1")
+	wt2 := filepath.Join(home, ".claude", "worktrees", "wt2")
 	os.MkdirAll(wt1, 0755)
 	os.MkdirAll(wt2, 0755)
 	os.WriteFile(filepath.Join(wt1, "a.txt"), make([]byte, 10), 0644)
