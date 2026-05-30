@@ -51,26 +51,26 @@ func walkDir(ctx context.Context, path string, total *atomic.Int64, wg *sync.Wai
 			return
 		}
 
-		info, err := entry.Info()
-		if err != nil {
-			continue
-		}
-
-		if !info.IsDir() {
-			total.Add(info.Size())
-			continue
-		}
-
-		// Subdirectory: walk concurrently, bounded by semaphore
-		subPath := filepath.Join(path, entry.Name())
-		wg.Add(1)
-		go func() {
-			defer func() {
-				<-sem
+		// Check IsDir() via d_type (no syscall needed) before calling
+		// entry.Info() which triggers an lstat per entry.
+		if entry.IsDir() {
+			// Subdirectory: walk concurrently, bounded by semaphore
+			subPath := filepath.Join(path, entry.Name())
+			wg.Add(1)
+			go func() {
+				defer func() {
+					<-sem
+				}()
+				sem <- struct{}{}
+				walkDir(ctx, subPath, total, wg, sem)
 			}()
-			sem <- struct{}{}
-			walkDir(ctx, subPath, total, wg, sem)
-		}()
+		} else {
+			info, err := entry.Info()
+			if err != nil {
+				continue
+			}
+			total.Add(info.Size())
+		}
 	}
 }
 
