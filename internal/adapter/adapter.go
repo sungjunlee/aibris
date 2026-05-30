@@ -6,9 +6,9 @@ import (
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
-// WorktreeProvider is implemented by each adapter to discover debris from a specific AI tool.
-type WorktreeProvider interface {
+// DebrisProvider is implemented by each adapter to discover debris from a specific AI tool.
+type DebrisProvider interface {
 	Name() types.Tool
 	Category() types.Category
-	Scan(ctx context.Context) ([]types.WorktreeInfo, error)
+	Scan(ctx context.Context) ([]types.DebrisInfo, error)
 }

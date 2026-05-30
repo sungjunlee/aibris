@@ -14,7 +14,7 @@ import (
 
 type mockProvider struct {
 	name      types.Tool
-	worktrees []types.WorktreeInfo
+	worktrees []types.DebrisInfo
 	err       error
 }
 
@@ -26,16 +26,13 @@ func (m *mockProvider) Category() types.Category {
 	return types.CategoryWorktree
 }
 
-func (m *mockProvider) Scan(_ context.Context) ([]types.WorktreeInfo, error) {
+func (m *mockProvider) Scan(_ context.Context) ([]types.DebrisInfo, error) {
 	return m.worktrees, m.err
 }
 
 func TestScan_NoResults(t *testing.T) {
-	saved := providers
-	t.Cleanup(func() { providers = saved })
-	providers = []adapter.WorktreeProvider{}
-
-	result, err := Scan(context.Background())
+	s := New([]adapter.DebrisProvider{})
+	result, err := s.Scan(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,18 +45,16 @@ func TestScan_NoResults(t *testing.T) {
 }
 
 func TestScan_SingleProvider(t *testing.T) {
-	saved := providers
-	t.Cleanup(func() { providers = saved })
-	providers = []adapter.WorktreeProvider{
+	s := New([]adapter.DebrisProvider{
 		&mockProvider{
 			name: types.ToolCodex,
-			worktrees: []types.WorktreeInfo{
+			worktrees: []types.DebrisInfo{
 				{ID: "a", Tool: types.ToolCodex, Size: 100},
 			},
 		},
-	}
+	})
 
-	result, err := Scan(context.Background())
+	result, err := s.Scan(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,25 +67,23 @@ func TestScan_SingleProvider(t *testing.T) {
 }
 
 func TestScan_MultipleProviders(t *testing.T) {
-	saved := providers
-	t.Cleanup(func() { providers = saved })
-	providers = []adapter.WorktreeProvider{
+	s := New([]adapter.DebrisProvider{
 		&mockProvider{
 			name: types.ToolCodex,
-			worktrees: []types.WorktreeInfo{
+			worktrees: []types.DebrisInfo{
 				{ID: "a", Size: 100},
 				{ID: "b", Size: 200},
 			},
 		},
 		&mockProvider{
 			name: types.ToolClaude,
-			worktrees: []types.WorktreeInfo{
+			worktrees: []types.DebrisInfo{
 				{ID: "c", Size: 300},
 			},
 		},
-	}
+	})
 
-	result, err := Scan(context.Background())
+	result, err := s.Scan(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,25 +96,23 @@ func TestScan_MultipleProviders(t *testing.T) {
 }
 
 func TestScan_SortedBySizeDesc(t *testing.T) {
-	saved := providers
-	t.Cleanup(func() { providers = saved })
-	providers = []adapter.WorktreeProvider{
+	s := New([]adapter.DebrisProvider{
 		&mockProvider{
 			name: types.ToolCodex,
-			worktrees: []types.WorktreeInfo{
+			worktrees: []types.DebrisInfo{
 				{ID: "small", Size: 10},
 				{ID: "large", Size: 1000},
 			},
 		},
 		&mockProvider{
 			name: types.ToolClaude,
-			worktrees: []types.WorktreeInfo{
+			worktrees: []types.DebrisInfo{
 				{ID: "medium", Size: 100},
 			},
 		},
-	}
+	})
 
-	result, err := Scan(context.Background())
+	result, err := s.Scan(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,22 +130,19 @@ func TestScan_SortedBySizeDesc(t *testing.T) {
 }
 
 func TestScan_ProviderError(t *testing.T) {
-	saved := providers
-	t.Cleanup(func() { providers = saved })
-
 	r, w, _ := os.Pipe()
 	oldStderr := os.Stderr
 	os.Stderr = w
 
-	providers = []adapter.WorktreeProvider{
+	s := New([]adapter.DebrisProvider{
 		&mockProvider{name: types.ToolCodex, err: errors.New("boom")},
 		&mockProvider{
 			name: types.ToolClaude,
-			worktrees: []types.WorktreeInfo{{ID: "ok", Size: 50}},
+			worktrees: []types.DebrisInfo{{ID: "ok", Size: 50}},
 		},
-	}
+	})
 
-	result, err := Scan(context.Background())
+	result, err := s.Scan(context.Background())
 	w.Close()
 	stderr, _ := io.ReadAll(r)
 	os.Stderr = oldStderr
@@ -171,38 +159,49 @@ func TestScan_ProviderError(t *testing.T) {
 }
 
 func TestScan_ContextCancelOnEntry(t *testing.T) {
-	saved := providers
-	t.Cleanup(func() { providers = saved })
-
-	providers = []adapter.WorktreeProvider{
+	s := New([]adapter.DebrisProvider{
 		&mockProvider{
 			name: types.ToolCodex,
-			worktrees: []types.WorktreeInfo{{ID: "a", Size: 100}},
+			worktrees: []types.DebrisInfo{{ID: "a", Size: 100}},
 		},
-	}
+	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := Scan(ctx)
+	_, err := s.Scan(ctx)
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("expected Canceled, got %v", err)
 	}
 }
 
 func TestScan_ProviderContextCancel(t *testing.T) {
-	saved := providers
-	t.Cleanup(func() { providers = saved })
-
-	providers = []adapter.WorktreeProvider{
+	s := New([]adapter.DebrisProvider{
 		&mockProvider{
 			name: types.ToolCodex,
 			err:  context.Canceled,
 		},
-	}
+	})
 
-	_, err := Scan(context.Background())
+	_, err := s.Scan(context.Background())
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("expected Canceled, got %v", err)
+	}
+}
+
+func TestScan_Default(t *testing.T) {
+	result, err := Scan(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+}
+
+func TestNew_NilProviders(t *testing.T) {
+	s := New(nil)
+	if s.Providers != nil {
+		t.Errorf("Providers = %v; want nil", s.Providers)
 	}
 }

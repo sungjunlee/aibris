@@ -36,6 +36,10 @@ var cleanCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		if age <= 0 {
+			fmt.Fprintf(os.Stderr, "error: --age must be positive (got %s)\n", cleanAge)
+			os.Exit(1)
+		}
 		if age < time.Hour {
 			fmt.Fprintf(os.Stderr, "Warning: --age %s will match ALL items including active ones.\n", cleanAge)
 		}
@@ -130,10 +134,20 @@ func init() {
 	cleanCmd.Flags().BoolVarP(&cleanForce, "force", "f", false, "Skip confirmation prompt")
 }
 
-func interactiveClean(targets []types.WorktreeInfo) int64 {
+func interactiveClean(targets []types.DebrisInfo) int64 {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: getting home dir: %v\n", err)
+		return 0
+	}
+
 	var total int64
 	scanner := bufio.NewScanner(os.Stdin)
 	for _, w := range targets {
+		if !cleaner.IsSafePath(home, w.Path) {
+			fmt.Fprintf(os.Stderr, "  error: unsafe path %q rejected\n", w.Path)
+			continue
+		}
 		fmt.Printf("Remove %s (%s) [%s]? [y/N]: ", w.ID, w.Tool, cleaner.FormatSize(w.Size))
 		if !scanner.Scan() {
 			break

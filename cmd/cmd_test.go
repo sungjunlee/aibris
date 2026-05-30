@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,6 +12,16 @@ import (
 
 	"github.com/sungjunlee/aibris/internal/types"
 )
+
+// createWorktreeGit creates a minimal git .git file and parent metadata
+// so that the WorktreeAdapter detects the worktree as active.
+func createWorktreeGit(t *testing.T, worktreePath, home, name string) {
+	t.Helper()
+	parentGit := filepath.Join(home, "_gitmain", ".git")
+	os.MkdirAll(filepath.Join(parentGit, "worktrees", name), 0755)
+	content := "gitdir: " + filepath.Join(parentGit, "worktrees", name) + "\n"
+	os.WriteFile(filepath.Join(worktreePath, ".git"), []byte(content), 0644)
+}
 
 func captureOutput(fn func()) string {
 	r, w, _ := os.Pipe()
@@ -42,6 +53,7 @@ func TestScanCmd_WithWorktrees(t *testing.T) {
 	base := filepath.Join(home, ".codex", "worktrees", "hash1", "myproj")
 	os.MkdirAll(base, 0755)
 	os.WriteFile(filepath.Join(base, "main.go"), []byte("package main"), 0644)
+	createWorktreeGit(t, base, home, "hash1")
 
 	output := captureOutput(func() {
 		rootCmd.SetArgs([]string{"scan"})
@@ -68,6 +80,24 @@ func resetCleanFlags() {
 	cleanForce = false
 }
 
+func TestCleanCmd_NegativeAge(t *testing.T) {
+	if os.Getenv("GO_TEST_SUBPROCESS") == "1" {
+		resetCleanFlags()
+		rootCmd.SetArgs([]string{"clean", "--age=-168h"})
+		rootCmd.Execute()
+		return
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=TestCleanCmd_NegativeAge$")
+	cmd.Env = append(os.Environ(), "GO_TEST_SUBPROCESS=1")
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected exit error for negative age, got: %s", out)
+	}
+	if !strings.Contains(string(out), "--age must be positive") {
+		t.Errorf("expected '--age must be positive' in output, got: %s", out)
+	}
+}
+
 func TestCleanCmd_NoWorktrees(t *testing.T) {
 	resetCleanFlags()
 	home := t.TempDir()
@@ -87,8 +117,10 @@ func TestCleanCmd_DryRun(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	wtPath := filepath.Join(home, ".codex", "worktrees", "hash1")
-	os.MkdirAll(filepath.Join(wtPath, "proj"), 0755)
-	os.WriteFile(filepath.Join(wtPath, "proj", "main.go"), []byte("package main"), 0644)
+	projPath := filepath.Join(wtPath, "proj")
+	os.MkdirAll(projPath, 0755)
+	os.WriteFile(filepath.Join(projPath, "main.go"), []byte("package main"), 0644)
+	createWorktreeGit(t, projPath, home, "hash1")
 	past := time.Now().Add(-2 * time.Hour)
 	os.Chtimes(wtPath, past, past)
 
@@ -106,7 +138,9 @@ func TestCleanCmd_Execute(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	wtPath := filepath.Join(home, ".codex", "worktrees", "hash1")
-	os.MkdirAll(filepath.Join(wtPath, "proj"), 0755)
+	projPath := filepath.Join(wtPath, "proj")
+	os.MkdirAll(projPath, 0755)
+	createWorktreeGit(t, projPath, home, "hash1")
 	past := time.Now().Add(-2 * time.Hour)
 	os.Chtimes(wtPath, past, past)
 
@@ -180,7 +214,7 @@ func TestPrintJSON_Empty(t *testing.T) {
 func TestPrintJSON_WithData(t *testing.T) {
 	now := time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC)
 	r := &types.ScanResult{
-		Worktrees: []types.WorktreeInfo{
+		Worktrees: []types.DebrisInfo{
 			{
 				Tool:     types.ToolCodex,
 				Category: types.CategoryWorktree,
@@ -282,6 +316,7 @@ func TestScanCmd_JSON(t *testing.T) {
 	base := filepath.Join(home, ".codex", "worktrees", "hash1", "myproj")
 	os.MkdirAll(base, 0755)
 	os.WriteFile(filepath.Join(base, "main.go"), []byte("package main"), 0644)
+	createWorktreeGit(t, base, home, "hash1")
 
 	output := captureOutput(func() {
 		rootCmd.SetArgs([]string{"scan", "--json"})

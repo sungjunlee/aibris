@@ -18,7 +18,7 @@ func (a *AILogsAdapter) Category() types.Category {
 	return types.CategoryAILogs
 }
 
-func (a *AILogsAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) {
+func (a *AILogsAdapter) Scan(ctx context.Context) ([]types.DebrisInfo, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -30,7 +30,7 @@ func (a *AILogsAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) 
 		return nil, err
 	}
 
-	var results []types.WorktreeInfo
+	var results []types.DebrisInfo
 
 	candidates := []struct {
 		id   string
@@ -50,7 +50,7 @@ func (a *AILogsAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) 
 		if err != nil {
 			continue
 		}
-		results = append(results, types.WorktreeInfo{
+		results = append(results, types.DebrisInfo{
 			Tool:     types.ToolAILogs,
 			Category: types.CategoryAILogs,
 			ID:       c.id,

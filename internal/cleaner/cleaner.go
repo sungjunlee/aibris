@@ -1,17 +1,47 @@
 package cleaner
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
+var safePathPrefixes = []string{
+	".codex", ".claude", ".cursor", ".cache", ".npm", ".gradle", ".cargo",
+	"Library", "projects", ".codeium",
+}
+
+func IsSafePath(home, target string) bool {
+	if !filepath.IsAbs(target) {
+		return false
+	}
+	if !strings.HasPrefix(target, home+string(filepath.Separator)) {
+		return false
+	}
+	rel, err := filepath.Rel(home, target)
+	if err != nil {
+		return false
+	}
+	parts := strings.Split(rel, string(filepath.Separator))
+	for _, part := range parts {
+		for _, p := range safePathPrefixes {
+			if part == p {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // Filter returns worktrees matching the given PruneOptions.
-func Filter(worktrees []types.WorktreeInfo, opts types.PruneOptions) []types.WorktreeInfo {
+func Filter(worktrees []types.DebrisInfo, opts types.PruneOptions) []types.DebrisInfo {
 	cutoff := time.Now().Add(-opts.Age)
-	var filtered []types.WorktreeInfo
+	var filtered []types.DebrisInfo
 	for _, w := range worktrees {
 		matchCat := len(opts.Categories) == 0 || containsCategory(opts.Categories, w.Category)
 		matchTool := len(opts.Tools) == 0 || containsTool(opts.Tools, w.Tool)
@@ -24,7 +54,7 @@ func Filter(worktrees []types.WorktreeInfo, opts types.PruneOptions) []types.Wor
 }
 
 // DryRun prints what would be deleted without actually removing anything.
-func DryRun(worktrees []types.WorktreeInfo) {
+func DryRun(worktrees []types.DebrisInfo) {
 	var total int64
 	for _, w := range worktrees {
 		age := time.Since(w.ModTime).Round(time.Hour)
@@ -41,10 +71,20 @@ func DryRun(worktrees []types.WorktreeInfo) {
 }
 
 // Execute removes the given worktrees from disk.
-func Execute(worktrees []types.WorktreeInfo) (int64, error) {
+func Execute(worktrees []types.DebrisInfo) (int64, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return 0, fmt.Errorf("getting home dir: %w", err)
+	}
+
 	var total int64
 	var errs []error
 	for _, w := range worktrees {
+		if !IsSafePath(home, w.Path) {
+			errs = append(errs, fmt.Errorf("unsafe path %q rejected", w.Path))
+			fmt.Fprintf(os.Stderr, "error: unsafe path %q rejected\n", w.Path)
+			continue
+		}
 		if err := os.RemoveAll(w.Path); err != nil {
 			errs = append(errs, fmt.Errorf("removing %s: %w", w.Path, err))
 			continue
@@ -53,7 +93,7 @@ func Execute(worktrees []types.WorktreeInfo) (int64, error) {
 		fmt.Printf("removed: %s (%s) — %s\n", w.ID, w.Tool, FormatSize(w.Size))
 	}
 	if len(errs) > 0 {
-		return total, fmt.Errorf("failed to remove %d item(s): %w", len(errs), errs[0])
+		return total, fmt.Errorf("failed to remove %d item(s): %w", len(errs), errors.Join(errs...))
 	}
 	return total, nil
 }

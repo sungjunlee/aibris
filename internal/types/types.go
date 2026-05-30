@@ -11,6 +11,7 @@ const (
 	ToolCursor      Tool = "cursor"
 	ToolWindsurf    Tool = "windsurf"
 	ToolNodeModules Tool = "node_modules"
+	ToolUnknown     Tool = "unknown"
 	ToolBuildCache  Tool = "build-cache"
 	ToolPipCache    Tool = "pip-cache"
 	ToolAILogs      Tool = "ai-logs"
@@ -40,8 +41,17 @@ func (c Category) IsRisky() bool {
 	}
 }
 
-// WorktreeInfo describes a single debris item found during scanning.
-type WorktreeInfo struct {
+// WorktreeStatus describes the health of a git worktree.
+type WorktreeStatus string
+
+const (
+	WorktreeOrphaned WorktreeStatus = "orphaned"  // .git file exists but parent repo is gone
+	WorktreeActive   WorktreeStatus = "active"    // .git file exists and parent repo is alive
+	WorktreePlain    WorktreeStatus = "plain-dir" // no .git file (plain directory)
+)
+
+// DebrisInfo describes a single debris item found during scanning.
+type DebrisInfo struct {
 	Tool     Tool
 	Category Category
 	ID       string
@@ -49,11 +59,12 @@ type WorktreeInfo struct {
 	Path     string
 	Size     int64
 	ModTime  time.Time
+	Status   WorktreeStatus // empty for non-worktree debris
 }
 
 // ScanResult aggregates all debris found by all adapters.
 type ScanResult struct {
-	Worktrees  []WorktreeInfo
+	Worktrees  []DebrisInfo
 	TotalCount int
 	TotalSize  int64
 	ByCategory map[Category]CategorySummary

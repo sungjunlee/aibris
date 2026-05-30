@@ -8,17 +8,17 @@ import (
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
-type CodexAdapter struct{}
+type WindsurfAdapter struct{}
 
-func (a *CodexAdapter) Name() types.Tool {
-	return types.ToolCodex
+func (a *WindsurfAdapter) Name() types.Tool {
+	return types.ToolWindsurf
 }
 
-func (a *CodexAdapter) Category() types.Category {
-	return types.CategoryWorktree
+func (a *WindsurfAdapter) Category() types.Category {
+	return types.CategoryAILogs
 }
 
-func (a *CodexAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) {
+func (a *WindsurfAdapter) Scan(ctx context.Context) ([]types.DebrisInfo, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -30,7 +30,7 @@ func (a *CodexAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) {
 		return nil, err
 	}
 
-	base := filepath.Join(home, ".codex", "worktrees")
+	base := filepath.Join(home, ".codeium", "windsurf")
 	entries, err := os.ReadDir(base)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -39,7 +39,7 @@ func (a *CodexAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) {
 		return nil, err
 	}
 
-	var results []types.WorktreeInfo
+	var results []types.DebrisInfo
 	for _, entry := range entries {
 		select {
 		case <-ctx.Done():
@@ -53,17 +53,14 @@ func (a *CodexAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) {
 		if err != nil {
 			continue
 		}
-
-		w := types.WorktreeInfo{
-			Tool:     types.ToolCodex,
-			Category: types.CategoryWorktree,
+		results = append(results, types.DebrisInfo{
+			Tool:     types.ToolWindsurf,
+			Category: types.CategoryAILogs,
 			ID:       entry.Name(),
 			Path:     filepath.Join(base, entry.Name()),
 			Size:     estimateDirSize(ctx, filepath.Join(base, entry.Name())),
 			ModTime:  info.ModTime(),
-		}
-		w.Project = detectProjectName(filepath.Join(base, entry.Name()))
-		results = append(results, w)
+		})
 	}
 	return results, nil
 }

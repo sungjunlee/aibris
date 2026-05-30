@@ -19,7 +19,7 @@ func (a *BuildCacheAdapter) Category() types.Category {
 	return types.CategoryBuildCache
 }
 
-func (a *BuildCacheAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, error) {
+func (a *BuildCacheAdapter) Scan(ctx context.Context) ([]types.DebrisInfo, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -31,7 +31,7 @@ func (a *BuildCacheAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, err
 		return nil, err
 	}
 
-	var results []types.WorktreeInfo
+	var results []types.DebrisInfo
 
 	candidates := []struct {
 		id   string
@@ -56,7 +56,7 @@ func (a *BuildCacheAdapter) Scan(ctx context.Context) ([]types.WorktreeInfo, err
 		if err != nil || !info.IsDir() {
 			continue
 		}
-		results = append(results, types.WorktreeInfo{
+		results = append(results, types.DebrisInfo{
 			Tool:     types.ToolBuildCache,
 			Category: types.CategoryBuildCache,
 			ID:       c.id,

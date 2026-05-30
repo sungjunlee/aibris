@@ -34,17 +34,17 @@ Each adapter declares its category. One adapter = one category.
 
 ```go
 // internal/adapter/adapter.go
-type WorktreeProvider interface {
+type DebrisProvider interface {
     Name() types.Tool
     Category() types.Category   // NEW
-    Scan(ctx context.Context) ([]types.WorktreeInfo, error)
+    Scan(ctx context.Context) ([]types.DebrisInfo, error)
 }
 ```
 
 ## Data Model
 
 ```go
-type WorktreeInfo struct {
+type DebrisInfo struct {
     Tool     Tool
     Category Category   // NEW
     ID       string
@@ -55,7 +55,7 @@ type WorktreeInfo struct {
 }
 
 type ScanResult struct {
-    Worktrees  []WorktreeInfo
+    Worktrees  []DebrisInfo
     TotalCount int
     TotalSize  int64
     ByCategory map[Category]CategorySummary   // NEW
@@ -115,7 +115,7 @@ type PruneOptions struct {
 ## Filter Logic (cleaner.go)
 
 ```go
-func Filter(worktrees []WorktreeInfo, opts PruneOptions) []WorktreeInfo {
+func Filter(worktrees []DebrisInfo, opts PruneOptions) []DebrisInfo {
     cutoff := time.Now().Add(-opts.Age)
     for _, w := range worktrees {
         matchCat := len(opts.Categories) == 0 || containsCategory(opts.Categories, w.Category)
@@ -187,8 +187,8 @@ aibris prune --tool X  →  aibris clean --tool X         (unchanged)
 Phase 2a (foundation) — no new adapters
 ─────────────────────────────────────
 1. Category type + constants
-2. Category() on WorktreeProvider interface
-3. WorktreeInfo.Category field
+2. Category() on DebrisProvider interface
+3. DebrisInfo.Category field
 4. Existing adapters set CategoryWorktree
 5. ScanResult.ByCategory / ByTool
 6. scan --json flag
