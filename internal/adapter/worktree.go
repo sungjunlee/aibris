@@ -104,12 +104,13 @@ func (a *WorktreeAdapter) scanSource(ctx context.Context, home string, src workt
 			continue
 		}
 
-		// Skip if already reported by a more specific pattern
-		absMatch, _ := filepath.Abs(match)
-		if visited[absMatch] {
+		// Skip if already reported by a more specific pattern.
+		// Glob already returns absolute paths (pattern is absolute), so
+		// match is fully qualified.
+		if visited[match] {
 			continue
 		}
-		visited[absMatch] = true
+		visited[match] = true
 
 		items := a.scanEntry(ctx, match, src)
 		results = append(results, items...)
@@ -218,11 +219,9 @@ func detectWorktreeProject(entryPath, worktreePath string, src worktreeSource) s
 		root := filepath.Dir(filepath.Dir(filepath.Dir(entryPath)))
 		return filepath.Base(root)
 	case types.ToolUnknown:
-		// generic: project = subdirectory name (non-hidden)
-		// or fall back to parent directory name if worktreePath == entryPath
-		if worktreePath == entryPath {
-			return filepath.Base(entryPath)
-		}
+		// generic: use the worktree-bearing directory name.
+		// For subdir-style (codex/relay-like) this is the project subdirectory;
+		// for direct-style (claude-like) this is the worktree/session name.
 		return filepath.Base(worktreePath)
 	default:
 		// codex: project = first non-hidden subdirectory name
