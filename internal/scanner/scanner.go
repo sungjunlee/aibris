@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 
@@ -12,20 +13,27 @@ import (
 )
 
 var defaultProviders = []adapter.DebrisProvider{
-	&adapter.CodexAdapter{},
-	&adapter.ClaudeAdapter{},
 	&adapter.NodeModulesAdapter{},
 	&adapter.BuildCacheAdapter{},
 	&adapter.PipCacheAdapter{},
 	&adapter.CursorAdapter{},
 	&adapter.AILogsAdapter{},
 	&adapter.WindsurfAdapter{},
+	adapter.NewWorktreeAdapter(),
 }
 
 var DefaultScanner = New(defaultProviders)
 
 type Scanner struct {
-	Providers []adapter.DebrisProvider
+	Providers   []adapter.DebrisProvider
+	ErrorWriter io.Writer
+}
+
+func (s *Scanner) errw() io.Writer {
+	if s.ErrorWriter != nil {
+		return s.ErrorWriter
+	}
+	return os.Stderr
 }
 
 func New(providers []adapter.DebrisProvider) *Scanner {
@@ -51,7 +59,7 @@ func (s *Scanner) Scan(ctx context.Context) (*types.ScanResult, error) {
 		}
 		worktrees, err := p.Scan(ctx)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "scan:%s:%v\n", p.Name(), err)
+			fmt.Fprintf(s.errw(), "scan:%s:%v\n", p.Name(), err)
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return nil, err
 			}

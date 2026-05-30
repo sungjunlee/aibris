@@ -13,6 +13,16 @@ import (
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
+// createWorktreeGit creates a minimal git .git file and parent metadata
+// so that the WorktreeAdapter detects the worktree as active.
+func createWorktreeGit(t *testing.T, worktreePath, home, name string) {
+	t.Helper()
+	parentGit := filepath.Join(home, "_gitmain", ".git")
+	os.MkdirAll(filepath.Join(parentGit, "worktrees", name), 0755)
+	content := "gitdir: " + filepath.Join(parentGit, "worktrees", name) + "\n"
+	os.WriteFile(filepath.Join(worktreePath, ".git"), []byte(content), 0644)
+}
+
 func captureOutput(fn func()) string {
 	r, w, _ := os.Pipe()
 	old := os.Stdout
@@ -43,6 +53,7 @@ func TestScanCmd_WithWorktrees(t *testing.T) {
 	base := filepath.Join(home, ".codex", "worktrees", "hash1", "myproj")
 	os.MkdirAll(base, 0755)
 	os.WriteFile(filepath.Join(base, "main.go"), []byte("package main"), 0644)
+	createWorktreeGit(t, base, home, "hash1")
 
 	output := captureOutput(func() {
 		rootCmd.SetArgs([]string{"scan"})
@@ -106,8 +117,10 @@ func TestCleanCmd_DryRun(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	wtPath := filepath.Join(home, ".codex", "worktrees", "hash1")
-	os.MkdirAll(filepath.Join(wtPath, "proj"), 0755)
-	os.WriteFile(filepath.Join(wtPath, "proj", "main.go"), []byte("package main"), 0644)
+	projPath := filepath.Join(wtPath, "proj")
+	os.MkdirAll(projPath, 0755)
+	os.WriteFile(filepath.Join(projPath, "main.go"), []byte("package main"), 0644)
+	createWorktreeGit(t, projPath, home, "hash1")
 	past := time.Now().Add(-2 * time.Hour)
 	os.Chtimes(wtPath, past, past)
 
@@ -125,7 +138,9 @@ func TestCleanCmd_Execute(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	wtPath := filepath.Join(home, ".codex", "worktrees", "hash1")
-	os.MkdirAll(filepath.Join(wtPath, "proj"), 0755)
+	projPath := filepath.Join(wtPath, "proj")
+	os.MkdirAll(projPath, 0755)
+	createWorktreeGit(t, projPath, home, "hash1")
 	past := time.Now().Add(-2 * time.Hour)
 	os.Chtimes(wtPath, past, past)
 
@@ -301,6 +316,7 @@ func TestScanCmd_JSON(t *testing.T) {
 	base := filepath.Join(home, ".codex", "worktrees", "hash1", "myproj")
 	os.MkdirAll(base, 0755)
 	os.WriteFile(filepath.Join(base, "main.go"), []byte("package main"), 0644)
+	createWorktreeGit(t, base, home, "hash1")
 
 	output := captureOutput(func() {
 		rootCmd.SetArgs([]string{"scan", "--json"})
