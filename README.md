@@ -5,41 +5,29 @@
 [![CI](https://github.com/sungjunlee/aibris/actions/workflows/ci.yml/badge.svg)](https://github.com/sungjunlee/aibris/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/sungjunlee/aibris)](https://goreportcard.com/report/github.com/sungjunlee/aibris)
 
-Scan and clean up disk debris left behind by AI coding tools — worktrees, caches,
-`node_modules`, and log files that silently consume gigabytes over time.
+Scan and clean disk debris left by AI coding workflows: temporary worktrees,
+tool logs, dependency folders, and build caches that pile up while agents
+branch, build, test, and retry.
 
-Supports: **Codex CLI**, **Claude Code**, **Cursor**, **Windsurf** (worktrees + logs),
-plus **node_modules**, **Go/Gradle/npm/Cargo build caches**, and **pip/uv caches**.
+Supports Codex and Claude worktrees, Cursor and Windsurf logs, `node_modules`,
+Go/Gradle/npm/Cargo build caches, and pip/uv caches.
+
+It is intentionally narrow: scan known AI-workflow paths, show what was found,
+and clean only after explicit filters and safety checks.
 
 ## Who is this for?
 
 - Developers who use AI coding tools (Codex CLI, Claude Code, Cursor, Windsurf)
 - Teams sharing development machines where worktrees accumulate
 - Anyone who wants to reclaim disk space from node_modules and build caches
-
-## When NOT to use this
-
-- On production servers (aibris is designed for development machines)
-- When you need fine-grained per-file control (use `du`/`ncdu`/`baobab` instead)
-- When you want to keep every AI session artifact indefinitely
-
-## Comparison to other tools
-
-| Tool | Scope | Safety | AI-aware | Dry-run |
-|------|-------|--------|----------|---------|
-| **aibris** | AI debris + caches | Age gates, risky flag, isSafePath | Yes (understands tool layout) | `--dry-run` |
-| **ncdu** | All files | Manual review | No | Interactive |
-| **du** | All files | None | No | No |
-| **bleachbit** | System caches | Whitelist-based | No (generic) | Preview |
-| **brew cleanup** | Homebrew only | Formula-aware | No | `--dry-run` |
-| **docker system prune** | Docker only | Container-aware | No | No |
+- AI assistants that need structured scan output before cleanup
 
 ### Install
 
 ```bash
-brew install sungjunlee/tap/aibris
-# or
 go install github.com/sungjunlee/aibris@latest
+# or, once the Homebrew tap is published:
+brew install sungjunlee/tap/aibris
 ```
 
 ### Usage
@@ -49,9 +37,11 @@ aibris scan                    # discover what's taking space
 aibris scan --json             # machine-readable output (see docs/JSON_SCHEMA.md)
 
 aibris clean --dry-run         # preview without deleting
-aibris clean                   # requires confirmation (or --force)
-aibris clean --age 168h        # older than 7 days (default)
-aibris clean --age 720h        # older than 30 days
+aibris clean                   # delete with confirmation
+aibris clean --age 7d          # older than 7 days (default)
+aibris clean --age 30d         # older than 30 days
+aibris clean --age 1mo         # older than 30 days (month shorthand)
+aibris clean --age 1y          # older than 365 days
 aibris clean --interactive     # confirm each item
 aibris clean --category node_modules   # only node_modules
 aibris clean --tool codex,claude       # only specific tools
@@ -59,9 +49,37 @@ aibris clean --risky           # include ai-logs
 aibris clean --force           # skip confirmation prompt
 ```
 
+### Example
+
+```text
+$ aibris scan
+
+node_modules:
+  → dashboard       ?                      1.8 GB  24d ago
+
+build-cache:
+  → go-build        ?                    842.0 MB  9d ago
+  → npm             ?                    512.4 MB  18d ago
+
+codex:
+  → b7f4c2          aibris                96.0 MB  12d ago
+
+Total: 4 items | 3.2 GB
+```
+
+Preview before deleting anything:
+
+```text
+$ aibris clean --category worktree --age 7d --dry-run
+[DRY-RUN] would remove: b7f4c2 (codex) — 96.0 MB (12d ago)
+
+[DRY-RUN] Total: 1 items | 96.0 MB would be freed
+```
+
 ### Safety
 
-- **Default `--age 168h` (7 days)** protects active worktrees
+- **Default `--age 7d`** avoids very recent work
+- **Human age units** support `h`, `d`, `w`, `mo`, and `y`
 - **`--dry-run`** previews before deleting
 - **`--interactive`** confirms each item
 - **`--risky`** must be explicitly set to delete AI logs
@@ -76,9 +94,23 @@ aibris scan  → discovers worktrees, caches, node_modules, logs
 aibris clean → filters by age/category/tool → deletes safely
 ```
 
-Each AI tool leaves its debris in predictable locations. aibris scans these
-locations, measures disk usage, and cleans up what's no longer needed.
+AI tools leave debris in predictable locations. aibris scans those locations,
+measures disk usage, and cleans only after filters and safety checks. Judgment
+about what should be removed stays with a human or an AI assistant using
+`scan --json`.
+
 New tools can be added by implementing the `DebrisProvider` interface.
+
+### Agent Workflow
+
+```bash
+aibris scan --json
+aibris clean --category worktree --tool codex --age 7d --dry-run
+aibris clean --category worktree --tool codex --age 7d
+```
+
+The intended agent flow is: scan, summarize by project/category/age, ask the
+user what to remove, run a dry-run, ask again, then execute.
 
 ### Contributing
 

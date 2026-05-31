@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- `--age` now accepts human values such as `7d`, `2w`, `1mo`, and `1y`.
+
 ## [0.2.0] - 2026-05-25
 
 ### Added
@@ -24,7 +29,7 @@
 - No-result messages updated ("No items to clean", "No AI tool debris found")
 
 ### Fixed
-- README: `aibris prune` → `aibris clean`, `7d` → `168h`
+- README: `aibris prune` → `aibris clean`, duration examples clarified
 - README expanded with English, features, safety section, usage examples
 - `containsTool` no longer conflates "contains" with "match all"
 

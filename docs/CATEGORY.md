@@ -1,212 +1,65 @@
-# aibris — Category System Design
+# aibris Category Reference
 
-## Overview
+`aibris` groups debris by category so users and agents can target one kind of
+AI-workflow artifact without broad filesystem cleanup.
 
-`aibris clean` currently handles one cleanup target: AI tool git worktrees (codex, claude).
-The category system generalizes cleanup to arbitrary disk debris categories (node_modules,
-build caches, pip caches, etc.) while keeping the CLI simple and agent-friendly.
+## Categories
 
-```
-aibris scan                         → all categories
-aibris scan --json                  → machine-readable (agent consumption)
-aibris clean                        → all categories, non-interactive
-aibris clean --category node_modules → single category
-aibris clean --tool codex --age 24h → AND filters
-```
+| Category | Default clean | Risk | Description |
+|----------|---------------|------|-------------|
+| `worktree` | yes | low | Temporary Git worktrees created by Codex, Claude, relay-style workflows, or other tools. |
+| `node_modules` | yes | medium | Project dependency folders under configured project roots. They can be recreated with package managers. |
+| `build-cache` | yes | medium | Go, Xcode, Gradle, npm, and Cargo caches. They are usually safe but may slow the next build. |
+| `other-cache` | yes | low | pip and uv package caches. |
+| `ai-logs` | no | high | AI tool logs, archived sessions, file history, and similar records. Requires `--risky`. |
 
-## Category Type
+Unknown or future categories should stay risky until they have explicit safety
+rules.
 
-```go
-// internal/types/types.go
-type Category string
+## Tool Mapping
 
-const (
-    CategoryWorktree    Category = "worktree"
-    CategoryNodeModules Category = "node_modules"
-    CategoryBuildCache  Category = "build-cache"
-    CategoryOtherCache  Category = "other-cache"
-)
-```
+| Tool | Category | Notes |
+|------|----------|-------|
+| `codex` | `worktree` | Known Codex worktree layout. |
+| `claude` | `worktree` | Known Claude Code worktree layout. |
+| `unknown` | `worktree` | Generic `worktree*` discovery for future or local tools. |
+| `node_modules` | `node_modules` | Dependency directories under `~/projects`. |
+| `build-cache` | `build-cache` | Language and platform build caches. |
+| `pip-cache` | `other-cache` | Python package caches. |
+| `cursor` | `ai-logs` | Cursor project/session logs. |
+| `windsurf` | `ai-logs` | Windsurf logs and cache-style AI artifacts. |
+| `ai-logs` | `ai-logs` | Codex and Claude log/history locations. |
 
-## Interface Extension
+## Filter Semantics
 
-Each adapter declares its category. One adapter = one category.
+`aibris clean` combines filters with AND semantics:
 
-```go
-// internal/adapter/adapter.go
-type DebrisProvider interface {
-    Name() types.Tool
-    Category() types.Category   // NEW
-    Scan(ctx context.Context) ([]types.DebrisInfo, error)
-}
+```bash
+aibris clean --category worktree --tool codex --age 7d --dry-run
 ```
 
-## Data Model
+This command means:
 
-```go
-type DebrisInfo struct {
-    Tool     Tool
-    Category Category   // NEW
-    ID       string
-    Project  string
-    Path     string
-    Size     int64
-    ModTime  time.Time
-}
+- category must be `worktree`
+- tool must be `codex`
+- item must be older than 7 days
+- risky categories are excluded unless `--risky` is set
 
-type ScanResult struct {
-    Worktrees  []DebrisInfo
-    TotalCount int
-    TotalSize  int64
-    ByCategory map[Category]CategorySummary   // NEW
-    ByTool     map[Tool]ToolSummary           // NEW
-}
+Empty `--category` means all categories allowed by `--risky`. Empty `--tool`
+means all tools.
 
-type CategorySummary struct {
-    Count int
-    Size  int64
-}
-
-type ToolSummary struct {
-    Count int
-    Size  int64
-}
-
-type PruneOptions struct {
-    Age         time.Duration
-    Categories  []Category   // NEW: replaces All bool
-    Tools       []Tool
-    DryRun      bool
-    Interactive bool
-}
-```
-
-## JSON Output (`scan --json`)
-
-```json
-{
-  "worktrees": [
-    {
-      "tool": "codex",
-      "category": "worktree",
-      "id": "abc123",
-      "project": "my-project",
-      "path": "/Users/sj/.codex/worktrees/abc123",
-      "size": 1048576,
-      "mod_time": "2026-05-19T10:30:00Z"
-    }
-  ],
-  "summary": {
-    "total_count": 5,
-    "total_size": 5242880,
-    "by_category": {
-      "worktree": {"count": 3, "size": 3145728},
-      "node_modules": {"count": 2, "size": 2097152}
-    },
-    "by_tool": {
-      "codex": {"count": 3, "size": 3145728},
-      "claude": {"count": 2, "size": 1048576},
-      "node_modules": {"count": 2, "size": 2097152}
-    }
-  }
-}
-```
-
-## Filter Logic (cleaner.go)
-
-```go
-func Filter(worktrees []DebrisInfo, opts PruneOptions) []DebrisInfo {
-    cutoff := time.Now().Add(-opts.Age)
-    for _, w := range worktrees {
-        matchCat := len(opts.Categories) == 0 || containsCategory(opts.Categories, w.Category)
-        matchTool := len(opts.Tools) == 0 || containsTool(opts.Tools, w.Tool)
-        if matchCat && matchTool && w.ModTime.Before(cutoff) {
-            filtered = append(filtered, w)
-        }
-    }
-    return filtered
-}
-```
-
-No `--all` flag needed. Both `--category` and `--tool` empty = all.
-
-## CLI Changes
-
-```
-REMOVED:
-  --all                     → replaced by len(Categories)==0
-
-MODIFIED:
-  --tool                    → AND filter with --category
-
-NEW:
-  --category <name>         → repeatable? or comma-separated?
-  --json                    → JSON output (scan only)
-```
-
-## Phase 2 Adapters
-
-| Adapter | Category | Default Paths | Risk Level |
-|---------|----------|---------------|------------|
-| `CodexAdapter` | `worktree` | `~/.codex/worktrees/*` | Low |
-| `ClaudeAdapter` | `worktree` | `~/*/.claude/worktrees/*` | Low |
-| `NodeModulesAdapter` | `node_modules` | `~/projects/**/node_modules/` | Medium |
-| `BuildCacheAdapter` | `build-cache` | `~/Library/Caches/Xcode/`, `~/.cache/go-build/` | Medium |
-| `PipCacheAdapter` | `other-cache` | `~/.cache/pip/`, `~/.cache/uv/` | Low |
+Age values accept human units such as `7d`, `2w`, `1mo`, and `1y`. Use `mo` for
+months; bare `m` keeps the Go duration meaning of minutes.
 
 ## Agent Integration Pattern
 
-```
-Agent flow:
-  1. agent calls:  aibris scan --json
-  2. agent parses JSON, summarizes for user
-  3. user picks categories/tools/age
-  4. agent calls:  aibris clean --category node_modules --dry-run
-  5. user confirms
-  6. agent calls:  aibris clean --category node_modules
+The intended AI-guided cleanup loop is:
 
-All decision-making stays in the agent.
-aibris only does scan + clean; never asks questions in agent mode.
+```bash
+aibris scan --json
+aibris clean --category <category> --tool <tool> --age <duration> --dry-run
+aibris clean --category <category> --tool <tool> --age <duration>
 ```
 
-## Migration from v0.1.0
-
-```
-v0.1.0                              v0.2.0
-aibris scan            →  aibris scan                   (unchanged)
-aibris prune --all     →  aibris clean                  (renamed)
-aibris prune --force   →  aibris clean                  (prompt removed)
-aibris prune --tool X  →  aibris clean --tool X         (unchanged)
-                        →  aibris clean --category node_modules  (NEW)
-                        →  aibris scan --json           (NEW)
-```
-
-## Implementation Order
-
-```
-Phase 2a (foundation) — no new adapters
-─────────────────────────────────────
-1. Category type + constants
-2. Category() on DebrisProvider interface
-3. DebrisInfo.Category field
-4. Existing adapters set CategoryWorktree
-5. ScanResult.ByCategory / ByTool
-6. scan --json flag
-7. PruneOptions.Categories (replace All)
-8. Filter uses Categories
-9. clean --category flag
-10. Remove --all flag from CLI
-
-Phase 2b (expansion) — new adapters
-────────────────────────────────────
-11. NodeModulesAdapter
-12. BuildCacheAdapter
-13. PipCacheAdapter
-14. Register all in scanner.providers
-```
-
-## Out of Scope
-
-- Auto-detect categories without explicit adapter registration
-- Category-aware `--dry-run` grouping
-- Per-category confirmation in interactive mode
+Agents should summarize scan results, ask the user what to remove, run a dry-run
+first, and only execute cleanup after a second explicit confirmation.

@@ -1,6 +1,9 @@
 # aibris JSON Output Schema
 
-`aibris scan --json` outputs the following JSON structure:
+`aibris scan --json` outputs the following JSON structure.
+
+Compatibility note: the top-level array is named `worktrees` for historical
+reasons, but it contains all debris items, including caches and `node_modules`.
 
 ## Top-level structure
 
@@ -35,9 +38,13 @@
 ## Fields
 
 ### `worktrees` array
+
+This array contains debris items from every category. Consumers should treat it
+as an item list, not as a worktree-only list.
+
 | Field | Type | Description |
 |-------|------|-------------|
-| `tool` | string | Tool name (`codex`, `claude`, `cursor`, `windsurf`, `node_modules`, `build-cache`, `pip-cache`, `ai-logs`) |
+| `tool` | string | Tool name (`codex`, `claude`, `unknown`, `cursor`, `windsurf`, `node_modules`, `build-cache`, `pip-cache`, `ai-logs`) |
 | `category` | string | Debris category (`worktree`, `node_modules`, `build-cache`, `other-cache`, `ai-logs`) |
 | `id` | string | Unique identifier (hash, directory name, or cache key) |
 | `project` | string | Project name if detectable, empty otherwise |

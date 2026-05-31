@@ -37,7 +37,7 @@ CLI 자체는 dumb executor. Q&A와 판단은 AI 스킬이负责.
 - `internal/scanner/scanner.go` 의 `providers` 목록에 등록
 
 **2. Prune 안전장치**
-- 기본 `--age`는 `168h` (7일)
+- 기본 `--age`는 `7d`
 - `--dry-run` 없이 실행 시 confirm 요청
 - `--force`로만 confirm 생략 가능
 - `--interactive`는 항목별 y/N 확인
