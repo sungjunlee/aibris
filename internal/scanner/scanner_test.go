@@ -1,10 +1,10 @@
 package scanner
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
-	"os"
 	"strings"
 	"testing"
 
@@ -31,6 +31,7 @@ func (m *mockProvider) Scan(_ context.Context) ([]types.DebrisInfo, error) {
 }
 
 func TestScan_NoResults(t *testing.T) {
+	t.Parallel()
 	s := New([]adapter.DebrisProvider{})
 	result, err := s.Scan(context.Background())
 	if err != nil {
@@ -45,6 +46,7 @@ func TestScan_NoResults(t *testing.T) {
 }
 
 func TestScan_SingleProvider(t *testing.T) {
+	t.Parallel()
 	s := New([]adapter.DebrisProvider{
 		&mockProvider{
 			name: types.ToolCodex,
@@ -67,6 +69,7 @@ func TestScan_SingleProvider(t *testing.T) {
 }
 
 func TestScan_MultipleProviders(t *testing.T) {
+	t.Parallel()
 	s := New([]adapter.DebrisProvider{
 		&mockProvider{
 			name: types.ToolCodex,
@@ -96,6 +99,7 @@ func TestScan_MultipleProviders(t *testing.T) {
 }
 
 func TestScan_SortedBySizeDesc(t *testing.T) {
+	t.Parallel()
 	s := New([]adapter.DebrisProvider{
 		&mockProvider{
 			name: types.ToolCodex,
@@ -130,10 +134,8 @@ func TestScan_SortedBySizeDesc(t *testing.T) {
 }
 
 func TestScan_ProviderError(t *testing.T) {
-	r, w, _ := os.Pipe()
-	oldStderr := os.Stderr
-	os.Stderr = w
-
+	t.Parallel()
+	var buf bytes.Buffer
 	s := New([]adapter.DebrisProvider{
 		&mockProvider{name: types.ToolCodex, err: errors.New("boom")},
 		&mockProvider{
@@ -141,17 +143,14 @@ func TestScan_ProviderError(t *testing.T) {
 			worktrees: []types.DebrisInfo{{ID: "ok", Size: 50}},
 		},
 	})
+	s.ErrorWriter = &buf
 
 	result, err := s.Scan(context.Background())
-	w.Close()
-	stderr, _ := io.ReadAll(r)
-	os.Stderr = oldStderr
-
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(stderr), "scan:codex:boom") {
-		t.Errorf("stderr = %q; want scan:codex:boom", string(stderr))
+	if !strings.Contains(buf.String(), "scan:codex:boom") {
+		t.Errorf("stderr = %q; want scan:codex:boom", buf.String())
 	}
 	if result.TotalCount != 1 {
 		t.Errorf("TotalCount = %d; want 1", result.TotalCount)
@@ -159,6 +158,7 @@ func TestScan_ProviderError(t *testing.T) {
 }
 
 func TestScan_ContextCancelOnEntry(t *testing.T) {
+	t.Parallel()
 	s := New([]adapter.DebrisProvider{
 		&mockProvider{
 			name: types.ToolCodex,
@@ -176,6 +176,7 @@ func TestScan_ContextCancelOnEntry(t *testing.T) {
 }
 
 func TestScan_ProviderContextCancel(t *testing.T) {
+	t.Parallel()
 	s := New([]adapter.DebrisProvider{
 		&mockProvider{
 			name: types.ToolCodex,
@@ -200,8 +201,29 @@ func TestScan_Default(t *testing.T) {
 }
 
 func TestNew_NilProviders(t *testing.T) {
+	t.Parallel()
 	s := New(nil)
 	if s.Providers != nil {
 		t.Errorf("Providers = %v; want nil", s.Providers)
+	}
+}
+
+func TestScanner_ErrorWriterDefault(t *testing.T) {
+	t.Parallel()
+	s := New([]adapter.DebrisProvider{})
+	if s.errw() == nil {
+		t.Error("errw() should default to os.Stderr, not nil")
+	}
+}
+
+func TestScanner_ErrorWriterOverride(t *testing.T) {
+	t.Parallel()
+	s := New([]adapter.DebrisProvider{})
+	buf := new(bytes.Buffer)
+	s.ErrorWriter = buf
+	var discardWriter io.Writer = buf
+	_ = discardWriter
+	if s.errw() != s.ErrorWriter {
+		t.Error("errw() should return ErrorWriter when set")
 	}
 }

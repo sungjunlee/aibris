@@ -31,6 +31,7 @@ func TestIsSafePath(t *testing.T) {
 		{"cargo registry", home + "/.cargo/registry", true},
 		{"pip cache", home + "/.cache/pip", true},
 		{"Xcode cache", home + "/Library/Caches/Xcode", true},
+		{"Chrome under Library not safe", home + "/Library/Application Support/Chrome", false},
 		{"node_modules under projects", home + "/projects/myapp/node_modules", true},
 		{"codeium windsurf", home + "/.codeium/windsurf", true},
 		{"ai logs", home + "/.codex/logs_2.sqlite", true},
@@ -56,6 +57,20 @@ func TestIsSafePath_EmptyHome(t *testing.T) {
 func TestIsSafePath_NonExistentHome(t *testing.T) {
 	if IsSafePath("/nonexistent", "/nonexistent/codex/worktrees/hash") {
 		t.Error("IsSafePath with nonexistent home should reject")
+	}
+}
+
+func TestIsSafePath_Symlink(t *testing.T) {
+	home := t.TempDir()
+	safeDir := filepath.Join(home, ".codex", "worktrees", "hash1")
+	os.MkdirAll(safeDir, 0755)
+	evilLink := filepath.Join(home, ".codex", "worktrees", "evil")
+	if err := os.Symlink("/etc", evilLink); err != nil {
+		t.Skipf("symlink not supported: %v", err)
+	}
+
+	if IsSafePath(home, evilLink) {
+		t.Error("symlink to /etc should be rejected (resolves outside known prefixes)")
 	}
 }
 

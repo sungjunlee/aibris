@@ -13,7 +13,7 @@ import (
 
 var safePathPrefixes = []string{
 	".codex", ".claude", ".cursor", ".cache", ".npm", ".gradle", ".cargo",
-	"Library", "projects", ".codeium",
+	"Caches", "projects", ".codeium",
 }
 
 func IsSafePath(home, target string) bool {
@@ -22,6 +22,15 @@ func IsSafePath(home, target string) bool {
 	}
 	if !strings.HasPrefix(target, home+string(filepath.Separator)) {
 		return false
+	}
+	resolvedHome, homeErr := filepath.EvalSymlinks(home)
+	resolvedTarget, targetErr := filepath.EvalSymlinks(target)
+	if homeErr == nil && targetErr == nil {
+		home = resolvedHome
+		target = resolvedTarget
+		if !strings.HasPrefix(target, home+string(filepath.Separator)) && target != home {
+			return false
+		}
 	}
 	rel, err := filepath.Rel(home, target)
 	if err != nil {
