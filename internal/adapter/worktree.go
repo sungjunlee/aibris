@@ -215,9 +215,13 @@ func detectWorktreeProject(entryPath, worktreePath string, src worktreeSource) s
 	switch src.tool {
 	case types.ToolClaude:
 		// claude: entry = ~/<project>/.claude/worktrees/<name>
-		// project = "<project>"
-		root := filepath.Dir(filepath.Dir(filepath.Dir(entryPath)))
-		return filepath.Base(root)
+		// project = "<project>". Verify the structure before walking
+		// up three levels.
+		if filepath.Base(filepath.Dir(filepath.Dir(entryPath))) == ".claude" {
+			root := filepath.Dir(filepath.Dir(filepath.Dir(entryPath)))
+			return filepath.Base(root)
+		}
+		return ""
 	case types.ToolUnknown:
 		// generic: use the worktree-bearing directory name.
 		// For subdir-style (codex/relay-like) this is the project subdirectory;
