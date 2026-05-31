@@ -1,6 +1,7 @@
 /aibris
 /aibris.exe
 /dist/
+/.pi-lens/
 *.test
 *.out
 *.prof
