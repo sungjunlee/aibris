@@ -19,6 +19,10 @@ import (
 // avoids interface dispatch per entry and exploits goroutine-level
 // parallelism for subdirectory traversal.
 func estimateDirSize(ctx context.Context, path string) int64 {
+	if err := ctx.Err(); err != nil {
+		return 0
+	}
+
 	info, err := os.Stat(path)
 	if err != nil {
 		return 0
@@ -72,25 +76,6 @@ func walkDir(ctx context.Context, path string, total *atomic.Int64, wg *sync.Wai
 			total.Add(info.Size())
 		}
 	}
-}
-
-// estimateDirSizeWalkDir is the original single-threaded WalkDir fallback.
-func estimateDirSizeWalkDir(ctx context.Context, path string) int64 {
-	var total int64
-	filepath.WalkDir(path, func(_ string, d os.DirEntry, err error) error {
-		if err != nil {
-			return filepath.SkipDir
-		}
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		info, err := d.Info()
-		if err == nil && !info.IsDir() {
-			total += info.Size()
-		}
-		return nil
-	})
-	return total
 }
 
 func detectProjectName(path string) string {
