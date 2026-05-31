@@ -139,7 +139,7 @@ func TestScan_ProviderError(t *testing.T) {
 	s := New([]adapter.DebrisProvider{
 		&mockProvider{name: types.ToolCodex, err: errors.New("boom")},
 		&mockProvider{
-			name: types.ToolClaude,
+			name:      types.ToolClaude,
 			worktrees: []types.DebrisInfo{{ID: "ok", Size: 50}},
 		},
 	})
@@ -161,7 +161,7 @@ func TestScan_ContextCancelOnEntry(t *testing.T) {
 	t.Parallel()
 	s := New([]adapter.DebrisProvider{
 		&mockProvider{
-			name: types.ToolCodex,
+			name:      types.ToolCodex,
 			worktrees: []types.DebrisInfo{{ID: "a", Size: 100}},
 		},
 	})
@@ -191,6 +191,8 @@ func TestScan_ProviderContextCancel(t *testing.T) {
 }
 
 func TestScan_Default(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
 	result, err := Scan(context.Background())
 	if err != nil {
 		t.Fatal(err)

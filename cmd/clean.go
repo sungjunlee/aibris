@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -30,9 +31,9 @@ var cleanCmd = &cobra.Command{
 	Use:   "clean",
 	Short: "Clean up old AI tool debris",
 	Run: func(cmd *cobra.Command, args []string) {
-		age, err := time.ParseDuration(cleanAge)
+		age, err := parseAge(cleanAge)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "invalid age '%s': expected Go duration format (e.g. 168h, 720h, 24h)\n", cleanAge)
+			fmt.Fprintf(os.Stderr, "invalid age '%s': expected duration like 7d, 2w, 1mo, 1y, or 24h\n", cleanAge)
 			os.Exit(1)
 		}
 
@@ -125,13 +126,35 @@ var cleanCmd = &cobra.Command{
 }
 
 func init() {
-	cleanCmd.Flags().StringVarP(&cleanAge, "age", "a", "168h", "Max age in Go duration format (168h = 7 days, 720h = 30 days)")
+	cleanCmd.Flags().StringVarP(&cleanAge, "age", "a", "7d", "Max age (7d, 2w, 1mo, 1y, 24h)")
 	cleanCmd.Flags().StringVarP(&cleanCategory, "category", "c", "", "Comma-separated categories (worktree,node_modules,build-cache,other-cache,ai-logs)")
 	cleanCmd.Flags().StringVarP(&cleanTools, "tool", "t", "", "Comma-separated tools (codex,claude,cursor,windsurf,node_modules,build-cache,pip-cache,ai-logs)")
 	cleanCmd.Flags().BoolVar(&cleanDryRun, "dry-run", false, "Preview without deleting")
 	cleanCmd.Flags().BoolVarP(&cleanInteractive, "interactive", "i", false, "Confirm each deletion")
 	cleanCmd.Flags().BoolVar(&cleanRisky, "risky", false, "Include risky categories (ai-logs)")
 	cleanCmd.Flags().BoolVarP(&cleanForce, "force", "f", false, "Skip confirmation prompt")
+}
+
+func parseAge(s string) (time.Duration, error) {
+	units := []struct {
+		suffix string
+		unit   time.Duration
+	}{
+		{suffix: "mo", unit: 30 * 24 * time.Hour},
+		{suffix: "y", unit: 365 * 24 * time.Hour},
+		{suffix: "w", unit: 7 * 24 * time.Hour},
+		{suffix: "d", unit: 24 * time.Hour},
+	}
+	for _, u := range units {
+		if strings.HasSuffix(s, u.suffix) {
+			n, err := strconv.ParseFloat(strings.TrimSuffix(s, u.suffix), 64)
+			if err != nil {
+				return 0, err
+			}
+			return time.Duration(n * float64(u.unit)), nil
+		}
+	}
+	return time.ParseDuration(s)
 }
 
 func interactiveClean(targets []types.DebrisInfo) int64 {

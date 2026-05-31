@@ -71,7 +71,7 @@ func TestScanCmd_WithWorktrees(t *testing.T) {
 }
 
 func resetCleanFlags() {
-	cleanAge = "168h"
+	cleanAge = "7d"
 	cleanCategory = ""
 	cleanTools = ""
 	cleanDryRun = false
@@ -95,6 +95,29 @@ func TestCleanCmd_NegativeAge(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "--age must be positive") {
 		t.Errorf("expected '--age must be positive' in output, got: %s", out)
+	}
+}
+
+func TestParseAge(t *testing.T) {
+	tests := []struct {
+		input string
+		want  time.Duration
+	}{
+		{input: "1h", want: time.Hour},
+		{input: "7d", want: 7 * 24 * time.Hour},
+		{input: "2w", want: 14 * 24 * time.Hour},
+		{input: "1mo", want: 30 * 24 * time.Hour},
+		{input: "30d", want: 30 * 24 * time.Hour},
+		{input: "1y", want: 365 * 24 * time.Hour},
+	}
+	for _, tt := range tests {
+		got, err := parseAge(tt.input)
+		if err != nil {
+			t.Fatalf("parseAge(%q) returned error: %v", tt.input, err)
+		}
+		if got != tt.want {
+			t.Errorf("parseAge(%q) = %s; want %s", tt.input, got, tt.want)
+		}
 	}
 }
 
