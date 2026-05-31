@@ -5,15 +5,12 @@
 [![CI](https://github.com/sungjunlee/aibris/actions/workflows/ci.yml/badge.svg)](https://github.com/sungjunlee/aibris/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/sungjunlee/aibris)](https://goreportcard.com/report/github.com/sungjunlee/aibris)
 
-Scan and clean disk debris left by AI coding workflows: temporary worktrees,
-tool logs, dependency folders, and build caches that pile up while agents
-branch, build, test, and retry.
+Clean AI coding workflow debris from known paths: worktrees, logs,
+`node_modules`, and build caches.
 
-Supports Codex and Claude worktrees, Cursor and Windsurf logs, `node_modules`,
-Go/Gradle/npm/Cargo build caches, and pip/uv caches.
-
-It is intentionally narrow: scan known AI-workflow paths, show what was found,
-and clean only after explicit filters and safety checks.
+AI tools create lots of short-lived filesystem state while they branch, build,
+test, and retry. aibris scans the known places that debris tends to collect,
+then lets you preview and clean it with explicit filters and safety checks.
 
 ## Who is this for?
 
