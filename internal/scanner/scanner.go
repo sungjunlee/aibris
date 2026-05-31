@@ -52,6 +52,14 @@ func (s *Scanner) Scan(ctx context.Context) (*types.ScanResult, error) {
 	catByTool := make(map[types.Tool]types.Category)
 	for _, p := range s.Providers {
 		catByTool[p.Name()] = p.Category()
+	}
+
+	// Fast path: return immediately if context is already cancelled.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	for _, p := range s.Providers {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
