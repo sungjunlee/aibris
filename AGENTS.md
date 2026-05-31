@@ -74,14 +74,25 @@ skills/
 
 | Tool | Category | clean 기본 | 기본 경로 |
 |------|----------|-----------|---------|
-| codex | worktree | ✅ | `~/.codex/worktrees/<hash>/` |
-| claude | worktree | ✅ | `~/*/.claude/worktrees/<name>/` |
+| worktree (codex) | worktree | ✅ | `~/.codex/worktrees/<hash>/` |
+| worktree (claude) | worktree | ✅ | `~/*/.claude/worktrees/<name>/` |
+| worktree (generic) | worktree | ✅ | `*/worktree*/*` — relay, project-local, and unknown tools auto-discovered |
 | cursor | ai-logs | 🚫 `--risky` | `~/.cursor/projects/<name>/` |
 | windsurf | ai-logs | 🚫 `--risky` | `~/.codeium/windsurf/` |
 | node_modules | node_modules | ✅ | `~/projects/**/node_modules/` |
 | build-cache | build-cache | ✅ | `~/.cache/go-build/`, `~/.gradle/caches/`, `~/.npm/_cacache/`, `~/.cargo/registry/`, `~/Library/Caches/Xcode/` |
 | pip-cache | other-cache | ✅ | `~/.cache/pip/`, `~/.cache/uv/` |
 | ai-logs | ai-logs | 🚫 `--risky` | `~/.codex/logs_2.sqlite`, `~/.codex/archived_sessions/`, `~/.claude/command-audit.log`, `~/.claude/file-history/` |
+
+### Worktree health
+
+`WorktreeAdapter`는 각 worktree의 `.git` 파일을 읽어 상위 repo 생존 여부를 확인합니다:
+
+| Status | 의미 |
+|--------|------|
+| `active` | `.git` 존재, 상위 repo 살아있음 |
+| `orphaned` | `.git` 존재, 상위 repo 사라짐 (정리 대상) |
+| `plain-dir` | `.git` 없음 (일반 디렉토리, 무시) |
 
 ## 빌드
 
