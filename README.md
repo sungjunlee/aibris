@@ -22,19 +22,19 @@ then lets you preview and clean it with explicit filters and safety checks.
 ### Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.sh | bash
 ```
 
 Install from the current main branch when you want unreleased changes:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/main/install.sh | bash -s -- main
+curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.sh | bash -s -- main
 ```
 
 Install a specific release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/main/install.sh | bash -s -- 0.3.0
+curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.sh | bash -s -- 0.3.0
 ```
 
 The installer downloads GitHub Release binaries and verifies `checksums.txt`.

@@ -28,9 +28,9 @@ usage() {
 Install aibris.
 
 Usage:
-  curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | bash
-  curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | bash -s -- main
-  curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | bash -s -- 0.3.0
+  curl -fsSL https://raw.githubusercontent.com/${REPO}/refs/heads/main/install.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/${REPO}/refs/heads/main/install.sh | bash -s -- main
+  curl -fsSL https://raw.githubusercontent.com/${REPO}/refs/heads/main/install.sh | bash -s -- 0.3.0
 
 Options:
   --prefix DIR   Install into DIR (default: ${INSTALL_DIR})

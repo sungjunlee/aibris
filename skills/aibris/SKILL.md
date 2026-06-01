@@ -10,7 +10,7 @@ AI 코딩 도구(Codex CLI, Claude Code, Cursor 등)가 남긴 작업 잔해(wor
 ## 사전 설치
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.sh | bash
 ```
 
 ## 워크플로우: AI-guided 정리
@@ -26,13 +26,13 @@ command -v aibris
 `aibris`가 없으면 사용자에게 설치 여부를 묻고, 승인 후 아래 명령을 실행한다:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.sh | bash
 ```
 
 공개 릴리스 전 main 브랜치 버전이 필요하면:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/main/install.sh | bash -s -- main
+curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.sh | bash -s -- main
 ```
 
 ### Step 1: 전체 현황 스캔
