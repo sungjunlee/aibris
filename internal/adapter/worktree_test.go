@@ -29,12 +29,80 @@ func TestWorktreeAdapter_NoMatches(t *testing.T) {
 	t.Setenv("HOME", home)
 
 	a := &WorktreeAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(results) != 0 {
 		t.Errorf("expected 0, got %d", len(results))
+	}
+}
+
+func TestWorktreeAdapter_CustomRootLimitsResults(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	root := filepath.Join(home, "workspace")
+	inRoot := filepath.Join(root, "repo", "worktrees", "feature-a")
+	outRoot := filepath.Join(home, "other", "repo", "worktrees", "feature-b")
+	createWorktreeGit(t, inRoot, filepath.Join(home, "main-repo-a"), "feature-a")
+	createWorktreeGit(t, outRoot, filepath.Join(home, "main-repo-b"), "feature-b")
+
+	a := &WorktreeAdapter{}
+	results, err := a.Scan(context.Background(), types.ScanOptions{Roots: []string{root}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1, got %d", len(results))
+	}
+	if results[0].ID != "feature-a" {
+		t.Errorf("ID = %q; want feature-a", results[0].ID)
+	}
+}
+
+func TestWorktreeAdapter_ProjectRootFindsDirectClaudeWorktrees(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	project := filepath.Join(home, "my-project")
+	worktreePath := filepath.Join(project, ".claude", "worktrees", "session-1")
+	createWorktreeGit(t, worktreePath, filepath.Join(home, "main-repo"), "session-1")
+
+	a := &WorktreeAdapter{}
+	results, err := a.Scan(context.Background(), types.ScanOptions{Roots: []string{project}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1, got %d", len(results))
+	}
+	if results[0].Tool != types.ToolClaude {
+		t.Errorf("Tool = %q; want claude", results[0].Tool)
+	}
+	if results[0].Project != "my-project" {
+		t.Errorf("Project = %q; want my-project", results[0].Project)
+	}
+}
+
+func TestWorktreeAdapter_CodexRootFindsCodexWorktrees(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	codexRoot := filepath.Join(home, ".codex")
+	worktreeProject := filepath.Join(codexRoot, "worktrees", "hash1", "proj")
+	createWorktreeGit(t, worktreeProject, filepath.Join(home, "main-repo"), "hash1")
+
+	a := &WorktreeAdapter{}
+	results, err := a.Scan(context.Background(), types.ScanOptions{Roots: []string{codexRoot}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1, got %d", len(results))
+	}
+	if results[0].Tool != types.ToolCodex {
+		t.Errorf("Tool = %q; want codex", results[0].Tool)
+	}
+	if results[0].ID != "hash1" {
+		t.Errorf("ID = %q; want hash1", results[0].ID)
 	}
 }
 
@@ -61,7 +129,7 @@ func TestWorktreeAdapter_CodexStyle_Active(t *testing.T) {
 	os.WriteFile(filepath.Join(worktreeProject, "main.go"), []byte("package main"), 0644)
 
 	a := &WorktreeAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +169,7 @@ func TestWorktreeAdapter_CodexStyle_Orphaned(t *testing.T) {
 	os.WriteFile(filepath.Join(worktreeProject, "old.go"), []byte("package main"), 0644)
 
 	a := &WorktreeAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +193,7 @@ func TestWorktreeAdapter_ClaudeStyle_Active(t *testing.T) {
 	os.WriteFile(filepath.Join(worktreePath, "notes.md"), []byte("# work"), 0644)
 
 	a := &WorktreeAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +224,7 @@ func TestWorktreeAdapter_ClaudeStyle_NoDotGit(t *testing.T) {
 	os.WriteFile(filepath.Join(worktreePath, "notes.md"), []byte("some notes"), 0644)
 
 	a := &WorktreeAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +246,7 @@ func TestWorktreeAdapter_Generic_HiddenDir(t *testing.T) {
 	os.WriteFile(filepath.Join(dispatchDir, "README.md"), []byte("done"), 0644)
 
 	a := &WorktreeAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +278,7 @@ func TestWorktreeAdapter_Generic_ProjectLocal(t *testing.T) {
 	os.WriteFile(filepath.Join(worktreeDir, "work.py"), []byte("print('hi')"), 0644)
 
 	a := &WorktreeAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +311,7 @@ func TestWorktreeAdapter_Generic_SubdirStyle(t *testing.T) {
 	os.WriteFile(filepath.Join(projDir, "file.txt"), []byte("data"), 0644)
 
 	a := &WorktreeAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +339,7 @@ func TestWorktreeAdapter_Generic_Orphaned(t *testing.T) {
 	os.WriteFile(filepath.Join(worktreeDir, "old.md"), []byte("done"), 0644)
 
 	a := &WorktreeAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -294,7 +362,7 @@ func TestWorktreeAdapter_Generic_WorktreePrefixName(t *testing.T) {
 	os.WriteFile(filepath.Join(worktreeDir, "data.txt"), []byte("x"), 0644)
 
 	a := &WorktreeAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -326,7 +394,7 @@ func TestWorktreeAdapter_GenericSkipsKnownPaths(t *testing.T) {
 	os.WriteFile(filepath.Join(projDir, "a.go"), []byte("package a"), 0644)
 
 	a := &WorktreeAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -356,7 +424,7 @@ func TestWorktreeAdapter_ClaudeNotDeduplicatedByGeneric(t *testing.T) {
 	createWorktreeGit(t, gt, filepath.Join(home, "main-repo"), "generic-1")
 
 	a := &WorktreeAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -393,7 +461,7 @@ func TestWorktreeAdapter_SkipsPlainDir(t *testing.T) {
 	os.WriteFile(filepath.Join(validProj, "a.go"), []byte("package a"), 0644)
 
 	a := &WorktreeAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -413,7 +481,7 @@ func TestWorktreeAdapter_EmptyWorktreeDir(t *testing.T) {
 	os.MkdirAll(filepath.Join(home, ".codex", "worktrees", "empty-hash"), 0755)
 
 	a := &WorktreeAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -431,7 +499,7 @@ func TestWorktreeAdapter_BrokenSymlink(t *testing.T) {
 	os.Symlink("/nonexistent-path-xyzzy", broken)
 
 	a := &WorktreeAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -454,7 +522,7 @@ func TestWorktreeAdapter_MultipleSubdirsInOneEntry(t *testing.T) {
 	os.WriteFile(filepath.Join(projB, "b.go"), []byte("package b"), 0644)
 
 	a := &WorktreeAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -487,7 +555,7 @@ func TestWorktreeAdapter_ContextCancellation(t *testing.T) {
 	cancel()
 
 	a := &WorktreeAdapter{}
-	_, err := a.Scan(ctx)
+	_, err := a.Scan(ctx, types.ScanOptions{})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

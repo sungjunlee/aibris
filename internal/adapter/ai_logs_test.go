@@ -22,7 +22,7 @@ func TestAILogsAdapter_NoFiles(t *testing.T) {
 	t.Setenv("HOME", home)
 
 	a := &AILogsAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func TestAILogsAdapter_CodexLogs(t *testing.T) {
 	os.WriteFile(filepath.Join(codexDir, "logs_2.sqlite"), make([]byte, 100), 0644)
 
 	a := &AILogsAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestAILogsAdapter_ClaudeCommandLog(t *testing.T) {
 	os.WriteFile(filepath.Join(claudeDir, "command-audit.log"), make([]byte, 50), 0644)
 
 	a := &AILogsAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestAILogsAdapter_Multiple(t *testing.T) {
 	os.WriteFile(filepath.Join(home, ".claude", "command-audit.log"), make([]byte, 30), 0644)
 
 	a := &AILogsAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestAILogsAdapter_ContextCancellation(t *testing.T) {
 	cancel()
 
 	a := &AILogsAdapter{}
-	_, err := a.Scan(ctx)
+	_, err := a.Scan(ctx, types.ScanOptions{})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

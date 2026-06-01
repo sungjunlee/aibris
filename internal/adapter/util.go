@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 )
@@ -113,4 +114,39 @@ func detectProjectName(path string) string {
 
 func isHiddenDir(name string) bool {
 	return len(name) > 0 && name[0] == '.'
+}
+
+func scanRootsOrHome(roots []string) ([]string, error) {
+	if len(roots) > 0 {
+		return roots, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	return []string{home}, nil
+}
+
+func pathUnderRoots(path string, roots []string) bool {
+	if len(roots) == 0 {
+		return true
+	}
+	cleanPath := filepath.Clean(path)
+	if resolved, err := filepath.EvalSymlinks(cleanPath); err == nil {
+		cleanPath = filepath.Clean(resolved)
+	}
+	for _, root := range roots {
+		cleanRoot := filepath.Clean(root)
+		if resolved, err := filepath.EvalSymlinks(cleanRoot); err == nil {
+			cleanRoot = filepath.Clean(resolved)
+		}
+		if cleanPath == cleanRoot {
+			return true
+		}
+		rel, err := filepath.Rel(cleanRoot, cleanPath)
+		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel) {
+			return true
+		}
+	}
+	return false
 }

@@ -18,7 +18,7 @@ func (a *WindsurfAdapter) Category() types.Category {
 	return types.CategoryAILogs
 }
 
-func (a *WindsurfAdapter) Scan(ctx context.Context) ([]types.DebrisInfo, error) {
+func (a *WindsurfAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([]types.DebrisInfo, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -29,8 +29,15 @@ func (a *WindsurfAdapter) Scan(ctx context.Context) ([]types.DebrisInfo, error) 
 	if err != nil {
 		return nil, err
 	}
+	roots, err := scanRootsOrHome(opts.Roots)
+	if err != nil {
+		return nil, err
+	}
 
 	base := filepath.Join(home, ".codeium", "windsurf")
+	if !pathUnderRoots(base, roots) {
+		return nil, nil
+	}
 	entries, err := os.ReadDir(base)
 	if err != nil {
 		if os.IsNotExist(err) {

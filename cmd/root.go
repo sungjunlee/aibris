@@ -17,7 +17,7 @@ like Codex CLI, Claude Code, Cursor, and Windsurf.
 
 Scans for:
   - worktrees (Codex, Claude)
-  - node_modules (from ~/projects)
+  - node_modules (under scan roots, defaulting to $HOME)
   - build caches (Go, Xcode, Gradle, npm, Cargo)
   - pip/uv caches
   - AI logs (Codex, Claude, Cursor — requires --risky)

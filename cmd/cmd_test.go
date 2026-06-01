@@ -23,6 +23,12 @@ func createWorktreeGit(t *testing.T, worktreePath, home, name string) {
 	os.WriteFile(filepath.Join(worktreePath, ".git"), []byte(content), 0644)
 }
 
+func createOrphanedWorktreeGit(t *testing.T, worktreePath, name string) {
+	t.Helper()
+	content := "gitdir: /nonexistent/aibris/.git/worktrees/" + name + "\n"
+	os.WriteFile(filepath.Join(worktreePath, ".git"), []byte(content), 0644)
+}
+
 func captureOutput(fn func()) string {
 	r, w, _ := os.Pipe()
 	old := os.Stdout
@@ -34,7 +40,13 @@ func captureOutput(fn func()) string {
 	return string(out)
 }
 
+func resetScanFlags() {
+	scanJSON = false
+	scanRoots = nil
+}
+
 func TestScanCmd_NoWorktrees(t *testing.T) {
+	resetScanFlags()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
@@ -48,6 +60,7 @@ func TestScanCmd_NoWorktrees(t *testing.T) {
 }
 
 func TestScanCmd_WithWorktrees(t *testing.T) {
+	resetScanFlags()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	base := filepath.Join(home, ".codex", "worktrees", "hash1", "myproj")
@@ -70,6 +83,36 @@ func TestScanCmd_WithWorktrees(t *testing.T) {
 	}
 }
 
+func TestScanCmd_RootLimitsResults(t *testing.T) {
+	resetScanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	workspace := filepath.Join(home, "workspace")
+	other := filepath.Join(home, "other")
+	os.MkdirAll(filepath.Join(workspace, "app", "node_modules", "pkg"), 0755)
+	os.MkdirAll(filepath.Join(other, "app", "node_modules", "pkg"), 0755)
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"scan", "--root", workspace, "--json"})
+		rootCmd.Execute()
+	})
+
+	var out jsonOutput
+	if err := json.Unmarshal([]byte(output), &out); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, output)
+	}
+	if len(out.Worktrees) != 1 {
+		t.Fatalf("Worktrees = %d; want 1", len(out.Worktrees))
+	}
+	resolvedWorkspace, err := filepath.EvalSymlinks(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Worktrees[0].Path != filepath.Join(resolvedWorkspace, "app", "node_modules") {
+		t.Errorf("Path = %q; want workspace node_modules", out.Worktrees[0].Path)
+	}
+}
+
 func resetCleanFlags() {
 	cleanAge = "7d"
 	cleanCategory = ""
@@ -78,6 +121,8 @@ func resetCleanFlags() {
 	cleanInteractive = false
 	cleanRisky = false
 	cleanForce = false
+	cleanRoots = nil
+	cleanIncludeActiveWorktrees = false
 }
 
 func TestCleanCmd_NegativeAge(t *testing.T) {
@@ -143,7 +188,7 @@ func TestCleanCmd_DryRun(t *testing.T) {
 	projPath := filepath.Join(wtPath, "proj")
 	os.MkdirAll(projPath, 0755)
 	os.WriteFile(filepath.Join(projPath, "main.go"), []byte("package main"), 0644)
-	createWorktreeGit(t, projPath, home, "hash1")
+	createOrphanedWorktreeGit(t, projPath, "hash1")
 	past := time.Now().Add(-2 * time.Hour)
 	os.Chtimes(wtPath, past, past)
 
@@ -156,6 +201,94 @@ func TestCleanCmd_DryRun(t *testing.T) {
 	}
 }
 
+func TestCleanCmd_ActiveWorktreeExcludedByDefault(t *testing.T) {
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	wtPath := filepath.Join(home, ".codex", "worktrees", "hash-active")
+	projPath := filepath.Join(wtPath, "proj")
+	os.MkdirAll(projPath, 0755)
+	createWorktreeGit(t, projPath, home, "hash-active")
+	past := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(wtPath, past, past)
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--dry-run", "--age=1h", "--category=worktree"})
+		rootCmd.Execute()
+	})
+	if !strings.Contains(output, "No items to clean") {
+		t.Errorf("active worktree should be omitted by default; got: %s", output)
+	}
+}
+
+func TestCleanCmd_IncludeActiveWorktree(t *testing.T) {
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	wtPath := filepath.Join(home, ".codex", "worktrees", "hash-active")
+	projPath := filepath.Join(wtPath, "proj")
+	os.MkdirAll(projPath, 0755)
+	createWorktreeGit(t, projPath, home, "hash-active")
+	past := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(wtPath, past, past)
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--dry-run", "--age=1h", "--category=worktree", "--include-active-worktrees"})
+		rootCmd.Execute()
+	})
+	if !strings.Contains(output, "[DRY-RUN]") {
+		t.Errorf("active worktree should be included with flag; got: %s", output)
+	}
+}
+
+func TestCleanCmd_RootLimitsResults(t *testing.T) {
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	workspace := filepath.Join(home, "workspace")
+	other := filepath.Join(home, "other")
+	os.MkdirAll(filepath.Join(workspace, "app", "node_modules", "pkg"), 0755)
+	os.MkdirAll(filepath.Join(other, "app", "node_modules", "pkg"), 0755)
+	past := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(filepath.Join(workspace, "app", "node_modules"), past, past)
+	os.Chtimes(filepath.Join(other, "app", "node_modules"), past, past)
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--dry-run", "--age=1h", "--root", workspace, "--category=node_modules"})
+		rootCmd.Execute()
+	})
+	if !strings.Contains(output, "[DRY-RUN]") {
+		t.Fatalf("expected dry-run output; got: %s", output)
+	}
+	if !strings.Contains(output, "app") {
+		t.Errorf("output missing workspace app; got: %s", output)
+	}
+	if strings.Count(output, "[DRY-RUN] would remove") != 1 {
+		t.Errorf("expected exactly one dry-run target; got: %s", output)
+	}
+}
+
+func TestScanCmd_InvalidRoot(t *testing.T) {
+	if os.Getenv("GO_TEST_INVALID_ROOT_SUBPROCESS") == "1" {
+		resetScanFlags()
+		home := t.TempDir()
+		outside := t.TempDir()
+		t.Setenv("HOME", home)
+		rootCmd.SetArgs([]string{"scan", "--root", outside})
+		rootCmd.Execute()
+		return
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=TestScanCmd_InvalidRoot$")
+	cmd.Env = append(os.Environ(), "GO_TEST_INVALID_ROOT_SUBPROCESS=1")
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected exit error for invalid root, got: %s", out)
+	}
+	if !strings.Contains(string(out), "must be under") {
+		t.Errorf("expected invalid root error, got: %s", out)
+	}
+}
+
 func TestCleanCmd_Execute(t *testing.T) {
 	resetCleanFlags()
 	home := t.TempDir()
@@ -163,7 +296,7 @@ func TestCleanCmd_Execute(t *testing.T) {
 	wtPath := filepath.Join(home, ".codex", "worktrees", "hash1")
 	projPath := filepath.Join(wtPath, "proj")
 	os.MkdirAll(projPath, 0755)
-	createWorktreeGit(t, projPath, home, "hash1")
+	createOrphanedWorktreeGit(t, projPath, "hash1")
 	past := time.Now().Add(-2 * time.Hour)
 	os.Chtimes(wtPath, past, past)
 
@@ -246,15 +379,19 @@ func TestPrintJSON_WithData(t *testing.T) {
 				Path:     "/home/user/.codex/worktrees/hash1",
 				Size:     102400,
 				ModTime:  now,
+				Status:   types.WorktreeActive,
 			},
 			{
-				Tool:     types.ToolClaude,
-				Category: types.CategoryWorktree,
-				ID:       "session-42",
-				Project:  "otherproj",
-				Path:     "/home/user/.claude/worktrees/session-42",
-				Size:     204800,
-				ModTime:  now.Add(-72 * time.Hour),
+				Tool:           types.ToolClaude,
+				Category:       types.CategoryWorktree,
+				ID:             "session-42",
+				Project:        "otherproj",
+				Path:           "/home/user/.claude/worktrees/session-42",
+				Size:           204800,
+				ModTime:        now.Add(-72 * time.Hour),
+				Status:         types.WorktreeOrphaned,
+				CleanupKind:    types.CleanupCommand,
+				CleanupCommand: []string{"go", "clean", "-cache"},
 			},
 		},
 		TotalCount: 2,
@@ -305,6 +442,18 @@ func TestPrintJSON_WithData(t *testing.T) {
 	if w0.ModTime != "2026-05-25T12:00:00Z" {
 		t.Errorf("Worktrees[0].ModTime = %q; want 2026-05-25T12:00:00Z", w0.ModTime)
 	}
+	if w0.Status != "active" {
+		t.Errorf("Worktrees[0].Status = %q; want active", w0.Status)
+	}
+	if w0.Risk != "low" {
+		t.Errorf("Worktrees[0].Risk = %q; want low", w0.Risk)
+	}
+	if len(w0.CleanupCommand) != 0 {
+		t.Errorf("Worktrees[0].CleanupCommand = %v; want empty", w0.CleanupCommand)
+	}
+	if !strings.Contains(w0.Reason, "protected") {
+		t.Errorf("Worktrees[0].Reason = %q; want protected", w0.Reason)
+	}
 	if w0.Path != "/home/user/.codex/worktrees/hash1" {
 		t.Errorf("Worktrees[0].Path = %q", w0.Path)
 	}
@@ -315,6 +464,18 @@ func TestPrintJSON_WithData(t *testing.T) {
 	}
 	if w1.Tool != "claude" {
 		t.Errorf("Worktrees[1].Tool = %q; want claude", w1.Tool)
+	}
+	if w1.Status != "orphaned" {
+		t.Errorf("Worktrees[1].Status = %q; want orphaned", w1.Status)
+	}
+	if !strings.Contains(w1.Reason, "parent repo metadata missing") {
+		t.Errorf("Worktrees[1].Reason = %q; want orphaned reason", w1.Reason)
+	}
+	if w1.CleanupKind != "command" {
+		t.Errorf("Worktrees[1].CleanupKind = %q; want command", w1.CleanupKind)
+	}
+	if len(w1.CleanupCommand) != 3 || w1.CleanupCommand[0] != "go" {
+		t.Errorf("Worktrees[1].CleanupCommand = %v; want [go clean -cache]", w1.CleanupCommand)
 	}
 
 	catWorktree := out.Summary.ByCategory["worktree"]
@@ -334,6 +495,7 @@ func TestPrintJSON_WithData(t *testing.T) {
 }
 
 func TestScanCmd_JSON(t *testing.T) {
+	resetScanFlags()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	base := filepath.Join(home, ".codex", "worktrees", "hash1", "myproj")
@@ -380,6 +542,43 @@ func TestScanCmd_JSON(t *testing.T) {
 	toolCodex := out.Summary.ByTool["codex"]
 	if toolCodex.Count <= 0 {
 		t.Errorf("ByTool[codex] missing; got %+v", out.Summary.ByTool)
+	}
+}
+
+func TestPrintJSON_DerivedRiskAndReasonForCategories(t *testing.T) {
+	now := time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC)
+	r := &types.ScanResult{
+		Worktrees: []types.DebrisInfo{
+			{Tool: types.ToolNodeModules, Category: types.CategoryNodeModules, ID: "deps", ModTime: now},
+			{Tool: types.ToolBuildCache, Category: types.CategoryBuildCache, ID: "go-build", ModTime: now},
+			{Tool: types.ToolPipCache, Category: types.CategoryOtherCache, ID: "uv", ModTime: now},
+			{Tool: types.ToolAILogs, Category: types.CategoryAILogs, ID: "logs", ModTime: now},
+		},
+		ByCategory: make(map[types.Category]types.CategorySummary),
+		ByTool:     make(map[types.Tool]types.ToolSummary),
+	}
+
+	output := captureOutput(func() {
+		printJSON(r)
+	})
+
+	var out jsonOutput
+	if err := json.Unmarshal([]byte(output), &out); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, output)
+	}
+	wantRisk := map[string]string{
+		"deps":     "medium",
+		"go-build": "medium",
+		"uv":       "low",
+		"logs":     "high",
+	}
+	for _, item := range out.Worktrees {
+		if item.Risk != wantRisk[item.ID] {
+			t.Errorf("%s risk = %q; want %q", item.ID, item.Risk, wantRisk[item.ID])
+		}
+		if item.Reason == "" {
+			t.Errorf("%s reason is empty", item.ID)
+		}
 	}
 }
 

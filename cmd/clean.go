@@ -18,13 +18,15 @@ import (
 )
 
 var (
-	cleanAge         string
-	cleanCategory    string
-	cleanTools       string
-	cleanDryRun      bool
-	cleanInteractive bool
-	cleanRisky       bool
-	cleanForce       bool
+	cleanAge                    string
+	cleanCategory               string
+	cleanTools                  string
+	cleanDryRun                 bool
+	cleanInteractive            bool
+	cleanRisky                  bool
+	cleanForce                  bool
+	cleanRoots                  []string
+	cleanIncludeActiveWorktrees bool
 )
 
 var cleanCmd = &cobra.Command{
@@ -48,7 +50,7 @@ var cleanCmd = &cobra.Command{
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer cancel()
 
-		result, err := scanner.Scan(ctx)
+		result, err := scanner.ScanWithOptions(ctx, types.ScanOptions{Roots: cleanRoots})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
@@ -75,13 +77,14 @@ var cleanCmd = &cobra.Command{
 		}
 
 		opts := types.PruneOptions{
-			Age:         age,
-			Categories:  categories,
-			Tools:       tools,
-			DryRun:      cleanDryRun,
-			Interactive: cleanInteractive,
-			Risky:       cleanRisky,
-			Force:       cleanForce,
+			Age:                    age,
+			Categories:             categories,
+			Tools:                  tools,
+			DryRun:                 cleanDryRun,
+			Interactive:            cleanInteractive,
+			Risky:                  cleanRisky,
+			Force:                  cleanForce,
+			IncludeActiveWorktrees: cleanIncludeActiveWorktrees,
 		}
 
 		targets := cleaner.Filter(result.Worktrees, opts)
@@ -133,6 +136,8 @@ func init() {
 	cleanCmd.Flags().BoolVarP(&cleanInteractive, "interactive", "i", false, "Confirm each deletion")
 	cleanCmd.Flags().BoolVar(&cleanRisky, "risky", false, "Include risky categories (ai-logs)")
 	cleanCmd.Flags().BoolVarP(&cleanForce, "force", "f", false, "Skip confirmation prompt")
+	cleanCmd.Flags().StringArrayVar(&cleanRoots, "root", nil, "Scan root under $HOME (repeatable)")
+	cleanCmd.Flags().BoolVar(&cleanIncludeActiveWorktrees, "include-active-worktrees", false, "Include active worktrees in cleanup candidates")
 }
 
 func parseAge(s string) (time.Duration, error) {
@@ -177,12 +182,12 @@ func interactiveClean(targets []types.DebrisInfo) int64 {
 		}
 		response := strings.TrimSpace(strings.ToLower(scanner.Text()))
 		if response == "y" || response == "yes" {
-			if err := os.RemoveAll(w.Path); err != nil {
+			freed, err := cleaner.Execute([]types.DebrisInfo{w})
+			if err != nil {
 				fmt.Fprintf(os.Stderr, "  error: %v\n", err)
 				continue
 			}
-			total += w.Size
-			fmt.Printf("  removed\n")
+			total += freed
 		} else {
 			fmt.Printf("  skipped\n")
 		}

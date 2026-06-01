@@ -22,7 +22,7 @@ func TestWindsurfAdapter_NoBaseDir(t *testing.T) {
 	t.Setenv("HOME", home)
 
 	a := &WindsurfAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +37,7 @@ func TestWindsurfAdapter_EmptyDir(t *testing.T) {
 	os.MkdirAll(filepath.Join(home, ".codeium", "windsurf"), 0755)
 
 	a := &WindsurfAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestWindsurfAdapter_SingleProject(t *testing.T) {
 	os.WriteFile(filepath.Join(projDir, "logs", "session.log"), []byte("data"), 0644)
 
 	a := &WindsurfAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestWindsurfAdapter_MultipleProjects(t *testing.T) {
 	os.MkdirAll(filepath.Join(base, "proj2", "logs"), 0755)
 
 	a := &WindsurfAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestWindsurfAdapter_ReadDirError(t *testing.T) {
 	os.WriteFile(base, []byte("not a dir"), 0644)
 
 	a := &WindsurfAdapter{}
-	_, err := a.Scan(context.Background())
+	_, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err == nil {
 		t.Error("expected error for ReadDir on file, got nil")
 	}
@@ -119,7 +119,7 @@ func TestWindsurfAdapter_ContextCancellation(t *testing.T) {
 	cancel()
 
 	a := &WindsurfAdapter{}
-	_, err := a.Scan(ctx)
+	_, err := a.Scan(ctx, types.ScanOptions{})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

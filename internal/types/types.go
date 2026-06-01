@@ -17,6 +17,14 @@ const (
 	ToolAILogs      Tool = "ai-logs"
 )
 
+// CleanupKind describes how an item should be cleaned.
+type CleanupKind string
+
+const (
+	CleanupRemovePath CleanupKind = "remove-path"
+	CleanupCommand    CleanupKind = "command"
+)
+
 // Category classifies the type of debris.
 type Category string
 
@@ -52,14 +60,16 @@ const (
 
 // DebrisInfo describes a single debris item found during scanning.
 type DebrisInfo struct {
-	Tool     Tool
-	Category Category
-	ID       string
-	Project  string
-	Path     string
-	Size     int64
-	ModTime  time.Time
-	Status   WorktreeStatus // empty for non-worktree debris
+	Tool           Tool
+	Category       Category
+	ID             string
+	Project        string
+	Path           string
+	Size           int64
+	ModTime        time.Time
+	Status         WorktreeStatus // empty for non-worktree debris
+	CleanupKind    CleanupKind
+	CleanupCommand []string
 }
 
 // ScanResult aggregates all debris found by all adapters.
@@ -69,6 +79,11 @@ type ScanResult struct {
 	TotalSize  int64
 	ByCategory map[Category]CategorySummary
 	ByTool     map[Tool]ToolSummary
+}
+
+// ScanOptions configures discovery scope for scan providers.
+type ScanOptions struct {
+	Roots []string
 }
 
 // CategorySummary reports aggregate stats for a single category.
@@ -85,11 +100,12 @@ type ToolSummary struct {
 
 // PruneOptions configures the filtering and deletion behavior of a clean operation.
 type PruneOptions struct {
-	Age         time.Duration
-	Categories  []Category
-	Tools       []Tool
-	DryRun      bool
-	Interactive bool
-	Risky       bool
-	Force       bool
+	Age                    time.Duration
+	Categories             []Category
+	Tools                  []Tool
+	DryRun                 bool
+	Interactive            bool
+	Risky                  bool
+	Force                  bool
+	IncludeActiveWorktrees bool
 }
