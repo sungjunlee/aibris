@@ -99,6 +99,7 @@ Repository release controls include:
 - Dependabot for Go modules and GitHub Actions
 - GoReleaser builds for Linux, macOS, and Windows
 - GoReleaser checksum generation
+- `install.sh` verifies downloaded release archives against `checksums.txt`
 
 Future hardening should add artifact attestations and documented Homebrew tap
 verification once that distribution path is published.

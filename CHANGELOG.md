@@ -2,8 +2,26 @@
 
 ## Unreleased
 
+## [0.3.0] - 2026-06-01
+
 ### Added
 - `--age` now accepts human values such as `7d`, `2w`, `1mo`, and `1y`.
+- `install.sh` for Homebrew-free installation from GitHub Releases or `main`.
+- Unified `WorktreeAdapter` for Codex, Claude, and generic AI worktree discovery.
+- Worktree health detection (`active`, `orphaned`, `plain-dir`).
+- JSON schema documentation for `scan --json`.
+- Security audit documentation.
+
+### Changed
+- README and project docs now focus on AI coding workflow debris.
+- GoReleaser config updated for current v2 keys.
+- GitHub Actions updated to current Node 24-compatible actions.
+- Directory size estimation uses a bounded worker-pool walker.
+
+### Fixed
+- Symlink-aware cleanup path validation.
+- Default scanner test no longer scans the real home directory.
+- CI no longer depends on a Go-version-incompatible golangci-lint binary.
 
 ## [0.2.0] - 2026-05-25
 

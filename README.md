@@ -22,10 +22,24 @@ then lets you preview and clean it with explicit filters and safety checks.
 ### Install
 
 ```bash
-go install github.com/sungjunlee/aibris@latest
-# or, once the Homebrew tap is published:
-brew install sungjunlee/tap/aibris
+curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/main/install.sh | bash
 ```
+
+Install from the current main branch, useful before the first tagged release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/main/install.sh | bash -s -- main
+```
+
+Install a specific release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/main/install.sh | bash -s -- 0.3.0
+```
+
+The installer downloads GitHub Release binaries and verifies `checksums.txt`.
+If no release exists yet, it falls back to building `main` with Go.
+`main`/`latest` always builds from source with Go.
 
 ### Usage
 
