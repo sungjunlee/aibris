@@ -15,7 +15,10 @@ import (
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
-var scanJSON bool
+var (
+	scanJSON  bool
+	scanRoots []string
+)
 
 var scanCmd = &cobra.Command{
 	Use:   "scan",
@@ -24,7 +27,7 @@ var scanCmd = &cobra.Command{
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer cancel()
 
-		result, err := scanner.Scan(ctx)
+		result, err := scanner.ScanWithOptions(ctx, types.ScanOptions{Roots: scanRoots})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
@@ -64,13 +67,18 @@ var scanCmd = &cobra.Command{
 }
 
 type jsonWorktree struct {
-	Tool     string `json:"tool"`
-	Category string `json:"category"`
-	ID       string `json:"id"`
-	Project  string `json:"project"`
-	Path     string `json:"path"`
-	Size     int64  `json:"size"`
-	ModTime  string `json:"mod_time"`
+	Tool           string   `json:"tool"`
+	Category       string   `json:"category"`
+	ID             string   `json:"id"`
+	Project        string   `json:"project"`
+	Path           string   `json:"path"`
+	Size           int64    `json:"size"`
+	ModTime        string   `json:"mod_time"`
+	Status         string   `json:"status"`
+	Risk           string   `json:"risk"`
+	Reason         string   `json:"reason"`
+	CleanupKind    string   `json:"cleanup_kind"`
+	CleanupCommand []string `json:"cleanup_command"`
 }
 
 type jsonSummaryEntry struct {
@@ -101,14 +109,23 @@ func printJSON(r *types.ScanResult) {
 		},
 	}
 	for i, w := range r.Worktrees {
+		cleanupCommand := append([]string(nil), w.CleanupCommand...)
+		if cleanupCommand == nil {
+			cleanupCommand = []string{}
+		}
 		out.Worktrees[i] = jsonWorktree{
-			Tool:     string(w.Tool),
-			Category: string(w.Category),
-			ID:       w.ID,
-			Project:  w.Project,
-			Path:     w.Path,
-			Size:     w.Size,
-			ModTime:  w.ModTime.Format(time.RFC3339),
+			Tool:           string(w.Tool),
+			Category:       string(w.Category),
+			ID:             w.ID,
+			Project:        w.Project,
+			Path:           w.Path,
+			Size:           w.Size,
+			ModTime:        w.ModTime.Format(time.RFC3339),
+			Status:         string(w.Status),
+			Risk:           itemRisk(w),
+			Reason:         itemReason(w),
+			CleanupKind:    string(cleanupKind(w)),
+			CleanupCommand: cleanupCommand,
 		}
 	}
 	for cat, s := range r.ByCategory {
@@ -123,6 +140,49 @@ func printJSON(r *types.ScanResult) {
 	enc.Encode(out)
 }
 
+func cleanupKind(w types.DebrisInfo) types.CleanupKind {
+	if w.CleanupKind != "" {
+		return w.CleanupKind
+	}
+	return types.CleanupRemovePath
+}
+
+func itemRisk(w types.DebrisInfo) string {
+	if w.Category.IsRisky() {
+		return "high"
+	}
+	switch w.Category {
+	case types.CategoryNodeModules, types.CategoryBuildCache:
+		return "medium"
+	default:
+		return "low"
+	}
+}
+
+func itemReason(w types.DebrisInfo) string {
+	switch w.Category {
+	case types.CategoryWorktree:
+		switch w.Status {
+		case types.WorktreeActive:
+			return "active worktree; protected from cleanup by default"
+		case types.WorktreeOrphaned:
+			return "orphaned worktree; parent repo metadata missing"
+		default:
+			return "worktree debris"
+		}
+	case types.CategoryNodeModules:
+		return "dependency directory; can be reinstalled"
+	case types.CategoryBuildCache:
+		return "build cache; can be regenerated"
+	case types.CategoryOtherCache:
+		return "package cache; can be regenerated"
+	case types.CategoryAILogs:
+		return "AI tool logs; requires --risky to clean"
+	default:
+		return "unknown category; requires explicit review"
+	}
+}
+
 func ageString(d time.Duration) string {
 	if d.Hours() < 24 {
 		return "today"
@@ -133,4 +193,5 @@ func ageString(d time.Duration) string {
 
 func init() {
 	scanCmd.Flags().BoolVar(&scanJSON, "json", false, "Output as JSON")
+	scanCmd.Flags().StringArrayVar(&scanRoots, "root", nil, "Scan root under $HOME (repeatable)")
 }

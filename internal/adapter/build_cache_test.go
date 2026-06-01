@@ -22,7 +22,7 @@ func TestBuildCacheAdapter_NoCacheDirs(t *testing.T) {
 	t.Setenv("HOME", home)
 
 	a := &BuildCacheAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func TestBuildCacheAdapter_GoBuild(t *testing.T) {
 	os.WriteFile(filepath.Join(goBuild, "cache-entry", "a.out"), []byte("binary"), 0644)
 
 	a := &BuildCacheAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,6 +58,12 @@ func TestBuildCacheAdapter_GoBuild(t *testing.T) {
 	if results[0].ModTime.IsZero() {
 		t.Error("ModTime is zero")
 	}
+	if results[0].CleanupKind != types.CleanupCommand {
+		t.Errorf("CleanupKind = %q; want command", results[0].CleanupKind)
+	}
+	if got := results[0].CleanupCommand; len(got) != 3 || got[0] != "go" || got[1] != "clean" || got[2] != "-cache" {
+		t.Errorf("CleanupCommand = %v; want [go clean -cache]", got)
+	}
 }
 
 func TestBuildCacheAdapter_FileNotDir(t *testing.T) {
@@ -67,7 +73,7 @@ func TestBuildCacheAdapter_FileNotDir(t *testing.T) {
 	os.WriteFile(filepath.Join(home, ".cache", "go-build"), []byte("not-a-dir"), 0644)
 
 	a := &BuildCacheAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +90,7 @@ func TestBuildCacheAdapter_Gradle(t *testing.T) {
 	os.WriteFile(filepath.Join(gradleDir, "8.14", "some-cache", "artifact.bin"), make([]byte, 200), 0644)
 
 	a := &BuildCacheAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +116,7 @@ func TestBuildCacheAdapter_Npm(t *testing.T) {
 	os.WriteFile(filepath.Join(npmDir, "content", "pkg.tgz"), make([]byte, 100), 0644)
 
 	a := &BuildCacheAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,6 +126,12 @@ func TestBuildCacheAdapter_Npm(t *testing.T) {
 			found = true
 			if r.Size <= 0 {
 				t.Errorf("npm Size = %d; want > 0", r.Size)
+			}
+			if r.CleanupKind != types.CleanupCommand {
+				t.Errorf("npm CleanupKind = %q; want command", r.CleanupKind)
+			}
+			if got := r.CleanupCommand; len(got) != 4 || got[0] != "npm" || got[1] != "cache" || got[2] != "clean" || got[3] != "--force" {
+				t.Errorf("npm CleanupCommand = %v; want [npm cache clean --force]", got)
 			}
 		}
 	}
@@ -136,7 +148,7 @@ func TestBuildCacheAdapter_Cargo(t *testing.T) {
 	os.WriteFile(filepath.Join(cargoDir, "src", "crate.tar.gz"), make([]byte, 150), 0644)
 
 	a := &BuildCacheAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +177,7 @@ func TestBuildCacheAdapter_Multiple(t *testing.T) {
 	os.WriteFile(filepath.Join(home, ".npm", "_cacache", "content", "pkg"), make([]byte, 30), 0644)
 
 	a := &BuildCacheAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +204,7 @@ func TestBuildCacheAdapter_ContextCancellation(t *testing.T) {
 	cancel()
 
 	a := &BuildCacheAdapter{}
-	_, err := a.Scan(ctx)
+	_, err := a.Scan(ctx, types.ScanOptions{})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

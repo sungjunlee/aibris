@@ -22,7 +22,7 @@ func TestPipCacheAdapter_NoCacheDirs(t *testing.T) {
 	t.Setenv("HOME", home)
 
 	a := &PipCacheAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func TestPipCacheAdapter_PipOnly(t *testing.T) {
 	os.WriteFile(filepath.Join(pipDir, "packages", "wheels.whl"), []byte("wheels"), 0644)
 
 	a := &PipCacheAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestPipCacheAdapter_PipAndUv(t *testing.T) {
 	os.MkdirAll(filepath.Join(home, ".cache", "uv", "cache"), 0755)
 
 	a := &PipCacheAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,11 +75,19 @@ func TestPipCacheAdapter_PipAndUv(t *testing.T) {
 		t.Fatalf("expected 2, got %d", len(results))
 	}
 	ids := map[string]bool{}
+	commands := map[string][]string{}
 	for _, r := range results {
 		ids[r.ID] = true
+		commands[r.ID] = r.CleanupCommand
 	}
 	if !ids["pip"] || !ids["uv"] {
 		t.Errorf("missing expected IDs: %v", results)
+	}
+	if len(commands["pip"]) != 0 {
+		t.Errorf("pip CleanupCommand = %v; want none", commands["pip"])
+	}
+	if got := commands["uv"]; len(got) != 3 || got[0] != "uv" || got[1] != "cache" || got[2] != "prune" {
+		t.Errorf("uv CleanupCommand = %v; want [uv cache prune]", got)
 	}
 }
 
@@ -90,7 +98,7 @@ func TestPipCacheAdapter_FileNotDir(t *testing.T) {
 	os.WriteFile(filepath.Join(home, ".cache", "pip"), []byte("not-a-dir"), 0644)
 
 	a := &PipCacheAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +115,7 @@ func TestPipCacheAdapter_ContextCancellation(t *testing.T) {
 	cancel()
 
 	a := &PipCacheAdapter{}
-	_, err := a.Scan(ctx)
+	_, err := a.Scan(ctx, types.ScanOptions{})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

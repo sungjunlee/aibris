@@ -17,7 +17,12 @@ reasons, but it contains all debris items, including caches and `node_modules`.
       "project": "my-project",
       "path": "/Users/user/.codex/worktrees/abc123",
       "size": 102400,
-      "mod_time": "2026-05-25T12:00:00Z"
+      "mod_time": "2026-05-25T12:00:00Z",
+      "status": "orphaned",
+      "risk": "low",
+      "reason": "orphaned worktree; parent repo metadata missing",
+      "cleanup_kind": "remove-path",
+      "cleanup_command": []
     }
   ],
   "summary": {
@@ -51,6 +56,14 @@ as an item list, not as a worktree-only list.
 | `path` | string | Absolute filesystem path |
 | `size` | integer | Size in bytes |
 | `mod_time` | string | Last modification time in RFC 3339 format |
+| `status` | string | Worktree health (`active`, `orphaned`, `plain-dir`) or empty for non-worktree items |
+| `risk` | string | Derived cleanup risk (`low`, `medium`, `high`) |
+| `reason` | string | Short derived explanation for cleanup review |
+| `cleanup_kind` | string | Cleanup strategy (`remove-path` or `command`) |
+| `cleanup_command` | array | Argv command used when `cleanup_kind` is `command`; empty for path removal |
+
+`risk` and `reason` are presentation fields derived from `category` and
+`status`; they are intended for human and AI-assisted cleanup decisions.
 
 ### `summary` object
 | Field | Type | Description |

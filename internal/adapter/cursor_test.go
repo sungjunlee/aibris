@@ -22,7 +22,7 @@ func TestCursorAdapter_NoProjectsDir(t *testing.T) {
 	t.Setenv("HOME", home)
 
 	a := &CursorAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +37,7 @@ func TestCursorAdapter_EmptyProjects(t *testing.T) {
 	os.MkdirAll(filepath.Join(home, ".cursor", "projects"), 0755)
 
 	a := &CursorAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestCursorAdapter_SingleProject(t *testing.T) {
 	os.WriteFile(filepath.Join(projDir, "mcps", "plugin", "config.json"), []byte("{}"), 0644)
 
 	a := &CursorAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestCursorAdapter_MultipleProjects(t *testing.T) {
 	os.MkdirAll(filepath.Join(base, "proj2", "mcps"), 0755)
 
 	a := &CursorAdapter{}
-	results, err := a.Scan(context.Background())
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestCursorAdapter_ReadDirError(t *testing.T) {
 	os.WriteFile(base, []byte("not a dir"), 0644)
 
 	a := &CursorAdapter{}
-	_, err := a.Scan(context.Background())
+	_, err := a.Scan(context.Background(), types.ScanOptions{})
 	if err == nil {
 		t.Error("expected error for ReadDir on file, got nil")
 	}
@@ -119,7 +119,7 @@ func TestCursorAdapter_ContextCancellation(t *testing.T) {
 	cancel()
 
 	a := &CursorAdapter{}
-	_, err := a.Scan(ctx)
+	_, err := a.Scan(ctx, types.ScanOptions{})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

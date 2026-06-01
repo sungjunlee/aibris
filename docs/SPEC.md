@@ -31,6 +31,8 @@ AI-guided judgment happens outside the CLI.
 - Print human-readable output grouped by tool.
 - Print `No AI tool debris found.` and exit 0 when no items are found.
 - Support `--json` for machine-readable agent workflows.
+- Support repeated `--root` flags. Roots default to `$HOME`, may use `~`, must
+  resolve under `$HOME`, and are sorted/deduplicated before scanning.
 
 ### FR2 - `aibris scan --json`
 
@@ -42,6 +44,8 @@ Output contains:
 - `summary.total_size`
 - `summary.by_category`
 - `summary.by_tool`
+- item-level `status`, `risk`, and `reason` fields for agent decisions
+- item-level `cleanup_kind` and `cleanup_command` fields for cleanup execution
 
 The schema is documented in `docs/JSON_SCHEMA.md`.
 
@@ -56,9 +60,11 @@ Flags:
 | `--age`, `-a` | `7d` | Only include items older than this duration. Supports `h`, `d`, `w`, `mo`, and `y`; Go duration units such as `m` and `s` are also accepted. Must be positive. |
 | `--category`, `-c` | empty | Comma-separated category filter. Empty means all categories allowed by `--risky`. |
 | `--tool`, `-t` | empty | Comma-separated tool filter. Empty means all tools. |
+| `--root` | `$HOME` | Repeatable scan root. Each root must resolve under `$HOME`. |
 | `--dry-run` | `false` | Preview targets without deleting. |
 | `--interactive`, `-i` | `false` | Confirm each item before deleting. |
 | `--risky` | `false` | Include risky categories such as AI logs. |
+| `--include-active-worktrees` | `false` | Include active Git worktrees in cleanup candidates. |
 | `--force`, `-f` | `false` | Skip the final confirmation prompt. |
 
 Behavior:
@@ -66,13 +72,21 @@ Behavior:
 1. Parse and validate `--age`.
 2. Warn when `--age` is shorter than one hour.
 3. Scan all providers.
-4. Filter by age, category, tool, and risky status.
+4. Filter by age, category, tool, risky status, and worktree health.
 5. If no targets match, print `No items to clean.` and exit 0.
 6. If `--dry-run` is set, print targets and total reclaimable space.
 7. If `--interactive` is set, ask per item.
 8. If not forced, ask for one final confirmation.
 9. Delete targets through cleaner safety checks.
 10. Print freed space.
+
+Command-backed cleanup:
+
+- `cleanup_kind=command` uses argv-only execution with `exec.CommandContext`.
+- No shell string execution is allowed.
+- Missing commands fall back to safe path removal for the scanned item.
+- Commands that run and fail do not fall back silently.
+- Context cancellation must stop command execution.
 
 ### FR4 - AI-guided Skill Workflow
 
@@ -90,7 +104,7 @@ Behavior:
 | Category | Default clean | Tools | Default locations |
 |----------|---------------|-------|-------------------|
 | `worktree` | yes | `codex`, `claude`, `unknown` | `~/.codex/worktrees/*`, `~/*/.claude/worktrees/*`, `*/worktree*/*` |
-| `node_modules` | yes | `node_modules` | `~/projects/**/node_modules` |
+| `node_modules` | yes | `node_modules` | `$HOME/**/node_modules`, with noisy system/media/cache directories pruned |
 | `build-cache` | yes | `build-cache` | `~/.cache/go-build`, `~/.gradle/caches`, `~/.npm/_cacache`, `~/.cargo/registry`, `~/Library/Caches/Xcode` |
 | `other-cache` | yes | `pip-cache` | `~/.cache/pip`, `~/.cache/uv` |
 | `ai-logs` | no, requires `--risky` | `ai-logs`, `cursor`, `windsurf` | known Codex, Claude, Cursor, and Windsurf log/cache locations |
@@ -105,9 +119,21 @@ Behavior:
 | `orphaned` | `.git` exists but parent repository metadata is gone. |
 | `plain-dir` | No valid worktree metadata was found. |
 
-Current cleanup filtering is based on age, category, tool, and risky status.
-Worktree status is retained in the internal model for future reporting and
-filtering.
+Cleanup excludes `active` worktrees by default. `orphaned` worktrees remain
+eligible when age/category/tool filters match. Use `--include-active-worktrees`
+to intentionally include active worktrees.
+
+## Scan Roots
+
+Default scan roots are equivalent to resolved `$HOME`. `--root` narrows scan
+scope and may be repeated:
+
+```bash
+aibris scan --root ~/workspace --root ~/Developer
+```
+
+Roots are expanded, symlink-resolved, rejected when they escape `$HOME`, sorted,
+deduplicated, and collapsed when one root is nested inside another.
 
 ## Safety Requirements
 
@@ -115,6 +141,8 @@ filtering.
 - Destructive deletion must reject paths outside `$HOME`.
 - Destructive deletion must pass `cleaner.IsSafePath`.
 - Risky categories must be excluded unless `--risky` is set.
+- Active worktrees must be excluded unless `--include-active-worktrees` is set.
+- Command-backed cleanup must use argv-only execution and context cancellation.
 - `--dry-run` must never delete.
 - `clean` must ask for confirmation unless `--force` or `--interactive` is set.
 - Context cancellation must be checked during scans and directory walks.
@@ -142,7 +170,7 @@ Each adapter implements:
 type DebrisProvider interface {
 	Name() types.Tool
 	Category() types.Category
-	Scan(ctx context.Context) ([]types.DebrisInfo, error)
+	Scan(ctx context.Context, opts types.ScanOptions) ([]types.DebrisInfo, error)
 }
 ```
 

@@ -18,7 +18,7 @@ func (a *AILogsAdapter) Category() types.Category {
 	return types.CategoryAILogs
 }
 
-func (a *AILogsAdapter) Scan(ctx context.Context) ([]types.DebrisInfo, error) {
+func (a *AILogsAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([]types.DebrisInfo, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -26,6 +26,10 @@ func (a *AILogsAdapter) Scan(ctx context.Context) ([]types.DebrisInfo, error) {
 	}
 
 	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	roots, err := scanRootsOrHome(opts.Roots)
 	if err != nil {
 		return nil, err
 	}
@@ -45,6 +49,9 @@ func (a *AILogsAdapter) Scan(ctx context.Context) ([]types.DebrisInfo, error) {
 	for _, c := range candidates {
 		if err := ctx.Err(); err != nil {
 			return nil, err
+		}
+		if !pathUnderRoots(c.path, roots) {
+			continue
 		}
 		info, err := os.Stat(c.path)
 		if err != nil {

@@ -5,6 +5,9 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -16,6 +19,7 @@ type mockProvider struct {
 	name      types.Tool
 	worktrees []types.DebrisInfo
 	err       error
+	roots     []string
 }
 
 func (m *mockProvider) Name() types.Tool {
@@ -26,7 +30,8 @@ func (m *mockProvider) Category() types.Category {
 	return types.CategoryWorktree
 }
 
-func (m *mockProvider) Scan(_ context.Context) ([]types.DebrisInfo, error) {
+func (m *mockProvider) Scan(_ context.Context, opts types.ScanOptions) ([]types.DebrisInfo, error) {
+	m.roots = append([]string(nil), opts.Roots...)
 	return m.worktrees, m.err
 }
 
@@ -199,6 +204,106 @@ func TestScan_Default(t *testing.T) {
 	}
 	if result == nil {
 		t.Fatal("expected non-nil result")
+	}
+}
+
+func TestScanWithOptions_PassesNormalizedRootsToProvider(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	root := filepath.Join(home, "workspace")
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatal(err)
+	}
+	provider := &mockProvider{name: types.ToolNodeModules}
+	s := New([]adapter.DebrisProvider{provider})
+
+	_, err := s.ScanWithOptions(context.Background(), types.ScanOptions{Roots: []string{root}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(provider.roots, []string{want}) {
+		t.Errorf("roots = %v; want %v", provider.roots, []string{want})
+	}
+}
+
+func TestNormalizeRoots_DefaultHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	roots, err := NormalizeRoots(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := filepath.EvalSymlinks(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(roots, []string{want}) {
+		t.Errorf("roots = %v; want %v", roots, []string{want})
+	}
+}
+
+func TestNormalizeRoots_TildeAndNestedDedup(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	workspace := filepath.Join(home, "workspace")
+	if err := os.MkdirAll(workspace, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	roots, err := NormalizeRoots([]string{"~/workspace", "~"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := filepath.EvalSymlinks(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(roots, []string{want}) {
+		t.Errorf("roots = %v; want %v", roots, []string{want})
+	}
+}
+
+func TestNormalizeRoots_RejectsOutsideHome(t *testing.T) {
+	parent := t.TempDir()
+	home := filepath.Join(parent, "home")
+	outside := filepath.Join(parent, "outside")
+	os.MkdirAll(home, 0755)
+	os.MkdirAll(outside, 0755)
+	t.Setenv("HOME", home)
+
+	_, err := NormalizeRoots([]string{outside})
+	if err == nil {
+		t.Fatal("expected outside home root to be rejected")
+	}
+	if !strings.Contains(err.Error(), "must be under") {
+		t.Errorf("error = %v; want must be under", err)
+	}
+}
+
+func TestNormalizeRoots_RejectsSymlinkEscape(t *testing.T) {
+	parent := t.TempDir()
+	home := filepath.Join(parent, "home")
+	outside := filepath.Join(parent, "outside")
+	os.MkdirAll(home, 0755)
+	os.MkdirAll(outside, 0755)
+	link := filepath.Join(home, "outside-link")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlink not supported: %v", err)
+	}
+	t.Setenv("HOME", home)
+
+	_, err := NormalizeRoots([]string{link})
+	if err == nil {
+		t.Fatal("expected symlink escape to be rejected")
+	}
+	if !strings.Contains(err.Error(), "must be under") {
+		t.Errorf("error = %v; want must be under", err)
 	}
 }
 

@@ -1,6 +1,8 @@
 package cleaner
 
 import (
+	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -197,6 +199,37 @@ func TestFilter_RiskyIncludedWithFlag(t *testing.T) {
 	}
 }
 
+func TestFilter_WorktreeStatusPolicy(t *testing.T) {
+	old := time.Now().Add(-200 * time.Hour)
+	worktrees := []types.DebrisInfo{
+		{ID: "active", Category: types.CategoryWorktree, Status: types.WorktreeActive, ModTime: old},
+		{ID: "orphaned", Category: types.CategoryWorktree, Status: types.WorktreeOrphaned, ModTime: old},
+		{ID: "legacy", Category: types.CategoryWorktree, ModTime: old},
+		{ID: "node_modules", Category: types.CategoryNodeModules, ModTime: old},
+	}
+
+	filtered := Filter(worktrees, types.PruneOptions{Age: 168 * time.Hour})
+	ids := map[string]bool{}
+	for _, item := range filtered {
+		ids[item.ID] = true
+	}
+	if ids["active"] {
+		t.Fatal("active worktree should be excluded by default")
+	}
+	if !ids["orphaned"] || !ids["legacy"] || !ids["node_modules"] {
+		t.Fatalf("filtered ids = %v; want orphaned, legacy, and node_modules", ids)
+	}
+
+	filtered = Filter(worktrees, types.PruneOptions{Age: 168 * time.Hour, IncludeActiveWorktrees: true})
+	ids = map[string]bool{}
+	for _, item := range filtered {
+		ids[item.ID] = true
+	}
+	if !ids["active"] {
+		t.Fatal("active worktree should be included with IncludeActiveWorktrees")
+	}
+}
+
 func TestFilter_NoFilter(t *testing.T) {
 	opts := types.PruneOptions{Age: 168 * time.Hour}
 	worktrees := []types.DebrisInfo{
@@ -233,6 +266,27 @@ func TestDryRun(t *testing.T) {
 	}
 	if !strings.Contains(output, "test-id") {
 		t.Errorf("output missing worktree ID; got: %s", output)
+	}
+}
+
+func TestDryRun_CommandCleanup(t *testing.T) {
+	worktrees := []types.DebrisInfo{
+		{
+			ID:             "go-build",
+			Tool:           types.ToolBuildCache,
+			Size:           1024,
+			ModTime:        time.Now().Add(-48 * time.Hour),
+			CleanupKind:    types.CleanupCommand,
+			CleanupCommand: []string{"go", "clean", "-cache"},
+		},
+	}
+
+	output := captureStdout(func() {
+		DryRun(worktrees)
+	})
+
+	if !strings.Contains(output, "[DRY-RUN] would run: go clean -cache") {
+		t.Errorf("output missing command dry-run; got: %s", output)
 	}
 }
 
@@ -339,6 +393,132 @@ func TestExecute_Multiple(t *testing.T) {
 	}
 	if _, err := os.Stat(wt2); !os.IsNotExist(err) {
 		t.Error("wt2 should be removed")
+	}
+}
+
+func TestExecute_CommandCleanupSuccess(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	binDir := t.TempDir()
+	writeExecutable(t, filepath.Join(binDir, "fake-clean"), "#!/bin/sh\nexit 0\n")
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	path := filepath.Join(home, ".cache", "go-build")
+	os.MkdirAll(path, 0755)
+	os.WriteFile(filepath.Join(path, "file"), []byte("data"), 0644)
+
+	output := captureStdout(func() {
+		total, err := Execute([]types.DebrisInfo{{
+			ID:             "go-build",
+			Tool:           types.ToolBuildCache,
+			Path:           path,
+			Size:           4,
+			CleanupKind:    types.CleanupCommand,
+			CleanupCommand: []string{"fake-clean"},
+		}})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if total != 4 {
+			t.Fatalf("total = %d; want 4", total)
+		}
+	})
+
+	if !strings.Contains(output, "cleaned: go-build") {
+		t.Errorf("output missing cleaned; got: %s", output)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("command cleanup should not remove path directly; stat err = %v", err)
+	}
+}
+
+func TestExecute_CommandMissingFallsBackToPathRemoval(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	path := filepath.Join(home, ".cache", "uv")
+	os.MkdirAll(path, 0755)
+	os.WriteFile(filepath.Join(path, "file"), []byte("data"), 0644)
+
+	total, err := Execute([]types.DebrisInfo{{
+		ID:             "uv",
+		Tool:           types.ToolPipCache,
+		Path:           path,
+		Size:           4,
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{"definitely-missing-aibris-cleaner"},
+	}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if total != 4 {
+		t.Fatalf("total = %d; want 4", total)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("path should be removed on missing command fallback; stat err = %v", err)
+	}
+}
+
+func TestExecute_CommandFailureDoesNotFallback(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	binDir := t.TempDir()
+	writeExecutable(t, filepath.Join(binDir, "fake-fail"), "#!/bin/sh\necho nope\nexit 2\n")
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	path := filepath.Join(home, ".cache", "go-build")
+	os.MkdirAll(path, 0755)
+
+	total, err := Execute([]types.DebrisInfo{{
+		ID:             "go-build",
+		Tool:           types.ToolBuildCache,
+		Path:           path,
+		Size:           4,
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{"fake-fail"},
+	}})
+	if err == nil {
+		t.Fatal("expected command failure error")
+	}
+	if total != 0 {
+		t.Fatalf("total = %d; want 0", total)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("path should remain after command failure; stat err = %v", err)
+	}
+}
+
+func TestExecute_CommandCancellation(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	binDir := t.TempDir()
+	writeExecutable(t, filepath.Join(binDir, "fake-sleep"), "#!/bin/sh\nsleep 2\n")
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	path := filepath.Join(home, ".cache", "go-build")
+	os.MkdirAll(path, 0755)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	total, err := ExecuteWithContext(ctx, []types.DebrisInfo{{
+		ID:             "go-build",
+		Tool:           types.ToolBuildCache,
+		Path:           path,
+		Size:           4,
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{"fake-sleep"},
+	}})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v; want context.Canceled", err)
+	}
+	if total != 0 {
+		t.Fatalf("total = %d; want 0", total)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("path should remain after cancellation; stat err = %v", err)
+	}
+}
+
+func writeExecutable(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0755); err != nil {
+		t.Fatal(err)
 	}
 }
 

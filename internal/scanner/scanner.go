@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/types"
@@ -44,7 +46,25 @@ func Scan(ctx context.Context) (*types.ScanResult, error) {
 	return DefaultScanner.Scan(ctx)
 }
 
+func ScanWithOptions(ctx context.Context, opts types.ScanOptions) (*types.ScanResult, error) {
+	return DefaultScanner.ScanWithOptions(ctx, opts)
+}
+
 func (s *Scanner) Scan(ctx context.Context) (*types.ScanResult, error) {
+	opts, err := DefaultScanOptions()
+	if err != nil {
+		return nil, err
+	}
+	return s.ScanWithOptions(ctx, opts)
+}
+
+func (s *Scanner) ScanWithOptions(ctx context.Context, opts types.ScanOptions) (*types.ScanResult, error) {
+	roots, err := NormalizeRoots(opts.Roots)
+	if err != nil {
+		return nil, err
+	}
+	opts.Roots = roots
+
 	result := &types.ScanResult{
 		ByCategory: make(map[types.Category]types.CategorySummary),
 		ByTool:     make(map[types.Tool]types.ToolSummary),
@@ -65,7 +85,7 @@ func (s *Scanner) Scan(ctx context.Context) (*types.ScanResult, error) {
 			return nil, ctx.Err()
 		default:
 		}
-		worktrees, err := p.Scan(ctx)
+		worktrees, err := p.Scan(ctx, opts)
 		if err != nil {
 			fmt.Fprintf(s.errw(), "scan:%s:%v\n", p.Name(), err)
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -99,4 +119,104 @@ func (s *Scanner) Scan(ctx context.Context) (*types.ScanResult, error) {
 	})
 
 	return result, nil
+}
+
+func DefaultScanOptions() (types.ScanOptions, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return types.ScanOptions{}, err
+	}
+	roots, err := NormalizeRoots([]string{home})
+	if err != nil {
+		return types.ScanOptions{}, err
+	}
+	return types.ScanOptions{Roots: roots}, nil
+}
+
+func NormalizeRoots(rawRoots []string) ([]string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	resolvedHome, err := resolveExistingPath(home)
+	if err != nil {
+		return nil, fmt.Errorf("resolving home: %w", err)
+	}
+
+	if len(rawRoots) == 0 {
+		rawRoots = []string{resolvedHome}
+	}
+
+	seen := make(map[string]bool)
+	var roots []string
+	for _, raw := range rawRoots {
+		root, err := normalizeRoot(raw, resolvedHome)
+		if err != nil {
+			return nil, err
+		}
+		if !seen[root] {
+			seen[root] = true
+			roots = append(roots, root)
+		}
+	}
+
+	sort.Strings(roots)
+	var deduped []string
+	for _, root := range roots {
+		nested := false
+		for _, parent := range deduped {
+			if root == parent || isWithin(parent, root) {
+				nested = true
+				break
+			}
+		}
+		if !nested {
+			deduped = append(deduped, root)
+		}
+	}
+	return deduped, nil
+}
+
+func normalizeRoot(raw, home string) (string, error) {
+	root := strings.TrimSpace(raw)
+	if root == "" {
+		return "", fmt.Errorf("scan root cannot be empty")
+	}
+	if root == "~" {
+		root = home
+	} else if strings.HasPrefix(root, "~/") {
+		root = filepath.Join(home, strings.TrimPrefix(root, "~/"))
+	}
+	if !filepath.IsAbs(root) {
+		return "", fmt.Errorf("scan root %q must be absolute or start with ~", raw)
+	}
+	resolved, err := resolveExistingPath(root)
+	if err != nil {
+		return "", fmt.Errorf("resolving scan root %q: %w", raw, err)
+	}
+	info, err := os.Stat(resolved)
+	if err != nil {
+		return "", fmt.Errorf("reading scan root %q: %w", raw, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("scan root %q is not a directory", raw)
+	}
+	if resolved != home && !isWithin(home, resolved) {
+		return "", fmt.Errorf("scan root %q must be under %s", raw, home)
+	}
+	return resolved, nil
+}
+
+func resolveExistingPath(path string) (string, error) {
+	clean := filepath.Clean(path)
+	resolved, err := filepath.EvalSymlinks(clean)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Clean(resolved), nil
+}
+
+func isWithin(parent, child string) bool {
+	rel, err := filepath.Rel(parent, child)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }

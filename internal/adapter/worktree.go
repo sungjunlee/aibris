@@ -28,6 +28,7 @@ var knownSources = []worktreeSource{
 // This discovers worktrees from any tool — relay, project-local, future tools —
 // without hardcoding specific paths. All matches get ToolUnknown.
 const genericPattern = "*/worktree*/*"
+const directGenericPattern = "worktree*/*"
 
 // WorktreeAdapter discovers git worktrees created by AI coding tools
 // and reports their health status (active vs orphaned).
@@ -45,14 +46,14 @@ func (a *WorktreeAdapter) Category() types.Category {
 	return types.CategoryWorktree
 }
 
-func (a *WorktreeAdapter) Scan(ctx context.Context) ([]types.DebrisInfo, error) {
+func (a *WorktreeAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([]types.DebrisInfo, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	default:
 	}
 
-	home, err := os.UserHomeDir()
+	roots, err := scanRootsOrHome(opts.Roots)
 	if err != nil {
 		return nil, err
 	}
@@ -62,22 +63,40 @@ func (a *WorktreeAdapter) Scan(ctx context.Context) ([]types.DebrisInfo, error) 
 	visited := make(map[string]bool)
 	var results []types.DebrisInfo
 
-	// 1. Known tool patterns (specific, with correct tool attribution)
-	for _, src := range knownSources {
-		items, err := a.scanSource(ctx, home, src, visited)
+	for _, root := range roots {
+		// 1. Known tool patterns (specific, with correct tool attribution)
+		for _, src := range knownSources {
+			items, err := a.scanSource(ctx, root, src, visited)
+			if err != nil {
+				return nil, err
+			}
+			results = append(results, items...)
+		}
+		directClaude := worktreeSource{tool: types.ToolClaude, pattern: ".claude/worktrees/*"}
+		items, err := a.scanSource(ctx, root, directClaude, visited)
 		if err != nil {
 			return nil, err
 		}
 		results = append(results, items...)
-	}
+		if filepath.Base(root) == ".codex" {
+			directCodex := worktreeSource{tool: types.ToolCodex, pattern: "worktrees/*"}
+			items, err := a.scanSource(ctx, root, directCodex, visited)
+			if err != nil {
+				return nil, err
+			}
+			results = append(results, items...)
+		}
 
-	// 2. Generic catch-all: any */worktree*/* path not already reported
-	generic := worktreeSource{tool: types.ToolUnknown, pattern: genericPattern}
-	items, err := a.scanSource(ctx, home, generic, visited)
-	if err != nil {
-		return nil, err
+		// 2. Generic catch-all paths not already reported.
+		for _, pattern := range []string{genericPattern, directGenericPattern} {
+			generic := worktreeSource{tool: types.ToolUnknown, pattern: pattern}
+			items, err := a.scanSource(ctx, root, generic, visited)
+			if err != nil {
+				return nil, err
+			}
+			results = append(results, items...)
+		}
 	}
-	results = append(results, items...)
 
 	return results, nil
 }

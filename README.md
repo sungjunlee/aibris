@@ -46,9 +46,11 @@ If no release exists yet, it falls back to building `main` with Go.
 ```bash
 aibris scan                    # discover what's taking space
 aibris scan --json             # machine-readable output (see docs/JSON_SCHEMA.md)
+aibris scan --root ~/workspace # limit scan to a home subdirectory
 
 aibris clean --dry-run         # preview without deleting
 aibris clean                   # delete with confirmation
+aibris clean --root ~/workspace --dry-run
 aibris clean --age 7d          # older than 7 days (default)
 aibris clean --age 30d         # older than 30 days
 aibris clean --age 1mo         # older than 30 days (month shorthand)
@@ -57,6 +59,7 @@ aibris clean --interactive     # confirm each item
 aibris clean --category node_modules   # only node_modules
 aibris clean --tool codex,claude       # only specific tools
 aibris clean --risky           # include ai-logs
+aibris clean --include-active-worktrees # include active worktrees
 aibris clean --force           # skip confirmation prompt
 ```
 
@@ -94,6 +97,18 @@ $ aibris clean --category worktree --age 7d --dry-run
 - **`--dry-run`** previews before deleting
 - **`--interactive`** confirms each item
 - **`--risky`** must be explicitly set to delete AI logs
+- **Active worktrees are excluded by default**; use
+  `--include-active-worktrees` only when you intentionally want age-based
+  cleanup for valid worktrees
+- **Home-scoped roots**: default scanning starts at `$HOME`; `--root` can narrow
+  scope to one or more existing directories under `$HOME`
+- **Pruned scan directories** for project-style walks include `.Trash`,
+  `Library`, `Applications`, `Pictures`, `Movies`, `Music`, `.git`, `vendor`,
+  and nested `node_modules`; `Desktop` and `Downloads` are scanned
+- **Official cache cleanup commands** are preferred for supported caches
+  (`go clean -cache`, `npm cache clean --force`, `uv cache prune`). If the
+  owning command is missing, aibris falls back to the existing safe path removal
+  behavior; if the command runs and fails, aibris does not fall back silently.
 - **Confirmation prompt** on every `clean` (use `--force` to skip)
 - **`isSafePath` validation** rejects deletions outside known-safe directories
 - **Negative age rejection** prevents accidental full-scope deletion
@@ -101,14 +116,15 @@ $ aibris clean --category worktree --age 7d --dry-run
 ### How It Works
 
 ```
-aibris scan  → discovers worktrees, caches, node_modules, logs
+aibris scan  → discovers worktrees, caches, node_modules, logs under scan roots
 aibris clean → filters by age/category/tool → deletes safely
 ```
 
-AI tools leave debris in predictable locations. aibris scans those locations,
-measures disk usage, and cleans only after filters and safety checks. Judgment
-about what should be removed stays with a human or an AI assistant using
-`scan --json`.
+AI tools leave debris in predictable locations. aibris scans `$HOME` by default,
+prunes high-noise system and media directories while walking project-style
+debris, measures disk usage, and cleans only after filters and safety checks.
+Judgment about what should be removed stays with a human or an AI assistant
+using `scan --json`.
 
 New tools can be added by implementing the `DebrisProvider` interface.
 
@@ -116,6 +132,7 @@ New tools can be added by implementing the `DebrisProvider` interface.
 
 ```bash
 aibris scan --json
+aibris scan --root ~/workspace --json
 aibris clean --category worktree --tool codex --age 7d --dry-run
 aibris clean --category worktree --tool codex --age 7d
 ```

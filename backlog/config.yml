@@ -1,0 +1,18 @@
+project_name: "aibris"
+default_status: "To Do"
+statuses: ["To Do", "In Progress", "Done"]
+task_prefix: "AIB"
+labels:
+  - cli
+  - scanner
+  - safety
+  - docs
+  - tech-debt
+milestones:
+  - "Scan + Clean Safety"
+definition_of_done:
+  - "go test ./..."
+  - "go build ./..."
+  - "go vet ./..."
+date_format: yyyy-mm-dd hh:mm
+auto_commit: false

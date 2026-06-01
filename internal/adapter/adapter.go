@@ -10,5 +10,5 @@ import (
 type DebrisProvider interface {
 	Name() types.Tool
 	Category() types.Category
-	Scan(ctx context.Context) ([]types.DebrisInfo, error)
+	Scan(ctx context.Context, opts types.ScanOptions) ([]types.DebrisInfo, error)
 }
