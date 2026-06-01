@@ -2,6 +2,7 @@
 /aibris.exe
 /dist/
 /.pi-lens/
+/docs/superpowers/
 *.test
 *.out
 *.prof

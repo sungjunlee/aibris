@@ -25,7 +25,7 @@ then lets you preview and clean it with explicit filters and safety checks.
 curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/main/install.sh | bash
 ```
 
-Install from the current main branch, useful before the first tagged release:
+Install from the current main branch when you want unreleased changes:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/main/install.sh | bash -s -- main

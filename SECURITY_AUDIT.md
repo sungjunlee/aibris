@@ -95,7 +95,6 @@ Repository release controls include:
 - GitHub Actions CI on push and pull requests
 - `go test -race -count=1 -cover ./...`
 - `go vet ./...`
-- `golangci-lint`
 - Dependabot for Go modules and GitHub Actions
 - GoReleaser builds for Linux, macOS, and Windows
 - GoReleaser checksum generation
