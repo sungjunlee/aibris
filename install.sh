@@ -6,6 +6,14 @@ REPO="sungjunlee/aibris"
 BINARY="aibris"
 INSTALL_DIR="${AIBRIS_INSTALL_DIR:-/usr/local/bin}"
 VERSION=""
+TMP_ROOT=""
+
+cleanup() {
+  if [[ -n "${TMP_ROOT:-}" ]]; then
+    rm -rf "$TMP_ROOT"
+  fi
+}
+trap cleanup EXIT
 
 log() {
   printf '%s\n' "$*"
@@ -126,7 +134,7 @@ install_from_main() {
   need go
   local tmp
   tmp="$(mktemp -d)"
-  trap 'rm -rf "$tmp"' EXIT
+  TMP_ROOT="$tmp"
   log "Building ${BINARY} from ${REPO}@main..."
   GOBIN="${tmp}/bin" go install "github.com/${REPO}@main"
   install_binary "${tmp}/bin/${BINARY}"
@@ -143,7 +151,7 @@ download_release() {
   checksums_url="https://github.com/${REPO}/releases/download/${tag}/checksums.txt"
 
   tmp="$(mktemp -d)"
-  trap 'rm -rf "$tmp"' EXIT
+  TMP_ROOT="$tmp"
   checksums="${tmp}/checksums.txt"
   extract_dir="${tmp}/extract"
 
@@ -154,8 +162,8 @@ download_release() {
     "${BINARY}_${tag#v}_${os}_${arch}.tar.gz"; do
     archive="${tmp}/${asset}"
     url="https://github.com/${REPO}/releases/download/${tag}/${asset}"
-    log "Downloading ${asset}..."
-    if curl -fsSL -o "$archive" "$url"; then
+    if curl -fsSL -o "$archive" "$url" 2>/dev/null; then
+      log "Downloaded ${asset}"
       break
     fi
     rm -f "$archive"
