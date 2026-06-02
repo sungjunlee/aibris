@@ -162,6 +162,54 @@ func TestScan_ProviderError(t *testing.T) {
 	}
 }
 
+func TestScan_ProgressEvents(t *testing.T) {
+	t.Parallel()
+	var events []string
+	var buf bytes.Buffer
+	s := New([]adapter.DebrisProvider{
+		&mockProvider{
+			name:      types.ToolCodex,
+			worktrees: []types.DebrisInfo{{ID: "ok", Tool: types.ToolCodex, Size: 100}},
+		},
+		&mockProvider{name: types.ToolClaude, err: errors.New("boom")},
+	})
+	s.ErrorWriter = &buf
+
+	_, err := s.ScanWithOptions(context.Background(), types.ScanOptions{
+		OnProgress: func(event types.ScanProgressEvent) {
+			switch event.State {
+			case types.ScanProgressStart:
+				events = append(events, "start:"+string(event.Tool))
+			case types.ScanProgressDone:
+				events = append(events, "done:"+string(event.Tool)+":1:100")
+				if event.Count != 1 {
+					t.Errorf("done count = %d; want 1", event.Count)
+				}
+				if event.Size != 100 {
+					t.Errorf("done size = %d; want 100", event.Size)
+				}
+			case types.ScanProgressError:
+				events = append(events, "error:"+string(event.Tool)+":"+event.Err.Error())
+			default:
+				t.Errorf("unknown progress state %q", event.State)
+			}
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{
+		"start:codex",
+		"done:codex:1:100",
+		"start:claude",
+		"error:claude:boom",
+	}
+	if !reflect.DeepEqual(events, want) {
+		t.Errorf("events = %v; want %v", events, want)
+	}
+}
+
 func TestScan_ContextCancelOnEntry(t *testing.T) {
 	t.Parallel()
 	s := New([]adapter.DebrisProvider{

@@ -28,8 +28,10 @@ AI-guided judgment happens outside the CLI.
   `scan:<tool>:<error>` to stderr.
 - Return context cancellation and deadline errors immediately.
 - Sort discovered items by size descending.
-- Print human-readable output grouped by tool.
-- Print `No AI tool debris found.` and exit 0 when no items are found.
+- Print provider-level progress for human-readable scans.
+- Print a human-readable summary, category breakdown, largest items, and next
+  command suggestions after scanning.
+- For empty scans, print an explicit zero-item summary and exit 0.
 - Support `--json` for machine-readable agent workflows.
 - Support repeated `--root` flags. Roots default to `$HOME`, may use `~`, must
   resolve under `$HOME`, and are sorted/deduplicated before scanning.
