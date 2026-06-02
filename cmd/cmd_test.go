@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -54,8 +55,10 @@ func TestScanCmd_NoWorktrees(t *testing.T) {
 		rootCmd.SetArgs([]string{"scan"})
 		rootCmd.Execute()
 	})
-	if !strings.Contains(output, "No AI tool debris found") {
-		t.Errorf("output = %q; want 'No AI tool debris found'", output)
+	for _, want := range []string{"scan", "roots", "running", "done", "summary", "found       0 items", "reclaimable 0 B", "next", "aibris scan --json"} {
+		if !strings.Contains(output, want) {
+			t.Errorf("output missing %q; got: %s", want, output)
+		}
 	}
 }
 
@@ -78,8 +81,10 @@ func TestScanCmd_WithWorktrees(t *testing.T) {
 	if !strings.Contains(output, "myproj") {
 		t.Errorf("output missing project name; got: %s", output)
 	}
-	if !strings.Contains(output, "Total:") {
-		t.Errorf("output missing total; got: %s", output)
+	for _, want := range []string{"running", "done", "summary", "by category", "largest", "next"} {
+		if !strings.Contains(output, want) {
+			t.Errorf("output missing %q; got: %s", want, output)
+		}
 	}
 }
 
@@ -336,6 +341,40 @@ func TestAgeString(t *testing.T) {
 	}
 }
 
+func TestDisplayHomePath(t *testing.T) {
+	home := filepath.Join(string(filepath.Separator), "Users", "me")
+
+	tests := []struct {
+		path string
+		want string
+	}{
+		{path: home, want: "~"},
+		{path: filepath.Join(home, "workspace"), want: filepath.Join("~", "workspace")},
+		{path: filepath.Join(home, "..foo"), want: filepath.Join("~", "..foo")},
+		{path: filepath.Join(string(filepath.Separator), "tmp", "outside"), want: filepath.Join(string(filepath.Separator), "tmp", "outside")},
+	}
+	for _, tt := range tests {
+		got := displayHomePath(home, tt.path)
+		if got != tt.want {
+			t.Errorf("displayHomePath(%q, %q) = %q; want %q", home, tt.path, got, tt.want)
+		}
+	}
+}
+
+func TestDisplayRootsUsesResolvedHome(t *testing.T) {
+	realHome := t.TempDir()
+	linkHome := filepath.Join(t.TempDir(), "home-link")
+	if err := os.Symlink(realHome, linkHome); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", linkHome)
+
+	got := displayRoots([]string{realHome})
+	if !reflect.DeepEqual(got, []string{"~"}) {
+		t.Errorf("displayRoots = %v; want [~]", got)
+	}
+}
+
 func TestPrintJSON_Empty(t *testing.T) {
 	r := &types.ScanResult{
 		ByCategory: make(map[types.Category]types.CategorySummary),
@@ -518,6 +557,9 @@ func TestScanCmd_JSON(t *testing.T) {
 	}
 	if out.Summary.TotalSize <= 0 {
 		t.Errorf("TotalSize = %d; want > 0", out.Summary.TotalSize)
+	}
+	if strings.Contains(output, "running") {
+		t.Errorf("JSON output includes human progress text: %s", output)
 	}
 	if len(out.Worktrees) < 1 {
 		t.Fatal("expected at least 1 worktree")

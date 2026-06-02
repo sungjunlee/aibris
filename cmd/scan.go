@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"sort"
+	"strings"
 	"syscall"
 	"time"
 
@@ -27,42 +30,33 @@ var scanCmd = &cobra.Command{
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer cancel()
 
-		result, err := scanner.ScanWithOptions(ctx, types.ScanOptions{Roots: scanRoots})
+		if scanJSON {
+			result, err := scanner.ScanWithOptions(ctx, types.ScanOptions{Roots: scanRoots})
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				os.Exit(1)
+			}
+			printJSON(result)
+			return
+		}
+
+		roots, err := scanner.NormalizeRoots(scanRoots)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		printScanHeader(roots)
+
+		result, err := scanner.ScanWithOptions(ctx, types.ScanOptions{
+			Roots:      roots,
+			OnProgress: printScanProgress,
+		})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
 
-		if scanJSON {
-			printJSON(result)
-			return
-		}
-
-		if result.TotalCount == 0 {
-			fmt.Println("No AI tool debris found.")
-			return
-		}
-
-		currentTool := ""
-		for _, w := range result.Worktrees {
-			toolName := string(w.Tool)
-			if toolName != currentTool {
-				currentTool = toolName
-				fmt.Printf("\n%s:\n", toolName)
-			}
-			project := w.Project
-			if project == "" {
-				project = "?"
-			}
-			age := time.Since(w.ModTime).Round(time.Hour)
-			if age.Hours() < 24 {
-				fmt.Printf("  → %-14s %-18s %10s  today\n", w.ID, project, cleaner.FormatSize(w.Size))
-			} else {
-				fmt.Printf("  → %-14s %-18s %10s  %s ago\n",
-					w.ID, project, cleaner.FormatSize(w.Size), ageString(age))
-			}
-		}
-		fmt.Printf("\nTotal: %d items | %s\n", result.TotalCount, cleaner.FormatSize(result.TotalSize))
+		printHumanScanResult(result)
 	},
 }
 
@@ -138,6 +132,168 @@ func printJSON(r *types.ScanResult) {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	enc.Encode(out)
+}
+
+func printScanHeader(roots []string) {
+	fmt.Println("scan")
+	fmt.Printf("  roots  %s\n\n", strings.Join(displayRoots(roots), ", "))
+}
+
+func printScanProgress(event types.ScanProgressEvent) {
+	switch event.State {
+	case types.ScanProgressStart:
+		fmt.Printf("  running  %-12s\n", event.Tool)
+	case types.ScanProgressDone:
+		fmt.Printf("  done     %-12s %3d found   %s\n\n",
+			event.Tool, event.Count, cleaner.FormatSize(event.Size))
+	case types.ScanProgressError:
+		fmt.Printf("  error    %-12s %s\n\n", event.Tool, event.Err)
+	}
+}
+
+func printHumanScanResult(r *types.ScanResult) {
+	fmt.Println("summary")
+	fmt.Printf("  found       %d %s\n", r.TotalCount, itemNoun(r.TotalCount))
+	fmt.Printf("  reclaimable %s\n", cleaner.FormatSize(r.TotalSize))
+	if risky := riskyCount(r.Worktrees); risky > 0 {
+		fmt.Printf("  risky       %d %s require --risky\n", risky, itemNoun(risky))
+	}
+
+	printCategorySummary(r.ByCategory)
+	printLargestItems(r.Worktrees)
+
+	fmt.Println("\nnext")
+	if r.TotalCount > 0 {
+		fmt.Println("  aibris clean --dry-run")
+	}
+	fmt.Println("  aibris scan --json")
+}
+
+func printCategorySummary(summary map[types.Category]types.CategorySummary) {
+	if len(summary) == 0 {
+		return
+	}
+
+	fmt.Println("\nby category")
+	for _, category := range sortedCategories(summary) {
+		entry := summary[category]
+		fmt.Printf("  %-13s %3d   %s\n", category, entry.Count, cleaner.FormatSize(entry.Size))
+	}
+}
+
+func printLargestItems(items []types.DebrisInfo) {
+	if len(items) == 0 {
+		return
+	}
+
+	limit := 5
+	if len(items) < limit {
+		limit = len(items)
+	}
+
+	fmt.Println("\nlargest")
+	for _, item := range items[:limit] {
+		fmt.Printf("  %8s  %-13s %-12s %-18s %s\n",
+			cleaner.FormatSize(item.Size),
+			item.Category,
+			itemName(item),
+			itemProject(item),
+			itemAgeAndStatus(item))
+	}
+	if len(items) > limit {
+		fmt.Printf("  + %d more\n", len(items)-limit)
+	}
+}
+
+func sortedCategories(summary map[types.Category]types.CategorySummary) []types.Category {
+	categories := make([]types.Category, 0, len(summary))
+	for category := range summary {
+		categories = append(categories, category)
+	}
+	sort.Slice(categories, func(i, j int) bool {
+		left := summary[categories[i]]
+		right := summary[categories[j]]
+		if left.Size == right.Size {
+			return categories[i] < categories[j]
+		}
+		return left.Size > right.Size
+	})
+	return categories
+}
+
+func displayRoots(roots []string) []string {
+	out := make([]string, len(roots))
+	home, err := os.UserHomeDir()
+	if err == nil {
+		if resolved, resolveErr := filepath.EvalSymlinks(home); resolveErr == nil {
+			home = resolved
+		}
+	}
+	for i, root := range roots {
+		displayRoot := root
+		if resolved, resolveErr := filepath.EvalSymlinks(root); resolveErr == nil {
+			displayRoot = resolved
+		}
+		if err == nil {
+			out[i] = displayHomePath(home, displayRoot)
+		} else {
+			out[i] = displayRoot
+		}
+	}
+	return out
+}
+
+func displayHomePath(home, path string) string {
+	rel, err := filepath.Rel(home, path)
+	if err != nil {
+		return path
+	}
+	if rel == "." {
+		return "~"
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return path
+	}
+	return filepath.Join("~", rel)
+}
+
+func riskyCount(items []types.DebrisInfo) int {
+	var count int
+	for _, item := range items {
+		if item.Category.IsRisky() {
+			count++
+		}
+	}
+	return count
+}
+
+func itemNoun(count int) string {
+	if count == 1 {
+		return "item"
+	}
+	return "items"
+}
+
+func itemName(item types.DebrisInfo) string {
+	if item.ID != "" {
+		return item.ID
+	}
+	return string(item.Tool)
+}
+
+func itemProject(item types.DebrisInfo) string {
+	if item.Project != "" {
+		return item.Project
+	}
+	return "?"
+}
+
+func itemAgeAndStatus(item types.DebrisInfo) string {
+	age := ageString(time.Since(item.ModTime).Round(time.Hour))
+	if item.Status == "" {
+		return age
+	}
+	return fmt.Sprintf("%s %s", item.Status, age)
 }
 
 func cleanupKind(w types.DebrisInfo) types.CleanupKind {

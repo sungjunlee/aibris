@@ -85,14 +85,29 @@ func (s *Scanner) ScanWithOptions(ctx context.Context, opts types.ScanOptions) (
 			return nil, ctx.Err()
 		default:
 		}
+		emitProgress(opts.OnProgress, types.ScanProgressEvent{
+			State: types.ScanProgressStart,
+			Tool:  p.Name(),
+		})
 		worktrees, err := p.Scan(ctx, opts)
 		if err != nil {
+			emitProgress(opts.OnProgress, types.ScanProgressEvent{
+				State: types.ScanProgressError,
+				Tool:  p.Name(),
+				Err:   err,
+			})
 			fmt.Fprintf(s.errw(), "scan:%s:%v\n", p.Name(), err)
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return nil, err
 			}
 			continue
 		}
+		emitProgress(opts.OnProgress, types.ScanProgressEvent{
+			State: types.ScanProgressDone,
+			Tool:  p.Name(),
+			Count: len(worktrees),
+			Size:  totalSize(worktrees),
+		})
 		result.Worktrees = append(result.Worktrees, worktrees...)
 	}
 
@@ -119,6 +134,20 @@ func (s *Scanner) ScanWithOptions(ctx context.Context, opts types.ScanOptions) (
 	})
 
 	return result, nil
+}
+
+func emitProgress(fn func(types.ScanProgressEvent), event types.ScanProgressEvent) {
+	if fn != nil {
+		fn(event)
+	}
+}
+
+func totalSize(items []types.DebrisInfo) int64 {
+	var size int64
+	for _, item := range items {
+		size += item.Size
+	}
+	return size
 }
 
 func DefaultScanOptions() (types.ScanOptions, error) {

@@ -83,7 +83,26 @@ type ScanResult struct {
 
 // ScanOptions configures discovery scope for scan providers.
 type ScanOptions struct {
-	Roots []string
+	Roots      []string
+	OnProgress func(ScanProgressEvent)
+}
+
+// ScanProgressState describes the lifecycle point for a scan provider.
+type ScanProgressState string
+
+const (
+	ScanProgressStart ScanProgressState = "start"
+	ScanProgressDone  ScanProgressState = "done"
+	ScanProgressError ScanProgressState = "error"
+)
+
+// ScanProgressEvent reports provider-level scan activity.
+type ScanProgressEvent struct {
+	State ScanProgressState
+	Tool  Tool
+	Count int
+	Size  int64
+	Err   error
 }
 
 // CategorySummary reports aggregate stats for a single category.

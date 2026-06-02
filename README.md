@@ -68,17 +68,36 @@ aibris clean --force           # skip confirmation prompt
 ```text
 $ aibris scan
 
-node_modules:
-  → dashboard       ?                      1.8 GB  24d ago
+scan
+  roots  ~
 
-build-cache:
-  → go-build        ?                    842.0 MB  9d ago
-  → npm             ?                    512.4 MB  18d ago
+  running  node_modules
+  done     node_modules   1 found   1.8 GB
 
-codex:
-  → b7f4c2          aibris                96.0 MB  12d ago
+  running  build-cache
+  done     build-cache    2 found   1.3 GB
 
-Total: 4 items | 3.2 GB
+  running  codex
+  done     codex          1 found   96.0 MB
+
+summary
+  found       4 items
+  reclaimable 3.2 GB
+
+by category
+  node_modules    1   1.8 GB
+  build-cache     2   1.3 GB
+  worktree        1   96.0 MB
+
+largest
+    1.8 GB  node_modules  dashboard    ?                  24d
+  842.0 MB  build-cache   go-build     ?                  9d
+  512.4 MB  build-cache   npm          ?                  18d
+   96.0 MB  worktree      b7f4c2       aibris             active today
+
+next
+  aibris clean --dry-run
+  aibris scan --json
 ```
 
 Preview before deleting anything:
