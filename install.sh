@@ -37,8 +37,9 @@ Options:
   -h, --help     Show this help
 
 Arguments:
-  no argument    Install latest GitHub Release binary, or main if no release exists
-  main/latest    Build and install current main branch with Go
+  no argument    Install latest GitHub Release binary
+  latest         Install latest GitHub Release binary
+  main           Build and install current main branch with Go
   X.Y.Z/vX.Y.Z   Install that GitHub Release binary
 EOF
 }
@@ -94,6 +95,13 @@ latest_release_tag() {
   curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" |
     sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' |
     head -n 1
+}
+
+archive_candidates() {
+  local tag="$1" os="$2" arch="$3"
+  printf '%s\n' "${BINARY}_${os}_${arch}.tar.gz"
+  printf '%s\n' "${BINARY}_${tag}_${os}_${arch}.tar.gz"
+  printf '%s\n' "${BINARY}_${tag#v}_${os}_${arch}.tar.gz"
 }
 
 detect_os() {
@@ -157,9 +165,7 @@ download_release() {
 
   curl -fsSL -o "$checksums" "$checksums_url"
 
-  for asset in \
-    "${BINARY}_${tag}_${os}_${arch}.tar.gz" \
-    "${BINARY}_${tag#v}_${os}_${arch}.tar.gz"; do
+  while IFS= read -r asset; do
     archive="${tmp}/${asset}"
     url="https://github.com/${REPO}/releases/download/${tag}/${asset}"
     if curl -fsSL -o "$archive" "$url" 2>/dev/null; then
@@ -167,7 +173,7 @@ download_release() {
       break
     fi
     rm -f "$archive"
-  done
+  done < <(archive_candidates "$tag" "$os" "$arch")
 
   [[ -f "${archive:-}" ]] || { err "release archive not found for ${tag} ${os}/${arch}"; exit 1; }
 
@@ -178,28 +184,63 @@ download_release() {
 
   mkdir -p "$extract_dir"
   tar -xzf "$archive" -C "$extract_dir"
-  binary_path="$(find "$extract_dir" -type f -name "$BINARY" -perm -111 | head -n 1)"
+  binary_path="$(find "$extract_dir" -type f -name "$BINARY" -perm -111 -print -quit)"
   [[ -n "$binary_path" ]] || { err "${BINARY} not found in archive"; exit 1; }
 
   install_binary "$binary_path"
+}
+
+download_latest_release() {
+  need curl
+  need tar
+
+  local os arch asset url checksums_url tmp archive checksums expected actual extract_dir binary_path tag
+  os="$(detect_os)"
+  arch="$(detect_arch)"
+  asset="${BINARY}_${os}_${arch}.tar.gz"
+  url="https://github.com/${REPO}/releases/latest/download/${asset}"
+  checksums_url="https://github.com/${REPO}/releases/latest/download/checksums.txt"
+
+  tmp="$(mktemp -d)"
+  TMP_ROOT="$tmp"
+  checksums="${tmp}/checksums.txt"
+  archive="${tmp}/${asset}"
+  extract_dir="${tmp}/extract"
+
+  if curl -fsSL -o "$checksums" "$checksums_url" 2>/dev/null &&
+    curl -fsSL -o "$archive" "$url" 2>/dev/null; then
+    log "Downloaded ${asset}"
+    expected="$(awk -v asset="$asset" '$2 == asset { print $1; found = 1; exit } END { exit found ? 0 : 1 }' "$checksums")" ||
+      { err "checksum for ${asset} not found"; exit 1; }
+    actual="$(sha256 "$archive")"
+    [[ "$actual" == "$expected" ]] || { err "checksum mismatch for ${asset}"; exit 1; }
+
+    mkdir -p "$extract_dir"
+    tar -xzf "$archive" -C "$extract_dir"
+    binary_path="$(find "$extract_dir" -type f -name "$BINARY" -perm -111 -print -quit)"
+    [[ -n "$binary_path" ]] || { err "${BINARY} not found in archive"; exit 1; }
+
+    install_binary "$binary_path"
+    return
+  fi
+
+  log "Latest release does not provide ${asset}; trying legacy release asset lookup..."
+  rm -rf "$tmp"
+  TMP_ROOT=""
+  tag="$(latest_release_tag)" || { err "could not resolve latest GitHub Release"; exit 1; }
+  [[ -n "$tag" ]] || { err "no GitHub Release found"; exit 1; }
+  download_release "$tag"
 }
 
 main() {
   parse_args "$@"
 
   case "${VERSION:-}" in
-    main|latest)
+    main)
       install_from_main
       ;;
-    "")
-      local tag
-      tag="$(latest_release_tag || true)"
-      if [[ -n "$tag" ]]; then
-        download_release "$tag"
-      else
-        log "No GitHub Release found, installing main branch from source..."
-        install_from_main
-      fi
+    ""|latest)
+      download_latest_release
       ;;
     *)
       download_release "$(normalize_tag "$VERSION")"

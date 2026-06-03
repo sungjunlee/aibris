@@ -38,8 +38,8 @@ curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/i
 ```
 
 The installer downloads GitHub Release binaries and verifies `checksums.txt`.
-If no release exists yet, it falls back to building `main` with Go.
-`main`/`latest` always builds from source with Go.
+The default install path uses GitHub's `releases/latest/download` URLs for
+prebuilt binaries. `main` builds from source with Go.
 
 ### Usage
 

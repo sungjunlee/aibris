@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Changed
+- Installer now prefers GitHub `releases/latest/download` URLs for latest
+  binaries and no longer falls back to source builds unless `main` is requested.
+- GoReleaser archive names are stable across versions for API-free latest
+  downloads.
+
 ## [0.3.0] - 2026-06-01
 
 ### Added
