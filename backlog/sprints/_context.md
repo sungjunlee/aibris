@@ -11,5 +11,5 @@
 
 ## Known Follow-Ups
 
-- Command-backed cache cleanup is intentionally deferred. See `AIB-6` and
-  root `TODOS.md`.
+- No open GitHub issues remain after PR #30. Next work should start from fresh
+  product dogfooding or release feedback.

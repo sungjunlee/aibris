@@ -34,7 +34,7 @@ curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/i
 Install a specific release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.sh | bash -s -- 0.3.0
+curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.sh | bash -s -- 0.3.2
 ```
 
 The installer downloads GitHub Release binaries and verifies `checksums.txt`.
@@ -63,6 +63,9 @@ aibris clean --include-active-worktrees # include active worktrees
 aibris clean --force           # skip confirmation prompt
 ```
 
+See [docs/DOGFOOD.md](docs/DOGFOOD.md) for real local scan transcripts used to
+validate release behavior.
+
 ### Example
 
 ```text
@@ -71,14 +74,7 @@ $ aibris scan
 scan
   roots  ~
 
-  running  node_modules
-  done     node_modules   1 found   1.8 GB
-
-  running  build-cache
-  done     build-cache    2 found   1.3 GB
-
-  running  codex
-  done     codex          1 found   96.0 MB
+  scanned  7 sources   4 items   3.2 GB
 
 summary
   found       4 items
@@ -109,12 +105,31 @@ $ aibris clean --category worktree --age 7d --dry-run
 [DRY-RUN] Total: 1 items | 96.0 MB would be freed
 ```
 
+Confirm before deleting anything:
+
+```text
+$ aibris clean --category node_modules --age 7d
+About to delete 1 items (1.8 GB).
+
+targets
+    1.8 GB  node_modules  dashboard    ?                  24d
+    ~/workspace/dashboard/node_modules
+
+Proceed? [y/N]:
+```
+
+When stdout is an interactive terminal, scan progress uses a single-line
+spinner while providers run. In non-interactive logs, progress falls back to
+plain `scanning` / `found` lines.
+
 ### Safety
 
 - **Default `--age 7d`** avoids very recent work
 - **Human age units** support `h`, `d`, `w`, `mo`, and `y`
 - **`--dry-run`** previews before deleting
 - **`--interactive`** confirms each item
+- **Target plan before final confirmation** shows category, size, project,
+  age/status, path, and cleanup command when applicable
 - **`--risky`** must be explicitly set to delete AI logs
 - **Active worktrees are excluded by default**; use
   `--include-active-worktrees` only when you intentionally want age-based

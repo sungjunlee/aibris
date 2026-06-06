@@ -24,11 +24,15 @@ AI-guided judgment happens outside the CLI.
 ### FR1 - `aibris scan`
 
 - Run all registered `DebrisProvider` adapters.
+- Run providers with bounded parallelism so slow discovery in one category does
+  not block unrelated categories from starting.
 - Continue scanning when a non-context adapter error occurs; write
   `scan:<tool>:<error>` to stderr.
 - Return context cancellation and deadline errors immediately.
 - Sort discovered items by size descending.
-- Print provider-level progress for human-readable scans.
+- Print progress for human-readable scans. Interactive terminals use a
+  single-line spinner summary; non-interactive output uses plain progress
+  lines suitable for logs.
 - Print a human-readable summary, category breakdown, largest items, and next
   command suggestions after scanning.
 - For empty scans, print an explicit zero-item summary and exit 0.
@@ -78,7 +82,7 @@ Behavior:
 5. If no targets match, print `No items to clean.` and exit 0.
 6. If `--dry-run` is set, print targets and total reclaimable space.
 7. If `--interactive` is set, ask per item.
-8. If not forced, ask for one final confirmation.
+8. If not forced, print the target plan and ask for one final confirmation.
 9. Delete targets through cleaner safety checks.
 10. Print freed space.
 
@@ -142,6 +146,8 @@ deduplicated, and collapsed when one root is nested inside another.
 - Destructive deletion must reject relative paths.
 - Destructive deletion must reject paths outside `$HOME`.
 - Destructive deletion must pass `cleaner.IsSafePath`.
+- `node_modules` discovered under valid home-scoped scan roots must remain
+  eligible for cleanup safety checks.
 - Risky categories must be excluded unless `--risky` is set.
 - Active worktrees must be excluded unless `--include-active-worktrees` is set.
 - Command-backed cleanup must use argv-only execution and context cancellation.
@@ -157,7 +163,7 @@ main.go       -> cmd.Execute()
 cmd/          -> Cobra commands and CLI I/O
 internal/
   adapter/    -> DebrisProvider implementations
-  scanner/    -> provider orchestration and aggregation
+  scanner/    -> bounded-parallel provider orchestration and aggregation
   cleaner/    -> filtering, dry-run output, safe deletion
   types/      -> shared data model
 skills/

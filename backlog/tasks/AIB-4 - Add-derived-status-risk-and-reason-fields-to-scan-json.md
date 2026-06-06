@@ -1,7 +1,7 @@
 ---
 id: AIB-4
 title: Add derived status, risk, and reason fields to scan JSON
-status: In Review
+status: Done
 labels: [scanner, cli]
 priority: medium
 milestone: Scan + Clean Safety
@@ -28,12 +28,12 @@ top-level `worktrees` array for compatibility.
 ## Acceptance Criteria
 
 <!-- AC:BEGIN -->
-- [ ] JSON output includes `status` for worktree items.
-- [ ] JSON output includes derived `risk` for every item.
-- [ ] JSON output includes a short derived `reason` for every item.
-- [ ] Active worktree reason explains that it is protected by default.
-- [ ] Orphaned worktree reason explains that parent repo metadata is missing.
-- [ ] Existing top-level `worktrees` array and current fields remain backward-compatible.
-- [ ] Tests cover JSON output for active worktree, orphaned worktree, node_modules, build-cache, other-cache, and ai-logs.
-- [ ] `go test ./...`, `go build ./...`, and `go vet ./...` pass.
+- [x] JSON output includes `status` for worktree items.
+- [x] JSON output includes derived `risk` for every item.
+- [x] JSON output includes a short derived `reason` for every item.
+- [x] Active worktree reason explains that it is protected by default.
+- [x] Orphaned worktree reason explains that parent repo metadata is missing.
+- [x] Existing top-level `worktrees` array and current fields remain backward-compatible.
+- [x] Tests cover JSON output for active worktree, orphaned worktree, node_modules, build-cache, other-cache, and ai-logs.
+- [x] `go test ./...`, `go build ./...`, and `go vet ./...` pass.
 <!-- AC:END -->

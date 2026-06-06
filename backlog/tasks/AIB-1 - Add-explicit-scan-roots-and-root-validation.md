@@ -1,7 +1,7 @@
 ---
 id: AIB-1
 title: Add explicit scan roots and root validation
-status: In Review
+status: Done
 labels: [cli, scanner, safety]
 priority: high
 milestone: Scan + Clean Safety
@@ -23,13 +23,13 @@ roots, and pass them through the scanner contract to providers.
 ## Acceptance Criteria
 
 <!-- AC:BEGIN -->
-- [ ] `scan` accepts repeated `--root` flags.
-- [ ] `clean` accepts repeated `--root` flags and uses the same scan scope as `scan`.
-- [ ] Default roots are equivalent to resolved `$HOME`.
-- [ ] Roots expand `~`, resolve symlinks when possible, and reject paths outside resolved `$HOME`.
-- [ ] Roots are sorted, deduplicated, and nested roots are dropped when an ancestor root is already present.
-- [ ] `DebrisProvider` receives explicit `types.ScanOptions` instead of reading implicit global scan scope.
-- [ ] Existing `scanner.Scan(ctx)` compatibility wrapper still works.
-- [ ] Tests cover valid roots, invalid roots outside `$HOME`, symlink escape, duplicate roots, and nested roots.
-- [ ] `go test ./...`, `go build ./...`, and `go vet ./...` pass.
+- [x] `scan` accepts repeated `--root` flags.
+- [x] `clean` accepts repeated `--root` flags and uses the same scan scope as `scan`.
+- [x] Default roots are equivalent to resolved `$HOME`.
+- [x] Roots expand `~`, resolve symlinks when possible, and reject paths outside resolved `$HOME`.
+- [x] Roots are sorted, deduplicated, and nested roots are dropped when an ancestor root is already present.
+- [x] `DebrisProvider` receives explicit `types.ScanOptions` instead of reading implicit global scan scope.
+- [x] Existing `scanner.Scan(ctx)` compatibility wrapper still works.
+- [x] Tests cover valid roots, invalid roots outside `$HOME`, symlink escape, duplicate roots, and nested roots.
+- [x] `go test ./...`, `go build ./...`, and `go vet ./...` pass.
 <!-- AC:END -->

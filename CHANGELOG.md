@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## [0.3.2] - 2026-06-06
+
+### Added
+- Human-readable `scan` now runs providers with bounded parallelism and shows
+  interactive spinner progress on terminals.
+- `clean` confirmation now prints a target plan with category, size, project,
+  age/status, path, and cleanup command before asking for approval.
+- Test coverage for spinner output and deterministic provider concurrency.
+
+### Fixed
+- `node_modules` entries found under workspace-style roots are now accepted by
+  cleanup path safety validation instead of being rejected as unsafe.
+
+## [0.3.1] - 2026-06-03
+
 ### Changed
 - Installer now prefers GitHub `releases/latest/download` URLs for latest
   binaries and no longer falls back to source builds unless `main` is requested.
