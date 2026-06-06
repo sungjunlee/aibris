@@ -4,9 +4,14 @@ set -euo pipefail
 
 REPO="sungjunlee/aibris"
 BINARY="aibris"
-INSTALL_DIR="${AIBRIS_INSTALL_DIR:-/usr/local/bin}"
+INSTALL_DIR="${AIBRIS_INSTALL_DIR:-${HOME}/.local/bin}"
+INSTALL_DIR_EXPLICIT=0
 VERSION=""
 TMP_ROOT=""
+
+if [[ -n "${AIBRIS_INSTALL_DIR:-}" ]]; then
+  INSTALL_DIR_EXPLICIT=1
+fi
 
 cleanup() {
   if [[ -n "${TMP_ROOT:-}" ]]; then
@@ -30,7 +35,7 @@ Install aibris.
 Usage:
   curl -fsSL https://raw.githubusercontent.com/${REPO}/refs/heads/main/install.sh | bash
   curl -fsSL https://raw.githubusercontent.com/${REPO}/refs/heads/main/install.sh | bash -s -- main
-  curl -fsSL https://raw.githubusercontent.com/${REPO}/refs/heads/main/install.sh | bash -s -- 0.3.0
+  curl -fsSL https://raw.githubusercontent.com/${REPO}/refs/heads/main/install.sh | bash -s -- 0.3.3
 
 Options:
   --prefix DIR   Install into DIR (default: ${INSTALL_DIR})
@@ -50,6 +55,7 @@ parse_args() {
       --prefix)
         [[ $# -ge 2 ]] || { err "missing value for --prefix"; exit 1; }
         INSTALL_DIR="$2"
+        INSTALL_DIR_EXPLICIT=1
         shift 2
         ;;
       -h|--help)
@@ -69,17 +75,39 @@ parse_args() {
   done
 }
 
+expand_path() {
+  case "$1" in
+    \~)
+      printf '%s\n' "$HOME"
+      ;;
+    \~/*)
+      printf '%s/%s\n' "$HOME" "${1#\~/}"
+      ;;
+    *)
+      printf '%s\n' "$1"
+      ;;
+  esac
+}
+
 need() {
   command -v "$1" >/dev/null 2>&1 || { err "required command not found: $1"; exit 1; }
 }
 
-maybe_sudo() {
+run_install_command() {
   if [[ -w "$INSTALL_DIR" ]]; then
     "$@"
-  else
-    need sudo
-    sudo "$@"
+    return
   fi
+  if [[ "$INSTALL_DIR_EXPLICIT" -eq 1 ]]; then
+    need sudo
+    log "Using sudo to install into ${INSTALL_DIR}"
+    sudo "$@"
+    return
+  fi
+
+  err "${INSTALL_DIR} is not writable"
+  err "Choose a writable directory with --prefix DIR, or use --prefix /usr/local/bin for a system install."
+  exit 1
 }
 
 normalize_tag() {
@@ -133,9 +161,87 @@ sha256() {
 
 install_binary() {
   local source="$1"
-  mkdir -p "$INSTALL_DIR" 2>/dev/null || maybe_sudo mkdir -p "$INSTALL_DIR"
-  maybe_sudo install -m 0755 "$source" "${INSTALL_DIR}/${BINARY}"
+  log "Installing ${BINARY} to ${INSTALL_DIR}"
+  mkdir -p "$INSTALL_DIR" 2>/dev/null || run_install_command mkdir -p "$INSTALL_DIR"
+  run_install_command install -m 0755 "$source" "${INSTALL_DIR}/${BINARY}"
   log "Installed ${BINARY} to ${INSTALL_DIR}/${BINARY}"
+}
+
+path_contains_install_dir() {
+  case ":${PATH:-}:" in
+    *":${INSTALL_DIR}:"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+display_path() {
+  case "$1" in
+    "$HOME") printf '%s\n' '~' ;;
+    "$HOME"/*) printf '%s/%s\n' '~' "${1#"$HOME"/}" ;;
+    *) printf '%s\n' "$1" ;;
+  esac
+}
+
+shell_path_value() {
+  case "$1" in
+    "$HOME") printf '%s\n' "\$HOME" ;;
+    "$HOME"/*) printf '%s/%s\n' "\$HOME" "${1#"$HOME"/}" ;;
+    *) printf '%s\n' "$1" ;;
+  esac
+}
+
+shell_path_hint() {
+  local shell_name profile displayed_profile path_value
+  shell_name="$(basename "${SHELL:-}")"
+  case "$shell_name" in
+    zsh)
+      profile="${HOME}/.zshrc"
+      ;;
+    bash)
+      profile="${HOME}/.bashrc"
+      ;;
+    fish)
+      profile="${HOME}/.config/fish/config.fish"
+      ;;
+    *)
+      profile="${HOME}/.profile"
+      ;;
+  esac
+  displayed_profile="$(display_path "$profile")"
+  path_value="$(shell_path_value "$INSTALL_DIR")"
+
+  if [[ "$shell_name" == "fish" ]]; then
+    cat <<EOF
+Add it for future fish shells:
+  mkdir -p $(display_path "$(dirname "$profile")")
+  echo 'fish_add_path "${path_value}"' >> ${displayed_profile}
+
+Use it in this shell now:
+  set -gx PATH "${path_value}" \$PATH
+EOF
+    return
+  fi
+
+  cat <<EOF
+Add it for future shells:
+  echo 'export PATH="${path_value}:\$PATH"' >> ${displayed_profile}
+
+Use it in this shell now:
+  export PATH="${path_value}:\$PATH"
+EOF
+}
+
+print_path_hint() {
+  if path_contains_install_dir; then
+    return
+  fi
+
+  cat <<EOF
+
+${BINARY} was installed to $(display_path "$INSTALL_DIR"), but that directory is not on your PATH yet.
+
+$(shell_path_hint)
+EOF
 }
 
 install_from_main() {
@@ -234,6 +340,7 @@ download_latest_release() {
 
 main() {
   parse_args "$@"
+  INSTALL_DIR="$(expand_path "$INSTALL_DIR")"
 
   case "${VERSION:-}" in
     main)
@@ -248,6 +355,9 @@ main() {
   esac
 
   "${INSTALL_DIR}/${BINARY}" --version || true
+  print_path_hint
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
