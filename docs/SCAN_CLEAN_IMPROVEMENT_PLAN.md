@@ -18,8 +18,8 @@ current scan and clean behavior has three sharp gaps:
 1. Expand scan coverage so users get a truthful inventory from `$HOME`.
 2. Make worktree cleanup safer by default, with explicit behavior for active
    versus orphaned worktrees.
-3. Keep cache cleanup behavior unchanged in this pass, but document the risk
-   and leave room for command-backed cleanup in a follow-up.
+3. Prefer official cache cleanup commands where the behavior is explicit and
+   testable.
 4. Keep the CLI dumb and predictable. AI-assisted judgment stays outside the
    CLI through `scan --json`.
 
@@ -29,8 +29,6 @@ current scan and clean behavior has three sharp gaps:
 - GUI, daemon, scheduled cleanup, or background agents.
 - Cross-machine policy sync.
 - Full branch/PR merge analysis in this pass.
-- Command-backed cache cleanup such as `uv cache prune`, `go clean -cache`, or
-  `npm cache clean --force`.
 - Removing arbitrary user-provided paths.
 
 ## What Already Exists
@@ -45,7 +43,7 @@ current scan and clean behavior has three sharp gaps:
   confirmation.
 - `scan --json` already carries structured items for AI-guided workflows.
 
-## Proposed Implementation
+## Shipped Implementation
 
 ### 1. Configurable Home-Scoped Scan Roots
 
@@ -156,6 +154,24 @@ Update:
 The docs must explain that `$HOME` scanning is bounded by pruning rules, and
 that active worktrees are excluded by default.
 
+### 5. Command-Backed Cache Cleanup
+
+Supported caches use owning-tool commands when available:
+
+- `go clean -cache`
+- `npm cache clean --force`
+- `uv cache prune`
+
+Commands run through argv-only execution with context cancellation. Missing
+commands fall back to safe path removal; commands that run and fail do not fall
+back silently.
+
+### 6. Scan and Clean UX Follow-Up
+
+PR #30 added bounded-parallel provider scans, interactive terminal spinner
+progress, a stable `scanned ...` summary line, and target plans before `clean`
+confirmation.
+
 ## Data Flow
 
 ```text
@@ -177,7 +193,7 @@ scanner.Scan(ctx, opts)
   |
   +--> Cache adapters
           |
-          +--> Report path size with existing cleanup behavior
+          +--> Report path size and cleanup command where supported
 
 ScanResult
   |

@@ -1,7 +1,7 @@
 ---
 id: AIB-2
 title: Expand node_modules discovery to home-scoped roots
-status: In Review
+status: Done
 labels: [scanner]
 priority: high
 milestone: Scan + Clean Safety
@@ -25,12 +25,12 @@ To keep `$HOME` scanning practical, the walk must prune high-noise directories:
 ## Acceptance Criteria
 
 <!-- AC:BEGIN -->
-- [ ] `aibris scan` finds `node_modules` outside `~/projects` under default `$HOME` roots.
-- [ ] `aibris scan --root <home-subdir>` only reports `node_modules` under that root.
-- [ ] The adapter skips traversal into nested `node_modules`.
-- [ ] The adapter prunes `.Trash`, `Library`, `Applications`, `Pictures`, `Movies`, `Music`, `.git`, and `vendor`.
-- [ ] The adapter does not prune `Desktop` or `Downloads` by default.
-- [ ] Context cancellation is still respected during the walk.
-- [ ] Tests cover default `$HOME` scan, custom roots, pruned roots, `Desktop`/`Downloads`, nested `node_modules`, and cancellation.
-- [ ] `go test ./...`, `go build ./...`, and `go vet ./...` pass.
+- [x] `aibris scan` finds `node_modules` outside `~/projects` under default `$HOME` roots.
+- [x] `aibris scan --root <home-subdir>` only reports `node_modules` under that root.
+- [x] The adapter skips traversal into nested `node_modules`.
+- [x] The adapter prunes `.Trash`, `Library`, `Applications`, `Pictures`, `Movies`, `Music`, `.git`, and `vendor`.
+- [x] The adapter does not prune `Desktop` or `Downloads` by default.
+- [x] Context cancellation is still respected during the walk.
+- [x] Tests cover default `$HOME` scan, custom roots, pruned roots, `Desktop`/`Downloads`, nested `node_modules`, and cancellation.
+- [x] `go test ./...`, `go build ./...`, and `go vet ./...` pass.
 <!-- AC:END -->

@@ -1,7 +1,7 @@
 ---
 id: AIB-3
 title: Exclude active worktrees from cleanup by default
-status: In Review
+status: Done
 labels: [safety, cli]
 priority: critical
 milestone: Scan + Clean Safety
@@ -31,12 +31,12 @@ age-based behavior.
 ## Acceptance Criteria
 
 <!-- AC:BEGIN -->
-- [ ] `cleaner.Filter` excludes `CategoryWorktree` items with `Status=active` by default.
-- [ ] `cleaner.Filter` includes `Status=orphaned` worktrees when age/category/tool filters match.
-- [ ] Non-worktree filtering behavior is unchanged.
-- [ ] `clean` exposes `--include-active-worktrees`.
-- [ ] `aibris clean --category worktree --dry-run` omits active worktrees.
-- [ ] `aibris clean --include-active-worktrees --category worktree --dry-run` includes active worktrees when age filters match.
-- [ ] Tests cover active, orphaned, empty status, non-worktree, dry-run, and CLI flag behavior.
-- [ ] `go test ./...`, `go build ./...`, and `go vet ./...` pass.
+- [x] `cleaner.Filter` excludes `CategoryWorktree` items with `Status=active` by default.
+- [x] `cleaner.Filter` includes `Status=orphaned` worktrees when age/category/tool filters match.
+- [x] Non-worktree filtering behavior is unchanged.
+- [x] `clean` exposes `--include-active-worktrees`.
+- [x] `aibris clean --category worktree --dry-run` omits active worktrees.
+- [x] `aibris clean --include-active-worktrees --category worktree --dry-run` includes active worktrees when age filters match.
+- [x] Tests cover active, orphaned, empty status, non-worktree, dry-run, and CLI flag behavior.
+- [x] `go test ./...`, `go build ./...`, and `go vet ./...` pass.
 <!-- AC:END -->

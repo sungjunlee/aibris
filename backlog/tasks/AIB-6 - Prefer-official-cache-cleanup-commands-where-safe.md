@@ -1,7 +1,7 @@
 ---
 id: AIB-6
 title: Prefer official cache cleanup commands where safe
-status: In Review
+status: Done
 labels: [tech-debt, safety]
 priority: medium
 milestone: Future
@@ -28,12 +28,12 @@ cleanup has different semantics from path deletion and needs separate review.
 ## Acceptance Criteria
 
 <!-- AC:BEGIN -->
-- [ ] Design a command cleanup strategy that uses argv-only execution, never shell strings.
-- [ ] Define exact dry-run behavior for command-backed cleanup.
-- [ ] Define fallback rules when a command is missing or fails.
-- [ ] Use context cancellation for command execution.
-- [ ] Preserve path safety checks for any fallback path deletion.
-- [ ] Tests cover successful command execution, missing command, failed command, timeout/cancellation, and fallback behavior.
-- [ ] Docs explain which caches use official commands and which still use path deletion.
-- [ ] `go test ./...`, `go build ./...`, and `go vet ./...` pass.
+- [x] Design a command cleanup strategy that uses argv-only execution, never shell strings.
+- [x] Define exact dry-run behavior for command-backed cleanup.
+- [x] Define fallback rules when a command is missing or fails.
+- [x] Use context cancellation for command execution.
+- [x] Preserve path safety checks for any fallback path deletion.
+- [x] Tests cover successful command execution, missing command, failed command, timeout/cancellation, and fallback behavior.
+- [x] Docs explain which caches use official commands and which still use path deletion.
+- [x] `go test ./...`, `go build ./...`, and `go vet ./...` pass.
 <!-- AC:END -->
