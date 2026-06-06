@@ -4,7 +4,7 @@ set -euo pipefail
 
 REPO="sungjunlee/aibris"
 BINARY="aibris"
-INSTALL_DIR="${AIBRIS_INSTALL_DIR:-${HOME}/.local/bin}"
+INSTALL_DIR="${AIBRIS_INSTALL_DIR:-}"
 INSTALL_DIR_EXPLICIT=0
 VERSION=""
 TMP_ROOT=""
@@ -29,6 +29,8 @@ err() {
 }
 
 usage() {
+  local default_install_dir
+  default_install_dir="$(default_install_dir_label)"
   cat <<EOF
 Install aibris.
 
@@ -38,7 +40,7 @@ Usage:
   curl -fsSL https://raw.githubusercontent.com/${REPO}/refs/heads/main/install.sh | bash -s -- 0.3.3
 
 Options:
-  --prefix DIR   Install into DIR (default: ${INSTALL_DIR})
+  --prefix DIR   Install into DIR (default: ${default_install_dir})
   -h, --help     Show this help
 
 Arguments:
@@ -47,6 +49,22 @@ Arguments:
   main           Build and install current main branch with Go
   X.Y.Z/vX.Y.Z   Install that GitHub Release binary
 EOF
+}
+
+default_install_dir_label() {
+  if [[ -n "${HOME:-}" ]]; then
+    printf '%s\n' "${HOME}/.local/bin"
+    return
+  fi
+  printf '%s\n' "\$HOME/.local/bin"
+}
+
+default_install_dir() {
+  if [[ -z "${HOME:-}" ]]; then
+    err "HOME is not set; pass --prefix DIR or set AIBRIS_INSTALL_DIR."
+    exit 1
+  fi
+  printf '%s\n' "${HOME}/.local/bin"
 }
 
 parse_args() {
@@ -78,9 +96,11 @@ parse_args() {
 expand_path() {
   case "$1" in
     \~)
+      [[ -n "${HOME:-}" ]] || { err "HOME is not set; cannot expand ~"; exit 1; }
       printf '%s\n' "$HOME"
       ;;
     \~/*)
+      [[ -n "${HOME:-}" ]] || { err "HOME is not set; cannot expand ~"; exit 1; }
       printf '%s/%s\n' "$HOME" "${1#\~/}"
       ;;
     *)
@@ -175,17 +195,29 @@ path_contains_install_dir() {
 }
 
 display_path() {
+  local home
+  home="${HOME:-}"
+  if [[ -z "$home" ]]; then
+    printf '%s\n' "$1"
+    return
+  fi
   case "$1" in
-    "$HOME") printf '%s\n' '~' ;;
-    "$HOME"/*) printf '%s/%s\n' '~' "${1#"$HOME"/}" ;;
+    "$home") printf '%s\n' '~' ;;
+    "$home"/*) printf '%s/%s\n' '~' "${1#"$home"/}" ;;
     *) printf '%s\n' "$1" ;;
   esac
 }
 
 shell_path_value() {
+  local home
+  home="${HOME:-}"
+  if [[ -z "$home" ]]; then
+    printf '%s\n' "$1"
+    return
+  fi
   case "$1" in
-    "$HOME") printf '%s\n' "\$HOME" ;;
-    "$HOME"/*) printf '%s/%s\n' "\$HOME" "${1#"$HOME"/}" ;;
+    "$home") printf '%s\n' "\$HOME" ;;
+    "$home"/*) printf '%s/%s\n' "\$HOME" "${1#"$home"/}" ;;
     *) printf '%s\n' "$1" ;;
   esac
 }
@@ -193,6 +225,19 @@ shell_path_value() {
 shell_path_hint() {
   local shell_name profile displayed_profile path_value
   shell_name="$(basename "${SHELL:-}")"
+  path_value="$(shell_path_value "$INSTALL_DIR")"
+
+  if [[ -z "${HOME:-}" ]]; then
+    cat <<EOF
+Add it for future shells:
+  Add ${path_value} to PATH in your shell startup file.
+
+Use it in this shell now:
+  export PATH="${path_value}:\$PATH"
+EOF
+    return
+  fi
+
   case "$shell_name" in
     zsh)
       profile="${HOME}/.zshrc"
@@ -208,7 +253,6 @@ shell_path_hint() {
       ;;
   esac
   displayed_profile="$(display_path "$profile")"
-  path_value="$(shell_path_value "$INSTALL_DIR")"
 
   if [[ "$shell_name" == "fish" ]]; then
     cat <<EOF
@@ -340,6 +384,9 @@ download_latest_release() {
 
 main() {
   parse_args "$@"
+  if [[ -z "$INSTALL_DIR" ]]; then
+    INSTALL_DIR="$(default_install_dir)"
+  fi
   INSTALL_DIR="$(expand_path "$INSTALL_DIR")"
 
   case "${VERSION:-}" in

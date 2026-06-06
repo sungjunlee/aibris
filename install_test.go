@@ -25,10 +25,29 @@ func runInstallSnippet(t *testing.T, home, script string, args ...string) string
 	return string(out)
 }
 
+func runInstallSnippetWithoutHome(t *testing.T, script string, args ...string) string {
+	t.Helper()
+	cmdArgs := append([]string{"-c", script, "bash"}, args...)
+	cmd := exec.Command("bash", cmdArgs...)
+	cmd.Dir = "."
+	cmd.Env = []string{
+		"PATH=/usr/bin:/bin",
+		"SHELL=/bin/zsh",
+	}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("script failed: %v\n%s", err, out)
+	}
+	return string(out)
+}
+
 func TestInstallScriptDefaultDirIsUserLocal(t *testing.T) {
 	home := t.TempDir()
 	output := runInstallSnippet(t, home, `
 source ./install.sh
+if [[ -z "$INSTALL_DIR" ]]; then
+  INSTALL_DIR="$(default_install_dir)"
+fi
 printf 'dir=%s\nexplicit=%s\n' "$INSTALL_DIR" "$INSTALL_DIR_EXPLICIT"
 `)
 
@@ -37,6 +56,25 @@ printf 'dir=%s\nexplicit=%s\n' "$INSTALL_DIR" "$INSTALL_DIR_EXPLICIT"
 	}
 	if !strings.Contains(output, "explicit=0") {
 		t.Fatalf("default install dir should not be explicit; output:\n%s", output)
+	}
+}
+
+func TestInstallScriptExplicitPrefixDoesNotRequireHome(t *testing.T) {
+	output := runInstallSnippetWithoutHome(t, `
+source ./install.sh
+parse_args --prefix /usr/local/bin 0.3.3
+INSTALL_DIR="$(expand_path "$INSTALL_DIR")"
+printf 'dir=%s\nexplicit=%s\nversion=%s\n' "$INSTALL_DIR" "$INSTALL_DIR_EXPLICIT" "$VERSION"
+`)
+
+	if !strings.Contains(output, "dir=/usr/local/bin") {
+		t.Fatalf("explicit prefix was not preserved; output:\n%s", output)
+	}
+	if !strings.Contains(output, "explicit=1") {
+		t.Fatalf("prefix should mark install dir explicit; output:\n%s", output)
+	}
+	if !strings.Contains(output, "version=0.3.3") {
+		t.Fatalf("version argument not parsed; output:\n%s", output)
 	}
 }
 
@@ -102,6 +140,9 @@ func TestInstallScriptInstallBinaryToDefaultDirWithoutSudo(t *testing.T) {
 
 	output := runInstallSnippet(t, home, `
 source ./install.sh
+if [[ -z "$INSTALL_DIR" ]]; then
+  INSTALL_DIR="$(default_install_dir)"
+fi
 INSTALL_DIR="$(expand_path "$INSTALL_DIR")"
 install_binary "$1"
 "$INSTALL_DIR/aibris"
