@@ -34,12 +34,20 @@ curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/i
 Install a specific release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.sh | bash -s -- 0.3.2
+curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.sh | bash -s -- 0.3.3
 ```
 
 The installer downloads GitHub Release binaries and verifies `checksums.txt`.
 The default install path uses GitHub's `releases/latest/download` URLs for
 prebuilt binaries. `main` builds from source with Go.
+
+By default, aibris installs to `~/.local/bin` and does not require `sudo`. If
+that directory is not on your `PATH`, the installer prints the exact command to
+add it for your shell. For a system-wide install, pass an explicit prefix:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.sh | bash -s -- --prefix /usr/local/bin
+```
 
 ### Usage
 

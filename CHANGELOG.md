@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## [0.3.3] - 2026-06-06
+
+### Changed
+- Installer now defaults to `~/.local/bin` so normal installs do not require
+  administrator privileges.
+- Installer only falls back to `sudo` for explicitly requested prefixes, such
+  as `--prefix /usr/local/bin`.
+- Installer prints shell-specific PATH guidance when the install directory is
+  not currently available on `PATH`.
+- `make install` now honors `PREFIX`, defaulting to `~/.local/bin`.
+
 ## [0.3.2] - 2026-06-06
 
 ### Added

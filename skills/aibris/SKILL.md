@@ -13,6 +13,14 @@ AI 코딩 도구(Codex CLI, Claude Code, Cursor 등)가 남긴 작업 잔해(wor
 curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.sh | bash
 ```
 
+기본 설치 위치는 `~/.local/bin`이며 관리자 권한이 필요 없다. PATH에
+없으면 installer가 shell별 추가 명령을 안내한다. 시스템 경로에 설치해야
+할 때만 명시적으로 prefix를 지정한다:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.sh | bash -s -- --prefix /usr/local/bin
+```
+
 ## 워크플로우: AI-guided 정리
 
 사용자가 "디스크 좀 정리해줘", "오래된 워크트리 지워줘" 등의 요청을 하면 이 워크플로우를 따른다.
