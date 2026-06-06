@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.3.4] - 2026-06-06
+
+### Fixed
+- Installer now runs correctly when executed from stdin via `curl ... | bash`.
+  The `0.3.3` installer guard could fail under `set -u` with
+  `BASH_SOURCE[0]: unbound variable`.
+
 ## [0.3.3] - 2026-06-06
 
 ### Changed

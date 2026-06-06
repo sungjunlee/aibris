@@ -37,7 +37,7 @@ Install aibris.
 Usage:
   curl -fsSL https://raw.githubusercontent.com/${REPO}/refs/heads/main/install.sh | bash
   curl -fsSL https://raw.githubusercontent.com/${REPO}/refs/heads/main/install.sh | bash -s -- main
-  curl -fsSL https://raw.githubusercontent.com/${REPO}/refs/heads/main/install.sh | bash -s -- 0.3.3
+  curl -fsSL https://raw.githubusercontent.com/${REPO}/refs/heads/main/install.sh | bash -s -- 0.3.4
 
 Options:
   --prefix DIR   Install into DIR (default: ${default_install_dir})
@@ -405,6 +405,6 @@ main() {
   print_path_hint
 }
 
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+if [[ "${#BASH_SOURCE[@]}" -eq 0 || "${BASH_SOURCE[0]}" == "$0" ]]; then
   main "$@"
 fi
