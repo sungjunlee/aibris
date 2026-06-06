@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/types"
@@ -20,6 +21,9 @@ type mockProvider struct {
 	worktrees []types.DebrisInfo
 	err       error
 	roots     []string
+	delay     time.Duration
+	entered   chan<- struct{}
+	release   <-chan struct{}
 }
 
 func (m *mockProvider) Name() types.Tool {
@@ -30,8 +34,28 @@ func (m *mockProvider) Category() types.Category {
 	return types.CategoryWorktree
 }
 
-func (m *mockProvider) Scan(_ context.Context, opts types.ScanOptions) ([]types.DebrisInfo, error) {
+func (m *mockProvider) Scan(ctx context.Context, opts types.ScanOptions) ([]types.DebrisInfo, error) {
 	m.roots = append([]string(nil), opts.Roots...)
+	if m.entered != nil {
+		select {
+		case m.entered <- struct{}{}:
+		default:
+		}
+	}
+	if m.release != nil {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-m.release:
+		}
+	}
+	if m.delay > 0 {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(m.delay):
+		}
+	}
 	return m.worktrees, m.err
 }
 
@@ -201,12 +225,58 @@ func TestScan_ProgressEvents(t *testing.T) {
 
 	want := []string{
 		"start:codex",
-		"done:codex:1:100",
 		"start:claude",
-		"error:claude:boom",
 	}
-	if !reflect.DeepEqual(events, want) {
-		t.Errorf("events = %v; want %v", events, want)
+	if len(events) != 4 {
+		t.Fatalf("events = %v; want 4 events", events)
+	}
+	if !reflect.DeepEqual(events[:2], want) {
+		t.Errorf("start events = %v; want %v", events[:2], want)
+	}
+	tail := strings.Join(events[2:], "\n")
+	for _, want := range []string{"done:codex:1:100", "error:claude:boom"} {
+		if !strings.Contains(tail, want) {
+			t.Errorf("events = %v; missing %q", events, want)
+		}
+	}
+}
+
+func TestScan_ProvidersRunConcurrently(t *testing.T) {
+	t.Parallel()
+	firstEntered := make(chan struct{}, 1)
+	secondEntered := make(chan struct{}, 1)
+	release := make(chan struct{})
+	s := New([]adapter.DebrisProvider{
+		&mockProvider{name: types.ToolCodex, entered: firstEntered, release: release},
+		&mockProvider{name: types.ToolClaude, entered: secondEntered, release: release},
+	})
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := s.Scan(context.Background())
+		done <- err
+	}()
+
+	waitForProviderEntry(t, firstEntered, "first provider")
+	waitForProviderEntry(t, secondEntered, "second provider")
+	close(release)
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("scan did not finish after providers were released")
+	}
+}
+
+func waitForProviderEntry(t *testing.T, ch <-chan struct{}, name string) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(time.Second):
+		t.Fatalf("%s did not start; providers appear to be running sequentially", name)
 	}
 }
 

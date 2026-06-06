@@ -15,7 +15,7 @@ import (
 
 var safePathPrefixes = []string{
 	".codex", ".claude", ".cursor", ".cache", ".npm", ".gradle", ".cargo",
-	"Caches", "projects", ".codeium",
+	"Caches", "projects", ".codeium", "node_modules",
 }
 
 var (

@@ -35,6 +35,7 @@ func TestIsSafePath(t *testing.T) {
 		{"Xcode cache", home + "/Library/Caches/Xcode", true},
 		{"Chrome under Library not safe", home + "/Library/Application Support/Chrome", false},
 		{"node_modules under projects", home + "/projects/myapp/node_modules", true},
+		{"node_modules under workspace", home + "/workspace/active/app/node_modules", true},
 		{"codeium windsurf", home + "/.codeium/windsurf", true},
 		{"ai logs", home + "/.codex/logs_2.sqlite", true},
 		{"archived sessions", home + "/.codex/archived_sessions", true},
@@ -98,6 +99,35 @@ func TestIsSafePath_RealHome(t *testing.T) {
 			t.Error("node_modules under projects should be safe")
 		}
 	})
+}
+
+func TestExecute_NodeModulesUnderWorkspace(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	depsPath := filepath.Join(home, "workspace", "active", "app", "node_modules")
+	os.MkdirAll(depsPath, 0755)
+	os.WriteFile(filepath.Join(depsPath, "pkg.js"), []byte("data"), 0644)
+
+	worktrees := []types.DebrisInfo{
+		{
+			ID:       "app",
+			Tool:     types.ToolNodeModules,
+			Category: types.CategoryNodeModules,
+			Path:     depsPath,
+			Size:     4,
+		},
+	}
+
+	total, err := Execute(worktrees)
+	if err != nil {
+		t.Fatalf("Execute() error = %v; want nil", err)
+	}
+	if total != 4 {
+		t.Errorf("total = %d; want 4", total)
+	}
+	if _, err := os.Stat(depsPath); !os.IsNotExist(err) {
+		t.Errorf("node_modules should be removed; stat err = %v", err)
+	}
 }
 
 func TestContainsTool(t *testing.T) {
