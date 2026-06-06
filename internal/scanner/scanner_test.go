@@ -22,6 +22,8 @@ type mockProvider struct {
 	err       error
 	roots     []string
 	delay     time.Duration
+	entered   chan<- struct{}
+	release   <-chan struct{}
 }
 
 func (m *mockProvider) Name() types.Tool {
@@ -34,6 +36,19 @@ func (m *mockProvider) Category() types.Category {
 
 func (m *mockProvider) Scan(ctx context.Context, opts types.ScanOptions) ([]types.DebrisInfo, error) {
 	m.roots = append([]string(nil), opts.Roots...)
+	if m.entered != nil {
+		select {
+		case m.entered <- struct{}{}:
+		default:
+		}
+	}
+	if m.release != nil {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-m.release:
+		}
+	}
 	if m.delay > 0 {
 		select {
 		case <-ctx.Done():
@@ -228,18 +243,40 @@ func TestScan_ProgressEvents(t *testing.T) {
 
 func TestScan_ProvidersRunConcurrently(t *testing.T) {
 	t.Parallel()
+	firstEntered := make(chan struct{}, 1)
+	secondEntered := make(chan struct{}, 1)
+	release := make(chan struct{})
 	s := New([]adapter.DebrisProvider{
-		&mockProvider{name: types.ToolCodex, delay: 200 * time.Millisecond},
-		&mockProvider{name: types.ToolClaude, delay: 200 * time.Millisecond},
+		&mockProvider{name: types.ToolCodex, entered: firstEntered, release: release},
+		&mockProvider{name: types.ToolClaude, entered: secondEntered, release: release},
 	})
 
-	start := time.Now()
-	_, err := s.Scan(context.Background())
-	if err != nil {
-		t.Fatal(err)
+	done := make(chan error, 1)
+	go func() {
+		_, err := s.Scan(context.Background())
+		done <- err
+	}()
+
+	waitForProviderEntry(t, firstEntered, "first provider")
+	waitForProviderEntry(t, secondEntered, "second provider")
+	close(release)
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("scan did not finish after providers were released")
 	}
-	if elapsed := time.Since(start); elapsed > 350*time.Millisecond {
-		t.Errorf("scan took %s; providers appear to be running sequentially", elapsed)
+}
+
+func waitForProviderEntry(t *testing.T, ch <-chan struct{}, name string) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(time.Second):
+		t.Fatalf("%s did not start; providers appear to be running sequentially", name)
 	}
 }
 
