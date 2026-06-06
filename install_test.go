@@ -1,17 +1,21 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func runInstallSnippet(t *testing.T, home, script string, args ...string) string {
 	t.Helper()
 	cmdArgs := append([]string{"-c", script, "bash"}, args...)
-	cmd := exec.Command("bash", cmdArgs...)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "bash", cmdArgs...)
 	cmd.Dir = "."
 	cmd.Env = []string{
 		"HOME=" + home,
@@ -19,6 +23,9 @@ func runInstallSnippet(t *testing.T, home, script string, args ...string) string
 		"SHELL=/bin/zsh",
 	}
 	out, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		t.Fatalf("script timed out: %v\n%s", ctx.Err(), out)
+	}
 	if err != nil {
 		t.Fatalf("script failed: %v\n%s", err, out)
 	}
@@ -28,13 +35,18 @@ func runInstallSnippet(t *testing.T, home, script string, args ...string) string
 func runInstallSnippetWithoutHome(t *testing.T, script string, args ...string) string {
 	t.Helper()
 	cmdArgs := append([]string{"-c", script, "bash"}, args...)
-	cmd := exec.Command("bash", cmdArgs...)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "bash", cmdArgs...)
 	cmd.Dir = "."
 	cmd.Env = []string{
 		"PATH=/usr/bin:/bin",
 		"SHELL=/bin/zsh",
 	}
 	out, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		t.Fatalf("script timed out: %v\n%s", ctx.Err(), out)
+	}
 	if err != nil {
 		t.Fatalf("script failed: %v\n%s", err, out)
 	}
