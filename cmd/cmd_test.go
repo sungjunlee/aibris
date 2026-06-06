@@ -55,7 +55,7 @@ func TestScanCmd_NoWorktrees(t *testing.T) {
 		rootCmd.SetArgs([]string{"scan"})
 		rootCmd.Execute()
 	})
-	for _, want := range []string{"scan", "roots", "running", "done", "summary", "found       0 items", "reclaimable 0 B", "next", "aibris scan --json"} {
+	for _, want := range []string{"scan", "roots", "scanning", "found", "summary", "found       0 items", "reclaimable 0 B", "next", "aibris scan --json"} {
 		if !strings.Contains(output, want) {
 			t.Errorf("output missing %q; got: %s", want, output)
 		}
@@ -81,7 +81,7 @@ func TestScanCmd_WithWorktrees(t *testing.T) {
 	if !strings.Contains(output, "myproj") {
 		t.Errorf("output missing project name; got: %s", output)
 	}
-	for _, want := range []string{"running", "done", "summary", "by category", "largest", "next"} {
+	for _, want := range []string{"scanning", "found", "summary", "by category", "largest", "next"} {
 		if !strings.Contains(output, want) {
 			t.Errorf("output missing %q; got: %s", want, output)
 		}

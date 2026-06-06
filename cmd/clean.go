@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -106,11 +107,7 @@ var cleanCmd = &cobra.Command{
 		}
 
 		if !opts.Force {
-			var totalSize int64
-			for _, w := range targets {
-				totalSize += w.Size
-			}
-			fmt.Printf("About to delete %d items (%s).\n", len(targets), cleaner.FormatSize(totalSize))
+			printCleanPlan(targets)
 			fmt.Print("Proceed? [y/N]: ")
 			var response string
 			fmt.Scanln(&response)
@@ -168,6 +165,7 @@ func interactiveClean(targets []types.DebrisInfo) int64 {
 		fmt.Fprintf(os.Stderr, "error: getting home dir: %v\n", err)
 		return 0
 	}
+	displayHome := resolvedDisplayHome(home)
 
 	var total int64
 	scanner := bufio.NewScanner(os.Stdin)
@@ -176,7 +174,12 @@ func interactiveClean(targets []types.DebrisInfo) int64 {
 			fmt.Fprintf(os.Stderr, "  error: unsafe path %q rejected\n", w.Path)
 			continue
 		}
-		fmt.Printf("Remove %s (%s) [%s]? [y/N]: ", w.ID, w.Tool, cleaner.FormatSize(w.Size))
+		fmt.Printf("\n%s\n", cleanPlanLine(w))
+		fmt.Printf("  %s\n", displayHomePath(displayHome, w.Path))
+		if cleanupKind(w) == types.CleanupCommand && len(w.CleanupCommand) > 0 {
+			fmt.Printf("  command: %s\n", strings.Join(w.CleanupCommand, " "))
+		}
+		fmt.Print("Remove? [y/N]: ")
 		if !scanner.Scan() {
 			break
 		}
@@ -193,4 +196,49 @@ func interactiveClean(targets []types.DebrisInfo) int64 {
 		}
 	}
 	return total
+}
+
+func printCleanPlan(targets []types.DebrisInfo) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = ""
+	} else {
+		home = resolvedDisplayHome(home)
+	}
+	var totalSize int64
+	for _, w := range targets {
+		totalSize += w.Size
+	}
+
+	fmt.Printf("About to delete %d items (%s).\n", len(targets), cleaner.FormatSize(totalSize))
+	fmt.Println()
+	fmt.Println("targets")
+	for _, w := range targets {
+		fmt.Println(cleanPlanLine(w))
+		if home != "" {
+			fmt.Printf("    %s\n", displayHomePath(home, w.Path))
+		} else {
+			fmt.Printf("    %s\n", w.Path)
+		}
+		if cleanupKind(w) == types.CleanupCommand && len(w.CleanupCommand) > 0 {
+			fmt.Printf("    command: %s\n", strings.Join(w.CleanupCommand, " "))
+		}
+	}
+	fmt.Println()
+}
+
+func cleanPlanLine(w types.DebrisInfo) string {
+	return fmt.Sprintf("  %8s  %-13s %-12s %-18s %s",
+		cleaner.FormatSize(w.Size),
+		w.Category,
+		itemName(w),
+		itemProject(w),
+		itemAgeAndStatus(w))
+}
+
+func resolvedDisplayHome(home string) string {
+	if resolved, err := filepath.EvalSymlinks(home); err == nil {
+		return resolved
+	}
+	return home
 }

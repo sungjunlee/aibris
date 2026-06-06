@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/types"
@@ -20,6 +21,7 @@ type mockProvider struct {
 	worktrees []types.DebrisInfo
 	err       error
 	roots     []string
+	delay     time.Duration
 }
 
 func (m *mockProvider) Name() types.Tool {
@@ -30,8 +32,15 @@ func (m *mockProvider) Category() types.Category {
 	return types.CategoryWorktree
 }
 
-func (m *mockProvider) Scan(_ context.Context, opts types.ScanOptions) ([]types.DebrisInfo, error) {
+func (m *mockProvider) Scan(ctx context.Context, opts types.ScanOptions) ([]types.DebrisInfo, error) {
 	m.roots = append([]string(nil), opts.Roots...)
+	if m.delay > 0 {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(m.delay):
+		}
+	}
 	return m.worktrees, m.err
 }
 
@@ -201,12 +210,36 @@ func TestScan_ProgressEvents(t *testing.T) {
 
 	want := []string{
 		"start:codex",
-		"done:codex:1:100",
 		"start:claude",
-		"error:claude:boom",
 	}
-	if !reflect.DeepEqual(events, want) {
-		t.Errorf("events = %v; want %v", events, want)
+	if len(events) != 4 {
+		t.Fatalf("events = %v; want 4 events", events)
+	}
+	if !reflect.DeepEqual(events[:2], want) {
+		t.Errorf("start events = %v; want %v", events[:2], want)
+	}
+	tail := strings.Join(events[2:], "\n")
+	for _, want := range []string{"done:codex:1:100", "error:claude:boom"} {
+		if !strings.Contains(tail, want) {
+			t.Errorf("events = %v; missing %q", events, want)
+		}
+	}
+}
+
+func TestScan_ProvidersRunConcurrently(t *testing.T) {
+	t.Parallel()
+	s := New([]adapter.DebrisProvider{
+		&mockProvider{name: types.ToolCodex, delay: 200 * time.Millisecond},
+		&mockProvider{name: types.ToolClaude, delay: 200 * time.Millisecond},
+	})
+
+	start := time.Now()
+	_, err := s.Scan(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(start); elapsed > 350*time.Millisecond {
+		t.Errorf("scan took %s; providers appear to be running sequentially", elapsed)
 	}
 }
 

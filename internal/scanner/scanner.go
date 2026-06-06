@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/types"
@@ -25,6 +26,8 @@ var defaultProviders = []adapter.DebrisProvider{
 }
 
 var DefaultScanner = New(defaultProviders)
+
+const maxParallelProviders = 3
 
 type Scanner struct {
 	Providers   []adapter.DebrisProvider
@@ -79,17 +82,54 @@ func (s *Scanner) ScanWithOptions(ctx context.Context, opts types.ScanOptions) (
 		return nil, err
 	}
 
+	scanCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	results := make(chan providerScanResult, len(s.Providers))
+	startGate := make(chan struct{})
+	sem := make(chan struct{}, maxParallelProviders)
+	var wg sync.WaitGroup
+
 	for _, p := range s.Providers {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-		}
 		emitProgress(opts.OnProgress, types.ScanProgressEvent{
 			State: types.ScanProgressStart,
 			Tool:  p.Name(),
 		})
-		worktrees, err := p.Scan(ctx, opts)
+		wg.Add(1)
+		go func(p adapter.DebrisProvider) {
+			defer wg.Done()
+			select {
+			case <-scanCtx.Done():
+				results <- providerScanResult{provider: p, err: scanCtx.Err()}
+				return
+			case <-startGate:
+			}
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-scanCtx.Done():
+				results <- providerScanResult{provider: p, err: scanCtx.Err()}
+				return
+			}
+			items, err := p.Scan(scanCtx, opts)
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				cancel()
+			}
+			results <- providerScanResult{provider: p, items: items, err: err}
+		}(p)
+	}
+	close(startGate)
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	var cancelErr error
+	for providerResult := range results {
+		p := providerResult.provider
+		worktrees := providerResult.items
+		err := providerResult.err
 		if err != nil {
 			emitProgress(opts.OnProgress, types.ScanProgressEvent{
 				State: types.ScanProgressError,
@@ -98,7 +138,7 @@ func (s *Scanner) ScanWithOptions(ctx context.Context, opts types.ScanOptions) (
 			})
 			fmt.Fprintf(s.errw(), "scan:%s:%v\n", p.Name(), err)
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				return nil, err
+				cancelErr = err
 			}
 			continue
 		}
@@ -109,6 +149,9 @@ func (s *Scanner) ScanWithOptions(ctx context.Context, opts types.ScanOptions) (
 			Size:  totalSize(worktrees),
 		})
 		result.Worktrees = append(result.Worktrees, worktrees...)
+	}
+	if cancelErr != nil {
+		return nil, cancelErr
 	}
 
 	result.TotalCount = len(result.Worktrees)
@@ -134,6 +177,12 @@ func (s *Scanner) ScanWithOptions(ctx context.Context, opts types.ScanOptions) (
 	})
 
 	return result, nil
+}
+
+type providerScanResult struct {
+	provider adapter.DebrisProvider
+	items    []types.DebrisInfo
+	err      error
 }
 
 func emitProgress(fn func(types.ScanProgressEvent), event types.ScanProgressEvent) {
