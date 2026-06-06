@@ -53,6 +53,36 @@ func runInstallSnippetWithoutHome(t *testing.T, script string, args ...string) s
 	return string(out)
 }
 
+func TestInstallScriptRunsFromStdin(t *testing.T) {
+	t.Helper()
+	script, err := os.Open("install.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer script.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "bash", "-s", "--", "--help")
+	cmd.Dir = "."
+	cmd.Env = []string{
+		"HOME=" + t.TempDir(),
+		"PATH=/usr/bin:/bin",
+		"SHELL=/bin/zsh",
+	}
+	cmd.Stdin = script
+	out, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		t.Fatalf("script timed out: %v\n%s", ctx.Err(), out)
+	}
+	if err != nil {
+		t.Fatalf("script failed: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "Install aibris.") {
+		t.Fatalf("stdin execution did not print usage; output:\n%s", out)
+	}
+}
+
 func TestInstallScriptDefaultDirIsUserLocal(t *testing.T) {
 	home := t.TempDir()
 	output := runInstallSnippet(t, home, `
@@ -74,7 +104,7 @@ printf 'dir=%s\nexplicit=%s\n' "$INSTALL_DIR" "$INSTALL_DIR_EXPLICIT"
 func TestInstallScriptExplicitPrefixDoesNotRequireHome(t *testing.T) {
 	output := runInstallSnippetWithoutHome(t, `
 source ./install.sh
-parse_args --prefix /usr/local/bin 0.3.3
+parse_args --prefix /usr/local/bin 0.3.4
 INSTALL_DIR="$(expand_path "$INSTALL_DIR")"
 printf 'dir=%s\nexplicit=%s\nversion=%s\n' "$INSTALL_DIR" "$INSTALL_DIR_EXPLICIT" "$VERSION"
 `)
@@ -85,7 +115,7 @@ printf 'dir=%s\nexplicit=%s\nversion=%s\n' "$INSTALL_DIR" "$INSTALL_DIR_EXPLICIT
 	if !strings.Contains(output, "explicit=1") {
 		t.Fatalf("prefix should mark install dir explicit; output:\n%s", output)
 	}
-	if !strings.Contains(output, "version=0.3.3") {
+	if !strings.Contains(output, "version=0.3.4") {
 		t.Fatalf("version argument not parsed; output:\n%s", output)
 	}
 }
@@ -94,7 +124,7 @@ func TestInstallScriptPrefixIsExplicitAndExpandsHome(t *testing.T) {
 	home := t.TempDir()
 	output := runInstallSnippet(t, home, `
 source ./install.sh
-parse_args --prefix '~/bin' 0.3.3
+parse_args --prefix '~/bin' 0.3.4
 INSTALL_DIR="$(expand_path "$INSTALL_DIR")"
 printf 'dir=%s\nexplicit=%s\nversion=%s\n' "$INSTALL_DIR" "$INSTALL_DIR_EXPLICIT" "$VERSION"
 `)
@@ -105,7 +135,7 @@ printf 'dir=%s\nexplicit=%s\nversion=%s\n' "$INSTALL_DIR" "$INSTALL_DIR_EXPLICIT
 	if !strings.Contains(output, "explicit=1") {
 		t.Fatalf("prefix should mark install dir explicit; output:\n%s", output)
 	}
-	if !strings.Contains(output, "version=0.3.3") {
+	if !strings.Contains(output, "version=0.3.4") {
 		t.Fatalf("version argument not parsed; output:\n%s", output)
 	}
 }
