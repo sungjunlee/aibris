@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -115,6 +116,65 @@ func TestScanCmd_RootLimitsResults(t *testing.T) {
 	}
 	if out.Worktrees[0].Path != filepath.Join(resolvedWorkspace, "app", "node_modules") {
 		t.Errorf("Path = %q; want workspace node_modules", out.Worktrees[0].Path)
+	}
+}
+
+func TestScanProgressPrinter_InteractiveSummary(t *testing.T) {
+	out, err := os.CreateTemp(t.TempDir(), "scan-progress")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer out.Close()
+
+	progress := &scanProgressPrinter{
+		out:         out,
+		interactive: true,
+		stop:        make(chan struct{}),
+		stopped:     make(chan struct{}),
+		active:      make(map[types.Tool]bool),
+	}
+	go progress.spin()
+
+	progress.Handle(types.ScanProgressEvent{State: types.ScanProgressStart, Tool: types.ToolNodeModules})
+	progress.Handle(types.ScanProgressEvent{State: types.ScanProgressStart, Tool: types.ToolCodex})
+	progress.Handle(types.ScanProgressEvent{
+		State: types.ScanProgressDone,
+		Tool:  types.ToolNodeModules,
+		Count: 2,
+		Size:  2048,
+	})
+	progress.Handle(types.ScanProgressEvent{
+		State: types.ScanProgressError,
+		Tool:  types.ToolCodex,
+		Err:   errors.New("boom"),
+	})
+	progress.Stop()
+
+	if _, err := out.Seek(0, 0); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := io.ReadAll(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := string(raw)
+	for _, want := range []string{"\x1b[2K", "scanned  2 sources", "2 items", "2.0 KB", "1 errors"} {
+		if !strings.Contains(output, want) {
+			t.Errorf("progress output missing %q; got: %q", want, output)
+		}
+	}
+}
+
+func TestActiveToolsSortsAndTruncates(t *testing.T) {
+	got := activeTools(map[types.Tool]bool{
+		types.ToolWindsurf:    true,
+		types.ToolCodex:       true,
+		types.ToolNodeModules: true,
+		types.ToolBuildCache:  true,
+	})
+	want := "build-cache, codex, node_modules..."
+	if got != want {
+		t.Errorf("activeTools() = %q; want %q", got, want)
 	}
 }
 
