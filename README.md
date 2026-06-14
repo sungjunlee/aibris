@@ -1,16 +1,17 @@
-# aibris (AI + debris)
+# aibris
 
 [![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![CI](https://github.com/sungjunlee/aibris/actions/workflows/ci.yml/badge.svg)](https://github.com/sungjunlee/aibris/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/sungjunlee/aibris)](https://goreportcard.com/report/github.com/sungjunlee/aibris)
 
-Clean AI coding workflow debris from known paths: worktrees, logs,
-`node_modules`, and build caches.
+AI + debris. A small CLI for cleaning up the filesystem leftovers from AI
+coding sessions: worktrees, logs, `node_modules`, and build caches.
 
-AI tools create lots of short-lived filesystem state while they branch, build,
-test, and retry. aibris scans the known places that debris tends to collect,
-then lets you preview and clean it with explicit filters and safety checks.
+AI tools are productive, but they shed a lot of temporary state while they
+branch, build, test, and retry. aibris scans the places that debris tends to
+collect, shows a readable cleanup plan, and only deletes after filters,
+confirmation, and path safety checks.
 
 ## Who is this for?
 
@@ -18,6 +19,16 @@ then lets you preview and clean it with explicit filters and safety checks.
 - Teams sharing development machines where worktrees accumulate
 - Anyone who wants to reclaim disk space from node_modules and build caches
 - AI assistants that need structured scan output before cleanup
+
+## What it cleans
+
+| Category | Examples | Default clean |
+|----------|----------|---------------|
+| AI worktrees | Codex, Claude, generic project worktrees | Yes |
+| Dependencies | project `node_modules` directories | Yes |
+| Build caches | Go, npm, Gradle, Cargo, Xcode | Yes |
+| Python caches | pip and uv cache directories | Yes |
+| AI logs | Codex, Claude, Cursor, Windsurf logs | Only with `--risky` |
 
 ### Install
 
@@ -34,7 +45,7 @@ curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/i
 Install a specific release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.sh | bash -s -- 0.3.4
+curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.sh | bash -s -- 0.4.0
 ```
 
 The installer downloads GitHub Release binaries and verifies `checksums.txt`.
@@ -155,9 +166,17 @@ Proceed? [y/N]:
 the cache is stale, missing, or for different roots, `clean` falls back to a
 live scan with progress output.
 
-When stdout is an interactive terminal, scan progress uses a single-line
-spinner while providers run. In non-interactive logs, progress falls back to
-plain `scanning` / `found` lines.
+So the common loop is fast and visible:
+
+```bash
+aibris scan
+aibris clean --dry-run
+aibris clean
+```
+
+When stdout is an interactive terminal, scans use a single-line spinner while
+providers run. In non-interactive logs, progress falls back to plain
+`scanning` / `found` lines.
 
 ### Safety
 

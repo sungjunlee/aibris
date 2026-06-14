@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## [0.4.0] - 2026-06-14
+
+### Added
+- `clean` now shows scan progress before candidate filtering, so running
+  cleanup without a prior scan no longer looks stalled.
+- `scan` writes a short-lived last-scan snapshot, and `clean` reuses it for
+  5 minutes when roots, cache schema, and freshness match.
+- `clean` re-checks cached target paths before presenting or deleting them.
+
+### Changed
+- `clean --dry-run` and delete confirmation now share the same target plan
+  renderer with category, size, project, age/status, path, and action.
+- Target lists now use explicit `global` or `-` labels instead of ambiguous
+  `?` placeholders.
+- README now describes the tool's cleanup targets and scan-to-clean loop more
+  directly.
+
+### Fixed
+- Long deletions now print per-item start progress before slow remove or
+  cleanup-command work.
+- Future-dated, stale, schema-mismatched, or root-mismatched scan snapshots are
+  ignored and fall back to a live scan.
+
 ## [0.3.4] - 2026-06-06
 
 ### Fixed
