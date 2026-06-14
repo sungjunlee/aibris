@@ -119,6 +119,35 @@ func TestScanCmd_RootLimitsResults(t *testing.T) {
 	}
 }
 
+func TestScanCmd_WritesLastScanCache(t *testing.T) {
+	resetScanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	workspace := filepath.Join(home, "workspace")
+	modules := filepath.Join(workspace, "app", "node_modules")
+	os.MkdirAll(filepath.Join(modules, "pkg"), 0755)
+
+	captureOutput(func() {
+		rootCmd.SetArgs([]string{"scan", "--root", workspace})
+		rootCmd.Execute()
+	})
+
+	cache, ok := readLastScanCache()
+	if !ok {
+		t.Fatal("expected scan to write last scan cache")
+	}
+	resolvedWorkspace, err := filepath.EvalSymlinks(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(cache.Roots, []string{resolvedWorkspace}) {
+		t.Errorf("cache roots = %v; want %v", cache.Roots, []string{resolvedWorkspace})
+	}
+	if cache.Result.TotalCount != 1 {
+		t.Errorf("cache TotalCount = %d; want 1", cache.Result.TotalCount)
+	}
+}
+
 func TestScanProgressPrinter_InteractiveSummary(t *testing.T) {
 	out, err := os.CreateTemp(t.TempDir(), "scan-progress")
 	if err != nil {
@@ -284,6 +313,233 @@ func TestCleanCmd_DryRunShowsScanProgressAndCandidates(t *testing.T) {
 		if !strings.Contains(output, want) {
 			t.Errorf("output missing %q; got: %s", want, output)
 		}
+	}
+}
+
+func TestCleanCmd_UsesFreshLastScanCache(t *testing.T) {
+	resetScanFlags()
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	workspace := filepath.Join(home, "workspace")
+	modules := filepath.Join(workspace, "app", "node_modules")
+	os.MkdirAll(filepath.Join(modules, "pkg"), 0755)
+	past := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(modules, past, past)
+
+	captureOutput(func() {
+		rootCmd.SetArgs([]string{"scan", "--root", workspace})
+		rootCmd.Execute()
+	})
+
+	resetCleanFlags()
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--dry-run", "--age=1h", "--root", workspace, "--category=node_modules"})
+		rootCmd.Execute()
+	})
+
+	if !strings.Contains(output, "using cached scan") {
+		t.Errorf("clean should report cached scan use; got: %s", output)
+	}
+	if strings.Contains(output, "scanning ") {
+		t.Errorf("clean should not run live scan when cache is fresh; got: %s", output)
+	}
+	if !strings.Contains(output, filepath.Join("~", "workspace", "app", "node_modules")) {
+		t.Errorf("clean output missing cached target; got: %s", output)
+	}
+}
+
+func TestCleanCmd_DropsMissingTargetsFromFreshLastScanCache(t *testing.T) {
+	resetScanFlags()
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	workspace := filepath.Join(home, "workspace")
+	modules := filepath.Join(workspace, "app", "node_modules")
+	os.MkdirAll(filepath.Join(modules, "pkg"), 0755)
+	past := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(modules, past, past)
+
+	captureOutput(func() {
+		rootCmd.SetArgs([]string{"scan", "--root", workspace})
+		rootCmd.Execute()
+	})
+	if err := os.RemoveAll(modules); err != nil {
+		t.Fatal(err)
+	}
+
+	resetCleanFlags()
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--dry-run", "--age=1h", "--root", workspace, "--category=node_modules"})
+		rootCmd.Execute()
+	})
+
+	if !strings.Contains(output, "using cached scan") {
+		t.Errorf("clean should use fresh cache before dropping stale target; got: %s", output)
+	}
+	if !strings.Contains(output, "matched  0 candidates") {
+		t.Errorf("clean should drop missing cached target; got: %s", output)
+	}
+	if strings.Contains(output, filepath.Join("~", "workspace", "app", "node_modules")) {
+		t.Errorf("clean should not show missing cached target; got: %s", output)
+	}
+}
+
+func TestCleanCmd_IgnoresStaleLastScanCache(t *testing.T) {
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	workspace := filepath.Join(home, "workspace")
+	modules := filepath.Join(workspace, "app", "node_modules")
+	os.MkdirAll(filepath.Join(modules, "pkg"), 0755)
+	past := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(modules, past, past)
+	resolvedWorkspace, err := filepath.EvalSymlinks(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := saveLastScanCache(lastScanCache{
+		SchemaVersion: lastScanCacheSchemaVersion,
+		CreatedAt:     time.Now().Add(-2 * lastScanCacheMaxAge),
+		Roots:         []string{resolvedWorkspace},
+		Result:        types.ScanResult{},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--dry-run", "--age=1h", "--root", workspace, "--category=node_modules"})
+		rootCmd.Execute()
+	})
+
+	if strings.Contains(output, "using cached scan") {
+		t.Errorf("clean should ignore stale cache; got: %s", output)
+	}
+	if !strings.Contains(output, "scanning ") {
+		t.Errorf("clean should run live scan when cache is stale; got: %s", output)
+	}
+	if !strings.Contains(output, filepath.Join("~", "workspace", "app", "node_modules")) {
+		t.Errorf("clean output missing live scan target; got: %s", output)
+	}
+}
+
+func TestCleanCmd_IgnoresFutureLastScanCache(t *testing.T) {
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	workspace := filepath.Join(home, "workspace")
+	modules := filepath.Join(workspace, "app", "node_modules")
+	os.MkdirAll(filepath.Join(modules, "pkg"), 0755)
+	past := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(modules, past, past)
+	resolvedWorkspace, err := filepath.EvalSymlinks(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := saveLastScanCache(lastScanCache{
+		SchemaVersion: lastScanCacheSchemaVersion,
+		CreatedAt:     time.Now().Add(lastScanCacheMaxAge),
+		Roots:         []string{resolvedWorkspace},
+		Result:        types.ScanResult{},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--dry-run", "--age=1h", "--root", workspace, "--category=node_modules"})
+		rootCmd.Execute()
+	})
+
+	if strings.Contains(output, "using cached scan") {
+		t.Errorf("clean should ignore future-dated cache; got: %s", output)
+	}
+	if !strings.Contains(output, "scanning ") {
+		t.Errorf("clean should run live scan when cache timestamp is in the future; got: %s", output)
+	}
+	if !strings.Contains(output, filepath.Join("~", "workspace", "app", "node_modules")) {
+		t.Errorf("clean output missing live scan target; got: %s", output)
+	}
+}
+
+func TestCleanCmd_IgnoresSchemaMismatchedLastScanCache(t *testing.T) {
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	workspace := filepath.Join(home, "workspace")
+	modules := filepath.Join(workspace, "app", "node_modules")
+	os.MkdirAll(filepath.Join(modules, "pkg"), 0755)
+	past := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(modules, past, past)
+	resolvedWorkspace, err := filepath.EvalSymlinks(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := saveLastScanCache(lastScanCache{
+		SchemaVersion: lastScanCacheSchemaVersion + 1,
+		CreatedAt:     time.Now(),
+		Roots:         []string{resolvedWorkspace},
+		Result:        types.ScanResult{},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--dry-run", "--age=1h", "--root", workspace, "--category=node_modules"})
+		rootCmd.Execute()
+	})
+
+	if strings.Contains(output, "using cached scan") {
+		t.Errorf("clean should ignore schema-mismatched cache; got: %s", output)
+	}
+	if !strings.Contains(output, "scanning ") {
+		t.Errorf("clean should run live scan when cache schema differs; got: %s", output)
+	}
+	if !strings.Contains(output, filepath.Join("~", "workspace", "app", "node_modules")) {
+		t.Errorf("clean output missing live scan target; got: %s", output)
+	}
+}
+
+func TestCleanCmd_IgnoresRootMismatchedLastScanCache(t *testing.T) {
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	workspace := filepath.Join(home, "workspace")
+	other := filepath.Join(home, "other")
+	modules := filepath.Join(workspace, "app", "node_modules")
+	os.MkdirAll(filepath.Join(modules, "pkg"), 0755)
+	os.MkdirAll(other, 0755)
+	past := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(modules, past, past)
+	resolvedOther, err := filepath.EvalSymlinks(other)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := saveLastScanCache(lastScanCache{
+		SchemaVersion: lastScanCacheSchemaVersion,
+		CreatedAt:     time.Now(),
+		Roots:         []string{resolvedOther},
+		Result:        types.ScanResult{},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--dry-run", "--age=1h", "--root", workspace, "--category=node_modules"})
+		rootCmd.Execute()
+	})
+
+	if strings.Contains(output, "using cached scan") {
+		t.Errorf("clean should ignore root-mismatched cache; got: %s", output)
+	}
+	if !strings.Contains(output, "scanning ") {
+		t.Errorf("clean should run live scan when cache roots differ; got: %s", output)
+	}
+	if !strings.Contains(output, filepath.Join("~", "workspace", "app", "node_modules")) {
+		t.Errorf("clean output missing live scan target; got: %s", output)
 	}
 }
 

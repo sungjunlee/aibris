@@ -58,12 +58,7 @@ var cleanCmd = &cobra.Command{
 		}
 		printCleanHeader(roots)
 
-		progress := newScanProgressPrinter(os.Stdout)
-		result, err := scanner.ScanWithOptions(ctx, types.ScanOptions{
-			Roots:      roots,
-			OnProgress: progress.Handle,
-		})
-		progress.Stop()
+		result, err := scanForClean(ctx, roots)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
@@ -101,6 +96,7 @@ var cleanCmd = &cobra.Command{
 		}
 
 		targets := cleaner.Filter(result.Worktrees, opts)
+		targets = filterExistingTargets(targets)
 		printCleanCandidateSummary(targets)
 
 		if len(targets) == 0 {
@@ -185,6 +181,35 @@ func printCleanHeader(roots []string) {
 	fmt.Printf("  roots  %s\n\n", strings.Join(displayRoots(roots), ", "))
 }
 
+func scanForClean(ctx context.Context, roots []string) (*types.ScanResult, error) {
+	if result, age, ok := readFreshLastScanCache(roots); ok {
+		fmt.Printf("  using cached scan from %s ago\n\n", shortDurationString(age))
+		return result, nil
+	}
+
+	progress := newScanProgressPrinter(os.Stdout)
+	result, err := scanner.ScanWithOptions(ctx, types.ScanOptions{
+		Roots:      roots,
+		OnProgress: progress.Handle,
+	})
+	progress.Stop()
+	if err != nil {
+		return nil, err
+	}
+	writeLastScanCache(roots, result)
+	return result, nil
+}
+
+func shortDurationString(d time.Duration) string {
+	if d < time.Second {
+		return "0s"
+	}
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	return fmt.Sprintf("%dm", int(d.Minutes()))
+}
+
 func printCleanCandidateSummary(targets []types.DebrisInfo) {
 	var totalSize int64
 	for _, w := range targets {
@@ -199,6 +224,16 @@ func candidateNoun(count int) string {
 		return "candidate"
 	}
 	return "candidates"
+}
+
+func filterExistingTargets(targets []types.DebrisInfo) []types.DebrisInfo {
+	filtered := targets[:0]
+	for _, target := range targets {
+		if _, err := os.Stat(target.Path); err == nil {
+			filtered = append(filtered, target)
+		}
+	}
+	return filtered
 }
 
 func interactiveClean(targets []types.DebrisInfo) int64 {

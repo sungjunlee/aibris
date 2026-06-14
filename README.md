@@ -111,7 +111,7 @@ $ aibris clean --category worktree --age 7d --dry-run
 clean
   roots  ~
 
-  scanned  7 sources   4 items   3.2 GB
+  using cached scan from 8s ago
 
   matched  1 candidate   96.0 MB
 
@@ -150,6 +150,11 @@ targets
 Proceed? [y/N]:
 ```
 
+`scan` writes a short-lived snapshot under the user cache directory. A following
+`clean` reuses it for 5 minutes when the scan roots and cache schema match. If
+the cache is stale, missing, or for different roots, `clean` falls back to a
+live scan with progress output.
+
 When stdout is an interactive terminal, scan progress uses a single-line
 spinner while providers run. In non-interactive logs, progress falls back to
 plain `scanning` / `found` lines.
@@ -162,6 +167,8 @@ plain `scanning` / `found` lines.
 - **`--interactive`** confirms each item
 - **Target plan before final confirmation** shows category, size, project,
   age/status, path, and cleanup command when applicable
+- **Recent scan reuse** skips a repeated scan when `clean` can use a fresh
+  compatible snapshot, while still re-checking target paths
 - **`--risky`** must be explicitly set to delete AI logs
 - **Active worktrees are excluded by default**; use
   `--include-active-worktrees` only when you intentionally want age-based

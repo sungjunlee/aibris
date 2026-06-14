@@ -32,11 +32,17 @@ var scanCmd = &cobra.Command{
 		defer cancel()
 
 		if scanJSON {
-			result, err := scanner.ScanWithOptions(ctx, types.ScanOptions{Roots: scanRoots})
+			roots, err := scanner.NormalizeRoots(scanRoots)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
 			}
+			result, err := scanner.ScanWithOptions(ctx, types.ScanOptions{Roots: roots})
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				os.Exit(1)
+			}
+			writeLastScanCache(roots, result)
 			printJSON(result)
 			return
 		}
@@ -59,6 +65,7 @@ var scanCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		writeLastScanCache(roots, result)
 		printHumanScanResult(result)
 	},
 }

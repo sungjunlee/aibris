@@ -2,23 +2,16 @@
 
 ## Active
 
-### Reuse recent scan results for faster clean
-
-**What:** Let `aibris clean` reuse a fresh compatible `aibris scan` snapshot
-instead of immediately rescanning the same roots.
-
-**Why:** Dogfood showed the back-to-back `scan` then `clean` workflow repeats
-work. The progress fixes make this visible, but a fresh scan cache would make
-the common path faster.
-
-**Start here:** GitHub issue #35.
-
-**Must handle:** stale paths, root mismatch, CLI/schema version mismatch, and
-safe-path checks before deletion.
-
-**Depends on:** The no-cache `clean` progress and target presentation fix.
+No active TODOs.
 
 ## Completed
+
+### Reuse recent scan results for faster clean
+
+Implemented from GitHub issue #35. `scan` now writes a short-lived last-scan
+snapshot, and `clean` reuses it when roots, schema version, and freshness match.
+`clean` still re-checks path existence before presenting or deleting cached
+targets.
 
 ### Improve `clean` progress and target presentation
 
