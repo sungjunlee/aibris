@@ -202,9 +202,8 @@ The implemented UX fix is intentionally small:
    - Then print `removed:` or `cleaned:` when the item completes.
    - Preserve all existing safe-path checks and cleanup-command semantics.
 
-This pass does not add scan-result caching. It is valuable, but it introduces state:
-cache location, CLI version invalidation, root/filter matching, stale paths, and
-JSON compatibility. Add cache reuse as a separate, measurable improvement:
+The follow-up cache pass writes a 5-minute last-scan snapshot and reuses it only
+when roots, cache schema, and freshness match:
 
 ```text
 aibris scan
@@ -213,7 +212,7 @@ aibris scan
 
 aibris clean
   |
-  +-- same roots and fresh snapshot? use it
+  +-- same roots, schema, and fresh snapshot? use it
   |
   +-- otherwise run scan with progress
   |
@@ -303,11 +302,20 @@ CODE PATH COVERAGE
     |
     +-- parse --include-active-worktrees
     +-- prints scan progress while finding clean candidates
+    +-- reuses a fresh compatible last-scan cache
+    +-- falls back to live scan when cache is stale or roots differ
+    +-- drops stale cached targets whose paths no longer exist
     +-- dry-run reports filtered targets
     +-- confirmation uses the same target renderer as dry-run
     +-- unknown project display never renders as "?"
     +-- execute still uses IsSafePath
     +-- prints per-item start progress before slow deletions or commands
+
+[+] cmd/scan_cache.go
+    |
+    +-- writes cache under the user cache directory
+    +-- stores schema version, created_at, normalized roots, and ScanResult
+    +-- rejects stale, schema-mismatched, and root-mismatched snapshots
 ```
 
 ### Unit Tests
@@ -348,6 +356,10 @@ CODE PATH COVERAGE
 - `aibris clean --dry-run` and confirmation plans share the same target format
 - non-project debris displays `global` or `-`, never `?`
 - forced cleanup prints start progress before `removed:` or `cleaned:`
+- `aibris scan --root <home-subdir>` writes a last-scan cache
+- `aibris clean --root <same-home-subdir> --dry-run` uses a fresh cache without
+  live scan progress
+- stale or root-mismatched scan cache falls back to live scan
 - invalid `--root /tmp` fails with a clear error
 
 ## Failure Modes
@@ -357,7 +369,9 @@ CODE PATH COVERAGE
 | `$HOME` scan is too slow | prune noisy roots, keep `--root` for narrowing |
 | `clean` appears hung during its implicit scan | reuse scan progress printer in `clean` |
 | a large deletion appears hung | print per-item start progress before delete/command work |
-| stale cached scan points at removed paths | defer caching; when added, re-check path existence and safety |
+| stale cached scan points at removed paths | reject old cache and re-check target path existence before presentation/deletion |
+| cached scan was for different roots | require exact normalized root match |
+| cache schema changes | require exact schema version match |
 | user has projects under `~/Library` | default misses them, user can pass `--root` |
 | active worktree contains valuable work | excluded by default |
 | symlink root escapes `$HOME` | reject after `EvalSymlinks` |
@@ -376,7 +390,7 @@ Suggested order:
 4. Add derived status/risk/reason fields to JSON output.
 5. Update JSON/docs/skill workflow.
 6. Reuse scan progress and target rendering in `clean`.
-7. Add last-scan cache reuse only after the no-cache UX is polished.
+7. Add last-scan cache reuse after the no-cache UX is polished.
 
 ## Simplify Constraints
 
@@ -388,5 +402,4 @@ Suggested order:
 - Keep CLI flag parsing in `cmd/`, scan logic in `adapter/`, filtering in
   `cleaner/`.
 - Avoid a broad scanner rewrite. Add options to the existing scanner shape.
-- Do not add scan-result caching in the same change as output cleanup.
 - Keep display-only labels out of JSON compatibility fields.
