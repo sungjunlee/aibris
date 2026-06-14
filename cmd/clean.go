@@ -51,7 +51,19 @@ var cleanCmd = &cobra.Command{
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer cancel()
 
-		result, err := scanner.ScanWithOptions(ctx, types.ScanOptions{Roots: cleanRoots})
+		roots, err := scanner.NormalizeRoots(cleanRoots)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		printCleanHeader(roots)
+
+		progress := newScanProgressPrinter(os.Stdout)
+		result, err := scanner.ScanWithOptions(ctx, types.ScanOptions{
+			Roots:      roots,
+			OnProgress: progress.Handle,
+		})
+		progress.Stop()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
@@ -89,6 +101,7 @@ var cleanCmd = &cobra.Command{
 		}
 
 		targets := cleaner.Filter(result.Worktrees, opts)
+		printCleanCandidateSummary(targets)
 
 		if len(targets) == 0 {
 			fmt.Println("No items to clean.")
@@ -96,7 +109,8 @@ var cleanCmd = &cobra.Command{
 		}
 
 		if opts.DryRun {
-			cleaner.DryRun(targets)
+			printCleanPlan(targets, cleanPlanModeDryRun)
+			fmt.Println("[DRY-RUN] No files were removed.")
 			return
 		}
 
@@ -107,7 +121,7 @@ var cleanCmd = &cobra.Command{
 		}
 
 		if !opts.Force {
-			printCleanPlan(targets)
+			printCleanPlan(targets, cleanPlanModeDelete)
 			fmt.Print("Proceed? [y/N]: ")
 			var response string
 			fmt.Scanln(&response)
@@ -137,6 +151,13 @@ func init() {
 	cleanCmd.Flags().BoolVar(&cleanIncludeActiveWorktrees, "include-active-worktrees", false, "Include active worktrees in cleanup candidates")
 }
 
+type cleanPlanMode string
+
+const (
+	cleanPlanModeDelete cleanPlanMode = "delete"
+	cleanPlanModeDryRun cleanPlanMode = "dry-run"
+)
+
 func parseAge(s string) (time.Duration, error) {
 	units := []struct {
 		suffix string
@@ -159,6 +180,27 @@ func parseAge(s string) (time.Duration, error) {
 	return time.ParseDuration(s)
 }
 
+func printCleanHeader(roots []string) {
+	fmt.Println("clean")
+	fmt.Printf("  roots  %s\n\n", strings.Join(displayRoots(roots), ", "))
+}
+
+func printCleanCandidateSummary(targets []types.DebrisInfo) {
+	var totalSize int64
+	for _, w := range targets {
+		totalSize += w.Size
+	}
+	fmt.Printf("  matched  %d %s   %s\n\n",
+		len(targets), candidateNoun(len(targets)), cleaner.FormatSize(totalSize))
+}
+
+func candidateNoun(count int) string {
+	if count == 1 {
+		return "candidate"
+	}
+	return "candidates"
+}
+
 func interactiveClean(targets []types.DebrisInfo) int64 {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -174,11 +216,8 @@ func interactiveClean(targets []types.DebrisInfo) int64 {
 			fmt.Fprintf(os.Stderr, "  error: unsafe path %q rejected\n", w.Path)
 			continue
 		}
-		fmt.Printf("\n%s\n", cleanPlanLine(w))
-		fmt.Printf("  %s\n", displayHomePath(displayHome, w.Path))
-		if cleanupKind(w) == types.CleanupCommand && len(w.CleanupCommand) > 0 {
-			fmt.Printf("  command: %s\n", strings.Join(w.CleanupCommand, " "))
-		}
+		fmt.Println()
+		printCleanTarget(w, displayHome)
 		fmt.Print("Remove? [y/N]: ")
 		if !scanner.Scan() {
 			break
@@ -198,7 +237,7 @@ func interactiveClean(targets []types.DebrisInfo) int64 {
 	return total
 }
 
-func printCleanPlan(targets []types.DebrisInfo) {
+func printCleanPlan(targets []types.DebrisInfo, mode cleanPlanMode) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = ""
@@ -210,30 +249,46 @@ func printCleanPlan(targets []types.DebrisInfo) {
 		totalSize += w.Size
 	}
 
-	fmt.Printf("About to delete %d items (%s).\n", len(targets), cleaner.FormatSize(totalSize))
+	fmt.Println("clean plan")
+	fmt.Printf("  mode     %s\n", mode)
+	fmt.Printf("  targets  %d %s   %s\n", len(targets), itemNoun(len(targets)), cleaner.FormatSize(totalSize))
 	fmt.Println()
 	fmt.Println("targets")
+	fmt.Printf("  %8s  %-13s %-12s %-18s %-14s %s\n",
+		"size", "category", "name", "project", "age/status", "action")
 	for _, w := range targets {
-		fmt.Println(cleanPlanLine(w))
-		if home != "" {
-			fmt.Printf("    %s\n", displayHomePath(home, w.Path))
-		} else {
-			fmt.Printf("    %s\n", w.Path)
-		}
-		if cleanupKind(w) == types.CleanupCommand && len(w.CleanupCommand) > 0 {
-			fmt.Printf("    command: %s\n", strings.Join(w.CleanupCommand, " "))
-		}
+		printCleanTarget(w, home)
 	}
 	fmt.Println()
 }
 
+func printCleanTarget(w types.DebrisInfo, home string) {
+	fmt.Println(cleanPlanLine(w))
+	if home != "" {
+		fmt.Printf("    %s\n", displayHomePath(home, w.Path))
+	} else {
+		fmt.Printf("    %s\n", w.Path)
+	}
+	if cleanupKind(w) == types.CleanupCommand && len(w.CleanupCommand) > 0 {
+		fmt.Printf("    command: %s\n", strings.Join(w.CleanupCommand, " "))
+	}
+}
+
 func cleanPlanLine(w types.DebrisInfo) string {
-	return fmt.Sprintf("  %8s  %-13s %-12s %-18s %s",
+	return fmt.Sprintf("  %8s  %-13s %-12s %-18s %-14s %s",
 		cleaner.FormatSize(w.Size),
 		w.Category,
 		itemName(w),
 		itemProject(w),
-		itemAgeAndStatus(w))
+		itemAgeAndStatus(w),
+		cleanAction(w))
+}
+
+func cleanAction(w types.DebrisInfo) string {
+	if cleanupKind(w) == types.CleanupCommand && len(w.CleanupCommand) > 0 {
+		return string(types.CleanupCommand)
+	}
+	return string(types.CleanupRemovePath)
 }
 
 func resolvedDisplayHome(home string) string {

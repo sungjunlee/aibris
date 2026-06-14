@@ -81,28 +81,6 @@ func Filter(worktrees []types.DebrisInfo, opts types.PruneOptions) []types.Debri
 	return filtered
 }
 
-// DryRun prints what would be deleted without actually removing anything.
-func DryRun(worktrees []types.DebrisInfo) {
-	var total int64
-	for _, w := range worktrees {
-		age := time.Since(w.ModTime).Round(time.Hour)
-		ageDisplay := "today"
-		if age.Hours() >= 24 {
-			ageDisplay = fmt.Sprintf("%dd ago", int(age.Hours()/24))
-		}
-		if cleanupKind(w) == types.CleanupCommand && len(w.CleanupCommand) > 0 {
-			fmt.Printf("[DRY-RUN] would run: %s for %s (%s) — %s (%s)\n",
-				strings.Join(w.CleanupCommand, " "), w.ID, w.Tool, FormatSize(w.Size), ageDisplay)
-		} else {
-			fmt.Printf("[DRY-RUN] would remove: %s (%s) — %s (%s)\n",
-				w.ID, w.Tool, FormatSize(w.Size), ageDisplay)
-		}
-		total += w.Size
-	}
-	fmt.Printf("\n[DRY-RUN] Total: %d items | %s would be freed\n",
-		len(worktrees), FormatSize(total))
-}
-
 // Execute removes the given worktrees from disk.
 func Execute(worktrees []types.DebrisInfo) (int64, error) {
 	return ExecuteWithContext(context.Background(), worktrees)
@@ -117,7 +95,7 @@ func ExecuteWithContext(ctx context.Context, worktrees []types.DebrisInfo) (int6
 
 	var total int64
 	var errs []error
-	for _, w := range worktrees {
+	for i, w := range worktrees {
 		if err := ctx.Err(); err != nil {
 			return total, err
 		}
@@ -127,6 +105,8 @@ func ExecuteWithContext(ctx context.Context, worktrees []types.DebrisInfo) (int6
 			continue
 		}
 		if cleanupKind(w) == types.CleanupCommand && len(w.CleanupCommand) > 0 {
+			fmt.Printf("running %d/%d: %s (%s) via %s ...\n",
+				i+1, len(worktrees), debrisName(w), w.Category, strings.Join(w.CleanupCommand, " "))
 			if err := runCleanupCommand(ctx, w.CleanupCommand); err == nil {
 				total += w.Size
 				fmt.Printf("cleaned: %s (%s) via %s — %s\n",
@@ -139,6 +119,8 @@ func ExecuteWithContext(ctx context.Context, worktrees []types.DebrisInfo) (int6
 			fmt.Fprintf(os.Stderr, "warning: cleanup command %q not found; falling back to path removal for %s\n",
 				w.CleanupCommand[0], w.ID)
 		}
+		fmt.Printf("removing %d/%d: %s (%s) ...\n",
+			i+1, len(worktrees), debrisName(w), w.Category)
 		if err := os.RemoveAll(w.Path); err != nil {
 			errs = append(errs, fmt.Errorf("removing %s: %w", w.Path, err))
 			continue
@@ -150,6 +132,13 @@ func ExecuteWithContext(ctx context.Context, worktrees []types.DebrisInfo) (int6
 		return total, fmt.Errorf("failed to remove %d item(s): %w", len(errs), errors.Join(errs...))
 	}
 	return total, nil
+}
+
+func debrisName(w types.DebrisInfo) string {
+	if w.ID != "" {
+		return w.ID
+	}
+	return string(w.Tool)
 }
 
 func cleanupKind(w types.DebrisInfo) types.CleanupKind {

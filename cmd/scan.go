@@ -426,7 +426,12 @@ func itemProject(item types.DebrisInfo) string {
 	if item.Project != "" {
 		return item.Project
 	}
-	return "?"
+	switch item.Category {
+	case types.CategoryBuildCache, types.CategoryOtherCache, types.CategoryAILogs:
+		return "global"
+	default:
+		return "-"
+	}
 }
 
 func itemAgeAndStatus(item types.DebrisInfo) string {

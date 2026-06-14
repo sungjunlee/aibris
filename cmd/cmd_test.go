@@ -266,6 +266,132 @@ func TestCleanCmd_DryRun(t *testing.T) {
 	}
 }
 
+func TestCleanCmd_DryRunShowsScanProgressAndCandidates(t *testing.T) {
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	modules := filepath.Join(home, "workspace", "app", "node_modules")
+	os.MkdirAll(filepath.Join(modules, "pkg"), 0755)
+	past := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(modules, past, past)
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--dry-run", "--age=1h", "--category=node_modules"})
+		rootCmd.Execute()
+	})
+
+	for _, want := range []string{"clean", "roots", "scanning", "found", "matched  1 candidate", "clean plan", "mode     dry-run"} {
+		if !strings.Contains(output, want) {
+			t.Errorf("output missing %q; got: %s", want, output)
+		}
+	}
+}
+
+func TestCleanCmd_DryRunAndConfirmShareTargetFormat(t *testing.T) {
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	modules := filepath.Join(home, "workspace", "app", "node_modules")
+	os.MkdirAll(filepath.Join(modules, "pkg"), 0755)
+	past := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(modules, past, past)
+
+	dryRunOutput := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--dry-run", "--age=1h", "--category=node_modules"})
+		rootCmd.Execute()
+	})
+
+	oldStdin := os.Stdin
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdin = r
+	w.WriteString("n\n")
+	w.Close()
+	defer func() { os.Stdin = oldStdin }()
+
+	resetCleanFlags()
+	confirmOutput := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--age=1h", "--category=node_modules"})
+		rootCmd.Execute()
+	})
+
+	for _, want := range []string{"targets", "size", "category", "project", "action", "remove-path", filepath.Join("~", "workspace", "app", "node_modules")} {
+		if !strings.Contains(dryRunOutput, want) {
+			t.Errorf("dry-run output missing %q; got: %s", want, dryRunOutput)
+		}
+		if !strings.Contains(confirmOutput, want) {
+			t.Errorf("confirm output missing %q; got: %s", want, confirmOutput)
+		}
+	}
+}
+
+func TestCleanCmd_InteractiveUsesCleanTargetFormat(t *testing.T) {
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	modules := filepath.Join(home, "workspace", "app", "node_modules")
+	os.MkdirAll(filepath.Join(modules, "pkg"), 0755)
+	past := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(modules, past, past)
+
+	oldStdin := os.Stdin
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdin = r
+	w.WriteString("n\n")
+	w.Close()
+	defer func() { os.Stdin = oldStdin }()
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--interactive", "--age=1h", "--category=node_modules"})
+		rootCmd.Execute()
+	})
+
+	for _, want := range []string{"node_modules", "remove-path", filepath.Join("~", "workspace", "app", "node_modules"), "Remove? [y/N]:"} {
+		if !strings.Contains(output, want) {
+			t.Errorf("interactive output missing %q; got: %s", want, output)
+		}
+	}
+}
+
+func TestCleanPlanLineAvoidsUnknownProjectQuestionMark(t *testing.T) {
+	output := captureOutput(func() {
+		printCleanPlan([]types.DebrisInfo{
+			{
+				Tool:        types.ToolBuildCache,
+				Category:    types.CategoryBuildCache,
+				ID:          "npm",
+				Path:        filepath.Join(t.TempDir(), ".npm", "_cacache"),
+				Size:        1024,
+				ModTime:     time.Now().Add(-48 * time.Hour),
+				CleanupKind: types.CleanupCommand,
+			},
+			{
+				Tool:     types.ToolNodeModules,
+				Category: types.CategoryNodeModules,
+				ID:       "deps",
+				Path:     filepath.Join(t.TempDir(), "workspace", "app", "node_modules"),
+				Size:     1024,
+				ModTime:  time.Now().Add(-48 * time.Hour),
+			},
+		}, cleanPlanModeDryRun)
+	})
+
+	if strings.Contains(output, "?") {
+		t.Errorf("clean plan should not render unknown project as '?'; got: %s", output)
+	}
+	if !strings.Contains(output, "global") {
+		t.Errorf("clean plan should mark global cache items; got: %s", output)
+	}
+	if !strings.Contains(output, "-") {
+		t.Errorf("clean plan should mark unknown path-derived projects with '-'; got: %s", output)
+	}
+}
+
 func TestCleanCmd_ActiveWorktreeExcludedByDefault(t *testing.T) {
 	resetCleanFlags()
 	home := t.TempDir()
@@ -328,7 +454,7 @@ func TestCleanCmd_RootLimitsResults(t *testing.T) {
 	if !strings.Contains(output, "app") {
 		t.Errorf("output missing workspace app; got: %s", output)
 	}
-	if strings.Count(output, "[DRY-RUN] would remove") != 1 {
+	if strings.Count(output, "remove-path") != 1 {
 		t.Errorf("expected exactly one dry-run target; got: %s", output)
 	}
 }
@@ -377,6 +503,33 @@ func TestCleanCmd_Execute(t *testing.T) {
 	}
 	if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
 		t.Error("worktree should be removed")
+	}
+}
+
+func TestCleanCmd_ExecutePrintsStartProgressBeforeCompletion(t *testing.T) {
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	modules := filepath.Join(home, "workspace", "app", "node_modules")
+	os.MkdirAll(filepath.Join(modules, "pkg"), 0755)
+	past := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(modules, past, past)
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--age=1h", "--force", "--category=node_modules"})
+		rootCmd.Execute()
+	})
+
+	start := strings.Index(output, "removing 1/1:")
+	done := strings.Index(output, "removed:")
+	if start < 0 {
+		t.Fatalf("output missing start progress; got: %s", output)
+	}
+	if done < 0 {
+		t.Fatalf("output missing completion progress; got: %s", output)
+	}
+	if start > done {
+		t.Errorf("start progress should appear before completion; got: %s", output)
 	}
 }
 
