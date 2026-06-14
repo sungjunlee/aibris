@@ -282,53 +282,6 @@ func captureStdout(fn func()) string {
 	return string(out)
 }
 
-func TestDryRun(t *testing.T) {
-	worktrees := []types.DebrisInfo{
-		{ID: "test-id", Tool: types.ToolCodex, Size: 1024, ModTime: time.Now().Add(-48 * time.Hour)},
-	}
-
-	output := captureStdout(func() {
-		DryRun(worktrees)
-	})
-
-	if !strings.Contains(output, "[DRY-RUN]") {
-		t.Errorf("output missing [DRY-RUN]; got: %s", output)
-	}
-	if !strings.Contains(output, "test-id") {
-		t.Errorf("output missing worktree ID; got: %s", output)
-	}
-}
-
-func TestDryRun_CommandCleanup(t *testing.T) {
-	worktrees := []types.DebrisInfo{
-		{
-			ID:             "go-build",
-			Tool:           types.ToolBuildCache,
-			Size:           1024,
-			ModTime:        time.Now().Add(-48 * time.Hour),
-			CleanupKind:    types.CleanupCommand,
-			CleanupCommand: []string{"go", "clean", "-cache"},
-		},
-	}
-
-	output := captureStdout(func() {
-		DryRun(worktrees)
-	})
-
-	if !strings.Contains(output, "[DRY-RUN] would run: go clean -cache") {
-		t.Errorf("output missing command dry-run; got: %s", output)
-	}
-}
-
-func TestDryRun_Empty(t *testing.T) {
-	output := captureStdout(func() {
-		DryRun(nil)
-	})
-	if !strings.Contains(output, "0 items") {
-		t.Errorf("output missing 0 items; got: %s", output)
-	}
-}
-
 func TestExecute(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

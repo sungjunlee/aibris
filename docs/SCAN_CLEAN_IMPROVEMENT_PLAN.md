@@ -172,6 +172,54 @@ PR #30 added bounded-parallel provider scans, interactive terminal spinner
 progress, a stable `scanned ...` summary line, and target plans before `clean`
 confirmation.
 
+### 7. Dogfood Follow-Up: Make `clean` Feel As Good As `scan`
+
+Real usage exposed that `clean` still feels worse than `scan`:
+
+- `clean` silently performs a full scan before showing candidates.
+- `clean --dry-run` and real `clean` use different output shapes.
+- unknown project values render as `?`, which reads like missing safety
+  information instead of "not applicable".
+- deletion progress is printed only after each item finishes, so a large
+  `node_modules` removal or cache command can still look stuck.
+
+The implemented UX fix is intentionally small:
+
+1. Reuse the existing scan progress printer in `clean`.
+   - Print `clean` and `roots` before scanning.
+   - Show the same spinner and final `scanned ...` line used by `scan`.
+   - After filtering, print `matched N candidates`.
+2. Use one clean-plan renderer for both `--dry-run` and confirmation.
+   - Keep `cleaner.Filter` as the policy boundary.
+   - Move human presentation to `cmd/`, not `internal/cleaner`.
+   - Include headers so the columns are self-explanatory.
+3. Replace `?` with an explicit display value.
+   - For global caches, show `global`.
+   - For path-derived items where no project is known, show `-`.
+   - Keep JSON fields unchanged for compatibility.
+4. Print per-item start progress before destructive work.
+   - Example: `removing 1/28 expo (node_modules) ...`
+   - Then print `removed:` or `cleaned:` when the item completes.
+   - Preserve all existing safe-path checks and cleanup-command semantics.
+
+This pass does not add scan-result caching. It is valuable, but it introduces state:
+cache location, CLI version invalidation, root/filter matching, stale paths, and
+JSON compatibility. Add cache reuse as a separate, measurable improvement:
+
+```text
+aibris scan
+  |
+  +-- writes last scan snapshot with roots, version, timestamp
+
+aibris clean
+  |
+  +-- same roots and fresh snapshot? use it
+  |
+  +-- otherwise run scan with progress
+  |
+  +-- always re-check path safety and existence before deletion
+```
+
 ## Data Flow
 
 ```text
@@ -254,8 +302,12 @@ CODE PATH COVERAGE
 [+] cmd/clean.go
     |
     +-- parse --include-active-worktrees
+    +-- prints scan progress while finding clean candidates
     +-- dry-run reports filtered targets
+    +-- confirmation uses the same target renderer as dry-run
+    +-- unknown project display never renders as "?"
     +-- execute still uses IsSafePath
+    +-- prints per-item start progress before slow deletions or commands
 ```
 
 ### Unit Tests
@@ -292,6 +344,10 @@ CODE PATH COVERAGE
 - `aibris scan --root <home-subdir> --json`
 - `aibris clean --category worktree --dry-run` excludes active worktrees
 - `aibris clean --include-active-worktrees --dry-run` includes active worktrees
+- `aibris clean --dry-run` includes scan progress and a candidate summary
+- `aibris clean --dry-run` and confirmation plans share the same target format
+- non-project debris displays `global` or `-`, never `?`
+- forced cleanup prints start progress before `removed:` or `cleaned:`
 - invalid `--root /tmp` fails with a clear error
 
 ## Failure Modes
@@ -299,6 +355,9 @@ CODE PATH COVERAGE
 | Failure | Handling |
 |---------|----------|
 | `$HOME` scan is too slow | prune noisy roots, keep `--root` for narrowing |
+| `clean` appears hung during its implicit scan | reuse scan progress printer in `clean` |
+| a large deletion appears hung | print per-item start progress before delete/command work |
+| stale cached scan points at removed paths | defer caching; when added, re-check path existence and safety |
 | user has projects under `~/Library` | default misses them, user can pass `--root` |
 | active worktree contains valuable work | excluded by default |
 | symlink root escapes `$HOME` | reject after `EvalSymlinks` |
@@ -316,6 +375,8 @@ Suggested order:
 3. Add worktree status filtering and tests.
 4. Add derived status/risk/reason fields to JSON output.
 5. Update JSON/docs/skill workflow.
+6. Reuse scan progress and target rendering in `clean`.
+7. Add last-scan cache reuse only after the no-cache UX is polished.
 
 ## Simplify Constraints
 
@@ -327,3 +388,5 @@ Suggested order:
 - Keep CLI flag parsing in `cmd/`, scan logic in `adapter/`, filtering in
   `cleaner/`.
 - Avoid a broad scanner rewrite. Add options to the existing scanner shape.
+- Do not add scan-result caching in the same change as output cleanup.
+- Keep display-only labels out of JSON compatibility fields.

@@ -64,7 +64,7 @@ cmd/         → cobra commands (root, scan, clean)
 internal/
   adapter/   → DebrisProvider 인터페이스 + codex, claude 등 구현
   scanner/   → Scan(): 전체 adapter 순회하며 수집
-  cleaner/   → Filter(): 조건에 따라 필터, DryRun(), Execute() 삭제
+  cleaner/   → Filter(): 조건에 따라 필터, Execute() 삭제
   types/     → DebrisInfo, ScanResult, PruneOptions
 skills/
   aibris/    → AI-assisted 정리 워크플로우 (SKILL.md)

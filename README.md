@@ -94,9 +94,9 @@ by category
   worktree        1   96.0 MB
 
 largest
-    1.8 GB  node_modules  dashboard    ?                  24d
-  842.0 MB  build-cache   go-build     ?                  9d
-  512.4 MB  build-cache   npm          ?                  18d
+    1.8 GB  node_modules  dashboard    -                  24d
+  842.0 MB  build-cache   go-build     global             9d
+  512.4 MB  build-cache   npm          global             18d
    96.0 MB  worktree      b7f4c2       aibris             active today
 
 next
@@ -108,19 +108,43 @@ Preview before deleting anything:
 
 ```text
 $ aibris clean --category worktree --age 7d --dry-run
-[DRY-RUN] would remove: b7f4c2 (codex) — 96.0 MB (12d ago)
+clean
+  roots  ~
 
-[DRY-RUN] Total: 1 items | 96.0 MB would be freed
+  scanned  7 sources   4 items   3.2 GB
+
+  matched  1 candidate   96.0 MB
+
+clean plan
+  mode     dry-run
+  targets  1 item   96.0 MB
+
+targets
+      size  category      name         project            age/status     action
+   96.0 MB  worktree      b7f4c2       aibris             orphaned 12d   remove-path
+    ~/.codex/worktrees/b7f4c2/aibris
+
+[DRY-RUN] No files were removed.
 ```
 
 Confirm before deleting anything:
 
 ```text
 $ aibris clean --category node_modules --age 7d
-About to delete 1 items (1.8 GB).
+clean
+  roots  ~
+
+  scanned  7 sources   4 items   3.2 GB
+
+  matched  1 candidate   1.8 GB
+
+clean plan
+  mode     delete
+  targets  1 item   1.8 GB
 
 targets
-    1.8 GB  node_modules  dashboard    ?                  24d
+      size  category      name         project            age/status     action
+    1.8 GB  node_modules  dashboard    -                  24d           remove-path
     ~/workspace/dashboard/node_modules
 
 Proceed? [y/N]:
