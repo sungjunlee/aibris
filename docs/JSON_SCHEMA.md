@@ -15,6 +15,7 @@ reasons, but it contains all debris items, including caches and `node_modules`.
       "category": "worktree",
       "id": "abc123",
       "project": "my-project",
+      "source": ".codex",
       "path": "/Users/user/.codex/worktrees/abc123",
       "size": 102400,
       "mod_time": "2026-05-25T12:00:00Z",
@@ -49,10 +50,11 @@ as an item list, not as a worktree-only list.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `tool` | string | Tool name (`codex`, `claude`, `unknown`, `cursor`, `windsurf`, `node_modules`, `build-cache`, `pip-cache`, `ai-logs`) |
+| `tool` | string | Tool name (`codex`, `claude`, `unknown`, `cursor`, `windsurf`, `node_modules`, `build-cache`, `pip-cache`, `ai-logs`). Generic worktree owners may remain `unknown`. |
 | `category` | string | Debris category (`worktree`, `node_modules`, `build-cache`, `other-cache`, `ai-logs`) |
 | `id` | string | Unique identifier (hash, directory name, or cache key) |
 | `project` | string | Project name if detectable, empty otherwise |
+| `source` | string | Path-derived worktree source such as `.codex`, `.somename`, or `project-local`; empty for non-worktree items |
 | `path` | string | Absolute filesystem path |
 | `size` | integer | Size in bytes |
 | `mod_time` | string | Last modification time in RFC 3339 format |

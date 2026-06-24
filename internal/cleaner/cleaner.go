@@ -25,11 +25,33 @@ var (
 )
 
 func IsSafePath(home, target string) bool {
-	if home == "" {
+	rel, ok := safeHomeRel(home, target)
+	if !ok {
 		return false
 	}
-	if !filepath.IsAbs(target) {
-		return false
+	parts := strings.Split(rel, string(filepath.Separator))
+	for _, part := range parts {
+		for _, p := range safePathPrefixes {
+			if part == p {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func IsSafeTarget(home string, item types.DebrisInfo) bool {
+	if item.Category == types.CategoryWorktree &&
+		(item.Status == types.WorktreeActive || item.Status == types.WorktreeOrphaned) {
+		_, ok := safeHomeRel(home, item.Path)
+		return ok
+	}
+	return IsSafePath(home, item.Path)
+}
+
+func safeHomeRel(home, target string) (string, bool) {
+	if home == "" || !filepath.IsAbs(target) {
+		return "", false
 	}
 	rawHome := filepath.Clean(home)
 	home = rawHome
@@ -43,26 +65,18 @@ func IsSafePath(home, target string) bool {
 	} else if homeErr == nil && strings.HasPrefix(target, rawHome+string(filepath.Separator)) {
 		rel, err := filepath.Rel(rawHome, target)
 		if err != nil {
-			return false
+			return "", false
 		}
 		target = filepath.Join(home, rel)
 	}
-	if !strings.HasPrefix(target, home+string(filepath.Separator)) {
-		return false
+	if target != home && !strings.HasPrefix(target, home+string(filepath.Separator)) {
+		return "", false
 	}
 	rel, err := filepath.Rel(home, target)
-	if err != nil {
-		return false
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return "", false
 	}
-	parts := strings.Split(rel, string(filepath.Separator))
-	for _, part := range parts {
-		for _, p := range safePathPrefixes {
-			if part == p {
-				return true
-			}
-		}
-	}
-	return false
+	return rel, true
 }
 
 // Filter returns worktrees matching the given PruneOptions.
@@ -99,7 +113,7 @@ func ExecuteWithContext(ctx context.Context, worktrees []types.DebrisInfo) (int6
 		if err := ctx.Err(); err != nil {
 			return total, err
 		}
-		if !IsSafePath(home, w.Path) {
+		if !IsSafeTarget(home, w) {
 			errs = append(errs, fmt.Errorf("unsafe path %q rejected", w.Path))
 			fmt.Fprintf(os.Stderr, "error: unsafe path %q rejected\n", w.Path)
 			continue

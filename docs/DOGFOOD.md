@@ -35,7 +35,9 @@ scan
 
 summary
   found       1 item
-  reclaimable 1.4 MB
+  found size  1.4 MB
+  default clean 0 B
+  protected   1.4 MB active worktrees; use --include-active-worktrees after review
 
 by category
   worktree        1   1.4 MB

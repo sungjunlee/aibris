@@ -77,6 +77,47 @@ func TestIsSafePath_Symlink(t *testing.T) {
 	}
 }
 
+func TestIsSafeTarget_GenericWorktree(t *testing.T) {
+	home := t.TempDir()
+	worktreePath := filepath.Join(home, ".somename", "worktrees", "hash1")
+	os.MkdirAll(worktreePath, 0755)
+
+	item := types.DebrisInfo{
+		Category: types.CategoryWorktree,
+		Status:   types.WorktreeOrphaned,
+		Path:     worktreePath,
+	}
+	if !IsSafeTarget(home, item) {
+		t.Fatal("scanner-validated generic worktree under home should be safe")
+	}
+}
+
+func TestIsSafeTarget_RejectsPlainWorktreeAndSymlinkEscape(t *testing.T) {
+	home := t.TempDir()
+	plainPath := filepath.Join(home, ".somename", "worktrees", "plain")
+	os.MkdirAll(plainPath, 0755)
+	if IsSafeTarget(home, types.DebrisInfo{
+		Category: types.CategoryWorktree,
+		Status:   types.WorktreePlain,
+		Path:     plainPath,
+	}) {
+		t.Fatal("plain worktree status should not use generic worktree safety")
+	}
+
+	linkPath := filepath.Join(home, ".somename", "worktrees", "evil")
+	os.MkdirAll(filepath.Dir(linkPath), 0755)
+	if err := os.Symlink("/etc", linkPath); err != nil {
+		t.Skipf("symlink not supported: %v", err)
+	}
+	if IsSafeTarget(home, types.DebrisInfo{
+		Category: types.CategoryWorktree,
+		Status:   types.WorktreeOrphaned,
+		Path:     linkPath,
+	}) {
+		t.Fatal("worktree symlink escape should be rejected")
+	}
+}
+
 func TestIsSafePath_RealHome(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -127,6 +168,32 @@ func TestExecute_NodeModulesUnderWorkspace(t *testing.T) {
 	}
 	if _, err := os.Stat(depsPath); !os.IsNotExist(err) {
 		t.Errorf("node_modules should be removed; stat err = %v", err)
+	}
+}
+
+func TestExecute_GenericWorktreeUnderHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	worktreePath := filepath.Join(home, ".somename", "worktrees", "hash1")
+	os.MkdirAll(worktreePath, 0755)
+	os.WriteFile(filepath.Join(worktreePath, "file.txt"), []byte("data"), 0644)
+
+	total, err := Execute([]types.DebrisInfo{{
+		ID:       "hash1",
+		Tool:     types.ToolUnknown,
+		Category: types.CategoryWorktree,
+		Status:   types.WorktreeOrphaned,
+		Path:     worktreePath,
+		Size:     4,
+	}})
+	if err != nil {
+		t.Fatalf("Execute() error = %v; want nil", err)
+	}
+	if total != 4 {
+		t.Errorf("total = %d; want 4", total)
+	}
+	if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
+		t.Errorf("generic worktree should be removed; stat err = %v", err)
 	}
 }
 

@@ -10,28 +10,11 @@ import (
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
-// worktreeSource defines a scan target for AI tool worktrees.
-type worktreeSource struct {
-	tool    types.Tool
-	pattern string // glob suffix relative to home, e.g. ".codex/worktrees/*"
-}
+const projectLocalSource = "project-local"
+const maxWorktreeContainerDepth = 4
 
-// knownSources are well-known AI tool patterns that get correct tool attribution.
-// These are matched first; their paths are tracked to avoid duplicates from the
-// generic catch-all pattern.
-var knownSources = []worktreeSource{
-	{tool: types.ToolCodex, pattern: ".codex/worktrees/*"},
-	{tool: types.ToolClaude, pattern: "*/.claude/worktrees/*"},
-}
-
-// genericPattern catches any <dir>/worktree*/* under home.
-// This discovers worktrees from any tool — relay, project-local, future tools —
-// without hardcoding specific paths. All matches get ToolUnknown.
-const genericPattern = "*/worktree*/*"
-const directGenericPattern = "worktree*/*"
-
-// WorktreeAdapter discovers git worktrees created by AI coding tools
-// and reports their health status (active vs orphaned).
+// WorktreeAdapter discovers Git worktrees created by AI coding tools and
+// reports their health status (active vs orphaned).
 type WorktreeAdapter struct{}
 
 func NewWorktreeAdapter() *WorktreeAdapter {
@@ -58,39 +41,20 @@ func (a *WorktreeAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([]t
 		return nil, err
 	}
 
-	// visited tracks entry paths already reported by known patterns,
-	// to prevent duplicates from the generic catch-all.
-	visited := make(map[string]bool)
+	visitedRoots := make(map[string]bool)
+	visitedEntries := make(map[string]bool)
 	var results []types.DebrisInfo
-
 	for _, root := range roots {
-		// 1. Known tool patterns (specific, with correct tool attribution)
-		for _, src := range knownSources {
-			items, err := a.scanSource(ctx, root, src, visited)
-			if err != nil {
-				return nil, err
-			}
-			results = append(results, items...)
-		}
-		directClaude := worktreeSource{tool: types.ToolClaude, pattern: ".claude/worktrees/*"}
-		items, err := a.scanSource(ctx, root, directClaude, visited)
+		worktreeRoots, err := discoverWorktreeRoots(ctx, root)
 		if err != nil {
 			return nil, err
 		}
-		results = append(results, items...)
-		if filepath.Base(root) == ".codex" {
-			directCodex := worktreeSource{tool: types.ToolCodex, pattern: "worktrees/*"}
-			items, err := a.scanSource(ctx, root, directCodex, visited)
-			if err != nil {
-				return nil, err
+		for _, worktreeRoot := range worktreeRoots {
+			if visitedRoots[worktreeRoot] {
+				continue
 			}
-			results = append(results, items...)
-		}
-
-		// 2. Generic catch-all paths not already reported.
-		for _, pattern := range []string{genericPattern, directGenericPattern} {
-			generic := worktreeSource{tool: types.ToolUnknown, pattern: pattern}
-			items, err := a.scanSource(ctx, root, generic, visited)
+			visitedRoots[worktreeRoot] = true
+			items, err := a.scanWorktreeRoot(ctx, worktreeRoot, visitedEntries)
 			if err != nil {
 				return nil, err
 			}
@@ -101,77 +65,171 @@ func (a *WorktreeAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([]t
 	return results, nil
 }
 
-// scanSource applies a single source pattern and returns found worktrees.
-// Already-visited entry paths are skipped.
-func (a *WorktreeAdapter) scanSource(ctx context.Context, home string, src worktreeSource, visited map[string]bool) ([]types.DebrisInfo, error) {
-	pattern := filepath.Join(home, src.pattern)
-	matches, err := filepath.Glob(pattern)
-	if err != nil {
-		return nil, nil
+type worktreeSearchDir struct {
+	path  string
+	depth int
+}
+
+func discoverWorktreeRoots(ctx context.Context, root string) ([]string, error) {
+	var results []string
+	seen := make(map[string]bool)
+	queue := []worktreeSearchDir{{path: root}}
+
+	if isWorktreeRootDir(filepath.Base(root)) {
+		results = append(results, root)
 	}
 
-	var results []types.DebrisInfo
-	for _, match := range matches {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
+	for len(queue) > 0 {
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
 
-		info, err := os.Stat(match)
-		if err != nil || !info.IsDir() {
+		current := queue[0]
+		queue = queue[1:]
+		if seen[current.path] {
+			continue
+		}
+		seen[current.path] = true
+
+		entries, err := os.ReadDir(current.path)
+		if err != nil {
 			continue
 		}
 
-		// Skip if already reported by a more specific pattern.
-		// Glob already returns absolute paths (pattern is absolute), so
-		// match is fully qualified.
-		if visited[match] {
-			continue
-		}
-		visited[match] = true
+		for _, entry := range entries {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			if !entry.IsDir() {
+				continue
+			}
 
-		items := a.scanEntry(ctx, match, src)
-		results = append(results, items...)
+			childPath := filepath.Join(current.path, entry.Name())
+			if isWorktreeRootDir(entry.Name()) {
+				results = append(results, childPath)
+				continue
+			}
+			if shouldSkipWorktreeContainer(entry.Name()) {
+				continue
+			}
+			if isHiddenDir(entry.Name()) {
+				results = append(results, immediateWorktreeRoots(childPath)...)
+				continue
+			}
+			if current.depth < maxWorktreeContainerDepth {
+				queue = append(queue, worktreeSearchDir{path: childPath, depth: current.depth + 1})
+			}
+		}
 	}
+
 	return results, nil
 }
 
-// scanEntry scans a single glob match directory for git worktrees.
-//
-// Claude places .git directly in the match directory; codex and relay
-// nest .git inside a project subdirectory. This handles both patterns.
-func (a *WorktreeAdapter) scanEntry(ctx context.Context, entryPath string, src worktreeSource) []types.DebrisInfo {
-	// Pattern 1: .git directly inside the entry (claude)
-	if item := a.checkWorktree(ctx, entryPath, entryPath, src); item != nil {
-		return []types.DebrisInfo{*item}
+func shouldSkipWorktreeContainer(name string) bool {
+	switch name {
+	case ".Trash", "Library", "Applications", "Pictures", "Movies", "Music", ".git", "vendor", "node_modules":
+		return true
+	case ".cache", ".npm", ".gradle", ".cargo", ".rustup", ".local", ".docker", ".android", ".dartServer":
+		return true
+	case "sessions", "archived_sessions", "logs", "runs":
+		return true
+	default:
+		return false
 	}
+}
 
-	// Pattern 2: .git inside a subdirectory (codex, relay, project-local)
-	entries, err := os.ReadDir(entryPath)
+func immediateWorktreeRoots(path string) []string {
+	entries, err := os.ReadDir(path)
 	if err != nil {
 		return nil
 	}
 
-	var results []types.DebrisInfo
-	for _, e := range entries {
-		if err := ctx.Err(); err != nil {
-			return nil
-		}
-		if !e.IsDir() {
-			continue
-		}
-		subPath := filepath.Join(entryPath, e.Name())
-		if item := a.checkWorktree(ctx, entryPath, subPath, src); item != nil {
-			results = append(results, *item)
+	var results []string
+	for _, entry := range entries {
+		if entry.IsDir() && isWorktreeRootDir(entry.Name()) {
+			results = append(results, filepath.Join(path, entry.Name()))
 		}
 	}
 	return results
 }
 
-// checkWorktree checks if worktreePath contains a git worktree (.git file).
-// Returns a DebrisInfo if found, nil otherwise.
-func (a *WorktreeAdapter) checkWorktree(ctx context.Context, entryPath, worktreePath string, src worktreeSource) *types.DebrisInfo {
+func isWorktreeRootDir(name string) bool {
+	return name == "worktree" ||
+		name == "worktrees" ||
+		strings.HasPrefix(name, "worktree-") ||
+		strings.HasPrefix(name, "worktrees-")
+}
+
+func (a *WorktreeAdapter) scanWorktreeRoot(ctx context.Context, rootPath string, visited map[string]bool) ([]types.DebrisInfo, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	entries, err := os.ReadDir(rootPath)
+	if err != nil {
+		return nil, nil
+	}
+
+	var results []types.DebrisInfo
+	for _, e := range entries {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if !e.IsDir() {
+			continue
+		}
+		entryPath := filepath.Join(rootPath, e.Name())
+		if visited[entryPath] {
+			continue
+		}
+		items, err := a.scanEntry(ctx, entryPath)
+		if err != nil {
+			return nil, err
+		}
+		if len(items) == 0 {
+			continue
+		}
+		visited[entryPath] = true
+		results = append(results, items...)
+	}
+	return results, nil
+}
+
+// scanEntry scans a single worktree entry directory.
+//
+// Direct-style tools place .git directly in the entry; codex-like tools nest
+// .git inside a project subdirectory.
+func (a *WorktreeAdapter) scanEntry(ctx context.Context, entryPath string) ([]types.DebrisInfo, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	if item := a.checkWorktree(ctx, entryPath, entryPath); item != nil {
+		return []types.DebrisInfo{*item}, nil
+	}
+
+	entries, err := os.ReadDir(entryPath)
+	if err != nil {
+		return nil, nil
+	}
+
+	var results []types.DebrisInfo
+	for _, e := range entries {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if !e.IsDir() {
+			continue
+		}
+		subPath := filepath.Join(entryPath, e.Name())
+		if item := a.checkWorktree(ctx, entryPath, subPath); item != nil {
+			results = append(results, *item)
+		}
+	}
+	return results, nil
+}
+
+func (a *WorktreeAdapter) checkWorktree(ctx context.Context, entryPath, worktreePath string) *types.DebrisInfo {
 	gitFile := filepath.Join(worktreePath, ".git")
 	gitInfo, err := os.Stat(gitFile)
 	if err != nil || gitInfo.IsDir() {
@@ -179,7 +237,11 @@ func (a *WorktreeAdapter) checkWorktree(ctx context.Context, entryPath, worktree
 	}
 
 	status := detectWorktreeStatus(gitFile)
-	project := detectWorktreeProject(entryPath, worktreePath, src)
+	if status != types.WorktreeActive && status != types.WorktreeOrphaned {
+		return nil
+	}
+	source := detectWorktreeSource(entryPath)
+	project := detectWorktreeProject(entryPath, worktreePath, source)
 
 	entryInfo, err := os.Stat(entryPath)
 	if err != nil {
@@ -187,14 +249,35 @@ func (a *WorktreeAdapter) checkWorktree(ctx context.Context, entryPath, worktree
 	}
 
 	return &types.DebrisInfo{
-		Tool:     src.tool,
+		Tool:     detectWorktreeTool(source),
 		Category: types.CategoryWorktree,
 		ID:       filepath.Base(entryPath),
 		Project:  project,
+		Source:   source,
 		Path:     entryPath,
 		Size:     estimateDirSize(ctx, entryPath),
 		ModTime:  entryInfo.ModTime(),
 		Status:   status,
+	}
+}
+
+func detectWorktreeSource(entryPath string) string {
+	worktreeRoot := filepath.Dir(entryPath)
+	owner := filepath.Base(filepath.Dir(worktreeRoot))
+	if isHiddenDir(owner) {
+		return owner
+	}
+	return projectLocalSource
+}
+
+func detectWorktreeTool(source string) types.Tool {
+	switch source {
+	case ".codex":
+		return types.ToolCodex
+	case ".claude":
+		return types.ToolClaude
+	default:
+		return types.ToolUnknown
 	}
 }
 
@@ -203,6 +286,9 @@ func detectWorktreeStatus(gitFilePath string) types.WorktreeStatus {
 	gitdirPath := readGitDir(gitFilePath)
 	if gitdirPath == "" {
 		return types.WorktreePlain
+	}
+	if !filepath.IsAbs(gitdirPath) {
+		gitdirPath = filepath.Join(filepath.Dir(gitFilePath), gitdirPath)
 	}
 	if _, err := os.Stat(gitdirPath); os.IsNotExist(err) {
 		return types.WorktreeOrphaned
@@ -223,31 +309,22 @@ func readGitDir(gitFilePath string) string {
 	if scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if strings.HasPrefix(line, "gitdir: ") {
-			return strings.TrimPrefix(line, "gitdir: ")
+			return strings.TrimSpace(strings.TrimPrefix(line, "gitdir: "))
 		}
 	}
 	return ""
 }
 
-// detectWorktreeProject determines the project name based on the source tool convention.
-func detectWorktreeProject(entryPath, worktreePath string, src worktreeSource) string {
-	switch src.tool {
-	case types.ToolClaude:
-		// claude: entry = ~/<project>/.claude/worktrees/<name>
-		// project = "<project>". Verify the structure before walking
-		// up three levels.
-		if filepath.Base(filepath.Dir(filepath.Dir(entryPath))) == ".claude" {
-			root := filepath.Dir(filepath.Dir(filepath.Dir(entryPath)))
-			return filepath.Base(root)
+func detectWorktreeProject(entryPath, worktreePath, source string) string {
+	if source == ".claude" {
+		worktreeRoot := filepath.Dir(entryPath)
+		ownerDir := filepath.Dir(worktreeRoot)
+		if filepath.Base(ownerDir) == ".claude" {
+			return filepath.Base(filepath.Dir(ownerDir))
 		}
-		return ""
-	case types.ToolUnknown:
-		// generic: use the worktree-bearing directory name.
-		// For subdir-style (codex/relay-like) this is the project subdirectory;
-		// for direct-style (claude-like) this is the worktree/session name.
-		return filepath.Base(worktreePath)
-	default:
-		// codex: project = first non-hidden subdirectory name
-		return detectProjectName(entryPath)
 	}
+	if worktreePath != entryPath {
+		return filepath.Base(worktreePath)
+	}
+	return filepath.Base(entryPath)
 }
