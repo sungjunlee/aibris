@@ -27,7 +27,7 @@ var defaultProviders = []adapter.DebrisProvider{
 
 var DefaultScanner = New(defaultProviders)
 
-const maxParallelProviders = 3
+const maxParallelProviders = 2
 
 type Scanner struct {
 	Providers   []adapter.DebrisProvider
