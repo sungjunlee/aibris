@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## [0.5.1] - 2026-06-26
+
+### Changed
+- HOME-wide scans now batch worktree and `node_modules` size estimation on Unix
+  with `du -sk`, while retaining the Go walker as a fallback.
+- Provider scan parallelism is tuned to reduce disk I/O contention during large
+  HOME scans.
+
+### Fixed
+- Real HOME dogfood scan latency improved from 178.55s to 78.32s on the
+  measured machine.
+
 ## [0.5.0] - 2026-06-25
 
 ### Added
