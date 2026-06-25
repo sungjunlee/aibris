@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+## [0.5.0] - 2026-06-25
+
+### Added
+- Worktree discovery now follows `$HOME` worktree directory conventions instead
+  of relying on a fixed tool list, so hidden owners such as `.relay`,
+  `.codex`, `.claude`, and future local tools can be detected when they expose
+  `worktrees`, `worktree`, `worktree-*`, or `worktrees-*` roots.
+- `scan --json` now includes a path-derived `source` field for worktree items,
+  such as `.codex`, `.relay`, `.claude`, or `project-local`.
+- `scan` and zero-candidate `clean` output now explain protected active
+  worktrees, age-blocked items, risky items, and category/tool-filtered items.
+
+### Changed
+- Generic worktrees are now cleanable only after scanner validation proves they
+  are active or orphaned Git worktrees under `$HOME`.
+- Human-readable worktree names include the source owner for unknown tools,
+  for example `.relay/1948review`.
+- Worktree discovery is bounded to shallow scan-root containers to keep
+  full-home scans practical.
+
+### Fixed
+- Cancelled worktree root scans now propagate the context error instead of
+  allowing partial scan results to be treated as successful.
+
 ## [0.4.0] - 2026-06-14
 
 ### Added

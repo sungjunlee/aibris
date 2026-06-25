@@ -37,7 +37,7 @@ Install aibris.
 Usage:
   curl -fsSL https://raw.githubusercontent.com/${REPO}/refs/heads/main/install.sh | bash
   curl -fsSL https://raw.githubusercontent.com/${REPO}/refs/heads/main/install.sh | bash -s -- main
-  curl -fsSL https://raw.githubusercontent.com/${REPO}/refs/heads/main/install.sh | bash -s -- 0.4.0
+  curl -fsSL https://raw.githubusercontent.com/${REPO}/refs/heads/main/install.sh | bash -s -- 0.5.0
 
 Options:
   --prefix DIR   Install into DIR (default: ${default_install_dir})
