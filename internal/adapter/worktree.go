@@ -171,6 +171,7 @@ func (a *WorktreeAdapter) scanWorktreeRoot(ctx context.Context, rootPath string,
 	}
 
 	var results []types.DebrisInfo
+	var sizePaths []string
 	for _, e := range entries {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -190,7 +191,12 @@ func (a *WorktreeAdapter) scanWorktreeRoot(ctx context.Context, rootPath string,
 			continue
 		}
 		visited[entryPath] = true
+		sizePaths = append(sizePaths, entryPath)
 		results = append(results, items...)
+	}
+	sizes := estimateDirSizes(ctx, sizePaths)
+	for i := range results {
+		results[i].Size = sizes[results[i].Path]
 	}
 	return results, nil
 }
@@ -255,7 +261,6 @@ func (a *WorktreeAdapter) checkWorktree(ctx context.Context, entryPath, worktree
 		Project:  project,
 		Source:   source,
 		Path:     entryPath,
-		Size:     estimateDirSize(ctx, entryPath),
 		ModTime:  entryInfo.ModTime(),
 		Status:   status,
 	}
