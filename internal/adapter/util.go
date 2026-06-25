@@ -3,7 +3,10 @@ package adapter
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -73,6 +76,61 @@ func estimateDirSize(ctx context.Context, path string) int64 {
 
 	wg.Wait()
 	return total.Load()
+}
+
+func estimateDirSizes(ctx context.Context, paths []string) map[string]int64 {
+	sizes := make(map[string]int64, len(paths))
+	if len(paths) == 0 || ctx.Err() != nil {
+		return sizes
+	}
+	if runtime.GOOS != "windows" {
+		if duSizes, ok := estimateDirSizesWithDU(ctx, paths); ok {
+			return duSizes
+		}
+	}
+	for _, path := range paths {
+		if ctx.Err() != nil {
+			break
+		}
+		sizes[path] = estimateDirSize(ctx, path)
+	}
+	return sizes
+}
+
+func estimateDirSizesWithDU(ctx context.Context, paths []string) (map[string]int64, bool) {
+	if _, err := exec.LookPath("du"); err != nil {
+		return nil, false
+	}
+	args := append([]string{"-sk"}, paths...)
+	output, err := exec.CommandContext(ctx, "du", args...).Output()
+	if err != nil {
+		return nil, false
+	}
+	sizes := make(map[string]int64, len(paths))
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	for _, line := range lines {
+		sizeField, pathField, ok := strings.Cut(line, "\t")
+		if !ok {
+			fields := strings.Fields(line)
+			if len(fields) < 2 {
+				return nil, false
+			}
+			sizeField = fields[0]
+			pathField = strings.TrimSpace(strings.TrimPrefix(line, sizeField))
+		}
+		if pathField == "" {
+			return nil, false
+		}
+		kb, err := strconv.ParseInt(sizeField, 10, 64)
+		if err != nil {
+			return nil, false
+		}
+		sizes[pathField] = kb * 1024
+	}
+	if len(sizes) != len(paths) {
+		return nil, false
+	}
+	return sizes, true
 }
 
 // walkDirSequential walks a directory tree sequentially within a single
