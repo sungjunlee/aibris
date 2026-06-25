@@ -101,6 +101,7 @@ var cleanCmd = &cobra.Command{
 
 		if len(targets) == 0 {
 			fmt.Println("No items to clean.")
+			printCleanupDiagnostics(summarizeCleanup(result.Worktrees, opts), opts)
 			return
 		}
 
@@ -247,7 +248,7 @@ func interactiveClean(targets []types.DebrisInfo) int64 {
 	var total int64
 	scanner := bufio.NewScanner(os.Stdin)
 	for _, w := range targets {
-		if !cleaner.IsSafePath(home, w.Path) {
+		if !cleaner.IsSafeTarget(home, w) {
 			fmt.Fprintf(os.Stderr, "  error: unsafe path %q rejected\n", w.Path)
 			continue
 		}

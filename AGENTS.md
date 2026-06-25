@@ -24,7 +24,8 @@ CLI 자체는 dumb executor. Q&A와 판단은 AI 스킬이负责.
                                    → cleaner.Filter() + Execute()
 ```
 
-각 `adapter`는 `DebrisProvider` 인터페이스를 구현하며, 새 AI 도구가 나오면 adapter만 추가하면 된다.
+각 `adapter`는 `DebrisProvider` 인터페이스를 구현한다. Worktree는 특정 도구별 adapter를
+계속 늘리기보다 `$HOME` 아래 worktree convention을 발견하고 `.git` metadata로 검증한다.
 
 ## 개발 규칙
 
@@ -35,6 +36,14 @@ CLI 자체는 dumb executor. Q&A와 판단은 AI 스킬이负责.
 - 발견된 모든 경로의 크기를 `estimateDirSize()`로 계산 (WalkDir 기반)
 - 프로젝트명은 `detectProjectName()`으로 추론 (숨김 디렉토리 제외)
 - `internal/scanner/scanner.go` 의 `providers` 목록에 등록
+
+**1-1. Worktree discovery 변경시 꼭 지킬 것**
+- 특정 도구 이름을 hardcode하기보다 `$HOME` 아래 `worktrees`, `worktree`, `worktree-*`, `worktrees-*` 디렉토리를 찾는다
+- hidden owner 디렉토리(`.codex`, `.somename` 등)는 worktree source일 수 있으므로 일반적으로 숨김이라는 이유만으로 prune하지 않는다
+- 전체 `$HOME`을 무제한 재귀 탐색하지 않는다. scan root에서 얕은 컨테이너 depth 안의 hidden owner/project-local convention만 찾는다
+- 후보는 direct `<entry>/.git` 또는 nested `<entry>/<project>/.git` 파일이 있어야 한다
+- `.git` 파일의 `gitdir:`를 읽어 `active`/`orphaned`를 판정하고, 유효하지 않은 plain dir은 보고하지 않는다
+- `Source`는 path-derived owner(`.codex`, `.somename`, `project-local`)로 채운다
 
 **2. Prune 안전장치**
 - 기본 `--age`는 `7d`
@@ -74,19 +83,18 @@ skills/
 
 | Tool | Category | clean 기본 | 기본 경로 |
 |------|----------|-----------|---------|
-| worktree (codex) | worktree | ✅ | `~/.codex/worktrees/<hash>/` |
-| worktree (claude) | worktree | ✅ | `~/*/.claude/worktrees/<name>/` |
-| worktree (generic) | worktree | ✅ | `*/worktree*/*` — relay, project-local, and unknown tools auto-discovered |
+| worktree (convention) | worktree | orphaned만 ✅ | bounded shallow `$HOME` discovery of `{worktrees,worktree,worktree-*,worktrees-*}/<entry>/` with direct or nested `.git` file |
 | cursor | ai-logs | 🚫 `--risky` | `~/.cursor/projects/<name>/` |
 | windsurf | ai-logs | 🚫 `--risky` | `~/.codeium/windsurf/` |
-| node_modules | node_modules | ✅ | `~/projects/**/node_modules/` |
+| node_modules | node_modules | ✅ | `$HOME/**/node_modules/` with noisy directories pruned |
 | build-cache | build-cache | ✅ | `~/.cache/go-build/`, `~/.gradle/caches/`, `~/.npm/_cacache/`, `~/.cargo/registry/`, `~/Library/Caches/Xcode/` |
 | pip-cache | other-cache | ✅ | `~/.cache/pip/`, `~/.cache/uv/` |
 | ai-logs | ai-logs | 🚫 `--risky` | `~/.codex/logs_2.sqlite`, `~/.codex/archived_sessions/`, `~/.claude/command-audit.log`, `~/.claude/file-history/` |
 
 ### Worktree health
 
-`WorktreeAdapter`는 각 worktree의 `.git` 파일을 읽어 상위 repo 생존 여부를 확인합니다:
+`WorktreeAdapter`는 각 worktree의 `.git` 파일을 읽어 상위 repo 생존 여부를 확인합니다.
+`source`는 `.codex`, `.claude`, `.somename`, `project-local`처럼 경로에서 추론합니다:
 
 | Status | 의미 |
 |--------|------|

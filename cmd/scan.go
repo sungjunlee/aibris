@@ -75,6 +75,7 @@ type jsonWorktree struct {
 	Category       string   `json:"category"`
 	ID             string   `json:"id"`
 	Project        string   `json:"project"`
+	Source         string   `json:"source"`
 	Path           string   `json:"path"`
 	Size           int64    `json:"size"`
 	ModTime        string   `json:"mod_time"`
@@ -122,6 +123,7 @@ func printJSON(r *types.ScanResult) {
 			Category:       string(w.Category),
 			ID:             w.ID,
 			Project:        w.Project,
+			Source:         w.Source,
 			Path:           w.Path,
 			Size:           w.Size,
 			ModTime:        w.ModTime.Format(time.RFC3339),
@@ -302,10 +304,11 @@ func isTerminal(file *os.File) bool {
 func printHumanScanResult(r *types.ScanResult) {
 	fmt.Println("summary")
 	fmt.Printf("  found       %d %s\n", r.TotalCount, itemNoun(r.TotalCount))
-	fmt.Printf("  reclaimable %s\n", cleaner.FormatSize(r.TotalSize))
-	if risky := riskyCount(r.Worktrees); risky > 0 {
-		fmt.Printf("  risky       %d %s require --risky\n", risky, itemNoun(risky))
-	}
+	fmt.Printf("  found size  %s\n", cleaner.FormatSize(r.TotalSize))
+	defaultPolicy := types.PruneOptions{Age: 7 * 24 * time.Hour}
+	diagnostics := summarizeCleanup(r.Worktrees, defaultPolicy)
+	fmt.Printf("  default clean %s\n", cleaner.FormatSize(diagnostics.EligibleSize))
+	printCleanupDiagnostics(diagnostics, defaultPolicy)
 
 	printCategorySummary(r.ByCategory)
 	printLargestItems(r.Worktrees)
@@ -405,16 +408,6 @@ func displayHomePath(home, path string) string {
 	return filepath.Join("~", rel)
 }
 
-func riskyCount(items []types.DebrisInfo) int {
-	var count int
-	for _, item := range items {
-		if item.Category.IsRisky() {
-			count++
-		}
-	}
-	return count
-}
-
 func itemNoun(count int) string {
 	if count == 1 {
 		return "item"
@@ -422,7 +415,104 @@ func itemNoun(count int) string {
 	return "items"
 }
 
+type cleanupDiagnostics struct {
+	EligibleCount int
+	EligibleSize  int64
+	ActiveCount   int
+	ActiveSize    int64
+	RiskyCount    int
+	RiskySize     int64
+	AgeCount      int
+	AgeSize       int64
+	FilterCount   int
+	FilterSize    int64
+}
+
+func summarizeCleanup(items []types.DebrisInfo, opts types.PruneOptions) cleanupDiagnostics {
+	cutoff := time.Now().Add(-opts.Age)
+	var summary cleanupDiagnostics
+	for _, item := range items {
+		if !cmdContainsCategory(opts.Categories, item.Category) || !cmdContainsTool(opts.Tools, item.Tool) {
+			summary.FilterCount++
+			summary.FilterSize += item.Size
+			continue
+		}
+		if !opts.Risky && item.Category.IsRisky() {
+			summary.RiskyCount++
+			summary.RiskySize += item.Size
+			continue
+		}
+		if !opts.IncludeActiveWorktrees && item.Category == types.CategoryWorktree && item.Status == types.WorktreeActive {
+			summary.ActiveCount++
+			summary.ActiveSize += item.Size
+			continue
+		}
+		if !item.ModTime.Before(cutoff) {
+			summary.AgeCount++
+			summary.AgeSize += item.Size
+			continue
+		}
+		summary.EligibleCount++
+		summary.EligibleSize += item.Size
+	}
+	return summary
+}
+
+func printCleanupDiagnostics(summary cleanupDiagnostics, opts types.PruneOptions) {
+	if summary.ActiveCount > 0 {
+		fmt.Printf("  protected   %s active worktrees; use --include-active-worktrees after review\n",
+			cleaner.FormatSize(summary.ActiveSize))
+	}
+	if summary.AgeCount > 0 {
+		fmt.Printf("  age-blocked %s younger than %s\n",
+			cleaner.FormatSize(summary.AgeSize), cleanAgeDisplay(opts.Age))
+	}
+	if summary.RiskyCount > 0 {
+		fmt.Printf("  risky       %s requires --risky\n", cleaner.FormatSize(summary.RiskySize))
+	}
+	if summary.FilterCount > 0 && (len(opts.Categories) > 0 || len(opts.Tools) > 0) {
+		fmt.Printf("  filtered    %s outside category/tool filters\n", cleaner.FormatSize(summary.FilterSize))
+	}
+}
+
+func cleanAgeDisplay(age time.Duration) string {
+	if age%(24*time.Hour) == 0 {
+		return fmt.Sprintf("%dd", int(age/(24*time.Hour)))
+	}
+	if age%time.Hour == 0 {
+		return fmt.Sprintf("%dh", int(age/time.Hour))
+	}
+	return age.String()
+}
+
+func cmdContainsCategory(categories []types.Category, cat types.Category) bool {
+	if len(categories) == 0 {
+		return true
+	}
+	for _, c := range categories {
+		if c == cat {
+			return true
+		}
+	}
+	return false
+}
+
+func cmdContainsTool(tools []types.Tool, tool types.Tool) bool {
+	if len(tools) == 0 {
+		return true
+	}
+	for _, t := range tools {
+		if t == tool {
+			return true
+		}
+	}
+	return false
+}
+
 func itemName(item types.DebrisInfo) string {
+	if item.Category == types.CategoryWorktree && item.Tool == types.ToolUnknown && item.Source != "" {
+		return item.Source + "/" + item.ID
+	}
 	if item.ID != "" {
 		return item.ID
 	}

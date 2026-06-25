@@ -64,6 +64,7 @@ type DebrisInfo struct {
 	Category       Category
 	ID             string
 	Project        string
+	Source         string
 	Path           string
 	Size           int64
 	ModTime        time.Time

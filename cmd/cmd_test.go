@@ -56,7 +56,7 @@ func TestScanCmd_NoWorktrees(t *testing.T) {
 		rootCmd.SetArgs([]string{"scan"})
 		rootCmd.Execute()
 	})
-	for _, want := range []string{"scan", "roots", "scanning", "found", "summary", "found       0 items", "reclaimable 0 B", "next", "aibris scan --json"} {
+	for _, want := range []string{"scan", "roots", "scanning", "found", "summary", "found       0 items", "found size  0 B", "default clean 0 B", "next", "aibris scan --json"} {
 		if !strings.Contains(output, want) {
 			t.Errorf("output missing %q; got: %s", want, output)
 		}
@@ -666,6 +666,9 @@ func TestCleanCmd_ActiveWorktreeExcludedByDefault(t *testing.T) {
 	if !strings.Contains(output, "No items to clean") {
 		t.Errorf("active worktree should be omitted by default; got: %s", output)
 	}
+	if !strings.Contains(output, "protected") || !strings.Contains(output, "--include-active-worktrees") {
+		t.Errorf("active worktree exclusion should explain opt-in flag; got: %s", output)
+	}
 }
 
 func TestCleanCmd_IncludeActiveWorktree(t *testing.T) {
@@ -685,6 +688,31 @@ func TestCleanCmd_IncludeActiveWorktree(t *testing.T) {
 	})
 	if !strings.Contains(output, "[DRY-RUN]") {
 		t.Errorf("active worktree should be included with flag; got: %s", output)
+	}
+}
+
+func TestCleanCmd_ZeroCandidatesExplainsAgeAndRiskyExclusions(t *testing.T) {
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	modules := filepath.Join(home, "app", "node_modules")
+	os.MkdirAll(filepath.Join(modules, "pkg"), 0755)
+	logPath := filepath.Join(home, ".codex", "logs_2.sqlite")
+	os.MkdirAll(filepath.Dir(logPath), 0755)
+	os.WriteFile(logPath, []byte("logs"), 0644)
+	past := time.Now().Add(-48 * time.Hour)
+	os.Chtimes(logPath, past, past)
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--dry-run", "--age=7d"})
+		rootCmd.Execute()
+	})
+
+	for _, want := range []string{"No items to clean", "age-blocked", "younger than 7d", "risky", "--risky"} {
+		if !strings.Contains(output, want) {
+			t.Errorf("output missing %q; got: %s", want, output)
+		}
 	}
 }
 
@@ -884,6 +912,7 @@ func TestPrintJSON_WithData(t *testing.T) {
 				Category: types.CategoryWorktree,
 				ID:       "hash1",
 				Project:  "myproject",
+				Source:   ".codex",
 				Path:     "/home/user/.codex/worktrees/hash1",
 				Size:     102400,
 				ModTime:  now,
@@ -943,6 +972,9 @@ func TestPrintJSON_WithData(t *testing.T) {
 	}
 	if w0.Project != "myproject" {
 		t.Errorf("Worktrees[0].Project = %q; want myproject", w0.Project)
+	}
+	if w0.Source != ".codex" {
+		t.Errorf("Worktrees[0].Source = %q; want .codex", w0.Source)
 	}
 	if w0.Size != 102400 {
 		t.Errorf("Worktrees[0].Size = %d; want 102400", w0.Size)

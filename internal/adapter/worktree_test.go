@@ -260,11 +260,81 @@ func TestWorktreeAdapter_Generic_HiddenDir(t *testing.T) {
 	if r.Tool != types.ToolUnknown {
 		t.Errorf("Tool = %q; want unknown", r.Tool)
 	}
+	if r.Source != ".relay" {
+		t.Errorf("Source = %q; want .relay", r.Source)
+	}
 	if r.Project != "relay-dispatch-abc123" {
 		t.Errorf("Project = %q; want relay-dispatch-abc123", r.Project)
 	}
 	if r.Status != types.WorktreeActive {
 		t.Errorf("Status = %q; want active", r.Status)
+	}
+}
+
+func TestWorktreeAdapter_DeepHiddenOwnerWorktrees(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	worktreeHash := filepath.Join(home, "deep", "path", ".somename", "worktrees", "abc123")
+	projectDir := filepath.Join(worktreeHash, "my-app")
+	createWorktreeGit(t, projectDir, filepath.Join(home, "main-repo"), "abc123")
+	os.WriteFile(filepath.Join(projectDir, "README.md"), []byte("ok"), 0644)
+
+	a := &WorktreeAdapter{}
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1, got %d", len(results))
+	}
+	r := results[0]
+	if r.ID != "abc123" {
+		t.Errorf("ID = %q; want abc123", r.ID)
+	}
+	if r.Tool != types.ToolUnknown {
+		t.Errorf("Tool = %q; want unknown", r.Tool)
+	}
+	if r.Source != ".somename" {
+		t.Errorf("Source = %q; want .somename", r.Source)
+	}
+	if r.Project != "my-app" {
+		t.Errorf("Project = %q; want my-app", r.Project)
+	}
+}
+
+func TestWorktreeAdapter_IgnoresHiddenOwnerBeyondContainerDepth(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	worktreeHash := filepath.Join(home, "a", "b", "c", "d", "e", ".somename", "worktrees", "abc123")
+	projectDir := filepath.Join(worktreeHash, "my-app")
+	createWorktreeGit(t, projectDir, filepath.Join(home, "main-repo"), "abc123")
+
+	a := &WorktreeAdapter{}
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 0 {
+		t.Fatalf("expected deeply nested hidden owner to be ignored, got %d", len(results))
+	}
+}
+
+func TestWorktreeAdapter_PrunesSystemLikeDirectories(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	projectDir := filepath.Join(home, "Library", "SomeApp", ".tool", "worktrees", "abc123", "my-app")
+	createWorktreeGit(t, projectDir, filepath.Join(home, "main-repo"), "abc123")
+
+	a := &WorktreeAdapter{}
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 0 {
+		t.Fatalf("expected pruned Library worktree to be ignored, got %d", len(results))
 	}
 }
 
@@ -291,6 +361,9 @@ func TestWorktreeAdapter_Generic_ProjectLocal(t *testing.T) {
 	}
 	if r.Tool != types.ToolUnknown {
 		t.Errorf("Tool = %q; want unknown", r.Tool)
+	}
+	if r.Source != projectLocalSource {
+		t.Errorf("Source = %q; want %s", r.Source, projectLocalSource)
 	}
 	if r.Project != "feature-xyz" {
 		t.Errorf("Project = %q; want feature-xyz (same as entry, .git directly inside)", r.Project)
@@ -556,6 +629,27 @@ func TestWorktreeAdapter_ContextCancellation(t *testing.T) {
 
 	a := &WorktreeAdapter{}
 	_, err := a.Scan(ctx, types.ScanOptions{})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("expected Canceled, got %v", err)
+	}
+}
+
+func TestWorktreeAdapter_ScanWorktreeRootPropagatesCancellation(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	worktreeRoot := filepath.Join(home, ".codex", "worktrees")
+	worktreeProject := filepath.Join(worktreeRoot, "some-hash", "proj")
+	createWorktreeGit(t, worktreeProject, filepath.Join(home, "main-repo"), "some-hash")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	a := &WorktreeAdapter{}
+	_, err := a.scanWorktreeRoot(ctx, worktreeRoot, map[string]bool{})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

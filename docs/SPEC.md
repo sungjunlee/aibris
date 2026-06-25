@@ -7,16 +7,16 @@ AI-assisted development workflows: temporary worktrees, dependency folders,
 build caches, package caches, and AI tool logs.
 
 The product stance is conservative cleanup for development machines. The CLI
-does four things: discover known debris, report structured data, preview
-filtered targets, and delete only inside known-safe boundaries. Human or
-AI-guided judgment happens outside the CLI.
+does four things: discover development debris, report structured data, preview
+filtered targets, and delete only inside conservative safety boundaries. Human
+or AI-guided judgment happens outside the CLI.
 
 ## Non-goals
 
 - General Mac system maintenance, app uninstall, daemon scheduling, or GUI.
 - Git worktree creation or repository management.
 - Deleting arbitrary user-provided paths.
-- Broad system cleanup outside known development and AI-tool locations.
+- Broad system cleanup outside development debris conventions.
 - Automatic inference that recent or ambiguous files are safe to delete.
 
 ## Functional Requirements
@@ -51,6 +51,7 @@ Output contains:
 - `summary.by_category`
 - `summary.by_tool`
 - item-level `status`, `risk`, and `reason` fields for agent decisions
+- item-level `source` for path-derived worktree owners
 - item-level `cleanup_kind` and `cleanup_command` fields for cleanup execution
 
 The schema is documented in `docs/JSON_SCHEMA.md`.
@@ -80,7 +81,7 @@ Behavior:
 3. Scan all providers.
 4. Filter by age, category, tool, risky status, and worktree health.
 5. If no targets match, print `No items to clean.` and exit 0.
-6. If `--dry-run` is set, print targets and total reclaimable space.
+6. If `--dry-run` is set, print targets and total candidate space.
 7. If `--interactive` is set, ask per item.
 8. If not forced, print the target plan and ask for one final confirmation.
 9. Delete targets through cleaner safety checks.
@@ -109,7 +110,7 @@ Command-backed cleanup:
 
 | Category | Default clean | Tools | Default locations |
 |----------|---------------|-------|-------------------|
-| `worktree` | yes | `codex`, `claude`, `unknown` | `~/.codex/worktrees/*`, `~/*/.claude/worktrees/*`, `*/worktree*/*` |
+| `worktree` | orphaned only | `codex`, `claude`, `unknown` | Bounded shallow discovery of `$HOME` directories named `worktrees`, `worktree`, `worktree-*`, or `worktrees-*`, validated by direct or nested `.git` files |
 | `node_modules` | yes | `node_modules` | `$HOME/**/node_modules`, with noisy system/media/cache directories pruned |
 | `build-cache` | yes | `build-cache` | `~/.cache/go-build`, `~/.gradle/caches`, `~/.npm/_cacache`, `~/.cargo/registry`, `~/Library/Caches/Xcode` |
 | `other-cache` | yes | `pip-cache` | `~/.cache/pip`, `~/.cache/uv` |
@@ -129,13 +130,25 @@ Cleanup excludes `active` worktrees by default. `orphaned` worktrees remain
 eligible when age/category/tool filters match. Use `--include-active-worktrees`
 to intentionally include active worktrees.
 
+Worktree discovery is convention-based rather than a fixed tool list. Hidden
+owner directories are intentionally allowed when they contain worktree roots,
+for example `$HOME/.codex/worktrees`, `$HOME/.some-tool/worktrees`, or
+`$HOME/project/.some-tool/worktrees`. The path-derived `source` field records
+that owner as `.codex`, `.some-tool`, or `project-local` for plain
+project-local `worktrees` directories.
+
+Full-home discovery is bounded: aibris checks immediate hidden owners and
+project-local containers within a shallow depth from each scan root. It does not
+recursively traverse every descendant looking for arbitrarily deep worktree
+owners.
+
 ## Scan Roots
 
 Default scan roots are equivalent to resolved `$HOME`. `--root` narrows scan
 scope and may be repeated:
 
 ```bash
-aibris scan --root ~/workspace --root ~/Developer
+aibris scan --root ~/.codex --root ~/path/to/project
 ```
 
 Roots are expanded, symlink-resolved, rejected when they escape `$HOME`, sorted,
@@ -145,7 +158,10 @@ deduplicated, and collapsed when one root is nested inside another.
 
 - Destructive deletion must reject relative paths.
 - Destructive deletion must reject paths outside `$HOME`.
-- Destructive deletion must pass `cleaner.IsSafePath`.
+- Destructive deletion must pass cleanup safety validation.
+- Worktree deletion may also pass scanner-validated worktree safety: the target
+  must resolve under `$HOME`, avoid symlink escape, and carry active/orphaned
+  Git worktree metadata from scanning.
 - `node_modules` discovered under valid home-scoped scan roots must remain
   eligible for cleanup safety checks.
 - Risky categories must be excluded unless `--risky` is set.
