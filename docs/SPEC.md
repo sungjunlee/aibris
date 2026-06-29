@@ -78,7 +78,7 @@ Behavior:
 
 1. Parse and validate `--age`.
 2. Warn when `--age` is shorter than one hour.
-3. Scan all providers.
+3. Obtain scan results from a fresh compatible scan cache or by scanning providers.
 4. Filter by age, category, tool, risky status, and worktree health.
 5. If no targets match, print `No items to clean.` and exit 0.
 6. If `--dry-run` is set, print targets and total candidate space.

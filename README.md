@@ -134,8 +134,8 @@ scan summary
 
 by category
   category             found     eligible  protected/skipped  main reason
-  worktree          2  192.0 MB   1  96.0 MB   1  96.0 MB  active worktree protected by default
-  node_modules      1    1.8 GB   0      0 B   1   1.8 GB  category filter
+  worktree          2  192.0 MB   1  96.0 MB   1  96.0 MB  active worktree protected
+  node_modules      1    1.8 GB   0      0 B   1   1.8 GB  outside category/tool filters
 
   matched  1 candidate   96.0 MB
 
@@ -145,7 +145,7 @@ clean plan
 
 targets
       size  category      name         project            age/status     action       reason
-   96.0 MB  worktree      b7f4c2       aibris             orphaned 12d   remove-path  orphaned worktree
+   96.0 MB  worktree      b7f4c2       aibris             orphaned 12d   remove-path  orphaned worktree; parent repo metadata missing
     ~/.codex/worktrees/b7f4c2
 
 [DRY-RUN] No files were removed.
@@ -168,9 +168,9 @@ scan summary
 
 by category
   category             found     eligible  protected/skipped  main reason
-  node_modules      1    1.8 GB   1   1.8 GB   0      0 B  eligible
-  build-cache       2    1.3 GB   0      0 B   2   1.3 GB  category filter
-  worktree          1   96.0 MB   0      0 B   1  96.0 MB  active worktree protected by default
+  node_modules      1    1.8 GB   1   1.8 GB   0      0 B  eligible for cleanup
+  build-cache       2    1.3 GB   0      0 B   2   1.3 GB  outside category/tool filters
+  worktree          1   96.0 MB   0      0 B   1  96.0 MB  active worktree protected
 
   matched  1 candidate   1.8 GB
 
@@ -180,7 +180,7 @@ clean plan
 
 targets
       size  category      name         project            age/status     action       reason
-    1.8 GB  node_modules  dashboard    -                  24d           remove-path  matched cleanup policy
+    1.8 GB  node_modules  dashboard    -                  24d           remove-path  dependency directory; can be reinstalled
     ~/path/to/dashboard/node_modules
 
 Proceed? [y/N]: y
