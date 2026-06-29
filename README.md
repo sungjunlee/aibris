@@ -198,6 +198,26 @@ cleanup receipt
 the cache is stale, missing, or for different roots, `clean` falls back to a
 live scan with progress output.
 
+Live fallback keeps the same audit shape after non-interactive scan progress:
+
+```text
+clean
+  roots  ~
+
+  scanning node_modules
+  scanning build-cache
+  found    build-cache    2 items   1.3 GB
+  found    node_modules   1 items   1.8 GB
+
+  policy  age>=7d, risky=false, active-worktrees=protected
+  scan    live
+
+scan summary
+  scanned    7 sources   3 items   3.1 GB
+  eligible   1 item   1.8 GB
+  protected/skipped 2 items   1.3 GB
+```
+
 So the common loop is fast and visible:
 
 ```bash

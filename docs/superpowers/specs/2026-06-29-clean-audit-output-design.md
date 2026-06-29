@@ -40,15 +40,20 @@ cleanup policy, deletion behavior, or `scan --json` compatibility.
 
 ```text
 clean
-  roots   ~
+  roots  ~
+
+  scanning node_modules
+  scanning build-cache
+  found    build-cache    3 items   2.1 GB
+  found    node_modules   11 items   8.4 GB
+
   policy  age>=7d, risky=false, active-worktrees=protected
   scan    live
 
 scan summary
   scanned    7 sources   23 items   14.2 GB
   eligible   9 items     6.8 GB
-  protected  6 items     3.1 GB
-  skipped    8 items     4.3 GB
+  protected/skipped 14 items   7.4 GB
 
 by category
   category       found        eligible     protected/skipped       main reason
@@ -63,7 +68,7 @@ clean plan
 
 targets
       size  category      name          project      age/status      action        reason
-    1.8 GB  node_modules  dashboard     -            24d             remove-path   reproducible dependency dir
+    1.8 GB  node_modules  dashboard     -            24d             remove-path   dependency directory; can be reinstalled
 ```
 
 When there are no deletion candidates, the command should still print the audit
@@ -71,15 +76,14 @@ sections that explain why:
 
 ```text
 clean
-  roots   ~
+  roots  ~
   policy  age>=7d, risky=false, active-worktrees=protected
   scan    cached, 8s old
 
 scan summary
   scanned    7 sources   4 items   3.2 GB
   eligible   0 items     0 B
-  protected  1 item      96.0 MB
-  skipped    3 items     3.1 GB
+  protected/skipped 4 items   3.2 GB
 
 by category
   category       found        eligible     protected/skipped       main reason
@@ -89,15 +93,15 @@ by category
 No items to clean.
 ```
 
-After real deletion, the receipt remains intentionally small because
-`cleaner.Execute` only returns total freed bytes today:
+After real deletion, the receipt remains intentionally small. It reports the
+requested target count and total freed bytes without claiming precise per-item
+success counts:
 
 ```text
 cleanup receipt
-  completed  9 items
+  targets    9 items
   freed      6.8 GB
-  protected  6 items   3.1 GB
-  skipped    8 items   4.3 GB
+  protected/skipped 14 items   7.4 GB
 ```
 
 If execution returns an error, existing stderr detail remains the source of
@@ -124,7 +128,7 @@ cleaner.Filter(items, opts) -> targets
 cmd/buildCleanAudit(result.Worktrees, targets, opts)
   |
   +-- category rows: found / eligible / protected-or-skipped / main reason
-  +-- totals: found / eligible / protected / skipped
+  +-- totals: found / eligible / protected/skipped
   +-- target rows: existing clean plan plus reason
   |
   v
@@ -178,8 +182,8 @@ category are eligible, the main reason can be `eligible for cleanup`.
 
 `clean` should show whether it used a recent scan cache or a live scan:
 
-- `scan live`
-- `scan cached, 8s old`
+- `scan    live`
+- `scan    cached, 8s old`
 
 Fresh scan cache reuse remains valid only when roots, schema, and freshness
 match. Cached items must still pass the existing path existence check before
