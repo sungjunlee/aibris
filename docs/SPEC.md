@@ -95,6 +95,17 @@ Command-backed cleanup:
 - Commands that run and fail do not fall back silently.
 - Context cancellation must stop command execution.
 
+Human `clean` output must include a cleanup audit before deletion:
+
+- roots and policy (`age`, `risky`, active worktree policy)
+- scan source (`live` or `cached, <age> old`)
+- scan summary with found, eligible, and protected/skipped totals
+- category rows with found, eligible, protected/skipped, and main reason
+- target plan with reason text before confirmation or dry-run completion
+- cleanup receipt after execution that reports target count and freed bytes without claiming per-item success counts
+
+The audit is human output only. `scan --json` remains the machine-readable surface for agents and scripts.
+
 ### FR4 - AI-guided Skill Workflow
 
 `skills/aibris/SKILL.md` defines the intended AI-assisted cleanup flow:

@@ -219,6 +219,13 @@ aibris clean
   +-- always re-check path safety and existence before deletion
 ```
 
+### 8. Clean Audit Output Follow-Up
+
+The clean audit output pass is implemented from
+`docs/superpowers/specs/2026-06-29-clean-audit-output-design.md`.
+It keeps scan, filter, and execute contracts stable while adding policy,
+scan-source, category reason, target reason, and receipt output in `cmd`.
+
 ## Data Flow
 
 ```text
