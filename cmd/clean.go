@@ -114,7 +114,7 @@ var cleanCmd = &cobra.Command{
 
 		if opts.Interactive {
 			total := interactiveClean(targets)
-			fmt.Printf("\nFreed: %s\n", cleaner.FormatSize(total))
+			printCleanupReceipt(len(targets), total, audit)
 			return
 		}
 
@@ -133,7 +133,7 @@ var cleanCmd = &cobra.Command{
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error during cleanup: %v\n", err)
 		}
-		fmt.Printf("\nFreed: %s\n", cleaner.FormatSize(total))
+		printCleanupReceipt(len(targets), total, audit)
 	},
 }
 

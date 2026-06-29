@@ -814,11 +814,35 @@ func TestCleanCmd_Execute(t *testing.T) {
 	if !strings.Contains(output, "removed:") {
 		t.Errorf("output missing 'removed:'; got: %s", output)
 	}
-	if !strings.Contains(output, "Freed:") {
-		t.Errorf("output missing 'Freed:'; got: %s", output)
+	if !strings.Contains(output, "cleanup receipt") {
+		t.Errorf("output missing cleanup receipt; got: %s", output)
 	}
 	if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
 		t.Error("worktree should be removed")
+	}
+}
+
+func TestCleanCmd_ForcePrintsCleanupReceipt(t *testing.T) {
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	modules := filepath.Join(home, "workspace", "app", "node_modules")
+	os.MkdirAll(filepath.Join(modules, "pkg"), 0755)
+	past := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(modules, past, past)
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--force", "--age=1h", "--category=node_modules"})
+		rootCmd.Execute()
+	})
+
+	for _, want := range []string{"cleanup receipt", "completed", "freed", "protected/skipped"} {
+		if !strings.Contains(output, want) {
+			t.Errorf("output missing %q; got: %s", want, output)
+		}
+	}
+	if strings.Contains(output, "\nFreed:") {
+		t.Errorf("legacy Freed line should be replaced by receipt; got: %s", output)
 	}
 }
 
@@ -1185,7 +1209,7 @@ func TestCleanCmd_Risky(t *testing.T) {
 			rootCmd.SetArgs([]string{"clean", "--age=1h", "--force", "--risky"})
 			rootCmd.Execute()
 		})
-		if !strings.Contains(output, "Freed:") {
+		if !strings.Contains(output, "cleanup receipt") {
 			t.Errorf("expected deletion with --risky; got: %s", output)
 		}
 	})
