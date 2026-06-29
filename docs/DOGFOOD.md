@@ -56,3 +56,51 @@ Notes:
   lines.
 - The active worktree appeared in scan output but remains protected from
   default cleanup.
+
+## 2026-06-29 - Clean Audit Output
+
+Command:
+
+```bash
+go run . clean --root /Users/sjlee/workspace/active/harness-stack/aibris --dry-run
+```
+
+Output:
+
+```text
+clean
+  roots  ~/workspace/active/harness-stack/aibris
+
+  scanning node_modules
+  scanning build-cache
+  scanning pip-cache
+  scanning cursor
+  scanning ai-logs
+  scanning windsurf
+  scanning codex
+  found    pip-cache      0 items   0 B
+
+  found    cursor         0 items   0 B
+
+  found    ai-logs        0 items   0 B
+
+  found    windsurf       0 items   0 B
+
+  found    codex          0 items   0 B
+
+  found    build-cache    0 items   0 B
+
+  found    node_modules   0 items   0 B
+
+  policy  age>7d, risky=false, active-worktrees=protected
+  scan    live
+
+scan summary
+  scanned    7 sources   0 items   0 B
+  eligible   0 items   0 B
+  protected/skipped 0 items   0 B
+
+  matched  0 candidates   0 B
+
+No items to clean.
+```

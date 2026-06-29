@@ -58,7 +58,7 @@ var cleanCmd = &cobra.Command{
 		}
 		printCleanHeader(roots)
 
-		result, err := scanForClean(ctx, roots)
+		result, source, err := scanForClean(ctx, roots)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
@@ -97,11 +97,12 @@ var cleanCmd = &cobra.Command{
 
 		targets := cleaner.Filter(result.Worktrees, opts)
 		targets = filterExistingTargets(targets)
+		audit := buildCleanAudit(result.Worktrees, targets, opts, len(scanner.DefaultScanner.Providers), source)
+		printCleanAudit(audit, opts)
 		printCleanCandidateSummary(targets)
 
 		if len(targets) == 0 {
 			fmt.Println("No items to clean.")
-			printCleanupDiagnostics(summarizeCleanup(result.Worktrees, opts), opts)
 			return
 		}
 
@@ -113,7 +114,7 @@ var cleanCmd = &cobra.Command{
 
 		if opts.Interactive {
 			total := interactiveClean(targets)
-			fmt.Printf("\nFreed: %s\n", cleaner.FormatSize(total))
+			printCleanupReceipt(len(targets), total, audit)
 			return
 		}
 
@@ -132,7 +133,7 @@ var cleanCmd = &cobra.Command{
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error during cleanup: %v\n", err)
 		}
-		fmt.Printf("\nFreed: %s\n", cleaner.FormatSize(total))
+		printCleanupReceipt(len(targets), total, audit)
 	},
 }
 
@@ -182,10 +183,9 @@ func printCleanHeader(roots []string) {
 	fmt.Printf("  roots  %s\n\n", strings.Join(displayRoots(roots), ", "))
 }
 
-func scanForClean(ctx context.Context, roots []string) (*types.ScanResult, error) {
+func scanForClean(ctx context.Context, roots []string) (*types.ScanResult, scanSource, error) {
 	if result, age, ok := readFreshLastScanCache(roots); ok {
-		fmt.Printf("  using cached scan from %s ago\n\n", shortDurationString(age))
-		return result, nil
+		return result, scanSource{Kind: scanSourceCached, Age: age}, nil
 	}
 
 	progress := newScanProgressPrinter(os.Stdout)
@@ -195,10 +195,10 @@ func scanForClean(ctx context.Context, roots []string) (*types.ScanResult, error
 	})
 	progress.Stop()
 	if err != nil {
-		return nil, err
+		return nil, scanSource{}, err
 	}
 	writeLastScanCache(roots, result)
-	return result, nil
+	return result, scanSource{Kind: scanSourceLive}, nil
 }
 
 func shortDurationString(d time.Duration) string {
@@ -290,8 +290,8 @@ func printCleanPlan(targets []types.DebrisInfo, mode cleanPlanMode) {
 	fmt.Printf("  targets  %d %s   %s\n", len(targets), itemNoun(len(targets)), cleaner.FormatSize(totalSize))
 	fmt.Println()
 	fmt.Println("targets")
-	fmt.Printf("  %8s  %-13s %-12s %-18s %-14s %s\n",
-		"size", "category", "name", "project", "age/status", "action")
+	fmt.Printf("  %8s  %-13s %-12s %-18s %-14s %-12s %s\n",
+		"size", "category", "name", "project", "age/status", "action", "reason")
 	for _, w := range targets {
 		printCleanTarget(w, home)
 	}
@@ -311,13 +311,14 @@ func printCleanTarget(w types.DebrisInfo, home string) {
 }
 
 func cleanPlanLine(w types.DebrisInfo) string {
-	return fmt.Sprintf("  %8s  %-13s %-12s %-18s %-14s %s",
+	return fmt.Sprintf("  %8s  %-13s %-12s %-18s %-14s %-12s %s",
 		cleaner.FormatSize(w.Size),
 		w.Category,
 		itemName(w),
 		itemProject(w),
 		itemAgeAndStatus(w),
-		cleanAction(w))
+		cleanAction(w),
+		cleanTargetReason(w))
 }
 
 func cleanAction(w types.DebrisInfo) string {

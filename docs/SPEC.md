@@ -78,14 +78,15 @@ Behavior:
 
 1. Parse and validate `--age`.
 2. Warn when `--age` is shorter than one hour.
-3. Scan all providers.
+3. Obtain scan results from a fresh compatible scan cache or by scanning providers.
 4. Filter by age, category, tool, risky status, and worktree health.
-5. If no targets match, print `No items to clean.` and exit 0.
-6. If `--dry-run` is set, print targets and total candidate space.
-7. If `--interactive` is set, ask per item.
-8. If not forced, print the target plan and ask for one final confirmation.
-9. Delete targets through cleaner safety checks.
-10. Print freed space.
+5. Print a cleanup audit with policy, scan source, eligible totals, and skipped reasons.
+6. If no targets match, print `No items to clean.` and exit 0.
+7. If `--dry-run` is set, print targets and total candidate space without deleting.
+8. If `--interactive` is set, ask per item.
+9. If not forced, print the target plan and ask for one final confirmation.
+10. Delete targets through cleaner safety checks.
+11. Print a cleanup receipt with target count, freed bytes, and protected/skipped totals.
 
 Command-backed cleanup:
 
@@ -94,6 +95,17 @@ Command-backed cleanup:
 - Missing commands fall back to safe path removal for the scanned item.
 - Commands that run and fail do not fall back silently.
 - Context cancellation must stop command execution.
+
+Human `clean` output must include a cleanup audit before deletion:
+
+- roots and policy (`age`, `risky`, active worktree policy)
+- scan source (`live` or `cached, <age> old`)
+- scan summary with found, eligible, and protected/skipped totals
+- category rows with found, eligible, protected/skipped, and main reason
+- target plan with reason text before confirmation or dry-run completion
+- cleanup receipt after execution that reports target count and freed bytes without claiming per-item success counts
+
+The audit is human output only. `scan --json` remains the machine-readable surface for agents and scripts.
 
 ### FR4 - AI-guided Skill Workflow
 

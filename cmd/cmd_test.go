@@ -309,7 +309,23 @@ func TestCleanCmd_DryRunShowsScanProgressAndCandidates(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	for _, want := range []string{"clean", "roots", "scanning", "found", "matched  1 candidate", "clean plan", "mode     dry-run"} {
+	for _, want := range []string{
+		"clean",
+		"roots",
+		"scanning",
+		"found",
+		"policy",
+		"age>1h",
+		"scan    live",
+		"scan summary",
+		"eligible",
+		"protected/skipped",
+		"by category",
+		"main reason",
+		"matched  1 candidate",
+		"clean plan",
+		"mode     dry-run",
+	} {
 		if !strings.Contains(output, want) {
 			t.Errorf("output missing %q; got: %s", want, output)
 		}
@@ -338,8 +354,11 @@ func TestCleanCmd_UsesFreshLastScanCache(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	if !strings.Contains(output, "using cached scan") {
-		t.Errorf("clean should report cached scan use; got: %s", output)
+	if !strings.Contains(output, "scan    cached") || !strings.Contains(output, "old") {
+		t.Errorf("clean should report cached scan source; got: %s", output)
+	}
+	if strings.Contains(output, "using cached scan") {
+		t.Errorf("clean should use audit scan source instead of legacy cache line; got: %s", output)
 	}
 	if strings.Contains(output, "scanning ") {
 		t.Errorf("clean should not run live scan when cache is fresh; got: %s", output)
@@ -374,11 +393,14 @@ func TestCleanCmd_DropsMissingTargetsFromFreshLastScanCache(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	if !strings.Contains(output, "using cached scan") {
+	if !strings.Contains(output, "scan    cached") {
 		t.Errorf("clean should use fresh cache before dropping stale target; got: %s", output)
 	}
 	if !strings.Contains(output, "matched  0 candidates") {
 		t.Errorf("clean should drop missing cached target; got: %s", output)
+	}
+	if !strings.Contains(output, "path no longer exists") {
+		t.Errorf("clean audit should explain missing cached target; got: %s", output)
 	}
 	if strings.Contains(output, filepath.Join("~", "workspace", "app", "node_modules")) {
 		t.Errorf("clean should not show missing cached target; got: %s", output)
@@ -573,7 +595,17 @@ func TestCleanCmd_DryRunAndConfirmShareTargetFormat(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	for _, want := range []string{"targets", "size", "category", "project", "action", "remove-path", filepath.Join("~", "workspace", "app", "node_modules")} {
+	for _, want := range []string{
+		"targets",
+		"size",
+		"category",
+		"project",
+		"action",
+		"reason",
+		"remove-path",
+		"dependency directory; can be reinstalled",
+		filepath.Join("~", "workspace", "app", "node_modules"),
+	} {
 		if !strings.Contains(dryRunOutput, want) {
 			t.Errorf("dry-run output missing %q; got: %s", want, dryRunOutput)
 		}
@@ -611,6 +643,48 @@ func TestCleanCmd_InteractiveUsesCleanTargetFormat(t *testing.T) {
 		if !strings.Contains(output, want) {
 			t.Errorf("interactive output missing %q; got: %s", want, output)
 		}
+	}
+}
+
+func TestCleanCmd_InteractiveSkipPrintsNeutralReceipt(t *testing.T) {
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	modules := filepath.Join(home, "workspace", "app", "node_modules")
+	os.MkdirAll(filepath.Join(modules, "pkg"), 0755)
+	past := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(modules, past, past)
+
+	oldStdin := os.Stdin
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdin = r
+	w.WriteString("n\n")
+	w.Close()
+	defer func() { os.Stdin = oldStdin }()
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--interactive", "--age=1h", "--category=node_modules"})
+		rootCmd.Execute()
+	})
+
+	receiptStart := strings.LastIndex(output, "cleanup receipt")
+	if receiptStart < 0 {
+		t.Fatalf("interactive skip output missing cleanup receipt; got: %s", output)
+	}
+	receipt := output[receiptStart:]
+	for _, want := range []string{"targets    1 item", "freed      0 B", "protected/skipped 0 items"} {
+		if !strings.Contains(receipt, want) {
+			t.Errorf("interactive skip output missing %q; got: %s", want, output)
+		}
+	}
+	if strings.Contains(output, "completed") {
+		t.Errorf("interactive skip receipt should not claim completion; got: %s", output)
+	}
+	if _, err := os.Stat(modules); err != nil {
+		t.Errorf("node_modules should still exist after skip: %v", err)
 	}
 }
 
@@ -666,7 +740,7 @@ func TestCleanCmd_ActiveWorktreeExcludedByDefault(t *testing.T) {
 	if !strings.Contains(output, "No items to clean") {
 		t.Errorf("active worktree should be omitted by default; got: %s", output)
 	}
-	if !strings.Contains(output, "protected") || !strings.Contains(output, "--include-active-worktrees") {
+	if !strings.Contains(output, "active-worktrees=protected") || !strings.Contains(output, "active worktree protected") {
 		t.Errorf("active worktree exclusion should explain opt-in flag; got: %s", output)
 	}
 }
@@ -709,7 +783,7 @@ func TestCleanCmd_ZeroCandidatesExplainsAgeAndRiskyExclusions(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	for _, want := range []string{"No items to clean", "age-blocked", "younger than 7d", "risky", "--risky"} {
+	for _, want := range []string{"No items to clean", "scan summary", "by category", "younger than 7d", "requires --risky"} {
 		if !strings.Contains(output, want) {
 			t.Errorf("output missing %q; got: %s", want, output)
 		}
@@ -782,11 +856,43 @@ func TestCleanCmd_Execute(t *testing.T) {
 	if !strings.Contains(output, "removed:") {
 		t.Errorf("output missing 'removed:'; got: %s", output)
 	}
-	if !strings.Contains(output, "Freed:") {
-		t.Errorf("output missing 'Freed:'; got: %s", output)
+	if !strings.Contains(output, "cleanup receipt") {
+		t.Errorf("output missing cleanup receipt; got: %s", output)
 	}
 	if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
 		t.Error("worktree should be removed")
+	}
+}
+
+func TestCleanCmd_ForcePrintsCleanupReceipt(t *testing.T) {
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	modules := filepath.Join(home, "workspace", "app", "node_modules")
+	os.MkdirAll(filepath.Join(modules, "pkg"), 0755)
+	past := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(modules, past, past)
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--force", "--age=1h", "--category=node_modules"})
+		rootCmd.Execute()
+	})
+
+	receiptStart := strings.LastIndex(output, "cleanup receipt")
+	if receiptStart < 0 {
+		t.Fatalf("output missing cleanup receipt; got: %s", output)
+	}
+	receipt := output[receiptStart:]
+	for _, want := range []string{"targets    1 item", "freed", "protected/skipped 0 items"} {
+		if !strings.Contains(receipt, want) {
+			t.Errorf("output missing %q; got: %s", want, output)
+		}
+	}
+	if strings.Contains(output, "\nFreed:") {
+		t.Errorf("legacy Freed line should be replaced by receipt; got: %s", output)
+	}
+	if strings.Contains(output, "completed") {
+		t.Errorf("receipt should not claim completion; got: %s", output)
 	}
 }
 
@@ -1153,7 +1259,7 @@ func TestCleanCmd_Risky(t *testing.T) {
 			rootCmd.SetArgs([]string{"clean", "--age=1h", "--force", "--risky"})
 			rootCmd.Execute()
 		})
-		if !strings.Contains(output, "Freed:") {
+		if !strings.Contains(output, "cleanup receipt") {
 			t.Errorf("expected deletion with --risky; got: %s", output)
 		}
 	})

@@ -124,7 +124,18 @@ $ aibris clean --category worktree --age 7d --dry-run
 clean
   roots  ~
 
-  using cached scan from 8s ago
+  policy  age>7d, risky=false, active-worktrees=protected
+  scan    cached, 8s old
+
+scan summary
+  scanned    7 sources   3 items   2.0 GB
+  eligible   1 item   96.0 MB
+  protected/skipped 2 items   1.9 GB
+
+by category
+  category             found     eligible  protected/skipped  main reason
+  worktree          2  192.0 MB   1  96.0 MB   1  96.0 MB  active worktree protected
+  node_modules      1    1.8 GB   0      0 B   1   1.8 GB  outside category/tool filters
 
   matched  1 candidate   96.0 MB
 
@@ -133,8 +144,8 @@ clean plan
   targets  1 item   96.0 MB
 
 targets
-      size  category      name         project            age/status     action
-   96.0 MB  worktree      b7f4c2       aibris             orphaned 12d   remove-path
+      size  category      name         project            age/status     action       reason
+   96.0 MB  worktree      b7f4c2       aibris             orphaned 12d   remove-path  orphaned worktree; parent repo metadata missing
     ~/.codex/worktrees/b7f4c2
 
 [DRY-RUN] No files were removed.
@@ -147,7 +158,19 @@ $ aibris clean --category node_modules --age 7d
 clean
   roots  ~
 
-  scanned  7 sources   4 items   3.2 GB
+  policy  age>7d, risky=false, active-worktrees=protected
+  scan    cached, 11s old
+
+scan summary
+  scanned    7 sources   4 items   3.2 GB
+  eligible   1 item   1.8 GB
+  protected/skipped 3 items   1.4 GB
+
+by category
+  category             found     eligible  protected/skipped  main reason
+  node_modules      1    1.8 GB   1   1.8 GB   0      0 B  eligible for cleanup
+  build-cache       2    1.3 GB   0      0 B   2   1.3 GB  outside category/tool filters
+  worktree          1   96.0 MB   0      0 B   1  96.0 MB  active worktree protected
 
   matched  1 candidate   1.8 GB
 
@@ -156,17 +179,44 @@ clean plan
   targets  1 item   1.8 GB
 
 targets
-      size  category      name         project            age/status     action
-    1.8 GB  node_modules  dashboard    -                  24d           remove-path
+      size  category      name         project            age/status     action       reason
+    1.8 GB  node_modules  dashboard    -                  24d           remove-path  dependency directory; can be reinstalled
     ~/path/to/dashboard/node_modules
 
-Proceed? [y/N]:
+Proceed? [y/N]: y
+removing 1/1: dashboard (node_modules) ...
+removed: dashboard (node_modules) — 1.8 GB
+
+cleanup receipt
+  targets    1 item
+  freed      1.8 GB
+  protected/skipped 3 items   1.4 GB
 ```
 
 `scan` writes a short-lived snapshot under the user cache directory. A following
 `clean` reuses it for 5 minutes when the scan roots and cache schema match. If
 the cache is stale, missing, or for different roots, `clean` falls back to a
 live scan with progress output.
+
+Live fallback keeps the same audit shape after non-interactive scan progress:
+
+```text
+clean
+  roots  ~
+
+  scanning node_modules
+  scanning build-cache
+  found    build-cache    2 items   1.3 GB
+  found    node_modules   1 items   1.8 GB
+
+  policy  age>7d, risky=false, active-worktrees=protected
+  scan    live
+
+scan summary
+  scanned    7 sources   3 items   3.1 GB
+  eligible   1 item   1.8 GB
+  protected/skipped 2 items   1.3 GB
+```
 
 So the common loop is fast and visible:
 
