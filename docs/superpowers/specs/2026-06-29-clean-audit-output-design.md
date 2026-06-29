@@ -47,7 +47,7 @@ clean
   found    build-cache    3 items   2.1 GB
   found    node_modules   11 items   8.4 GB
 
-  policy  age>=7d, risky=false, active-worktrees=protected
+  policy  age>7d, risky=false, active-worktrees=protected
   scan    live
 
 scan summary
@@ -77,7 +77,7 @@ sections that explain why:
 ```text
 clean
   roots  ~
-  policy  age>=7d, risky=false, active-worktrees=protected
+  policy  age>7d, risky=false, active-worktrees=protected
   scan    cached, 8s old
 
 scan summary

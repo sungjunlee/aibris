@@ -92,7 +92,7 @@ clean
 
   found    node_modules   0 items   0 B
 
-  policy  age>=7d, risky=false, active-worktrees=protected
+  policy  age>7d, risky=false, active-worktrees=protected
   scan    live
 
 scan summary

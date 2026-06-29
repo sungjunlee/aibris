@@ -315,7 +315,7 @@ func TestCleanCmd_DryRunShowsScanProgressAndCandidates(t *testing.T) {
 		"scanning",
 		"found",
 		"policy",
-		"age>=1h",
+		"age>1h",
 		"scan    live",
 		"scan summary",
 		"eligible",
@@ -670,8 +670,13 @@ func TestCleanCmd_InteractiveSkipPrintsNeutralReceipt(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	for _, want := range []string{"cleanup receipt", "targets", "freed", "skipped"} {
-		if !strings.Contains(output, want) {
+	receiptStart := strings.LastIndex(output, "cleanup receipt")
+	if receiptStart < 0 {
+		t.Fatalf("interactive skip output missing cleanup receipt; got: %s", output)
+	}
+	receipt := output[receiptStart:]
+	for _, want := range []string{"targets    1 item", "freed      0 B", "protected/skipped 0 items"} {
+		if !strings.Contains(receipt, want) {
 			t.Errorf("interactive skip output missing %q; got: %s", want, output)
 		}
 	}
@@ -873,8 +878,13 @@ func TestCleanCmd_ForcePrintsCleanupReceipt(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	for _, want := range []string{"cleanup receipt", "targets", "freed", "protected/skipped"} {
-		if !strings.Contains(output, want) {
+	receiptStart := strings.LastIndex(output, "cleanup receipt")
+	if receiptStart < 0 {
+		t.Fatalf("output missing cleanup receipt; got: %s", output)
+	}
+	receipt := output[receiptStart:]
+	for _, want := range []string{"targets    1 item", "freed", "protected/skipped 0 items"} {
+		if !strings.Contains(receipt, want) {
 			t.Errorf("output missing %q; got: %s", want, output)
 		}
 	}

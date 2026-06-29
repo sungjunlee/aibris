@@ -124,7 +124,7 @@ $ aibris clean --category worktree --age 7d --dry-run
 clean
   roots  ~
 
-  policy  age>=7d, risky=false, active-worktrees=protected
+  policy  age>7d, risky=false, active-worktrees=protected
   scan    cached, 8s old
 
 scan summary
@@ -158,7 +158,7 @@ $ aibris clean --category node_modules --age 7d
 clean
   roots  ~
 
-  policy  age>=7d, risky=false, active-worktrees=protected
+  policy  age>7d, risky=false, active-worktrees=protected
   scan    cached, 11s old
 
 scan summary
@@ -209,7 +209,7 @@ clean
   found    build-cache    2 items   1.3 GB
   found    node_modules   1 items   1.8 GB
 
-  policy  age>=7d, risky=false, active-worktrees=protected
+  policy  age>7d, risky=false, active-worktrees=protected
   scan    live
 
 scan summary

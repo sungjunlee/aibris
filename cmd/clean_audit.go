@@ -182,7 +182,7 @@ func cleanAuditPolicyLine(opts types.PruneOptions) string {
 	if opts.IncludeActiveWorktrees {
 		activePolicy = "included"
 	}
-	return fmt.Sprintf("age>=%s, risky=%t, active-worktrees=%s", cleanAgeDisplay(opts.Age), opts.Risky, activePolicy)
+	return fmt.Sprintf("age>%s, risky=%t, active-worktrees=%s", cleanAgeDisplay(opts.Age), opts.Risky, activePolicy)
 }
 
 func cleanAuditScanSourceLine(source scanSource) string {

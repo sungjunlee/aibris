@@ -57,7 +57,7 @@ func TestBuildCleanAudit_GroupsEligibleAndBlockedByCategory(t *testing.T) {
 
 func TestCleanAuditPolicyLine(t *testing.T) {
 	got := cleanAuditPolicyLine(types.PruneOptions{Age: 7 * 24 * time.Hour})
-	for _, want := range []string{"age>=7d", "risky=false", "active-worktrees=protected"} {
+	for _, want := range []string{"age>7d", "risky=false", "active-worktrees=protected"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("policy %q missing %q", got, want)
 		}
@@ -68,7 +68,7 @@ func TestCleanAuditPolicyLine(t *testing.T) {
 		Risky:                  true,
 		IncludeActiveWorktrees: true,
 	})
-	for _, want := range []string{"age>=2h", "risky=true", "active-worktrees=included"} {
+	for _, want := range []string{"age>2h", "risky=true", "active-worktrees=included"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("policy %q missing %q", got, want)
 		}
