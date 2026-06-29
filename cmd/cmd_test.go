@@ -646,6 +646,43 @@ func TestCleanCmd_InteractiveUsesCleanTargetFormat(t *testing.T) {
 	}
 }
 
+func TestCleanCmd_InteractiveSkipPrintsNeutralReceipt(t *testing.T) {
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	modules := filepath.Join(home, "workspace", "app", "node_modules")
+	os.MkdirAll(filepath.Join(modules, "pkg"), 0755)
+	past := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(modules, past, past)
+
+	oldStdin := os.Stdin
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdin = r
+	w.WriteString("n\n")
+	w.Close()
+	defer func() { os.Stdin = oldStdin }()
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--interactive", "--age=1h", "--category=node_modules"})
+		rootCmd.Execute()
+	})
+
+	for _, want := range []string{"cleanup receipt", "targets", "freed", "skipped"} {
+		if !strings.Contains(output, want) {
+			t.Errorf("interactive skip output missing %q; got: %s", want, output)
+		}
+	}
+	if strings.Contains(output, "completed") {
+		t.Errorf("interactive skip receipt should not claim completion; got: %s", output)
+	}
+	if _, err := os.Stat(modules); err != nil {
+		t.Errorf("node_modules should still exist after skip: %v", err)
+	}
+}
+
 func TestCleanPlanLineAvoidsUnknownProjectQuestionMark(t *testing.T) {
 	output := captureOutput(func() {
 		printCleanPlan([]types.DebrisInfo{
@@ -836,13 +873,16 @@ func TestCleanCmd_ForcePrintsCleanupReceipt(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	for _, want := range []string{"cleanup receipt", "completed", "freed", "protected/skipped"} {
+	for _, want := range []string{"cleanup receipt", "targets", "freed", "protected/skipped"} {
 		if !strings.Contains(output, want) {
 			t.Errorf("output missing %q; got: %s", want, output)
 		}
 	}
 	if strings.Contains(output, "\nFreed:") {
 		t.Errorf("legacy Freed line should be replaced by receipt; got: %s", output)
+	}
+	if strings.Contains(output, "completed") {
+		t.Errorf("receipt should not claim completion; got: %s", output)
 	}
 }
 

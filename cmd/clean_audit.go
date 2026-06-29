@@ -223,7 +223,7 @@ func printCleanAudit(audit cleanAudit, opts types.PruneOptions) {
 func printCleanupReceipt(targetCount int, freed int64, audit cleanAudit) {
 	fmt.Println()
 	fmt.Println("cleanup receipt")
-	fmt.Printf("  completed  %d %s\n", targetCount, itemNoun(targetCount))
+	fmt.Printf("  targets    %d %s\n", targetCount, itemNoun(targetCount))
 	fmt.Printf("  freed      %s\n", cleaner.FormatSize(freed))
 	fmt.Printf("  protected/skipped %d %s   %s\n",
 		audit.TotalBlockedCount, itemNoun(audit.TotalBlockedCount), cleaner.FormatSize(audit.TotalBlockedSize))
