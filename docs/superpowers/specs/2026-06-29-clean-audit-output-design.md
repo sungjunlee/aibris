@@ -59,7 +59,7 @@ by category
   category       found        eligible     protected/skipped       main reason
   node_modules   11  8.4 GB   7  5.8 GB   4  2.6 GB               younger than 7d
   worktree        8  3.5 GB   2  1.0 GB   6  2.5 GB               active worktree protected
-  build-cache     3  2.1 GB   0  0 B      3  2.1 GB               cleaned via tool command
+  build-cache     3  2.1 GB   3  2.1 GB   0  0 B                  eligible for cleanup
   ai-logs         1  200 MB   0  0 B      1  200 MB               requires --risky
 
 clean plan
