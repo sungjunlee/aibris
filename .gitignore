@@ -1,6 +1,7 @@
 /aibris
 /aibris.exe
 /dist/
+/.worktrees/
 /.pi-lens/
 /docs/superpowers/
 *.test
