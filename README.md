@@ -159,7 +159,7 @@ clean
   roots  ~
 
   policy  age>=7d, risky=false, active-worktrees=protected
-  scan    live
+  scan    cached, 11s old
 
 scan summary
   scanned    7 sources   4 items   3.2 GB
@@ -184,6 +184,8 @@ targets
     ~/path/to/dashboard/node_modules
 
 Proceed? [y/N]: y
+removing 1/1: dashboard (node_modules) ...
+removed: dashboard (node_modules) — 1.8 GB
 
 cleanup receipt
   targets    1 item
