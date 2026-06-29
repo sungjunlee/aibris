@@ -85,6 +85,32 @@ func TestCleanAuditScanSourceLine(t *testing.T) {
 	}
 }
 
+func TestCleanTargetReason(t *testing.T) {
+	tests := []struct {
+		name string
+		item types.DebrisInfo
+		want string
+	}{
+		{
+			name: "node modules",
+			item: types.DebrisInfo{Category: types.CategoryNodeModules},
+			want: "dependency directory; can be reinstalled",
+		},
+		{
+			name: "orphaned worktree",
+			item: types.DebrisInfo{Category: types.CategoryWorktree, Status: types.WorktreeOrphaned},
+			want: "orphaned worktree; parent repo metadata missing",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := cleanTargetReason(tt.item); got != tt.want {
+				t.Fatalf("cleanTargetReason() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func findAuditCategory(t *testing.T, audit cleanAudit, category types.Category) cleanAuditCategory {
 	t.Helper()
 	for _, row := range audit.Categories {

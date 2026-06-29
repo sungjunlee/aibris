@@ -290,8 +290,8 @@ func printCleanPlan(targets []types.DebrisInfo, mode cleanPlanMode) {
 	fmt.Printf("  targets  %d %s   %s\n", len(targets), itemNoun(len(targets)), cleaner.FormatSize(totalSize))
 	fmt.Println()
 	fmt.Println("targets")
-	fmt.Printf("  %8s  %-13s %-12s %-18s %-14s %s\n",
-		"size", "category", "name", "project", "age/status", "action")
+	fmt.Printf("  %8s  %-13s %-12s %-18s %-14s %-12s %s\n",
+		"size", "category", "name", "project", "age/status", "action", "reason")
 	for _, w := range targets {
 		printCleanTarget(w, home)
 	}
@@ -311,13 +311,14 @@ func printCleanTarget(w types.DebrisInfo, home string) {
 }
 
 func cleanPlanLine(w types.DebrisInfo) string {
-	return fmt.Sprintf("  %8s  %-13s %-12s %-18s %-14s %s",
+	return fmt.Sprintf("  %8s  %-13s %-12s %-18s %-14s %-12s %s",
 		cleaner.FormatSize(w.Size),
 		w.Category,
 		itemName(w),
 		itemProject(w),
 		itemAgeAndStatus(w),
-		cleanAction(w))
+		cleanAction(w),
+		cleanTargetReason(w))
 }
 
 func cleanAction(w types.DebrisInfo) string {

@@ -595,7 +595,17 @@ func TestCleanCmd_DryRunAndConfirmShareTargetFormat(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	for _, want := range []string{"targets", "size", "category", "project", "action", "remove-path", filepath.Join("~", "workspace", "app", "node_modules")} {
+	for _, want := range []string{
+		"targets",
+		"size",
+		"category",
+		"project",
+		"action",
+		"reason",
+		"remove-path",
+		"dependency directory; can be reinstalled",
+		filepath.Join("~", "workspace", "app", "node_modules"),
+	} {
 		if !strings.Contains(dryRunOutput, want) {
 			t.Errorf("dry-run output missing %q; got: %s", want, dryRunOutput)
 		}
