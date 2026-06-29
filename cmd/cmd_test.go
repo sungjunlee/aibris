@@ -309,7 +309,23 @@ func TestCleanCmd_DryRunShowsScanProgressAndCandidates(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	for _, want := range []string{"clean", "roots", "scanning", "found", "matched  1 candidate", "clean plan", "mode     dry-run"} {
+	for _, want := range []string{
+		"clean",
+		"roots",
+		"scanning",
+		"found",
+		"policy",
+		"age>=1h",
+		"scan    live",
+		"scan summary",
+		"eligible",
+		"protected/skipped",
+		"by category",
+		"main reason",
+		"matched  1 candidate",
+		"clean plan",
+		"mode     dry-run",
+	} {
 		if !strings.Contains(output, want) {
 			t.Errorf("output missing %q; got: %s", want, output)
 		}
@@ -338,8 +354,11 @@ func TestCleanCmd_UsesFreshLastScanCache(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	if !strings.Contains(output, "using cached scan") {
-		t.Errorf("clean should report cached scan use; got: %s", output)
+	if !strings.Contains(output, "scan    cached") || !strings.Contains(output, "old") {
+		t.Errorf("clean should report cached scan source; got: %s", output)
+	}
+	if strings.Contains(output, "using cached scan") {
+		t.Errorf("clean should use audit scan source instead of legacy cache line; got: %s", output)
 	}
 	if strings.Contains(output, "scanning ") {
 		t.Errorf("clean should not run live scan when cache is fresh; got: %s", output)
@@ -374,11 +393,14 @@ func TestCleanCmd_DropsMissingTargetsFromFreshLastScanCache(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	if !strings.Contains(output, "using cached scan") {
+	if !strings.Contains(output, "scan    cached") {
 		t.Errorf("clean should use fresh cache before dropping stale target; got: %s", output)
 	}
 	if !strings.Contains(output, "matched  0 candidates") {
 		t.Errorf("clean should drop missing cached target; got: %s", output)
+	}
+	if !strings.Contains(output, "path no longer exists") {
+		t.Errorf("clean audit should explain missing cached target; got: %s", output)
 	}
 	if strings.Contains(output, filepath.Join("~", "workspace", "app", "node_modules")) {
 		t.Errorf("clean should not show missing cached target; got: %s", output)
@@ -666,7 +688,7 @@ func TestCleanCmd_ActiveWorktreeExcludedByDefault(t *testing.T) {
 	if !strings.Contains(output, "No items to clean") {
 		t.Errorf("active worktree should be omitted by default; got: %s", output)
 	}
-	if !strings.Contains(output, "protected") || !strings.Contains(output, "--include-active-worktrees") {
+	if !strings.Contains(output, "active-worktrees=protected") || !strings.Contains(output, "active worktree protected") {
 		t.Errorf("active worktree exclusion should explain opt-in flag; got: %s", output)
 	}
 }
@@ -709,7 +731,7 @@ func TestCleanCmd_ZeroCandidatesExplainsAgeAndRiskyExclusions(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	for _, want := range []string{"No items to clean", "age-blocked", "younger than 7d", "risky", "--risky"} {
+	for _, want := range []string{"No items to clean", "scan summary", "by category", "younger than 7d", "requires --risky"} {
 		if !strings.Contains(output, want) {
 			t.Errorf("output missing %q; got: %s", want, output)
 		}

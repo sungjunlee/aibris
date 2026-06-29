@@ -58,7 +58,7 @@ var cleanCmd = &cobra.Command{
 		}
 		printCleanHeader(roots)
 
-		result, err := scanForClean(ctx, roots)
+		result, source, err := scanForClean(ctx, roots)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
@@ -97,11 +97,12 @@ var cleanCmd = &cobra.Command{
 
 		targets := cleaner.Filter(result.Worktrees, opts)
 		targets = filterExistingTargets(targets)
+		audit := buildCleanAudit(result.Worktrees, targets, opts, len(scanner.DefaultScanner.Providers), source)
+		printCleanAudit(audit, opts)
 		printCleanCandidateSummary(targets)
 
 		if len(targets) == 0 {
 			fmt.Println("No items to clean.")
-			printCleanupDiagnostics(summarizeCleanup(result.Worktrees, opts), opts)
 			return
 		}
 
@@ -182,10 +183,9 @@ func printCleanHeader(roots []string) {
 	fmt.Printf("  roots  %s\n\n", strings.Join(displayRoots(roots), ", "))
 }
 
-func scanForClean(ctx context.Context, roots []string) (*types.ScanResult, error) {
+func scanForClean(ctx context.Context, roots []string) (*types.ScanResult, scanSource, error) {
 	if result, age, ok := readFreshLastScanCache(roots); ok {
-		fmt.Printf("  using cached scan from %s ago\n\n", shortDurationString(age))
-		return result, nil
+		return result, scanSource{Kind: scanSourceCached, Age: age}, nil
 	}
 
 	progress := newScanProgressPrinter(os.Stdout)
@@ -195,10 +195,10 @@ func scanForClean(ctx context.Context, roots []string) (*types.ScanResult, error
 	})
 	progress.Stop()
 	if err != nil {
-		return nil, err
+		return nil, scanSource{}, err
 	}
 	writeLastScanCache(roots, result)
-	return result, nil
+	return result, scanSource{Kind: scanSourceLive}, nil
 }
 
 func shortDurationString(d time.Duration) string {
