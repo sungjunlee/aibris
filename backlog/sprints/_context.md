@@ -11,5 +11,5 @@
 
 ## Known Follow-Ups
 
-- No open GitHub issues remain after PR #30. Next work should start from fresh
-  product dogfooding or release feedback.
+- Sprint `Guided Codex Cleanup` tracks the active Codex worktree bloat follow-up
+  from local dogfooding. GitHub milestone #3 owns epic #49 and issues #50-#55.

@@ -10,6 +10,7 @@ labels:
   - tech-debt
 milestones:
   - "Scan + Clean Safety"
+  - "Guided Codex Cleanup"
 definition_of_done:
   - "go test ./..."
   - "go build ./..."
