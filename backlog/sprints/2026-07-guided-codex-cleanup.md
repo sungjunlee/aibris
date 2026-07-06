@@ -39,8 +39,10 @@ depends on path-safe cleanup targets.
 
 ### Batch 2 - Independent Signals
 
-- [ ] #51 Add Codex session metadata activity index
-- [ ] #52 Add conservative git safety inspection for guided cleanup
+- [x] #51 Add Codex session metadata activity index
+  → PR #58 merged
+- [x] #52 Add conservative git safety inspection for guided cleanup
+  → PR #57 merged
 
 These can proceed independently after #50. Both are advisory/protective inputs
 to the planner, and both must fail closed.
@@ -86,3 +88,6 @@ match the actual command output.
 - 2026-07-06: Closed #50 via PR #56. Target deduplication, nested overlap
   accounting, and dry-run audit display now have a stable foundation for
   guided cleanup planning.
+- 2026-07-06: Closed #51 via PR #58 and #52 via PR #57. Guided cleanup now has
+  Codex activity metadata and conservative git safety signals available for
+  recommendation planning.
