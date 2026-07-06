@@ -284,49 +284,59 @@ func TestParseAge(t *testing.T) {
 	}
 }
 
-func TestCleanCmd_DryRunDeduplicatesDuplicateTargetPaths(t *testing.T) {
+func TestCleanCmd_DryRunDeduplicatesDuplicateWorktreeTargetPaths(t *testing.T) {
 	resetCleanFlags()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	modules := filepath.Join(home, "workspace", "app", "node_modules")
-	os.MkdirAll(filepath.Join(modules, "pkg"), 0755)
+	worktree := filepath.Join(home, ".codex", "worktrees", "hash1")
+	os.MkdirAll(filepath.Join(worktree, "project-a"), 0755)
+	os.MkdirAll(filepath.Join(worktree, "project-b"), 0755)
 	old := time.Now().Add(-2 * time.Hour)
-	os.Chtimes(modules, old, old)
+	os.Chtimes(worktree, old, old)
 	saveCleanCacheFixture(t, home, []types.DebrisInfo{
 		{
-			Tool:     types.ToolNodeModules,
-			Category: types.CategoryNodeModules,
-			ID:       "app",
-			Path:     modules,
-			Size:     1024,
+			Tool:     types.ToolCodex,
+			Category: types.CategoryWorktree,
+			ID:       "hash1",
+			Project:  "project-a",
+			Source:   ".codex",
+			Path:     worktree,
+			Size:     4096,
 			ModTime:  old,
+			Status:   types.WorktreeOrphaned,
 		},
 		{
-			Tool:     types.ToolNodeModules,
-			Category: types.CategoryNodeModules,
-			ID:       "app-duplicate",
-			Path:     modules,
-			Size:     1024,
+			Tool:     types.ToolCodex,
+			Category: types.CategoryWorktree,
+			ID:       "hash1",
+			Project:  "project-b",
+			Source:   ".codex",
+			Path:     worktree,
+			Size:     4096,
 			ModTime:  old,
+			Status:   types.WorktreeOrphaned,
 		},
 	})
 
 	output := captureOutput(func() {
-		rootCmd.SetArgs([]string{"clean", "--dry-run", "--age=1h", "--category=node_modules"})
+		rootCmd.SetArgs([]string{"clean", "--dry-run", "--age=1h", "--category=worktree"})
 		rootCmd.Execute()
 	})
 
 	for _, want := range []string{
-		"eligible   1 item   1.0 KB",
-		"matched  1 candidate   1.0 KB",
-		"targets  1 item   1.0 KB",
+		"eligible   1 item   4.0 KB",
+		"matched  1 candidate   4.0 KB",
+		"targets  1 item   4.0 KB",
 	} {
 		if !strings.Contains(output, want) {
 			t.Errorf("output missing %q; got: %s", want, output)
 		}
 	}
-	if count := strings.Count(output, filepath.Join("~", "workspace", "app", "node_modules")); count != 1 {
+	if count := strings.Count(output, filepath.Join("~", ".codex", "worktrees", "hash1")); count != 1 {
 		t.Errorf("duplicate target path should be printed once, got %d occurrences: %s", count, output)
+	}
+	if count := strings.Count(output, "remove-path"); count != 1 {
+		t.Errorf("expected one cleanup target, got %d remove-path rows: %s", count, output)
 	}
 }
 
