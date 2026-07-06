@@ -99,7 +99,8 @@ var cleanCmd = &cobra.Command{
 		targets := cleaner.Filter(result.Worktrees, opts)
 		targets = filterExistingTargets(targets)
 		targets = normalizeCleanTargets(targets)
-		audit := buildCleanAudit(result.Worktrees, targets, opts, len(scanner.DefaultScanner.Providers), source)
+		targets, gitSafetyProtections := filterGitUnsafeActiveWorktreeTargets(ctx, targets)
+		audit := buildCleanAudit(result.Worktrees, targets, opts, len(scanner.DefaultScanner.Providers), source, gitSafetyProtections)
 		printCleanAudit(audit, opts)
 		printCleanCandidateSummary(targets)
 
@@ -237,6 +238,36 @@ func filterExistingTargets(targets []types.DebrisInfo) []types.DebrisInfo {
 		}
 	}
 	return filtered
+}
+
+type worktreeGitInspector func(context.Context, string) worktreeGitSafety
+
+func filterGitUnsafeActiveWorktreeTargets(ctx context.Context, targets []types.DebrisInfo) ([]types.DebrisInfo, map[string]cleanAuditReason) {
+	return filterGitUnsafeActiveWorktreeTargetsWithInspector(ctx, targets, inspectWorktreeGitState)
+}
+
+func filterGitUnsafeActiveWorktreeTargetsWithInspector(ctx context.Context, targets []types.DebrisInfo, inspector worktreeGitInspector) ([]types.DebrisInfo, map[string]cleanAuditReason) {
+	protections := make(map[string]cleanAuditReason)
+	filtered := targets[:0]
+	for _, target := range targets {
+		if target.Category != types.CategoryWorktree || target.Status != types.WorktreeActive {
+			filtered = append(filtered, target)
+			continue
+		}
+
+		safety := inspector(ctx, target.Path)
+		if !safety.Protected {
+			filtered = append(filtered, target)
+			continue
+		}
+
+		reason := gitProtectionGitStatusUnavailable
+		if len(safety.ProtectionReasons) > 0 {
+			reason = strings.Join(safety.ProtectionReasons, ", ")
+		}
+		protections[cleanAuditItemKey(target)] = cleanAuditReason(reason)
+	}
+	return filtered, protections
 }
 
 type normalizedCleanTarget struct {

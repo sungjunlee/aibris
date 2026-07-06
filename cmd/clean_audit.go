@@ -64,7 +64,7 @@ type cleanAuditReasonStat struct {
 	Size  int64
 }
 
-func buildCleanAudit(items, targets []types.DebrisInfo, opts types.PruneOptions, scannedSources int, source scanSource) cleanAudit {
+func buildCleanAudit(items, targets []types.DebrisInfo, opts types.PruneOptions, scannedSources int, source scanSource, protectedTargets map[string]cleanAuditReason) cleanAudit {
 	targetSet := newCleanAuditTargetSet(targets)
 
 	byCategory := make(map[types.Category]*cleanAuditCategory)
@@ -84,7 +84,7 @@ func buildCleanAudit(items, targets []types.DebrisInfo, opts types.PruneOptions,
 		audit.TotalFoundCount++
 		audit.TotalFoundSize += item.Size
 
-		reason := cleanAuditBlockReason(item, opts, targetSet)
+		reason := cleanAuditBlockReason(item, opts, targetSet, protectedTargets)
 		if reason == cleanReasonEligible {
 			row.EligibleCount++
 			row.EligibleSize += item.Size
@@ -172,7 +172,7 @@ func cleanAuditItemKey(item types.DebrisInfo) string {
 	return string(item.Category) + "\x00" + string(item.Tool) + "\x00" + item.ID + "\x00" + item.Path
 }
 
-func cleanAuditBlockReason(item types.DebrisInfo, opts types.PruneOptions, targetSet *cleanAuditTargetSet) cleanAuditReason {
+func cleanAuditBlockReason(item types.DebrisInfo, opts types.PruneOptions, targetSet *cleanAuditTargetSet, protectedTargets map[string]cleanAuditReason) cleanAuditReason {
 	if !cmdContainsCategory(opts.Categories, item.Category) || !cmdContainsTool(opts.Tools, item.Tool) {
 		return cleanReasonFiltered
 	}
@@ -184,6 +184,9 @@ func cleanAuditBlockReason(item types.DebrisInfo, opts types.PruneOptions, targe
 	}
 	if !item.ModTime.Before(time.Now().Add(-opts.Age)) {
 		return cleanReasonAge
+	}
+	if reason := protectedTargets[cleanAuditItemKey(item)]; reason != "" {
+		return reason
 	}
 	if !targetSet.consume(item) {
 		return targetSet.exclusionReason(item)
