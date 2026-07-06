@@ -31,7 +31,8 @@ dry-run preview before deletion.
 
 ### Batch 1 - Target Identity Foundation
 
-- [ ] #50 Fix cleanup target deduplication and nested overlap accounting
+- [x] #50 Fix cleanup target deduplication and nested overlap accounting
+  → PR #56 merged
 
 This comes first because every later recommendation, total, and dry-run preview
 depends on path-safe cleanup targets.
@@ -82,3 +83,6 @@ match the actual command output.
 - 2026-07-05: Created epic #49 and implementation issues #50-#55.
 - 2026-07-05: Created GitHub milestone `Guided Codex Cleanup` with due date
   2026-07-12 and assigned #49-#55.
+- 2026-07-06: Closed #50 via PR #56. Target deduplication, nested overlap
+  accounting, and dry-run audit display now have a stable foundation for
+  guided cleanup planning.
