@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -53,6 +54,8 @@ const (
 	cleanReasonActiveWorktree cleanAuditReason = "active worktree protected"
 	cleanReasonAge            cleanAuditReason = "younger than configured age"
 	cleanReasonMissingPath    cleanAuditReason = "path no longer exists"
+	cleanReasonDuplicatePath  cleanAuditReason = "duplicate cleanup target path"
+	cleanReasonNestedTarget   cleanAuditReason = "covered by selected parent"
 	cleanReasonEligible       cleanAuditReason = "eligible for cleanup"
 )
 
@@ -62,10 +65,7 @@ type cleanAuditReasonStat struct {
 }
 
 func buildCleanAudit(items, targets []types.DebrisInfo, opts types.PruneOptions, scannedSources int, source scanSource) cleanAudit {
-	targetKeys := make(map[string]bool, len(targets))
-	for _, target := range targets {
-		targetKeys[cleanAuditItemKey(target)] = true
-	}
+	targetSet := newCleanAuditTargetSet(targets)
 
 	byCategory := make(map[types.Category]*cleanAuditCategory)
 	reasonsByCategory := make(map[types.Category]map[cleanAuditReason]cleanAuditReasonStat)
@@ -84,7 +84,7 @@ func buildCleanAudit(items, targets []types.DebrisInfo, opts types.PruneOptions,
 		audit.TotalFoundCount++
 		audit.TotalFoundSize += item.Size
 
-		reason := cleanAuditBlockReason(item, opts, targetKeys[cleanAuditItemKey(item)])
+		reason := cleanAuditBlockReason(item, opts, targetSet)
 		if reason == cleanReasonEligible {
 			row.EligibleCount++
 			row.EligibleSize += item.Size
@@ -122,11 +122,57 @@ func buildCleanAudit(items, targets []types.DebrisInfo, opts types.PruneOptions,
 	return audit
 }
 
+type cleanAuditTargetSet struct {
+	keys  map[string]int
+	paths []string
+}
+
+func newCleanAuditTargetSet(targets []types.DebrisInfo) *cleanAuditTargetSet {
+	set := &cleanAuditTargetSet{keys: make(map[string]int, len(targets))}
+	seenPaths := make(map[string]bool, len(targets))
+	for _, target := range targets {
+		set.keys[cleanAuditItemKey(target)]++
+		if path, ok := cleanTargetPathKey(target.Path); ok && !seenPaths[path] {
+			seenPaths[path] = true
+			set.paths = append(set.paths, path)
+		}
+	}
+	return set
+}
+
+func (s *cleanAuditTargetSet) consume(item types.DebrisInfo) bool {
+	key := cleanAuditItemKey(item)
+	if s.keys[key] == 0 {
+		return false
+	}
+	s.keys[key]--
+	return true
+}
+
+func (s *cleanAuditTargetSet) exclusionReason(item types.DebrisInfo) cleanAuditReason {
+	if _, err := os.Stat(item.Path); err != nil {
+		return cleanReasonMissingPath
+	}
+	path, ok := cleanTargetPathKey(item.Path)
+	if !ok {
+		return cleanReasonMissingPath
+	}
+	for _, targetPath := range s.paths {
+		if targetPath == path {
+			return cleanReasonDuplicatePath
+		}
+		if cleanTargetContains(targetPath, path) {
+			return cleanReasonNestedTarget
+		}
+	}
+	return cleanReasonMissingPath
+}
+
 func cleanAuditItemKey(item types.DebrisInfo) string {
 	return string(item.Category) + "\x00" + string(item.Tool) + "\x00" + item.ID + "\x00" + item.Path
 }
 
-func cleanAuditBlockReason(item types.DebrisInfo, opts types.PruneOptions, isTarget bool) cleanAuditReason {
+func cleanAuditBlockReason(item types.DebrisInfo, opts types.PruneOptions, targetSet *cleanAuditTargetSet) cleanAuditReason {
 	if !cmdContainsCategory(opts.Categories, item.Category) || !cmdContainsTool(opts.Tools, item.Tool) {
 		return cleanReasonFiltered
 	}
@@ -139,8 +185,8 @@ func cleanAuditBlockReason(item types.DebrisInfo, opts types.PruneOptions, isTar
 	if !item.ModTime.Before(time.Now().Add(-opts.Age)) {
 		return cleanReasonAge
 	}
-	if !isTarget {
-		return cleanReasonMissingPath
+	if !targetSet.consume(item) {
+		return targetSet.exclusionReason(item)
 	}
 	return cleanReasonEligible
 }
@@ -172,6 +218,10 @@ func cleanAuditReasonText(reason cleanAuditReason, opts types.PruneOptions) stri
 		return "outside category/tool filters"
 	case cleanReasonMissingPath:
 		return "path no longer exists"
+	case cleanReasonDuplicatePath:
+		return "duplicate cleanup target path"
+	case cleanReasonNestedTarget:
+		return "covered by selected parent"
 	default:
 		return string(reason)
 	}

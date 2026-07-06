@@ -219,6 +219,30 @@ func resetCleanFlags() {
 	cleanIncludeActiveWorktrees = false
 }
 
+func saveCleanCacheFixture(t *testing.T, home string, items []types.DebrisInfo) {
+	t.Helper()
+	resolvedHome, err := filepath.EvalSymlinks(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var totalSize int64
+	for _, item := range items {
+		totalSize += item.Size
+	}
+	if err := saveLastScanCache(lastScanCache{
+		SchemaVersion: lastScanCacheSchemaVersion,
+		CreatedAt:     time.Now(),
+		Roots:         []string{resolvedHome},
+		Result: types.ScanResult{
+			Worktrees:  items,
+			TotalCount: len(items),
+			TotalSize:  totalSize,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCleanCmd_NegativeAge(t *testing.T) {
 	if os.Getenv("GO_TEST_SUBPROCESS") == "1" {
 		resetCleanFlags()
@@ -257,6 +281,107 @@ func TestParseAge(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("parseAge(%q) = %s; want %s", tt.input, got, tt.want)
 		}
+	}
+}
+
+func TestCleanCmd_DryRunDeduplicatesDuplicateTargetPaths(t *testing.T) {
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	modules := filepath.Join(home, "workspace", "app", "node_modules")
+	os.MkdirAll(filepath.Join(modules, "pkg"), 0755)
+	old := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(modules, old, old)
+	saveCleanCacheFixture(t, home, []types.DebrisInfo{
+		{
+			Tool:     types.ToolNodeModules,
+			Category: types.CategoryNodeModules,
+			ID:       "app",
+			Path:     modules,
+			Size:     1024,
+			ModTime:  old,
+		},
+		{
+			Tool:     types.ToolNodeModules,
+			Category: types.CategoryNodeModules,
+			ID:       "app-duplicate",
+			Path:     modules,
+			Size:     1024,
+			ModTime:  old,
+		},
+	})
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--dry-run", "--age=1h", "--category=node_modules"})
+		rootCmd.Execute()
+	})
+
+	for _, want := range []string{
+		"eligible   1 item   1.0 KB",
+		"matched  1 candidate   1.0 KB",
+		"targets  1 item   1.0 KB",
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("output missing %q; got: %s", want, output)
+		}
+	}
+	if count := strings.Count(output, filepath.Join("~", "workspace", "app", "node_modules")); count != 1 {
+		t.Errorf("duplicate target path should be printed once, got %d occurrences: %s", count, output)
+	}
+}
+
+func TestCleanCmd_DryRunExcludesNestedNodeModulesUnderSelectedWorktree(t *testing.T) {
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	worktree := filepath.Join(home, ".codex", "worktrees", "hash1")
+	modules := filepath.Join(worktree, "proj", "node_modules")
+	os.MkdirAll(filepath.Join(modules, "pkg"), 0755)
+	old := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(worktree, old, old)
+	os.Chtimes(modules, old, old)
+	saveCleanCacheFixture(t, home, []types.DebrisInfo{
+		{
+			Tool:     types.ToolCodex,
+			Category: types.CategoryWorktree,
+			ID:       "hash1",
+			Project:  "proj",
+			Source:   ".codex",
+			Path:     worktree,
+			Size:     4096,
+			ModTime:  old,
+			Status:   types.WorktreeOrphaned,
+		},
+		{
+			Tool:     types.ToolNodeModules,
+			Category: types.CategoryNodeModules,
+			ID:       "proj",
+			Path:     modules,
+			Size:     1024,
+			ModTime:  old,
+		},
+	})
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--dry-run", "--age=1h"})
+		rootCmd.Execute()
+	})
+
+	for _, want := range []string{
+		"eligible   1 item   4.0 KB",
+		"matched  1 candidate   4.0 KB",
+		"targets  1 item   4.0 KB",
+		filepath.Join("~", ".codex", "worktrees", "hash1"),
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("output missing %q; got: %s", want, output)
+		}
+	}
+	if strings.Contains(output, filepath.Join("~", ".codex", "worktrees", "hash1", "proj", "node_modules")) {
+		t.Errorf("nested node_modules should not be listed separately; got: %s", output)
+	}
+	if count := strings.Count(output, "remove-path"); count != 1 {
+		t.Errorf("expected one cleanup target, got %d remove-path rows: %s", count, output)
 	}
 }
 
