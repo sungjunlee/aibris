@@ -8,7 +8,80 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sungjunlee/aibris/internal/types"
 )
+
+func TestCodexActivityRecommendationsProtectActiveWorktreesWhenIndexUnavailable(t *testing.T) {
+	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	item := types.DebrisInfo{
+		Tool:     types.ToolCodex,
+		Category: types.CategoryWorktree,
+		ID:       "wt-1",
+		Project:  "project-a",
+		Source:   ".codex",
+		Path:     "/home/user/.codex/worktrees/wt-1",
+		Size:     512 * 1024 * 1024,
+		ModTime:  now.Add(-48 * time.Hour),
+		Status:   types.WorktreeActive,
+	}
+
+	plan := recommendCodexActivityWorktrees([]types.DebrisInfo{item}, unavailableCodexActivityIndex(errCodexActivityUnavailable))
+
+	if len(plan.Recommendations) != 1 {
+		t.Fatalf("Recommendations = %d; want 1", len(plan.Recommendations))
+	}
+	recommendation := plan.Recommendations[0]
+	if !recommendation.Protected {
+		t.Fatal("active Codex worktree should be protected when activity is unavailable")
+	}
+	if recommendation.Reason != codexActivityProtectionUnavailable {
+		t.Fatalf("Reason = %q; want %q", recommendation.Reason, codexActivityProtectionUnavailable)
+	}
+	if plan.ProtectedCount != 1 || plan.ProtectedSize != item.Size {
+		t.Fatalf("protected summary = %d/%d; want 1/%d", plan.ProtectedCount, plan.ProtectedSize, item.Size)
+	}
+}
+
+func TestPrintHumanScanResultReportsActivityUnavailableProtection(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	result := &types.ScanResult{
+		Worktrees: []types.DebrisInfo{
+			{
+				Tool:     types.ToolCodex,
+				Category: types.CategoryWorktree,
+				ID:       "wt-1",
+				Project:  "project-a",
+				Source:   ".codex",
+				Path:     filepath.Join(home, ".codex", "worktrees", "wt-1"),
+				Size:     512 * 1024 * 1024,
+				ModTime:  now.Add(-48 * time.Hour),
+				Status:   types.WorktreeActive,
+			},
+		},
+		TotalCount: 1,
+		TotalSize:  512 * 1024 * 1024,
+		ByCategory: map[types.Category]types.CategorySummary{
+			types.CategoryWorktree: {Count: 1, Size: 512 * 1024 * 1024},
+		},
+		ByTool: map[types.Tool]types.ToolSummary{
+			types.ToolCodex: {Count: 1, Size: 512 * 1024 * 1024},
+		},
+	}
+
+	output := captureOutput(func() {
+		printHumanScanResult(context.Background(), result)
+	})
+
+	for _, want := range []string{"codex activity", "unavailable", "1 active Codex worktree protected"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output missing %q; got: %s", want, output)
+		}
+	}
+}
 
 func TestLoadCodexActivityIndexBuildsMetadataOnlyAggregates(t *testing.T) {
 	home := t.TempDir()

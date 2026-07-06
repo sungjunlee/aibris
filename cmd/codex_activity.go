@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/sungjunlee/aibris/internal/types"
 )
 
 const (
@@ -22,6 +24,9 @@ const (
 	codexActivitySourceCache       = "cache"
 	codexActivitySourceRefresh     = "refresh"
 	codexActivitySourceUnavailable = "unavailable"
+
+	codexActivityProtectionUnavailable = "codex activity unavailable"
+	codexActivityProtectionActive      = "active worktree protected"
 )
 
 var errCodexActivityUnavailable = errors.New("codex activity unavailable")
@@ -77,6 +82,19 @@ type codexSessionFileInfo struct {
 	path    string
 	modTime time.Time
 	size    int64
+}
+
+type codexActivityRecommendationPlan struct {
+	Activity        codexActivityIndex
+	Recommendations []codexActivityRecommendation
+	ProtectedCount  int
+	ProtectedSize   int64
+}
+
+type codexActivityRecommendation struct {
+	Item      types.DebrisInfo
+	Protected bool
+	Reason    string
 }
 
 func loadCodexActivityIndex(ctx context.Context) codexActivityIndex {
@@ -143,6 +161,53 @@ func (i codexActivityIndex) ProjectHasSessionAfter(project string, ts time.Time)
 	}
 	activity, ok := i.Projects[project]
 	return ok && activity.LatestSession.After(ts)
+}
+
+func loadCodexActivityRecommendations(ctx context.Context, items []types.DebrisInfo) codexActivityRecommendationPlan {
+	candidates := activeCodexWorktrees(items)
+	if len(candidates) == 0 {
+		return codexActivityRecommendationPlan{}
+	}
+	return recommendCodexActivityWorktrees(candidates, loadCodexActivityIndex(ctx))
+}
+
+func recommendCodexActivityWorktrees(items []types.DebrisInfo, activity codexActivityIndex) codexActivityRecommendationPlan {
+	plan := codexActivityRecommendationPlan{Activity: activity}
+	for _, item := range items {
+		if !isActiveCodexWorktree(item) {
+			continue
+		}
+		recommendation := codexActivityRecommendation{
+			Item:      item,
+			Protected: true,
+			Reason:    codexActivityProtectionActive,
+		}
+		if !activity.Available {
+			recommendation.Reason = codexActivityProtectionUnavailable
+		}
+		plan.Recommendations = append(plan.Recommendations, recommendation)
+		if recommendation.Protected {
+			plan.ProtectedCount++
+			plan.ProtectedSize += item.Size
+		}
+	}
+	return plan
+}
+
+func activeCodexWorktrees(items []types.DebrisInfo) []types.DebrisInfo {
+	var candidates []types.DebrisInfo
+	for _, item := range items {
+		if isActiveCodexWorktree(item) {
+			candidates = append(candidates, item)
+		}
+	}
+	return candidates
+}
+
+func isActiveCodexWorktree(item types.DebrisInfo) bool {
+	return item.Category == types.CategoryWorktree &&
+		item.Tool == types.ToolCodex &&
+		item.Status == types.WorktreeActive
 }
 
 func codexActivityCachePath() (string, error) {
