@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -900,8 +901,41 @@ func TestCleanCmd_IncludeActiveWorktree(t *testing.T) {
 		rootCmd.SetArgs([]string{"clean", "--dry-run", "--age=1h", "--category=worktree", "--include-active-worktrees"})
 		rootCmd.Execute()
 	})
-	if !strings.Contains(output, "[DRY-RUN]") {
-		t.Errorf("active worktree should be included with flag; got: %s", output)
+	if !strings.Contains(output, "No items to clean") {
+		t.Errorf("unsafe active worktree should be protected with flag; got: %s", output)
+	}
+	if !strings.Contains(output, gitProtectionGitStatusUnavailable) {
+		t.Errorf("git safety protection reason should be shown; got: %s", output)
+	}
+}
+
+func TestFilterGitUnsafeActiveWorktreeTargets(t *testing.T) {
+	active := types.DebrisInfo{
+		Tool:     types.ToolCodex,
+		Category: types.CategoryWorktree,
+		ID:       "active",
+		Path:     filepath.Join(t.TempDir(), "active"),
+		ModTime:  time.Now().Add(-2 * time.Hour),
+		Status:   types.WorktreeActive,
+	}
+	orphaned := types.DebrisInfo{
+		Tool:     types.ToolCodex,
+		Category: types.CategoryWorktree,
+		ID:       "orphaned",
+		Path:     filepath.Join(t.TempDir(), "orphaned"),
+		ModTime:  time.Now().Add(-2 * time.Hour),
+		Status:   types.WorktreeOrphaned,
+	}
+
+	targets, protections := filterGitUnsafeActiveWorktreeTargetsWithInspector(context.Background(), []types.DebrisInfo{active, orphaned}, func(ctx context.Context, path string) worktreeGitSafety {
+		return worktreeGitSafety{Protected: true, ProtectionReasons: []string{gitProtectionDirtyFiles}}
+	})
+
+	if len(targets) != 1 || targets[0].ID != orphaned.ID {
+		t.Fatalf("targets = %#v; want only orphaned target", targets)
+	}
+	if got := protections[cleanAuditItemKey(active)]; got != cleanAuditReason(gitProtectionDirtyFiles) {
+		t.Fatalf("protection reason = %q; want %q", got, gitProtectionDirtyFiles)
 	}
 }
 

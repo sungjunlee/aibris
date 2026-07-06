@@ -21,7 +21,7 @@ func TestBuildCleanAudit_GroupsEligibleAndBlockedByCategory(t *testing.T) {
 	}
 	targets := []types.DebrisInfo{items[0]}
 
-	audit := buildCleanAudit(items, targets, opts, 7, scanSource{Kind: scanSourceLive})
+	audit := buildCleanAudit(items, targets, opts, 7, scanSource{Kind: scanSourceLive}, nil)
 
 	if audit.Source.Kind != scanSourceLive {
 		t.Fatalf("Source.Kind = %q, want live", audit.Source.Kind)
