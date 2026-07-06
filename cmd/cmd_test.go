@@ -332,7 +332,7 @@ func TestCleanCmd_DryRunDeduplicatesDuplicateWorktreeTargetPaths(t *testing.T) {
 			t.Errorf("output missing %q; got: %s", want, output)
 		}
 	}
-	if count := strings.Count(output, filepath.Join("~", ".codex", "worktrees", "hash1")); count != 1 {
+	if count := strings.Count(output, worktree); count != 1 {
 		t.Errorf("duplicate target path should be printed once, got %d occurrences: %s", count, output)
 	}
 	if count := strings.Count(output, "remove-path"); count != 1 {
@@ -381,13 +381,13 @@ func TestCleanCmd_DryRunExcludesNestedNodeModulesUnderSelectedWorktree(t *testin
 		"eligible   1 item   4.0 KB",
 		"matched  1 candidate   4.0 KB",
 		"targets  1 item   4.0 KB",
-		filepath.Join("~", ".codex", "worktrees", "hash1"),
+		worktree,
 	} {
 		if !strings.Contains(output, want) {
 			t.Errorf("output missing %q; got: %s", want, output)
 		}
 	}
-	if strings.Contains(output, filepath.Join("~", ".codex", "worktrees", "hash1", "proj", "node_modules")) {
+	if strings.Contains(output, modules) {
 		t.Errorf("nested node_modules should not be listed separately; got: %s", output)
 	}
 	if count := strings.Count(output, "remove-path"); count != 1 {
