@@ -66,7 +66,7 @@ var scanCmd = &cobra.Command{
 		}
 
 		writeLastScanCache(roots, result)
-		printHumanScanResult(result)
+		printHumanScanResult(ctx, result)
 	},
 }
 
@@ -301,7 +301,7 @@ func isTerminal(file *os.File) bool {
 	return stat.Mode()&os.ModeCharDevice != 0
 }
 
-func printHumanScanResult(r *types.ScanResult) {
+func printHumanScanResult(ctx context.Context, r *types.ScanResult) {
 	fmt.Println("summary")
 	fmt.Printf("  found       %d %s\n", r.TotalCount, itemNoun(r.TotalCount))
 	fmt.Printf("  found size  %s\n", cleaner.FormatSize(r.TotalSize))
@@ -312,12 +312,31 @@ func printHumanScanResult(r *types.ScanResult) {
 
 	printCategorySummary(r.ByCategory)
 	printLargestItems(r.Worktrees)
+	printCodexActivityRecommendations(ctx, r.Worktrees)
 
 	fmt.Println("\nnext")
 	if r.TotalCount > 0 {
 		fmt.Println("  aibris clean --dry-run")
 	}
 	fmt.Println("  aibris scan --json")
+}
+
+func printCodexActivityRecommendations(ctx context.Context, items []types.DebrisInfo) {
+	plan := loadCodexActivityRecommendations(ctx, items)
+	if len(plan.Recommendations) == 0 || plan.Activity.Available {
+		return
+	}
+
+	fmt.Println("\ncodex activity")
+	fmt.Printf("  unavailable; %d active Codex %s protected by default\n",
+		plan.ProtectedCount, codexWorktreeNoun(plan.ProtectedCount))
+}
+
+func codexWorktreeNoun(count int) string {
+	if count == 1 {
+		return "worktree"
+	}
+	return "worktrees"
 }
 
 func printCategorySummary(summary map[types.Category]types.CategorySummary) {
