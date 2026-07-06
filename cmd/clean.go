@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -97,6 +98,7 @@ var cleanCmd = &cobra.Command{
 
 		targets := cleaner.Filter(result.Worktrees, opts)
 		targets = filterExistingTargets(targets)
+		targets = normalizeCleanTargets(targets)
 		audit := buildCleanAudit(result.Worktrees, targets, opts, len(scanner.DefaultScanner.Providers), source)
 		printCleanAudit(audit, opts)
 		printCleanCandidateSummary(targets)
@@ -235,6 +237,142 @@ func filterExistingTargets(targets []types.DebrisInfo) []types.DebrisInfo {
 		}
 	}
 	return filtered
+}
+
+type normalizedCleanTarget struct {
+	item  types.DebrisInfo
+	path  string
+	depth int
+	index int
+}
+
+func normalizeCleanTargets(targets []types.DebrisInfo) []types.DebrisInfo {
+	byPath := make(map[string]normalizedCleanTarget, len(targets))
+	for i, target := range targets {
+		path, ok := cleanTargetPathKey(target.Path)
+		if !ok {
+			continue
+		}
+		candidate := normalizedCleanTarget{
+			item:  target,
+			path:  path,
+			depth: cleanTargetPathDepth(path),
+			index: i,
+		}
+		existing, exists := byPath[path]
+		if !exists {
+			byPath[path] = candidate
+			continue
+		}
+		if preferCleanTarget(candidate.item, existing.item) {
+			existing.item = candidate.item
+		}
+		if candidate.index < existing.index {
+			existing.index = candidate.index
+		}
+		byPath[path] = existing
+	}
+
+	candidates := make([]normalizedCleanTarget, 0, len(byPath))
+	for _, candidate := range byPath {
+		candidates = append(candidates, candidate)
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		left := candidates[i]
+		right := candidates[j]
+		if left.depth == right.depth {
+			return left.path < right.path
+		}
+		return left.depth < right.depth
+	})
+
+	kept := make([]normalizedCleanTarget, 0, len(candidates))
+	for _, candidate := range candidates {
+		nested := false
+		for _, parent := range kept {
+			if cleanTargetContains(parent.path, candidate.path) {
+				nested = true
+				break
+			}
+		}
+		if !nested {
+			kept = append(kept, candidate)
+		}
+	}
+	sort.SliceStable(kept, func(i, j int) bool {
+		if kept[i].index == kept[j].index {
+			return kept[i].path < kept[j].path
+		}
+		return kept[i].index < kept[j].index
+	})
+
+	normalized := make([]types.DebrisInfo, 0, len(kept))
+	for _, target := range kept {
+		normalized = append(normalized, target.item)
+	}
+	return normalized
+}
+
+func cleanTargetPathKey(path string) (string, bool) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", false
+	}
+	clean := filepath.Clean(path)
+	if resolved, err := filepath.EvalSymlinks(clean); err == nil {
+		clean = filepath.Clean(resolved)
+	}
+	return clean, true
+}
+
+func preferCleanTarget(left, right types.DebrisInfo) bool {
+	leftRank := cleanTargetRank(left)
+	rightRank := cleanTargetRank(right)
+	if leftRank != rightRank {
+		return leftRank < rightRank
+	}
+	return cleanTargetStableKey(left) < cleanTargetStableKey(right)
+}
+
+func cleanTargetRank(target types.DebrisInfo) int {
+	if target.Category == types.CategoryWorktree {
+		return 0
+	}
+	if cleanupKind(target) == types.CleanupRemovePath {
+		return 1
+	}
+	return 2
+}
+
+func cleanTargetStableKey(target types.DebrisInfo) string {
+	return strings.Join([]string{
+		string(target.Category),
+		string(target.Tool),
+		target.ID,
+		target.Project,
+		target.Source,
+		string(target.Status),
+		string(cleanupKind(target)),
+		strings.Join(target.CleanupCommand, "\x00"),
+		target.Path,
+	}, "\x00")
+}
+
+func cleanTargetPathDepth(path string) int {
+	volume := filepath.VolumeName(path)
+	trimmed := strings.Trim(strings.TrimPrefix(path, volume), string(filepath.Separator))
+	if trimmed == "" {
+		return 0
+	}
+	return strings.Count(trimmed, string(filepath.Separator)) + 1
+}
+
+func cleanTargetContains(parent, child string) bool {
+	rel, err := filepath.Rel(parent, child)
+	if err != nil || rel == "." || rel == ".." || filepath.IsAbs(rel) {
+		return false
+	}
+	return !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func interactiveClean(targets []types.DebrisInfo) int64 {
