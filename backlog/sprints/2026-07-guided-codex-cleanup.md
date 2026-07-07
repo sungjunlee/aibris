@@ -57,7 +57,8 @@ size/age thresholds, and git safety into selected vs protected rows.
 
 ### Batch 4 - User-Facing Guide
 
-- [ ] #54 Add clean --guide toggle and preview UX
+- [x] #54 Add clean --guide toggle and preview UX
+  → PR #60 merged
 
 This adds the command mode, default Codex worktree filters, selected/protected
 rendering, number toggles, abort, and dry-run preview handoff.
@@ -95,3 +96,6 @@ match the actual command output.
 - 2026-07-07: Closed #53 via PR #59. Guided cleanup now has a deterministic
   recommendation planner that separates default-selected low-risk Codex
   worktrees from protected rows.
+- 2026-07-07: Closed #54 via PR #60 after relay review round 2. `clean --guide`
+  now renders selected/protected rows, supports number toggles and abort, and
+  hands selected targets to the normal dry-run preview before any deletion.
