@@ -49,7 +49,8 @@ to the planner, and both must fail closed.
 
 ### Batch 3 - Recommendation Planning
 
-- [ ] #53 Build guided Codex worktree recommendation planner
+- [x] #53 Build guided Codex worktree recommendation planner
+  → PR #59 merged
 
 This combines scan results, deduped targets, Codex activity, project freshness,
 size/age thresholds, and git safety into selected vs protected rows.
@@ -91,3 +92,6 @@ match the actual command output.
 - 2026-07-06: Closed #51 via PR #58 and #52 via PR #57. Guided cleanup now has
   Codex activity metadata and conservative git safety signals available for
   recommendation planning.
+- 2026-07-07: Closed #53 via PR #59. Guided cleanup now has a deterministic
+  recommendation planner that separates default-selected low-risk Codex
+  worktrees from protected rows.
