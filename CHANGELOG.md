@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+## [0.6.0] - 2026-07-07
+
+### Added
+- `clean --guide` for guided Codex worktree cleanup. The guide defaults
+  low-risk active Codex worktrees to selected, shows protected rows, supports
+  number toggles and abort, and hands the final selection to the normal dry-run
+  clean plan before deletion.
+- Codex session activity indexing from metadata only, using session timestamps
+  and working directories without reading conversation bodies.
+- Conservative guided cleanup git safety checks for dirty worktrees, unpushed
+  commits, unknown upstream comparisons, and the current working directory.
+- Real local guided dry-run dogfood evidence in `docs/DOGFOOD.md`.
+
+### Changed
+- `skills/aibris/SKILL.md` now routes active Codex worktree bloat to
+  `aibris clean --guide --dry-run` while preserving dry-run-before-delete
+  rules.
+- Guided cleanup planning now combines target deduplication, nested overlap
+  protection, project freshness, activity signals, size thresholds, and git
+  safety before recommending cleanup rows.
+
 ## [0.5.1] - 2026-06-26
 
 ### Changed

@@ -104,7 +104,7 @@ printf 'dir=%s\nexplicit=%s\n' "$INSTALL_DIR" "$INSTALL_DIR_EXPLICIT"
 func TestInstallScriptExplicitPrefixDoesNotRequireHome(t *testing.T) {
 	output := runInstallSnippetWithoutHome(t, `
 source ./install.sh
-parse_args --prefix /usr/local/bin 0.5.1
+parse_args --prefix /usr/local/bin 0.6.0
 INSTALL_DIR="$(expand_path "$INSTALL_DIR")"
 printf 'dir=%s\nexplicit=%s\nversion=%s\n' "$INSTALL_DIR" "$INSTALL_DIR_EXPLICIT" "$VERSION"
 `)
@@ -115,7 +115,7 @@ printf 'dir=%s\nexplicit=%s\nversion=%s\n' "$INSTALL_DIR" "$INSTALL_DIR_EXPLICIT
 	if !strings.Contains(output, "explicit=1") {
 		t.Fatalf("prefix should mark install dir explicit; output:\n%s", output)
 	}
-	if !strings.Contains(output, "version=0.5.1") {
+	if !strings.Contains(output, "version=0.6.0") {
 		t.Fatalf("version argument not parsed; output:\n%s", output)
 	}
 }
@@ -124,7 +124,7 @@ func TestInstallScriptPrefixIsExplicitAndExpandsHome(t *testing.T) {
 	home := t.TempDir()
 	output := runInstallSnippet(t, home, `
 source ./install.sh
-parse_args --prefix '~/bin' 0.5.1
+parse_args --prefix '~/bin' 0.6.0
 INSTALL_DIR="$(expand_path "$INSTALL_DIR")"
 printf 'dir=%s\nexplicit=%s\nversion=%s\n' "$INSTALL_DIR" "$INSTALL_DIR_EXPLICIT" "$VERSION"
 `)
@@ -135,7 +135,7 @@ printf 'dir=%s\nexplicit=%s\nversion=%s\n' "$INSTALL_DIR" "$INSTALL_DIR_EXPLICIT
 	if !strings.Contains(output, "explicit=1") {
 		t.Fatalf("prefix should mark install dir explicit; output:\n%s", output)
 	}
-	if !strings.Contains(output, "version=0.5.1") {
+	if !strings.Contains(output, "version=0.6.0") {
 		t.Fatalf("version argument not parsed; output:\n%s", output)
 	}
 }
