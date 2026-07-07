@@ -9,7 +9,9 @@ build caches, package caches, and AI tool logs.
 The product stance is conservative cleanup for development machines. The CLI
 does four things: discover development debris, report structured data, preview
 filtered targets, and delete only inside conservative safety boundaries. Human
-or AI-guided judgment happens outside the CLI.
+or AI-guided judgment usually happens outside the CLI; the guided Codex cleanup
+mode is a conservative review surface that still uses the normal preview and
+confirmation path before deletion.
 
 ## Non-goals
 
@@ -73,6 +75,7 @@ Flags:
 | `--risky` | `false` | Include risky categories such as AI logs. |
 | `--include-active-worktrees` | `false` | Include active Git worktrees in cleanup candidates. |
 | `--force`, `-f` | `false` | Skip the final confirmation prompt. |
+| `--guide` | `false` | Open the guided Codex worktree cleanup flow. When category/tool filters are omitted, it implies `--category worktree --tool codex`. When age is omitted, it uses the guided 1-day review window; explicit `--age` values are respected. |
 
 Behavior:
 
@@ -107,16 +110,33 @@ Human `clean` output must include a cleanup audit before deletion:
 
 The audit is human output only. `scan --json` remains the machine-readable surface for agents and scripts.
 
+Guided Codex worktree cleanup:
+
+- `clean --guide` builds a selected/protected plan for active Codex worktrees.
+- Selected rows are conservative low-risk recommendations, not automatic
+  deletion. Protected rows remain visible and can be toggled by number.
+- The planner must fail closed when Codex activity or git safety evidence is
+  unavailable or unsafe.
+- Codex activity uses metadata only: session metadata, working-directory paths,
+  timestamps, and cache file metadata. It must not read conversation bodies.
+- Git safety protects current working directories, dirty worktrees, unpushed
+  commits, and unknown upstream comparisons.
+- Pressing Enter renders the existing dry-run target plan for selected rows.
+- Real deletion still requires confirmation unless `--force` is explicitly set;
+  `--dry-run` never deletes.
+
 ### FR4 - AI-guided Skill Workflow
 
 `skills/aibris/SKILL.md` defines the intended AI-assisted cleanup flow:
 
 1. Run `aibris scan --json`.
 2. Summarize by project, category, size, and age.
-3. Ask the user which groups to remove.
-4. Run `aibris clean ... --dry-run`.
-5. Ask for confirmation again.
-6. Run `aibris clean ...` only after explicit approval.
+3. For active Codex worktree bloat, prefer `aibris clean --guide --dry-run`
+   so the user can review low-risk defaults and protected rows.
+4. For ordinary cleanup groups, ask the user which groups to remove.
+5. Run `aibris clean ... --dry-run`.
+6. Ask for confirmation again.
+7. Run `aibris clean ...` only after explicit approval.
 
 ## Supported Categories
 
