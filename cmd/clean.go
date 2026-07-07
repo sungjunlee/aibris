@@ -49,17 +49,7 @@ var cleanCmd = &cobra.Command{
 		if age < time.Hour {
 			fmt.Fprintf(os.Stderr, "Warning: --age %s will match ALL items including active ones.\n", cleanAge)
 		}
-		if cleanGuide {
-			if cleanCategory == "" {
-				cleanCategory = string(types.CategoryWorktree)
-			}
-			if cleanTools == "" {
-				cleanTools = string(types.ToolCodex)
-			}
-			if cleanAge == "7d" {
-				age = guidedCodexDefaultAge
-			}
-		}
+		age = applyGuidedCleanDefaults(cmd, age)
 
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer cancel()
@@ -171,6 +161,22 @@ func init() {
 	cleanCmd.Flags().BoolVar(&cleanGuide, "guide", false, "Guided Codex worktree cleanup review")
 	cleanCmd.Flags().StringArrayVar(&cleanRoots, "root", nil, "Scan root under $HOME (repeatable)")
 	cleanCmd.Flags().BoolVar(&cleanIncludeActiveWorktrees, "include-active-worktrees", false, "Include active worktrees in cleanup candidates")
+}
+
+func applyGuidedCleanDefaults(cmd *cobra.Command, age time.Duration) time.Duration {
+	if !cleanGuide {
+		return age
+	}
+	if cleanCategory == "" {
+		cleanCategory = string(types.CategoryWorktree)
+	}
+	if cleanTools == "" {
+		cleanTools = string(types.ToolCodex)
+	}
+	if !cmd.Flags().Changed("age") {
+		return guidedCodexDefaultAge
+	}
+	return age
 }
 
 type cleanPlanMode string

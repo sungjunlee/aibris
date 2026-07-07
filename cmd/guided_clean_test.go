@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -98,6 +99,37 @@ func TestSelectedGuidedCleanTargetsNormalizesOverlap(t *testing.T) {
 
 	if len(targets) != 1 || targets[0].ID != "parent" {
 		t.Fatalf("targets = %#v; want normalized parent only", targets)
+	}
+}
+
+func TestApplyGuidedCleanDefaultsUsesOneDayOnlyWhenAgeOmitted(t *testing.T) {
+	resetCleanFlags()
+	cleanGuide = true
+	omitted := &cobra.Command{Use: "clean"}
+	omitted.Flags().String("age", "7d", "")
+
+	got := applyGuidedCleanDefaults(omitted, 7*24*time.Hour)
+	if got != guidedCodexDefaultAge {
+		t.Fatalf("omitted age = %s; want guide default %s", got, guidedCodexDefaultAge)
+	}
+	if cleanCategory != string(types.CategoryWorktree) {
+		t.Fatalf("cleanCategory = %q; want worktree", cleanCategory)
+	}
+	if cleanTools != string(types.ToolCodex) {
+		t.Fatalf("cleanTools = %q; want codex", cleanTools)
+	}
+
+	resetCleanFlags()
+	cleanGuide = true
+	explicit := &cobra.Command{Use: "clean"}
+	explicit.Flags().String("age", "7d", "")
+	if err := explicit.Flags().Set("age", "7d"); err != nil {
+		t.Fatal(err)
+	}
+
+	got = applyGuidedCleanDefaults(explicit, 7*24*time.Hour)
+	if got != 7*24*time.Hour {
+		t.Fatalf("explicit age = %s; want 7d", got)
 	}
 }
 
