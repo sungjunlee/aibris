@@ -68,6 +68,7 @@ aibris scan --json             # machine-readable output (see docs/JSON_SCHEMA.m
 aibris scan --root ~/.codex    # narrow scan to a home subdirectory
 
 aibris clean --dry-run         # preview without deleting
+aibris clean --guide --dry-run # guided Codex worktree review
 aibris clean                   # delete with confirmation
 aibris clean --root ~/.codex --dry-run
 aibris clean --age 7d          # older than 7 days (default)
@@ -150,6 +151,20 @@ targets
 
 [DRY-RUN] No files were removed.
 ```
+
+Guided Codex worktree cleanup is for active Codex worktree bloat. It defaults
+low-risk rows to selected, keeps protected rows visible, lets you toggle by
+number, and still hands the final selection to the normal dry-run plan before
+anything can be deleted:
+
+```bash
+aibris clean --guide --dry-run
+```
+
+The guide uses Codex session metadata only, such as session timestamps and
+working directories. It does not read conversation bodies. A real deletion still
+requires the dry-run preview first and then the normal confirmation prompt,
+unless `--force` is explicitly provided.
 
 Confirm before deleting anything:
 
@@ -238,6 +253,9 @@ providers run. In non-interactive logs, progress falls back to plain
 - **`--interactive`** confirms each item
 - **Target plan before final confirmation** shows category, size, project,
   age/status, path, and cleanup command when applicable
+- **Guided Codex cleanup** default-selects only low-risk active Codex worktrees
+  after activity and git-safety checks, then uses the same dry-run and
+  confirmation model as regular `clean`
 - **Recent scan reuse** skips a repeated scan when `clean` can use a fresh
   compatible snapshot, while still re-checking target paths
 - **`--risky`** must be explicitly set to delete AI logs
