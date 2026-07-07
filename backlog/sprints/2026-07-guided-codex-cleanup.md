@@ -1,6 +1,6 @@
 ---
 milestone: Guided Codex Cleanup
-status: planned
+status: completed
 started: 2026-07-05
 due: 2026-07-12
 objectives:
@@ -65,7 +65,8 @@ rendering, number toggles, abort, and dry-run preview handoff.
 
 ### Batch 5 - Documentation And Dogfood
 
-- [ ] #55 Document and dogfood guided Codex cleanup workflow
+- [x] #55 Document and dogfood guided Codex cleanup workflow
+  → PR #61 merged
 
 This lands after runtime behavior exists so the docs and dogfood transcript
 match the actual command output.
@@ -99,3 +100,8 @@ match the actual command output.
 - 2026-07-07: Closed #54 via PR #60 after relay review round 2. `clean --guide`
   now renders selected/protected rows, supports number toggles and abort, and
   hands selected targets to the normal dry-run preview before any deletion.
+- 2026-07-07: Closed #55 via PR #61 after relay review round 1. README, SPEC,
+  DOGFOOD, and `skills/aibris/SKILL.md` now document guided Codex cleanup,
+  metadata-only activity signals, and dry-run-before-delete behavior.
+- 2026-07-07: Completed child issues #50-#55. Final verification passed with
+  `go test ./...`, `go build ./...`, and `go vet ./...`.
