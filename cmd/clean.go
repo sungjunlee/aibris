@@ -27,6 +27,7 @@ var (
 	cleanInteractive            bool
 	cleanRisky                  bool
 	cleanForce                  bool
+	cleanGuide                  bool
 	cleanRoots                  []string
 	cleanIncludeActiveWorktrees bool
 )
@@ -47,6 +48,17 @@ var cleanCmd = &cobra.Command{
 		}
 		if age < time.Hour {
 			fmt.Fprintf(os.Stderr, "Warning: --age %s will match ALL items including active ones.\n", cleanAge)
+		}
+		if cleanGuide {
+			if cleanCategory == "" {
+				cleanCategory = string(types.CategoryWorktree)
+			}
+			if cleanTools == "" {
+				cleanTools = string(types.ToolCodex)
+			}
+			if cleanAge == "7d" {
+				age = guidedCodexDefaultAge
+			}
 		}
 
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -94,6 +106,14 @@ var cleanCmd = &cobra.Command{
 			Risky:                  cleanRisky,
 			Force:                  cleanForce,
 			IncludeActiveWorktrees: cleanIncludeActiveWorktrees,
+		}
+
+		if cleanGuide {
+			if err := runGuidedCodexClean(ctx, result, source, opts); err != nil {
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				os.Exit(1)
+			}
+			return
 		}
 
 		targets := cleaner.Filter(result.Worktrees, opts)
@@ -148,6 +168,7 @@ func init() {
 	cleanCmd.Flags().BoolVarP(&cleanInteractive, "interactive", "i", false, "Confirm each deletion")
 	cleanCmd.Flags().BoolVar(&cleanRisky, "risky", false, "Include risky categories (ai-logs)")
 	cleanCmd.Flags().BoolVarP(&cleanForce, "force", "f", false, "Skip confirmation prompt")
+	cleanCmd.Flags().BoolVar(&cleanGuide, "guide", false, "Guided Codex worktree cleanup review")
 	cleanCmd.Flags().StringArrayVar(&cleanRoots, "root", nil, "Scan root under $HOME (repeatable)")
 	cleanCmd.Flags().BoolVar(&cleanIncludeActiveWorktrees, "include-active-worktrees", false, "Include active worktrees in cleanup candidates")
 }

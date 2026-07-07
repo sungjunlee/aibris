@@ -216,6 +216,7 @@ func resetCleanFlags() {
 	cleanInteractive = false
 	cleanRisky = false
 	cleanForce = false
+	cleanGuide = false
 	cleanRoots = nil
 	cleanIncludeActiveWorktrees = false
 }
