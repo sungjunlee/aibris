@@ -59,6 +59,7 @@ Make `aibris clean` the pleasing guided path for Codex worktree bloat without we
 - Existing project context says the CLI should stay a conservative scanner/executor. This sprint narrows that rule: plain no-filter `clean` may choose the guided Codex worktree decision path, while explicit cleanup filters and `--no-guide` remain the classic executor path.
 - #63-#65 touch the same `clean` command route, so run them as one implementation wave with one review anchor rather than three conflicting parallel edits.
 - #66 lands after runtime output is stable so examples and dogfood match the actual command.
+- #66 relay-ready handoff is prepared as `req-20260709134455122` / `docs-dogfood-default-guided`; dispatch it after PR #71 lands so docs are based on the runtime route in `main`.
 - #67 releases only after runtime, tests, docs, and dogfood verification are complete.
 - Batch 1 should avoid broad TTY UI work. v0.6.1 may reuse the current textual guide; v0.7.0 owns the richer checklist polish.
 - #68-#70 are intentionally after v0.6.1: default routing should ship before introducing a richer terminal renderer.
@@ -68,3 +69,4 @@ Make `aibris clean` the pleasing guided path for Codex worktree bloat without we
 - 2026-07-09: Created active sprint for epic #62 and split work into v0.6.1 runtime/docs/release followed by v0.7.0 checklist follow-up.
 - 2026-07-09: Dispatched Batch 1 (#63-#65) through relay-ready/relay-plan as `default-guided-runtime`, run `issue-63-20260709130417141-761d43bf`.
 - 2026-07-09: Batch 1 reached relay `ready_to_merge` in PR #71. Internal and post-publication relay reviews passed, local `go test ./...`, `go build ./...`, `go vet ./...` passed with `GOCACHE=/private/tmp/aibris-gocache-63`, and GitHub ubuntu/macos CI passed.
+- 2026-07-09: Captured #66 dogfood from PR #71 head: default `clean --dry-run --root ~/.codex` entered guided cleanup, selected 3 items / 3.1 GB, protected 36 items / 30.8 GB, and confirmed dry-run deletion safety. Persisted relay-ready handoff `req-20260709134455122` and commented evidence on #66.
