@@ -135,6 +135,7 @@ func TestChooseCleanExperienceNoGuideAndClassicSelectorsKeepClassic(t *testing.T
 		{name: "category", input: cleanExperienceInput{CategoryChanged: true}},
 		{name: "tool", input: cleanExperienceInput{ToolChanged: true}},
 		{name: "risky", input: cleanExperienceInput{RiskyChanged: true}},
+		{name: "force", input: cleanExperienceInput{ForceChanged: true}},
 		{name: "include active", input: cleanExperienceInput{IncludeActiveWorktreesChanged: true}},
 		{name: "interactive", input: cleanExperienceInput{InteractiveChanged: true}},
 	}

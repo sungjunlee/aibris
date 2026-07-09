@@ -219,6 +219,7 @@ type cleanExperienceInput struct {
 	CategoryChanged               bool
 	ToolChanged                   bool
 	RiskyChanged                  bool
+	ForceChanged                  bool
 	IncludeActiveWorktreesChanged bool
 	InteractiveChanged            bool
 	UsefulGuidedCodexReview       bool
@@ -231,6 +232,7 @@ func cleanExperienceInputFromCommand(cmd *cobra.Command, usefulGuidedCodexReview
 		CategoryChanged:               cmd.Flags().Changed("category"),
 		ToolChanged:                   cmd.Flags().Changed("tool"),
 		RiskyChanged:                  cmd.Flags().Changed("risky"),
+		ForceChanged:                  cmd.Flags().Changed("force"),
 		IncludeActiveWorktreesChanged: cmd.Flags().Changed("include-active-worktrees"),
 		InteractiveChanged:            cmd.Flags().Changed("interactive"),
 		UsefulGuidedCodexReview:       usefulGuidedCodexReview,
@@ -257,6 +259,7 @@ func (input cleanExperienceInput) hasClassicSelector() bool {
 	return input.CategoryChanged ||
 		input.ToolChanged ||
 		input.RiskyChanged ||
+		input.ForceChanged ||
 		input.IncludeActiveWorktreesChanged ||
 		input.InteractiveChanged
 }
