@@ -177,6 +177,34 @@ func TestBuildGuidedCodexWorktreePlanProtectsNewestProjectWorktree(t *testing.T)
 	requireGuidedPlanProtectedReason(t, plan, newest.ID, guidedCodexProtectionNewestProjectWorktree)
 }
 
+func TestBuildGuidedCodexWorktreePlanRespectsExplicitAge(t *testing.T) {
+	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	home := t.TempDir()
+	item := guidedPlanWorktree(home, "three-days-old", "project-a", 512*guidedPlanMiB, now.Add(-72*time.Hour))
+	input := guidedCodexWorktreePlanInput{
+		Worktrees:               []types.DebrisInfo{item},
+		Activity:                guidedPlanActivity(),
+		GitSafety:               map[string]worktreeGitSafety{item.Path: {}},
+		CurrentWorkingDirectory: filepath.Join(home, "repo"),
+		Now:                     now,
+	}
+
+	oneDay := input
+	oneDay.Age = 24 * time.Hour
+	oneDayPlan := buildGuidedCodexWorktreePlan(oneDay)
+	if oneDayPlan.SelectedCount != 1 || oneDayPlan.SelectedSize != item.Size {
+		t.Fatalf("1d selected = %d/%d; want 1/%d", oneDayPlan.SelectedCount, oneDayPlan.SelectedSize, item.Size)
+	}
+
+	sevenDays := input
+	sevenDays.Age = 7 * 24 * time.Hour
+	sevenDayPlan := buildGuidedCodexWorktreePlan(sevenDays)
+	if sevenDayPlan.SelectedCount != 0 || sevenDayPlan.SelectedSize != 0 {
+		t.Fatalf("7d selected = %d/%d; want 0/0", sevenDayPlan.SelectedCount, sevenDayPlan.SelectedSize)
+	}
+	requireGuidedPlanProtectedReason(t, sevenDayPlan, item.ID, guidedCodexProtectionYoungerThanGuideAge)
+}
+
 func TestBuildGuidedCodexWorktreePlanRanksRowsBySizeAndDeduplicatesPaths(t *testing.T) {
 	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
 	home := t.TempDir()

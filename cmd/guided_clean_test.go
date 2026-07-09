@@ -102,6 +102,84 @@ func TestSelectedGuidedCleanTargetsNormalizesOverlap(t *testing.T) {
 	}
 }
 
+func TestChooseCleanExperienceRoutesDefaultGuidedOnlyWhenUseful(t *testing.T) {
+	got, reason, err := chooseCleanExperience(cleanExperienceInput{UsefulGuidedCodexReview: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != cleanExperienceGuided {
+		t.Fatalf("experience = %s; want %s", got, cleanExperienceGuided)
+	}
+	if reason != guidedCleanReasonAuto {
+		t.Fatalf("reason = %q; want %q", reason, guidedCleanReasonAuto)
+	}
+
+	got, reason, err = chooseCleanExperience(cleanExperienceInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != cleanExperienceClassic {
+		t.Fatalf("experience = %s; want %s", got, cleanExperienceClassic)
+	}
+	if reason != "" {
+		t.Fatalf("classic reason = %q; want empty", reason)
+	}
+}
+
+func TestChooseCleanExperienceNoGuideAndClassicSelectorsKeepClassic(t *testing.T) {
+	tests := []struct {
+		name  string
+		input cleanExperienceInput
+	}{
+		{name: "no guide", input: cleanExperienceInput{NoGuide: true}},
+		{name: "category", input: cleanExperienceInput{CategoryChanged: true}},
+		{name: "tool", input: cleanExperienceInput{ToolChanged: true}},
+		{name: "risky", input: cleanExperienceInput{RiskyChanged: true}},
+		{name: "include active", input: cleanExperienceInput{IncludeActiveWorktreesChanged: true}},
+		{name: "interactive", input: cleanExperienceInput{InteractiveChanged: true}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.input.UsefulGuidedCodexReview = true
+			got, reason, err := chooseCleanExperience(tt.input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != cleanExperienceClassic {
+				t.Fatalf("experience = %s; want %s", got, cleanExperienceClassic)
+			}
+			if reason != "" {
+				t.Fatalf("classic reason = %q; want empty", reason)
+			}
+		})
+	}
+}
+
+func TestChooseCleanExperienceGuideOverridesSelectorsAndConflictsWithNoGuide(t *testing.T) {
+	got, reason, err := chooseCleanExperience(cleanExperienceInput{
+		Guide:           true,
+		CategoryChanged: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != cleanExperienceGuided {
+		t.Fatalf("experience = %s; want %s", got, cleanExperienceGuided)
+	}
+	if reason != guidedCleanReasonExplicit {
+		t.Fatalf("reason = %q; want %q", reason, guidedCleanReasonExplicit)
+	}
+
+	_, _, err = chooseCleanExperience(cleanExperienceInput{Guide: true, NoGuide: true})
+	if err == nil {
+		t.Fatal("expected --guide/--no-guide conflict")
+	}
+	if !strings.Contains(err.Error(), "cannot use --guide with --no-guide") {
+		t.Fatalf("conflict error = %v", err)
+	}
+}
+
 func TestApplyGuidedCleanDefaultsUsesOneDayOnlyWhenAgeOmitted(t *testing.T) {
 	resetCleanFlags()
 	cleanGuide = true
