@@ -61,8 +61,10 @@ Make `aibris clean` the pleasing guided path for Codex worktree bloat without we
 - #66 lands after runtime output is stable so examples and dogfood match the actual command.
 - #66 relay-ready handoff is prepared as `req-20260709134455122` / `docs-dogfood-default-guided`; dispatch it after PR #71 lands so docs are based on the runtime route in `main`.
 - #67 releases only after runtime, tests, docs, and dogfood verification are complete.
+- #67 release handoff is prepared as `req-20260709141058411` / `release-v0-6-1-default-guided`; dispatch it after PR #71 and #66 land.
 - Batch 1 should avoid broad TTY UI work. v0.6.1 may reuse the current textual guide; v0.7.0 owns the richer checklist polish.
 - #68 design-only handoff is prepared as `req-20260709134834849` / `tty-checklist-design`; it must not implement the TTY renderer or add dependencies.
+- #70 release handoff is prepared as `req-20260709141058572` / `release-v0-7-0-guided-checklist`; dispatch it after #68/#69 land and v0.6.1 status is resolved.
 - #68-#70 are intentionally after v0.6.1: default routing should ship before introducing a richer terminal renderer.
 
 ## Progress
@@ -72,3 +74,4 @@ Make `aibris clean` the pleasing guided path for Codex worktree bloat without we
 - 2026-07-09: Batch 1 reached relay `ready_to_merge` in PR #71. Internal and post-publication relay reviews passed, local `go test ./...`, `go build ./...`, `go vet ./...` passed with `GOCACHE=/private/tmp/aibris-gocache-63`, and GitHub ubuntu/macos CI passed.
 - 2026-07-09: Captured #66 dogfood from PR #71 head: default `clean --dry-run --root ~/.codex` entered guided cleanup, selected 3 items / 3.1 GB, protected 36 items / 30.8 GB, and confirmed dry-run deletion safety. Persisted relay-ready handoff `req-20260709134455122` and commented evidence on #66.
 - 2026-07-09: Prepared relay-plan artifacts for #66 (`/tmp/dispatch-66.md`, `/tmp/rubric-66.yaml`) and dry-run validated dispatch, still gated on PR #71 landing. Prepared #68 relay-ready and relay-plan artifacts (`req-20260709134834849`, `/tmp/dispatch-68.md`, `/tmp/rubric-68.yaml`) and dry-run validated design-only dispatch.
+- 2026-07-09: Prepared release handoffs and relay-plan artifacts for #67 (`req-20260709141058411`, `/tmp/dispatch-67.md`, `/tmp/rubric-67.yaml`) and #70 (`req-20260709141058572`, `/tmp/dispatch-70.md`, `/tmp/rubric-70.yaml`), with dry-run dispatch validation passing. GitHub issue comments are pending because `gh` cannot connect to `api.github.com`.
