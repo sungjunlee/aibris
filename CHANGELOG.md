@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## [0.6.1] - 2026-07-10
+
+### Changed
+- `clean` and `clean --dry-run` now open guided Codex worktree review by
+  default when no classic cleanup selector is supplied and useful guided
+  recommendations exist.
+- `--no-guide` keeps the classic cleanup audit/executor route for scripts,
+  explicit cleanup workflows, and users who do not want guided review.
+- README, spec, skill workflow, and dogfood notes now present
+  `aibris clean --dry-run` as the natural first cleanup preview.
+
 ## [0.6.0] - 2026-07-07
 
 ### Added
