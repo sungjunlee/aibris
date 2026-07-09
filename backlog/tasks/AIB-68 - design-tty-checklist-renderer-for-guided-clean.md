@@ -1,7 +1,7 @@
 ---
 id: AIB-68
 title: Design TTY checklist renderer for guided clean
-status: In Progress
+status: Done
 labels:
   - enhancement
   - ux

@@ -15,8 +15,8 @@ func TestPromptGuidedCleanRendersAndTogglesSelection(t *testing.T) {
 		ScanSource: scanSource{Kind: scanSourceCached, Age: 12 * time.Second},
 		Activity:   codexActivityIndex{Available: true, Source: codexActivitySourceCache, Age: 3 * time.Second},
 		Rows: []guidedCleanRow{
-			{Number: 1, Row: guidedCodexWorktreeRow{Item: guidedCleanItem("one", 4<<30), Reason: guidedCodexReasonZeroSessions}, Selected: true},
-			{Number: 2, Row: guidedCodexWorktreeRow{Item: guidedCleanItem("two", 2<<30), Reason: guidedCodexProtectionNewestProjectWorktree}, Protected: true},
+			{Number: 1, Row: guidedCodexWorktreeRow{Item: guidedCleanItem("one", 4<<30), Reason: guidedCodexReasonZeroSessions}, Policy: guidedCleanPolicyRecommended, Selected: true},
+			{Number: 2, Row: guidedCodexWorktreeRow{Item: guidedCleanItem("two", 2<<30), Reason: guidedCodexProtectionNewestProjectWorktree}, Policy: guidedCleanPolicyReviewable},
 		},
 	}
 	var output bytes.Buffer
@@ -39,11 +39,34 @@ func TestPromptGuidedCleanRendersAndTogglesSelection(t *testing.T) {
 	}
 }
 
+func TestPromptGuidedCleanTTYModeRendersChecklistLabel(t *testing.T) {
+	state := guidedCleanState{
+		Rows: []guidedCleanRow{
+			{Number: 1, Row: guidedCodexWorktreeRow{Item: guidedCleanItem("one", 4<<30), Reason: guidedCodexReasonZeroSessions}, Policy: guidedCleanPolicyRecommended, Selected: true},
+		},
+	}
+	var output bytes.Buffer
+
+	targets, aborted, err := promptGuidedCleanWithMode(strings.NewReader("\n"), &output, state, guidedCleanPromptTTY)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if aborted {
+		t.Fatal("prompt aborted")
+	}
+	if len(targets) != 1 {
+		t.Fatalf("targets = %#v; want selected row", targets)
+	}
+	if !strings.Contains(output.String(), "mode       tty checklist") {
+		t.Fatalf("TTY checklist label missing:\n%s", output.String())
+	}
+}
+
 func TestPromptGuidedCleanEnterReturnsDefaultSelectionForPreview(t *testing.T) {
 	state := guidedCleanState{
 		Rows: []guidedCleanRow{
-			{Number: 1, Row: guidedCodexWorktreeRow{Item: guidedCleanItem("one", 4<<30), Reason: guidedCodexReasonZeroSessions}, Selected: true},
-			{Number: 2, Row: guidedCodexWorktreeRow{Item: guidedCleanItem("two", 2<<30), Reason: guidedCodexProtectionNewestProjectWorktree}, Protected: true},
+			{Number: 1, Row: guidedCodexWorktreeRow{Item: guidedCleanItem("one", 4<<30), Reason: guidedCodexReasonZeroSessions}, Policy: guidedCleanPolicyRecommended, Selected: true},
+			{Number: 2, Row: guidedCodexWorktreeRow{Item: guidedCleanItem("two", 2<<30), Reason: guidedCodexProtectionNewestProjectWorktree}, Policy: guidedCleanPolicyReviewable},
 		},
 	}
 	var output bytes.Buffer
@@ -83,6 +106,39 @@ func TestPromptGuidedCleanAbort(t *testing.T) {
 	}
 }
 
+func TestPromptGuidedCleanDoesNotToggleLockedRows(t *testing.T) {
+	state := guidedCleanState{
+		Rows: []guidedCleanRow{
+			{
+				Number: 1,
+				Row: guidedCodexWorktreeRow{
+					Item:   guidedCleanItem("locked", 4<<30),
+					Reason: guidedCodexProtectionCurrentWorkingDirectory,
+				},
+				Policy: guidedCleanPolicyLocked,
+			},
+		},
+	}
+	var output bytes.Buffer
+
+	targets, aborted, err := promptGuidedClean(strings.NewReader("1\n\n"), &output, state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if aborted {
+		t.Fatal("prompt aborted")
+	}
+	if len(targets) != 0 {
+		t.Fatalf("targets = %#v; want none for locked row", targets)
+	}
+	text := output.String()
+	for _, want := range []string{"[!]  1", "row 1 is locked and cannot be selected"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("output missing %q:\n%s", want, text)
+		}
+	}
+}
+
 func TestSelectedGuidedCleanTargetsNormalizesOverlap(t *testing.T) {
 	parent := guidedCleanItem("parent", 4<<30)
 	child := guidedCleanItem("child", 1<<30)
@@ -99,6 +155,79 @@ func TestSelectedGuidedCleanTargetsNormalizesOverlap(t *testing.T) {
 
 	if len(targets) != 1 || targets[0].ID != "parent" {
 		t.Fatalf("targets = %#v; want normalized parent only", targets)
+	}
+}
+
+func TestGuidedProjectedFreedSizeUsesNormalizedTargets(t *testing.T) {
+	parent := guidedCleanItem("parent", 4<<30)
+	child := guidedCleanItem("child", 1<<30)
+	child.Path = parent.Path + "/node_modules"
+	child.Category = types.CategoryNodeModules
+	state := guidedCleanState{
+		Rows: []guidedCleanRow{
+			{Number: 1, Row: guidedCodexWorktreeRow{Item: parent}, Policy: guidedCleanPolicyRecommended, Selected: true},
+			{Number: 2, Row: guidedCodexWorktreeRow{Item: child}, Policy: guidedCleanPolicyRecommended, Selected: true},
+		},
+	}
+
+	if got := guidedProjectedFreedSize(state); got != parent.Size {
+		t.Fatalf("projected freed = %d; want normalized parent size %d", got, parent.Size)
+	}
+}
+
+func TestGuidedCleanAgeCommandReplansSelection(t *testing.T) {
+	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	home := t.TempDir()
+	item := guidedPlanWorktree(home, "three-days-old", "project-a", 512*guidedPlanMiB, now.Add(-72*time.Hour))
+	state := newGuidedCleanStateFromPlanInput(scanSource{}, "", guidedCodexWorktreePlanInput{
+		Worktrees:               []types.DebrisInfo{item},
+		Activity:                guidedPlanActivity(),
+		GitSafety:               map[string]worktreeGitSafety{item.Path: {}},
+		CurrentWorkingDirectory: home,
+		Now:                     now,
+		Age:                     24 * time.Hour,
+	})
+	if selected, _ := guidedSelectionTotals(state); selected != 1 {
+		t.Fatalf("initial selected = %d; want 1", selected)
+	}
+
+	next, message, ok := applyGuidedCleanCommand(state, "age 7d")
+	if !ok {
+		t.Fatal("age command not handled")
+	}
+	if !strings.Contains(message, "7d") {
+		t.Fatalf("message = %q; want 7d status", message)
+	}
+	if selected, size := guidedSelectionTotals(next); selected != 0 || size != 0 {
+		t.Fatalf("7d selected = %d/%d; want 0/0", selected, size)
+	}
+	if next.Rows[0].Policy != guidedCleanPolicyReviewable || next.Rows[0].Row.Reason != guidedCodexProtectionYoungerThanGuideAge {
+		t.Fatalf("7d row = %+v; want reviewable younger-than-age", next.Rows[0])
+	}
+}
+
+func TestGuidedCleanAgeReplanKeepsUserDeselectOverride(t *testing.T) {
+	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	home := t.TempDir()
+	item := guidedPlanWorktree(home, "three-days-old", "project-a", 512*guidedPlanMiB, now.Add(-72*time.Hour))
+	state := newGuidedCleanStateFromPlanInput(scanSource{}, "", guidedCodexWorktreePlanInput{
+		Worktrees:               []types.DebrisInfo{item},
+		Activity:                guidedPlanActivity(),
+		GitSafety:               map[string]worktreeGitSafety{item.Path: {}},
+		CurrentWorkingDirectory: home,
+		Now:                     now,
+		Age:                     24 * time.Hour,
+	})
+	if !toggleGuidedCleanRow(&state, 1) {
+		t.Fatal("recommended row should be toggleable")
+	}
+
+	next, _, _ := applyGuidedCleanCommand(state, "age 3d")
+	if selected, size := guidedSelectionTotals(next); selected != 0 || size != 0 {
+		t.Fatalf("selected after user override = %d/%d; want 0/0", selected, size)
+	}
+	if next.Rows[0].Policy != guidedCleanPolicyRecommended {
+		t.Fatalf("policy after replan = %s; want recommended", next.Rows[0].Policy)
 	}
 }
 
