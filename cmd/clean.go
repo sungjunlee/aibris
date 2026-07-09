@@ -39,7 +39,9 @@ var cleanCmd = &cobra.Command{
 	Long: `Clean up old AI tool debris.
 
 With no classic cleanup filters, clean uses guided Codex worktree review by default when useful.
-Use --no-guide to keep the classic cleanup audit and executor route.`,
+Use --no-guide, or pass an explicit classic selector such as --category, --tool,
+--risky, --force, --include-active-worktrees, or --interactive to keep the
+classic cleanup audit and executor route.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if cleanGuide && cleanNoGuide {
 			fmt.Fprintln(os.Stderr, "error: cannot use --guide with --no-guide")
@@ -85,7 +87,7 @@ Use --no-guide to keep the classic cleanup audit and executor route.`,
 		if shouldPrepareGuidedClean(cmd) {
 			guidedState = buildGuidedCleanState(ctx, result, source, guidedAge, "")
 		}
-		experience, reason, err := chooseCleanExperience(cleanExperienceInputFromCommand(cmd, len(guidedState.Rows) > 0))
+		experience, reason, err := chooseCleanExperience(cleanExperienceInputFromCommand(cmd, hasSelectedGuidedCleanTargets(guidedState)))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
@@ -572,7 +574,7 @@ func interactiveClean(targets []types.DebrisInfo) int64 {
 			}
 			total += freed
 		} else {
-			fmt.Printf("  skipped\n")
+			fmt.Fprintf("  skipped\n")
 		}
 	}
 	return total

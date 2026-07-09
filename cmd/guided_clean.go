@@ -159,6 +159,10 @@ func selectedGuidedCleanTargets(state guidedCleanState) []types.DebrisInfo {
 	return normalizeCleanTargets(targets)
 }
 
+func hasSelectedGuidedCleanTargets(state guidedCleanState) bool {
+	return len(selectedGuidedCleanTargets(state)) > 0
+}
+
 func renderGuidedClean(output io.Writer, state guidedCleanState) {
 	selectedCount, selectedSize := guidedSelectionTotals(state)
 	protectedRows := guidedProtectedRows(state)
