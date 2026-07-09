@@ -75,7 +75,8 @@ Flags:
 | `--risky` | `false` | Include risky categories such as AI logs. |
 | `--include-active-worktrees` | `false` | Include active Git worktrees in cleanup candidates. |
 | `--force`, `-f` | `false` | Skip the final confirmation prompt. |
-| `--guide` | `false` | Open the guided Codex worktree cleanup flow. When category/tool filters are omitted, it implies `--category worktree --tool codex`. When age is omitted, it uses the guided 1-day review window; explicit `--age` values are respected. |
+| `--guide` | `false` | Force the guided Codex worktree cleanup flow. When category/tool filters are omitted, it implies `--category worktree --tool codex`. When age is omitted, it uses the guided 1-day review window; explicit `--age` values are respected. |
+| `--no-guide` | `false` | Keep the classic cleanup audit/executor route even when useful guided Codex worktree recommendations are available. |
 
 Behavior:
 
@@ -110,9 +111,17 @@ Human `clean` output must include a cleanup audit before deletion:
 
 The audit is human output only. `scan --json` remains the machine-readable surface for agents and scripts.
 
-Guided Codex worktree cleanup:
+Default guided Codex worktree cleanup:
 
-- `clean --guide` builds a selected/protected plan for active Codex worktrees.
+- Plain `clean` and `clean --dry-run` build a selected/protected plan for
+  active Codex worktrees when no classic selector is supplied and useful guided
+  recommendations exist.
+- Classic selectors such as `--category`, `--tool`, `--risky`,
+  `--include-active-worktrees`, `--interactive`, and `--force` keep the classic
+  cleanup route unless `--guide` is explicit.
+- `--root` only narrows scan scope; it does not disable default guided routing.
+- `--no-guide` disables the default guided route and keeps the classic audit.
+- `--guide` explicitly forces guided Codex worktree cleanup.
 - Selected rows are conservative low-risk recommendations, not automatic
   deletion. Protected rows remain visible and can be toggled by number.
 - The planner must fail closed when Codex activity or git safety evidence is
@@ -131,8 +140,9 @@ Guided Codex worktree cleanup:
 
 1. Run `aibris scan --json`.
 2. Summarize by project, category, size, and age.
-3. For active Codex worktree bloat, prefer `aibris clean --guide --dry-run`
-   so the user can review low-risk defaults and protected rows.
+3. For active Codex worktree bloat, prefer `aibris clean --dry-run` so the
+   user can review low-risk defaults and protected rows through the default
+   guided route.
 4. For ordinary cleanup groups, ask the user which groups to remove.
 5. Run `aibris clean ... --dry-run`.
 6. Ask for confirmation again.

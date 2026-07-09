@@ -202,3 +202,49 @@ Notes:
   reasons.
 - Pressing Enter handed the selected rows to the normal dry-run clean plan.
 - `--dry-run` completed without deleting files.
+
+## 2026-07-09 - Default Guided Clean Dry Run
+
+Command:
+
+```bash
+printf '\n' | GOCACHE=/private/tmp/aibris-gocache-66 go run . clean --dry-run --root /Users/sjlee/.codex
+```
+
+Observed result:
+
+```text
+clean
+  roots  ~/.codex
+
+guided codex worktree cleanup
+
+scan
+  source     live
+  activity   indexed
+
+summary
+  selected   3 items   3.1 GB
+  protected  36 items   30.8 GB
+
+selected for cleanup
+  [x]  1    1.0 GB  baby_ops-issue-184-export active 11d         zero matching Codex sessions
+  [x]  2    1.0 GB  baby_ops-issue-185-filters active 11d         zero matching Codex sessions
+  [x]  3    1.0 GB  baby_ops-issue-186-empty-states active 11d         zero matching Codex sessions
+
+Enter numbers to toggle, Enter to preview, q to abort: clean plan
+  mode     dry-run
+  targets  3 items   3.1 GB
+
+[DRY-RUN] Preview complete.
+[DRY-RUN] No files were removed.
+```
+
+Notes:
+
+- `clean --dry-run` entered guided Codex worktree cleanup without `--guide`
+  because useful active Codex worktree recommendations existed.
+- The reason was `active Codex worktrees are the largest cleanup decision`.
+- `--root /Users/sjlee/.codex` narrowed scan scope but did not disable default
+  guided routing.
+- Dry-run rendered the selected 3-item clean plan and deleted nothing.

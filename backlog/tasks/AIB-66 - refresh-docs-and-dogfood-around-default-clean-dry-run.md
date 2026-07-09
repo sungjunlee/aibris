@@ -1,7 +1,7 @@
 ---
 id: AIB-66
 title: Refresh docs and dogfood around default clean --dry-run
-status: To Do
+status: In Progress
 labels:
   - documentation
   - ux
@@ -28,9 +28,8 @@ The user-facing documentation and dogfood evidence need to match the new product
 
 ## Acceptance Criteria
 
-- [ ] README examples show `aibris clean --dry-run` as the natural first command.
-- [ ] Documentation explains when `--no-guide` is appropriate.
-- [ ] Help text and docs agree on routing semantics.
-- [ ] Dogfood evidence records guided recommendations and selected deletion impact.
-- [ ] Documentation avoids presenting `--guide` as a feature users must know in advance.
-
+- [x] README examples show `aibris clean --dry-run` as the natural first command.
+- [x] Documentation explains when `--no-guide` is appropriate.
+- [x] Help text and docs agree on routing semantics.
+- [x] Dogfood evidence records guided recommendations and selected deletion impact.
+- [x] Documentation avoids presenting `--guide` as a feature users must know in advance.
