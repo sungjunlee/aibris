@@ -574,7 +574,7 @@ func interactiveClean(targets []types.DebrisInfo) int64 {
 			}
 			total += freed
 		} else {
-			fmt.Fprintf("  skipped\n")
+			fmt.Printf("  skipped\n")
 		}
 	}
 	return total
