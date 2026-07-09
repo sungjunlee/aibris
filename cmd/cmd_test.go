@@ -220,9 +220,12 @@ func resetCleanFlags() {
 	cleanNoGuide = false
 	cleanRoots = nil
 	cleanIncludeActiveWorktrees = false
-	for _, name := range []string{"age", "category", "tool", "dry-run", "interactive", "risky", "force", "guide", "no-guide", "root", "include-active-worktrees"} {
+	for _, name := range []string{"age", "category", "tool", "dry-run", "interactive", "risky", "force", "guide", "no-guide", "root", "include-active-worktrees", "help"} {
 		if flag := cleanCmd.Flags().Lookup(name); flag != nil {
 			flag.Changed = false
+			if name != "root" {
+				_ = flag.Value.Set(flag.DefValue)
+			}
 		}
 	}
 }
@@ -351,12 +354,37 @@ func saveFreshCodexActivityCacheFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	now := time.Now()
+	sessionPath := filepath.Join(filepath.Dir(path), "unrelated.jsonl")
 	if err := saveCodexActivityCache(path, codexActivityCache{
 		SchemaVersion: codexActivityCacheSchemaVersion,
-		CreatedAt:     time.Now(),
-		Files:         map[string]codexActivityFileRecord{},
-		Worktrees:     map[string]codexWorktreeActivity{},
-		Projects:      map[string]codexProjectActivity{},
+		CreatedAt:     now,
+		Files: map[string]codexActivityFileRecord{
+			sessionPath: {
+				Path:       sessionPath,
+				ModTime:    now,
+				Size:       128,
+				Valid:      true,
+				WorktreeID: "unrelated",
+				Project:    "other-project",
+				Timestamp:  now.Add(-time.Hour),
+			},
+		},
+		Worktrees: map[string]codexWorktreeActivity{
+			"unrelated": {
+				WorktreeID:    "unrelated",
+				Project:       "other-project",
+				SessionCount:  1,
+				LatestSession: now.Add(-time.Hour),
+			},
+		},
+		Projects: map[string]codexProjectActivity{
+			"other-project": {
+				Project:       "other-project",
+				SessionCount:  1,
+				LatestSession: now.Add(-time.Hour),
+			},
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
