@@ -26,9 +26,9 @@ Make `aibris clean` the pleasing guided path for Codex worktree bloat without we
 
 ### Batch 1 - v0.6.1 Runtime Route
 
-- [ ] #63 Auto-enter guided cleanup from default clean
-- [ ] #64 Add --no-guide and preserve classic clean paths
-- [ ] #65 Harden non-TTY guided fallback and explicit age routing
+- [~] #63 Auto-enter guided cleanup from default clean -> relay run issue-63-20260709130417141-761d43bf
+- [~] #64 Add --no-guide and preserve classic clean paths -> relay run issue-63-20260709130417141-761d43bf
+- [~] #65 Harden non-TTY guided fallback and explicit age routing -> relay run issue-63-20260709130417141-761d43bf
 
 ### Batch 2 - v0.6.1 Docs And Dogfood
 
@@ -66,3 +66,4 @@ Make `aibris clean` the pleasing guided path for Codex worktree bloat without we
 ## Progress
 
 - 2026-07-09: Created active sprint for epic #62 and split work into v0.6.1 runtime/docs/release followed by v0.7.0 checklist follow-up.
+- 2026-07-09: Dispatched Batch 1 (#63-#65) through relay-ready/relay-plan as `default-guided-runtime`, run `issue-63-20260709130417141-761d43bf`.
