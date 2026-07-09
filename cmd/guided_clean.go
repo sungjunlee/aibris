@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
@@ -25,11 +26,12 @@ type guidedCleanRow struct {
 
 type guidedCleanState struct {
 	ScanSource scanSource
+	Reason     string
 	Activity   codexActivityIndex
 	Rows       []guidedCleanRow
 }
 
-func runGuidedCodexClean(ctx context.Context, result *types.ScanResult, source scanSource, opts types.PruneOptions) error {
+func buildGuidedCleanState(ctx context.Context, result *types.ScanResult, source scanSource, age time.Duration, reason string) guidedCleanState {
 	activity := loadCodexActivityIndex(ctx)
 	gitSafety := inspectGuidedCodexGitSafety(ctx, result.Worktrees)
 	cwd, _ := os.Getwd()
@@ -38,10 +40,12 @@ func runGuidedCodexClean(ctx context.Context, result *types.ScanResult, source s
 		Activity:                activity,
 		GitSafety:               gitSafety,
 		CurrentWorkingDirectory: cwd,
-		Age:                     opts.Age,
+		Age:                     age,
 	})
-	state := newGuidedCleanState(source, activity, plan)
+	return newGuidedCleanState(source, reason, activity, plan)
+}
 
+func runGuidedCodexClean(opts types.PruneOptions, state guidedCleanState) error {
 	targets, aborted, err := promptGuidedClean(os.Stdin, os.Stdout, state)
 	if err != nil || aborted {
 		return err
@@ -64,11 +68,7 @@ func runGuidedCodexClean(ctx context.Context, result *types.ScanResult, source s
 		return nil
 	}
 	if !opts.Force {
-		fmt.Print("Proceed? [y/N]: ")
-		var response string
-		fmt.Scanln(&response)
-		if response != "y" && response != "Y" {
-			fmt.Println("Aborted.")
+		if !confirmCleanExecution() {
 			return nil
 		}
 	}
@@ -91,7 +91,7 @@ func inspectGuidedCodexGitSafety(ctx context.Context, items []types.DebrisInfo) 
 	return safety
 }
 
-func newGuidedCleanState(source scanSource, activity codexActivityIndex, plan guidedCodexWorktreePlan) guidedCleanState {
+func newGuidedCleanState(source scanSource, reason string, activity codexActivityIndex, plan guidedCodexWorktreePlan) guidedCleanState {
 	rows := make([]guidedCleanRow, 0, len(plan.Selected)+len(plan.Protected))
 	number := 1
 	for _, row := range plan.Selected {
@@ -102,7 +102,7 @@ func newGuidedCleanState(source scanSource, activity codexActivityIndex, plan gu
 		rows = append(rows, guidedCleanRow{Number: number, Row: row, Protected: true})
 		number++
 	}
-	return guidedCleanState{ScanSource: source, Activity: activity, Rows: rows}
+	return guidedCleanState{ScanSource: source, Reason: reason, Activity: activity, Rows: rows}
 }
 
 func promptGuidedClean(input io.Reader, output io.Writer, state guidedCleanState) ([]types.DebrisInfo, bool, error) {
@@ -159,12 +159,19 @@ func selectedGuidedCleanTargets(state guidedCleanState) []types.DebrisInfo {
 	return normalizeCleanTargets(targets)
 }
 
+func hasSelectedGuidedCleanTargets(state guidedCleanState) bool {
+	return len(selectedGuidedCleanTargets(state)) > 0
+}
+
 func renderGuidedClean(output io.Writer, state guidedCleanState) {
 	selectedCount, selectedSize := guidedSelectionTotals(state)
 	protectedRows := guidedProtectedRows(state)
 	protectedCount, protectedSize := guidedProtectedTotals(state)
 
 	fmt.Fprintln(output, "guided codex worktree cleanup")
+	if state.Reason != "" {
+		fmt.Fprintf(output, "  reason     %s\n", state.Reason)
+	}
 	fmt.Fprintf(output, "\nscan\n  source     %s\n  activity   %s\n", cleanAuditScanSourceLine(state.ScanSource), guidedActivitySourceLine(state.Activity))
 	fmt.Fprintf(output, "\nsummary\n  selected   %d %s   %s\n  protected  %d %s   %s\n",
 		selectedCount, itemNoun(selectedCount), cleaner.FormatSize(selectedSize),
