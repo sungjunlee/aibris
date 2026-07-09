@@ -1,7 +1,7 @@
 ---
 id: AIB-68
 title: Design TTY checklist renderer for guided clean
-status: To Do
+status: In Progress
 labels:
   - enhancement
   - ux
@@ -9,6 +9,7 @@ labels:
 priority: medium
 milestone: Default Guided Clean
 created_date: '2026-07-09'
+updated_date: '2026-07-09 22:56'
 ---
 ## Description
 Part of #62
@@ -29,9 +30,8 @@ The next product step after default guided routing is a compact terminal selecti
 
 ## Acceptance Criteria
 
-- [ ] A short design note or issue comment defines the checklist interaction and key bindings.
-- [ ] Low-risk items are selected by default; users can deselect before deletion.
-- [ ] Age threshold changes update projected deletion totals in the design.
-- [ ] The design includes empty, all-active, all-risky, and non-TTY states.
-- [ ] Implementation risks and dependencies are identified before coding begins.
-
+- [x] A short design note or issue comment defines the checklist interaction and key bindings.
+- [x] Low-risk items are selected by default; users can deselect before deletion.
+- [x] Age threshold changes update projected deletion totals in the design.
+- [x] The design includes empty, all-active, all-risky, and non-TTY states.
+- [x] Implementation risks and dependencies are identified before coding begins.
