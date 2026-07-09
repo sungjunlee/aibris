@@ -40,8 +40,8 @@ Make `aibris clean` the pleasing guided path for Codex worktree bloat without we
 
 ### Batch 4 - v0.7.0 Checklist Follow-Up
 
-- [~] #68 Design TTY checklist renderer for guided clean [branch:issue-68-tty-checklist-design]
-- [ ] #69 Implement TTY checklist UI with text fallback
+- [x] #68 Design TTY checklist renderer for guided clean → PR #72 merged as `ad0400f`
+- [x] #69 Implement TTY checklist UI with text fallback → shared selection model, TTY checklist mode, text fallback tests
 - [ ] #70 Release v0.7.0 guided checklist UI
 
 ## Definition Of Done
@@ -81,3 +81,4 @@ Make `aibris clean` the pleasing guided path for Codex worktree bloat without we
 - 2026-07-10: Squash-merged PR #73 as `edfa80f`, closing #66 and opening the v0.6.1 release gate. Started #67 on `codex/issue-67-release-v0.6.1` from `origin/main`.
 - 2026-07-10: Squash-merged PR #74 as `788c69b`, pushed annotated tag `v0.6.1`, verified release workflow `29057968415`, confirmed GitHub Release assets, and smoke-tested `install.sh` returning `aibris version 0.6.1`.
 - 2026-07-09: #68 design produced in `docs/GUIDED_CLEAN_TTY_CHECKLIST.md`; task AC checked locally and PR publication is pending verification.
+- 2026-07-10: Squash-merged PR #72 as `ad0400f`, closing #68. Implemented #69 on `codex/issue-69-tty-checklist-ui`: shared recommended/reviewable/locked selection model, TTY checklist mode routing, projected freed-space totals, age threshold replanning, and text fallback regression tests.
