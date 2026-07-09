@@ -1,0 +1,39 @@
+---
+id: AIB-69
+title: Implement TTY checklist UI with text fallback
+status: To Do
+labels:
+  - enhancement
+  - ux
+  - cli
+  - safety
+priority: medium
+milestone: Default Guided Clean
+created_date: '2026-07-09'
+---
+## Description
+Part of #62
+
+PRD: https://github.com/sungjunlee/aibris/blob/main/docs/superpowers/specs/2026-07-09-clean-default-guided-prd.md
+
+## Problem
+
+Guided cleanup should let users act on recommendations directly from the default path, with visible selection control and freed-space feedback.
+
+## Scope
+
+- Implement the guided TTY checklist renderer.
+- Preselect low-risk recommended items by default.
+- Support deselecting individual items before deletion.
+- Show total selected size and update it as selections change.
+- Support changing age threshold within the guided flow if the final design confirms it.
+- Preserve text fallback and non-TTY behavior.
+
+## Acceptance Criteria
+
+- [ ] Guided TTY mode renders a checkbox-style list of candidate deletions.
+- [ ] Low-risk recommendations are selected by default.
+- [ ] Selection changes update projected freed-space totals.
+- [ ] Deletion only executes after explicit final confirmation.
+- [ ] Text fallback remains usable and covered by tests.
+
