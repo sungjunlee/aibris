@@ -1,7 +1,7 @@
 ---
 id: AIB-67
 title: Release v0.6.1 default guided clean
-status: To Do
+status: In Progress
 labels:
   - documentation
   - devops
@@ -28,9 +28,8 @@ Default guided cleanup is a meaningful CLI behavior change and should ship as a 
 
 ## Acceptance Criteria
 
-- [ ] Version metadata reflects v0.6.1.
-- [ ] Changelog/release notes call out default guided clean and `--no-guide`.
-- [ ] `go build ./...` passes.
-- [ ] `go vet ./...` passes.
+- [x] Version metadata reflects v0.6.1.
+- [x] Changelog/release notes call out default guided clean and `--no-guide`.
+- [x] `go build ./...` passes.
+- [x] `go vet ./...` passes.
 - [ ] Git tag and GitHub release exist for v0.6.1.
-
