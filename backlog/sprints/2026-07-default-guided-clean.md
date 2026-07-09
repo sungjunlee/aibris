@@ -26,9 +26,9 @@ Make `aibris clean` the pleasing guided path for Codex worktree bloat without we
 
 ### Batch 1 - v0.6.1 Runtime Route
 
-- [~] #63 Auto-enter guided cleanup from default clean -> relay run issue-63-20260709130417141-761d43bf
-- [~] #64 Add --no-guide and preserve classic clean paths -> relay run issue-63-20260709130417141-761d43bf
-- [~] #65 Harden non-TTY guided fallback and explicit age routing -> relay run issue-63-20260709130417141-761d43bf
+- [~] #63 Auto-enter guided cleanup from default clean → PR #71 (ready_to_merge)
+- [~] #64 Add --no-guide and preserve classic clean paths → PR #71 (ready_to_merge)
+- [~] #65 Harden non-TTY guided fallback and explicit age routing → PR #71 (ready_to_merge)
 
 ### Batch 2 - v0.6.1 Docs And Dogfood
 
@@ -67,3 +67,4 @@ Make `aibris clean` the pleasing guided path for Codex worktree bloat without we
 
 - 2026-07-09: Created active sprint for epic #62 and split work into v0.6.1 runtime/docs/release followed by v0.7.0 checklist follow-up.
 - 2026-07-09: Dispatched Batch 1 (#63-#65) through relay-ready/relay-plan as `default-guided-runtime`, run `issue-63-20260709130417141-761d43bf`.
+- 2026-07-09: Batch 1 reached relay `ready_to_merge` in PR #71. Internal and post-publication relay reviews passed, local `go test ./...`, `go build ./...`, `go vet ./...` passed with `GOCACHE=/private/tmp/aibris-gocache-63`, and GitHub ubuntu/macos CI passed.
