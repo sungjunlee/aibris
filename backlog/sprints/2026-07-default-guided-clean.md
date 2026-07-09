@@ -36,7 +36,7 @@ Make `aibris clean` the pleasing guided path for Codex worktree bloat without we
 
 ### Batch 3 - v0.6.1 Release
 
-- [~] #67 Release v0.6.1 default guided clean [branch:codex/issue-67-release-v0.6.1]
+- [x] #67 Release v0.6.1 default guided clean → PR #74 merged as `788c69b`, tag `v0.6.1` published
 
 ### Batch 4 - v0.7.0 Checklist Follow-Up
 
@@ -79,3 +79,4 @@ Make `aibris clean` the pleasing guided path for Codex worktree bloat without we
 - 2026-07-09: PR #71 received follow-up review on protected-only guided rows and a transient remote blob typo. Fixed routing to require selected guided targets before default reroute, restored the interactive skip print, and advanced PR #71 to `cdd08d0`. Local focused tests passed, GitHub Actions run `29030455743` passed on ubuntu and macOS, and all PR review threads are resolved. Next batch remains gated on PR #71 landing.
 - 2026-07-10: Squash-merged PR #71 as `e67078b`, closing #63-#65 and opening the #66 docs/dogfood gate. Started #66 on `codex/issue-66-docs-dogfood` from `origin/main`.
 - 2026-07-10: Squash-merged PR #73 as `edfa80f`, closing #66 and opening the v0.6.1 release gate. Started #67 on `codex/issue-67-release-v0.6.1` from `origin/main`.
+- 2026-07-10: Squash-merged PR #74 as `788c69b`, pushed annotated tag `v0.6.1`, verified release workflow `29057968415`, confirmed GitHub Release assets, and smoke-tested `install.sh` returning `aibris version 0.6.1`.
