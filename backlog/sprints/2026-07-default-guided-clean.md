@@ -26,9 +26,9 @@ Make `aibris clean` the pleasing guided path for Codex worktree bloat without we
 
 ### Batch 1 - v0.6.1 Runtime Route
 
-- [~] #63 Auto-enter guided cleanup from default clean → PR #71 (CI passed; CodeRabbit processing) [branch:codex/issue-63-default-guided-runtime]
-- [~] #64 Add --no-guide and preserve classic clean paths → PR #71 (CI passed; CodeRabbit processing) [branch:codex/issue-63-default-guided-runtime]
-- [~] #65 Harden non-TTY guided fallback and explicit age routing → PR #71 (CI passed; CodeRabbit processing) [branch:codex/issue-63-default-guided-runtime]
+- [~] #63 Auto-enter guided cleanup from default clean → PR #71 (ready_to_merge; CI passed; review threads resolved) [branch:codex/issue-63-default-guided-runtime]
+- [~] #64 Add --no-guide and preserve classic clean paths → PR #71 (ready_to_merge; CI passed; review threads resolved) [branch:codex/issue-63-default-guided-runtime]
+- [~] #65 Harden non-TTY guided fallback and explicit age routing → PR #71 (ready_to_merge; CI passed; review threads resolved) [branch:codex/issue-63-default-guided-runtime]
 
 ### Batch 2 - v0.6.1 Docs And Dogfood
 
@@ -76,3 +76,4 @@ Make `aibris clean` the pleasing guided path for Codex worktree bloat without we
 - 2026-07-09: Prepared relay-plan artifacts for #66 (`/tmp/dispatch-66.md`, `/tmp/rubric-66.yaml`) and dry-run validated dispatch, still gated on PR #71 landing. Prepared #68 relay-ready and relay-plan artifacts (`req-20260709134834849`, `/tmp/dispatch-68.md`, `/tmp/rubric-68.yaml`) and dry-run validated design-only dispatch.
 - 2026-07-09: Prepared release handoffs and relay-plan artifacts for #67 (`req-20260709141058411`, `/tmp/dispatch-67.md`, `/tmp/rubric-67.yaml`) and #70 (`req-20260709141058572`, `/tmp/dispatch-70.md`, `/tmp/rubric-70.yaml`), with dry-run dispatch validation passing. GitHub issue comments are pending because `gh` cannot connect to `api.github.com`.
 - 2026-07-09: PR #71 received a Codex P1 review that `--force` must not auto-enter guided cleanup. Fixed on PR branch commit `e5490cc` by treating `--force` as a classic selector while preserving explicit `--guide --force`; verified `go test ./...`, `go build ./...`, `go vet ./...`, and backlog doctor locally. GitHub Actions CI passed, the Codex inline thread was replied to and resolved, and CodeRabbit is processing the new commit.
+- 2026-07-09: PR #71 received follow-up review on protected-only guided rows and a transient remote blob typo. Fixed routing to require selected guided targets before default reroute, restored the interactive skip print, and advanced PR #71 to `cdd08d0`. Local focused tests passed, GitHub Actions run `29030455743` passed on ubuntu and macOS, and all PR review threads are resolved. Next batch remains gated on PR #71 landing.
