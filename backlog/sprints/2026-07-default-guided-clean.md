@@ -26,9 +26,9 @@ Make `aibris clean` the pleasing guided path for Codex worktree bloat without we
 
 ### Batch 1 - v0.6.1 Runtime Route
 
-- [~] #63 Auto-enter guided cleanup from default clean → PR #71 (ready_to_merge)
-- [~] #64 Add --no-guide and preserve classic clean paths → PR #71 (ready_to_merge)
-- [~] #65 Harden non-TTY guided fallback and explicit age routing → PR #71 (ready_to_merge)
+- [~] #63 Auto-enter guided cleanup from default clean → PR #71 (local fix pending push) [branch:codex/issue-63-default-guided-runtime]
+- [~] #64 Add --no-guide and preserve classic clean paths → PR #71 (local fix pending push) [branch:codex/issue-63-default-guided-runtime]
+- [~] #65 Harden non-TTY guided fallback and explicit age routing → PR #71 (local fix pending push) [branch:codex/issue-63-default-guided-runtime]
 
 ### Batch 2 - v0.6.1 Docs And Dogfood
 
@@ -75,3 +75,4 @@ Make `aibris clean` the pleasing guided path for Codex worktree bloat without we
 - 2026-07-09: Captured #66 dogfood from PR #71 head: default `clean --dry-run --root ~/.codex` entered guided cleanup, selected 3 items / 3.1 GB, protected 36 items / 30.8 GB, and confirmed dry-run deletion safety. Persisted relay-ready handoff `req-20260709134455122` and commented evidence on #66.
 - 2026-07-09: Prepared relay-plan artifacts for #66 (`/tmp/dispatch-66.md`, `/tmp/rubric-66.yaml`) and dry-run validated dispatch, still gated on PR #71 landing. Prepared #68 relay-ready and relay-plan artifacts (`req-20260709134834849`, `/tmp/dispatch-68.md`, `/tmp/rubric-68.yaml`) and dry-run validated design-only dispatch.
 - 2026-07-09: Prepared release handoffs and relay-plan artifacts for #67 (`req-20260709141058411`, `/tmp/dispatch-67.md`, `/tmp/rubric-67.yaml`) and #70 (`req-20260709141058572`, `/tmp/dispatch-70.md`, `/tmp/rubric-70.yaml`), with dry-run dispatch validation passing. GitHub issue comments are pending because `gh` cannot connect to `api.github.com`.
+- 2026-07-09: PR #71 received a Codex P1 review that `--force` must not auto-enter guided cleanup. Fixed locally on PR branch commit `47d10e6` by treating `--force` as a classic selector while preserving explicit `--guide --force`, and verified `go test ./...`, `go build ./...`, `go vet ./...`, and backlog doctor. Push is pending because local git cannot resolve `github.com`; PR comment posted via GitHub connector.
