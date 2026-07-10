@@ -1,7 +1,7 @@
 ---
 id: AIB-62
 title: '[Epic] Make clean default to guided decisions'
-status: In Progress
+status: Done
 labels:
   - enhancement
   - ux
@@ -47,7 +47,7 @@ Suggested order: #63 first, #64 alongside or immediately after #63, #65 before r
 
 - [x] #68 Design TTY checklist renderer for guided clean
 - [x] #69 Implement TTY checklist UI with text fallback
-- [ ] #70 Release v0.7.0 guided checklist UI
+- [x] #70 Release v0.7.0 guided checklist UI
 
 Suggested order: #68 after the v0.6.1 route exists, #69 after #68, then #70.
 
@@ -57,4 +57,4 @@ Suggested order: #68 after the v0.6.1 route exists, #69 after #68, then #70.
 - [x] Plain `aibris clean` keeps deletion confirmation and low-risk recommendation framing.
 - [x] Explicit classic cleanup flags remain predictable and script-friendly.
 - [x] Non-TTY operation never hangs.
-- [ ] Docs, dogfood notes, version bumps, tags, and GitHub releases are complete for v0.6.1 and v0.7.0.
+- [x] Docs, dogfood notes, version bumps, tags, and GitHub releases are complete for v0.6.1 and v0.7.0.
