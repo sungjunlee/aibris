@@ -42,7 +42,7 @@ Make `aibris clean` the pleasing guided path for Codex worktree bloat without we
 
 - [x] #68 Design TTY checklist renderer for guided clean → PR #72 merged as `ad0400f`
 - [x] #69 Implement TTY checklist UI with text fallback → shared selection model, TTY checklist mode, text fallback tests
-- [~] #70 Release v0.7.0 guided checklist UI [branch:codex/issue-70-release-v0.7.0]
+- [x] #70 Release v0.7.0 guided checklist UI → PR #77 merged as `ca643c9`, tag `v0.7.0` published
 
 ## Definition Of Done
 
@@ -84,3 +84,4 @@ Make `aibris clean` the pleasing guided path for Codex worktree bloat without we
 - 2026-07-10: Squash-merged PR #72 as `ad0400f`, closing #68. Implemented #69 on `codex/issue-69-tty-checklist-ui`: shared recommended/reviewable/locked selection model, TTY checklist mode routing, projected freed-space totals, age threshold replanning, and text fallback regression tests.
 - 2026-07-10: Squash-merged PR #76 as `dd85f64`, closing #69. Started #70 release prep on `codex/issue-70-release-v0.7.0` with v0.7.0 changelog and install example updates.
 - 2026-07-10: Verified #70 release prep locally: `go test ./...`, `go build ./...`, `go vet ./...`, backlog doctor, `goreleaser release --snapshot --clean`, non-TTY dry-run dogfood, and pseudo-TTY dry-run dogfood all passed without deletion.
+- 2026-07-10: Squash-merged PR #77 as `ca643c9`, pushed annotated tag `v0.7.0`, verified release workflow `29058905357`, confirmed GitHub Release assets plus `checksums.txt`, and smoke-tested `install.sh` returning `aibris version 0.7.0`.

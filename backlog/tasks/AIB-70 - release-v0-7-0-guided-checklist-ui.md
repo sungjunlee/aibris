@@ -1,7 +1,7 @@
 ---
 id: AIB-70
 title: Release v0.7.0 guided checklist UI
-status: In Progress
+status: Done
 labels:
   - documentation
   - devops
@@ -31,4 +31,4 @@ The interactive checklist changes the main cleanup experience enough to warrant 
 - [x] Changelog/release notes describe checklist selection behavior and defaults.
 - [x] `go build ./...` passes.
 - [x] `go vet ./...` passes.
-- [ ] Git tag and GitHub release exist for v0.7.0.
+- [x] Git tag and GitHub release exist for v0.7.0.
