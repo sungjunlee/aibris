@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## [0.7.0] - 2026-07-10
+
+### Added
+- Guided Codex worktree cleanup now has a checklist selection model for
+  terminal use, separating recommended, reviewable, and locked rows.
+- The guide shows projected freed space from normalized selected targets, so
+  overlapping selections preview the same size the cleaner will act on.
+- Age threshold commands in the guided flow can replan recommendations while
+  preserving user deselect overrides where safety policy still allows them.
+
+### Changed
+- Low-risk recommendations remain selected by default, while hard-safety rows
+  stay visible as locked rows and cannot be selected.
+- Non-TTY and piped usage keep the line-oriented text fallback, including
+  checkbox markers, locked-row markers, blank-input accept, abort, and dry-run
+  no-delete behavior.
+- Real deletion still exits the guide through the existing dry-run preview and
+  final confirmation path unless the user explicitly passes `--force`.
+
 ## [0.6.1] - 2026-07-10
 
 ### Changed
