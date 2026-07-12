@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+## [0.8.0] - 2026-07-13
+
+### Added
+- Guided cleanup now groups nested Git members into one physical cleanup unit,
+  uses canonical repository identity for retention, and combines metadata-only
+  Codex session, reflog, and filesystem fallback activity evidence.
+- Git-aware active worktree removal preflights every member, preserves branch
+  refs, cleans parent worktree metadata, and reports partial failures without
+  overstating reclaimed bytes.
+
+### Changed
+- Cleanup recommendations now apply independent recent-activity, per-repository
+  retention, idle-age, and size policies; protected-only Codex pressure still
+  opens guided review with nothing preselected.
+- Missing or gone upstream state is explanatory rather than a hard lock when a
+  named ref makes the commit recoverable.
+
+### Safety
+- Dirty, unreadable, recently active, current-directory, and unreferenced
+  detached worktrees remain locked. `--force` skips only final confirmation and
+  never forces Git worktree removal or bypasses hard-safety checks.
+
 ## [0.7.0] - 2026-07-10
 
 ### Added
