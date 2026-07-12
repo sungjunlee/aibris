@@ -45,4 +45,6 @@ Planning PR: https://github.com/sungjunlee/aibris/pull/79
 
 - PRs #92, #93, #94, and #97 merged; issues #82, #83, #84, and #86 closed.
 - Controlled removal preserved branch refs and parent worktree metadata.
-- v0.8.0 validation and release workflow passed.
+- v0.8.0 validation and release workflow passed. Local validation ran
+  `go test ./...`, `go build ./...`, and `go vet ./...`; PR #102 CI run
+  `29201757156` passed on Ubuntu and macOS.

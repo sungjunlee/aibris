@@ -1,7 +1,7 @@
 ---
 id: AIB-82
 title: Model physical cleanup units and nested Git members
-status: To Do
+status: Done
 labels:
   - enhancement
   - scanner
@@ -9,6 +9,7 @@ labels:
 priority: medium
 milestone: Evidence-Based Worktree Reclamation
 created_date: '2026-07-12'
+completed_date: '2026-07-13'
 ---
 ## Description
 ## Parent
@@ -30,7 +31,7 @@ None
 
 ## Acceptance Criteria
 
-- [ ] Direct, nested, duplicate, and two-member fixtures produce deterministic units.
-- [ ] A two-member target yields one physical target and two safety members.
-- [ ] Context cancellation and bounded discovery remain enforced.
-- [ ] Existing scan JSON compatibility tests pass.
+- [x] Direct, nested, duplicate, and two-member fixtures produce deterministic units.
+- [x] A two-member target yields one physical target and two safety members.
+- [x] Context cancellation and bounded discovery remain enforced.
+- [x] Existing scan JSON compatibility tests pass.
