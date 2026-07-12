@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,7 +22,13 @@ type WorktreeCleanupUnit struct {
 // GitWorktreeMember identifies an actual direct or one-level nested Git
 // worktree contained by a cleanup unit.
 type GitWorktreeMember struct {
-	WorktreePath string
+	WorktreePath      string
+	RepositoryID      string
+	DisplayRepository string
+	// EvidenceAvailable currently reports whether repository identity metadata
+	// was resolved. Later Git evidence stages can fail closed from this seam.
+	EvidenceAvailable bool
+	EvidenceError     string
 }
 
 type worktreeCleanupUnitRows struct {
@@ -74,8 +79,8 @@ func BuildWorktreeCleanupUnits(items []types.DebrisInfo) ([]WorktreeCleanupUnit,
 }
 
 func discoverGitWorktreeMembers(targetPath string) ([]GitWorktreeMember, error) {
-	if isGitWorktreeMember(targetPath) {
-		return []GitWorktreeMember{{WorktreePath: targetPath}}, nil
+	if hasGitWorktreeMetadata(targetPath) {
+		return []GitWorktreeMember{buildGitWorktreeMember(targetPath)}, nil
 	}
 
 	entries, err := os.ReadDir(targetPath)
@@ -89,7 +94,7 @@ func discoverGitWorktreeMembers(targetPath string) ([]GitWorktreeMember, error) 
 			continue
 		}
 		memberPath := filepath.Join(targetPath, entry.Name())
-		if !isGitWorktreeMember(memberPath) {
+		if !hasGitWorktreeMetadata(memberPath) {
 			continue
 		}
 		canonicalPath, ok := cleanTargetPathKey(memberPath)
@@ -106,30 +111,116 @@ func discoverGitWorktreeMembers(targetPath string) ([]GitWorktreeMember, error) 
 
 	members := make([]GitWorktreeMember, 0, len(paths))
 	for _, path := range paths {
-		members = append(members, GitWorktreeMember{WorktreePath: path})
+		members = append(members, buildGitWorktreeMember(path))
 	}
 	return members, nil
 }
 
-func isGitWorktreeMember(path string) bool {
+func hasGitWorktreeMetadata(path string) bool {
 	gitFilePath := filepath.Join(path, ".git")
-	info, err := os.Stat(gitFilePath)
-	if err != nil || info.IsDir() {
-		return false
-	}
+	info, err := os.Lstat(gitFilePath)
+	return err == nil && (info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0)
+}
 
-	file, err := os.Open(gitFilePath)
+func buildGitWorktreeMember(worktreePath string) GitWorktreeMember {
+	member := GitWorktreeMember{WorktreePath: worktreePath}
+	repositoryID, displayRepository, err := resolveRepositoryIdentity(worktreePath)
 	if err != nil {
-		return false
+		member.EvidenceError = err.Error()
+		return member
 	}
-	defer file.Close()
 
-	scanner := bufio.NewScanner(file)
-	if !scanner.Scan() {
-		return false
+	member.RepositoryID = repositoryID
+	member.DisplayRepository = displayRepository
+	member.EvidenceAvailable = true
+	return member
+}
+
+func resolveRepositoryIdentity(worktreePath string) (string, string, error) {
+	gitFilePath := filepath.Join(worktreePath, ".git")
+	gitDirValue, err := readSingleGitMetadataPath(gitFilePath, "gitdir: ")
+	if err != nil {
+		return "", "", err
 	}
-	line := strings.TrimSpace(scanner.Text())
-	return strings.HasPrefix(line, "gitdir: ") && strings.TrimSpace(strings.TrimPrefix(line, "gitdir: ")) != ""
+	gitDirPath := gitDirValue
+	if !filepath.IsAbs(gitDirPath) {
+		gitDirPath = filepath.Join(worktreePath, gitDirPath)
+	}
+	canonicalGitDir, err := canonicalGitDirectory(gitDirPath)
+	if err != nil {
+		return "", "", fmt.Errorf("unreadable Git metadata: resolving git-dir %q: %w", gitDirPath, err)
+	}
+
+	commonDirPath := canonicalGitDir
+	commonDirFile := filepath.Join(canonicalGitDir, "commondir")
+	if _, err := os.Lstat(commonDirFile); err == nil {
+		commonDirValue, err := readSingleGitMetadataPath(commonDirFile, "")
+		if err != nil {
+			return "", "", err
+		}
+		commonDirPath = commonDirValue
+		if !filepath.IsAbs(commonDirPath) {
+			commonDirPath = filepath.Join(canonicalGitDir, commonDirPath)
+		}
+	} else if !os.IsNotExist(err) {
+		return "", "", fmt.Errorf("unreadable Git metadata: inspecting %q: %w", commonDirFile, err)
+	}
+
+	canonicalCommonDir, err := canonicalGitDirectory(commonDirPath)
+	if err != nil {
+		return "", "", fmt.Errorf("unreadable Git metadata: resolving common-dir %q: %w", commonDirPath, err)
+	}
+	return canonicalCommonDir, displayRepositoryName(canonicalCommonDir), nil
+}
+
+func readSingleGitMetadataPath(path, prefix string) (string, error) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("unreadable Git metadata: reading %q: %w", path, err)
+	}
+
+	value := strings.TrimSpace(string(content))
+	lines := strings.Split(value, "\n")
+	if value == "" || len(lines) != 1 {
+		return "", fmt.Errorf("ambiguous Git metadata: %q must contain exactly one path", path)
+	}
+	line := strings.TrimSpace(strings.TrimSuffix(lines[0], "\r"))
+	if prefix != "" {
+		if !strings.HasPrefix(line, prefix) {
+			return "", fmt.Errorf("ambiguous Git metadata: %q does not contain a valid %sentry", path, prefix)
+		}
+		line = strings.TrimSpace(strings.TrimPrefix(line, prefix))
+	}
+	if line == "" {
+		return "", fmt.Errorf("ambiguous Git metadata: %q contains an empty path", path)
+	}
+	return line, nil
+}
+
+func canonicalGitDirectory(path string) (string, error) {
+	absolute, err := filepath.Abs(filepath.Clean(path))
+	if err != nil {
+		return "", err
+	}
+	resolved, err := filepath.EvalSymlinks(absolute)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(resolved)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("not a directory")
+	}
+	return filepath.Clean(resolved), nil
+}
+
+func displayRepositoryName(commonDir string) string {
+	if filepath.Base(commonDir) == ".git" {
+		return filepath.Base(filepath.Dir(commonDir))
+	}
+	return filepath.Base(commonDir)
 }
 
 func cleanupUnitSize(items []types.DebrisInfo) int64 {
