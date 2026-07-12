@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/sungjunlee/aibris/internal/types"
 )
 
 const (
@@ -22,6 +24,44 @@ type worktreeGitSafety struct {
 }
 
 type worktreeGitCommandRunner func(ctx context.Context, dir string, args ...string) ([]byte, error)
+
+// inspectActiveWorktreeCleanupSafety uses the same member discovery and Git
+// recoverability evidence as the active-worktree executor. The legacy
+// upstream comparison remains as a compatibility fallback for cached fixtures
+// that describe a regular repository rather than a linked worktree.
+func inspectActiveWorktreeCleanupSafety(ctx context.Context, candidatePath string) worktreeGitSafety {
+	units, err := buildWorktreeCleanupUnits(ctx, []types.DebrisInfo{{
+		Category: types.CategoryWorktree,
+		Path:     candidatePath,
+	}})
+	if err != nil {
+		return protectedWorktreeGitSafety(gitProtectionGitStatusUnavailable)
+	}
+	if len(units) == 0 {
+		return inspectWorktreeGitState(ctx, candidatePath)
+	}
+	if len(units) != 1 {
+		return protectedWorktreeGitSafety(gitProtectionGitStatusUnavailable)
+	}
+
+	unit := units[0]
+	reasons := make([]string, 0, len(unit.HardLockReasons))
+	for _, reason := range unit.HardLockReasons {
+		reasons = appendGitProtectionReason(reasons, gitEvidenceProtectionReason(reason))
+	}
+	return worktreeGitSafety{Protected: unit.HardLocked, ProtectionReasons: reasons}
+}
+
+func gitEvidenceProtectionReason(reason GitEvidenceReason) string {
+	switch reason.Code {
+	case GitReasonDirtyWorktree:
+		return gitProtectionDirtyFiles
+	case GitReasonEvidenceUnavailable:
+		return gitProtectionGitStatusUnavailable
+	default:
+		return reason.Description
+	}
+}
 
 func inspectWorktreeGitState(ctx context.Context, candidatePath string) worktreeGitSafety {
 	return inspectWorktreeGitStateWithRunner(ctx, candidatePath, runWorktreeGitCommand)

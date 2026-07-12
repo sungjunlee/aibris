@@ -64,7 +64,7 @@ func buildGuidedCleanState(ctx context.Context, result *types.ScanResult, source
 	return newGuidedCleanStateFromPlanInput(source, reason, input)
 }
 
-func runGuidedCodexClean(opts types.PruneOptions, state guidedCleanState) error {
+func runGuidedCodexClean(ctx context.Context, opts types.PruneOptions, state guidedCleanState) error {
 	targets, aborted, err := promptGuidedCleanForFiles(os.Stdin, os.Stdout, state)
 	if err != nil || aborted {
 		return err
@@ -80,10 +80,12 @@ func runGuidedCodexClean(opts types.PruneOptions, state guidedCleanState) error 
 		fmt.Fprintln(os.Stdout, "[DRY-RUN] No files were removed.")
 		return nil
 	}
+	prepared := prepareCleanExecution(ctx, targets)
 
 	if opts.Interactive {
-		total := interactiveClean(targets)
-		fmt.Printf("Cleaned %d items, freed %s\n", len(targets), cleaner.FormatSize(total))
+		receipt := interactiveClean(ctx, prepared)
+		printWorktreeExecutionReceipts(receipt)
+		printGuidedCleanupReceipt(len(targets), receipt)
 		return nil
 	}
 	if !opts.Force {
@@ -91,11 +93,12 @@ func runGuidedCodexClean(opts types.PruneOptions, state guidedCleanState) error 
 			return nil
 		}
 	}
-	total, err := cleaner.Execute(targets)
+	receipt, err := executePreparedCleanTargets(ctx, prepared, defaultActiveWorktreeExecutionOptions())
+	printWorktreeExecutionReceipts(receipt)
+	printGuidedCleanupReceipt(len(targets), receipt)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Cleaned %d items, freed %s\n", len(targets), cleaner.FormatSize(total))
 	return nil
 }
 
@@ -109,7 +112,7 @@ func promptGuidedCleanForFiles(input *os.File, output *os.File, state guidedClea
 func inspectGuidedCodexGitSafety(ctx context.Context, items []types.DebrisInfo) map[string]worktreeGitSafety {
 	safety := make(map[string]worktreeGitSafety)
 	for _, item := range activeCodexWorktrees(items) {
-		safety[item.Path] = inspectWorktreeGitState(ctx, item.Path)
+		safety[item.Path] = inspectActiveWorktreeCleanupSafety(ctx, item.Path)
 		if path, ok := cleanTargetPathKey(item.Path); ok {
 			safety[path] = safety[item.Path]
 		}

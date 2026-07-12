@@ -113,6 +113,12 @@ func ExecuteWithContext(ctx context.Context, worktrees []types.DebrisInfo) (int6
 		if err := ctx.Err(); err != nil {
 			return total, err
 		}
+		if w.Category == types.CategoryWorktree && w.Status == types.WorktreeActive {
+			err := fmt.Errorf("active worktree %q requires Git-aware removal", w.Path)
+			errs = append(errs, err)
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			continue
+		}
 		if !IsSafeTarget(home, w) {
 			errs = append(errs, fmt.Errorf("unsafe path %q rejected", w.Path))
 			fmt.Fprintf(os.Stderr, "error: unsafe path %q rejected\n", w.Path)
