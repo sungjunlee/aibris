@@ -7,7 +7,7 @@ AI-workflow artifact without broad filesystem cleanup.
 
 | Category | Default clean | Risk | Description |
 |----------|---------------|------|-------------|
-| `worktree` | orphaned only | low | Temporary Git worktrees discovered under `$HOME` by worktree directory conventions and validated `.git` metadata. Active worktrees are excluded unless `--include-active-worktrees` is set. |
+| `worktree` | classic: orphaned only; guided Codex: evidence-based | low | Temporary Git worktrees discovered under `$HOME` by worktree directory conventions and validated `.git` metadata. Classic filters exclude active worktrees unless `--include-active-worktrees` is set; guided Codex review may recommend safe linked units. |
 | `node_modules` | yes | medium | Project dependency folders under `$HOME` scan roots. They can be recreated with package managers. |
 | `build-cache` | yes | medium | Go, Xcode, Gradle, npm, and Cargo caches. They are usually safe but may slow the next build. |
 | `other-cache` | yes | low | pip and uv package caches. |
@@ -38,7 +38,7 @@ rules.
 aibris clean --category worktree --tool codex --age 7d --dry-run
 ```
 
-This command means:
+This explicit selector uses classic cleanup and means:
 
 - category must be `worktree`
 - tool must be `codex`
@@ -48,6 +48,15 @@ This command means:
 
 Empty `--category` means all categories allowed by `--risky`. Empty `--tool`
 means all tools.
+
+With no classic selector, plain `clean` uses guided Codex review when validated
+active pressure reaches 256 MB or three physical units. Guided cleanup groups
+members by physical target, groups retention by canonical Git common-dir, and
+classifies rows as recommended, reviewable, or locked. Its independent defaults
+are a 6-hour recent-activity hard lock, three retained units per repository, a
+3-day minimum idle age, and a 256 MB recommendation threshold. Missing upstream
+does not lock a row; dirty state, unavailable evidence, and an unreferenced
+detached HEAD do.
 
 Scan roots default to `$HOME`. Use repeatable `--root` flags to narrow scope:
 
@@ -78,11 +87,14 @@ The intended AI-guided cleanup loop is:
 
 ```bash
 aibris scan --json
-aibris clean --category <category> --tool <tool> --age <duration> --dry-run
-aibris clean --category <category> --tool <tool> --age <duration>
+aibris clean --dry-run
+aibris clean
 ```
 
 Agents should summarize worktrees by `source`, `project`, and `status`, ask the
-user what to remove, run a dry-run first, and only execute cleanup after a
-second explicit confirmation. Active worktrees need explicit user intent and
-`--include-active-worktrees`.
+user what to remove, use guided evidence for active Codex worktrees, run a
+dry-run first, and only execute cleanup after a second explicit confirmation.
+Classic active cleanup still needs `--include-active-worktrees`; guided active
+cleanup needs an explicitly accepted recommended or reviewable row. Active
+members are removed through non-forced Git worktree semantics with branch-ref
+and parent-metadata verification.
