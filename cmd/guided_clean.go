@@ -112,7 +112,7 @@ func promptGuidedCleanForFiles(input *os.File, output *os.File, state guidedClea
 func inspectGuidedCodexGitSafety(ctx context.Context, items []types.DebrisInfo) map[string]worktreeGitSafety {
 	safety := make(map[string]worktreeGitSafety)
 	for _, item := range activeCodexWorktrees(items) {
-		safety[item.Path] = inspectWorktreeGitState(ctx, item.Path)
+		safety[item.Path] = inspectActiveWorktreeCleanupSafety(ctx, item.Path)
 		if path, ok := cleanTargetPathKey(item.Path); ok {
 			safety[path] = safety[item.Path]
 		}

@@ -384,7 +384,7 @@ func filterExistingTargets(targets []types.DebrisInfo) []types.DebrisInfo {
 type worktreeGitInspector func(context.Context, string) worktreeGitSafety
 
 func filterGitUnsafeActiveWorktreeTargets(ctx context.Context, targets []types.DebrisInfo) ([]types.DebrisInfo, map[string]cleanAuditReason) {
-	return filterGitUnsafeActiveWorktreeTargetsWithInspector(ctx, targets, inspectWorktreeGitState)
+	return filterGitUnsafeActiveWorktreeTargetsWithInspector(ctx, targets, inspectActiveWorktreeCleanupSafety)
 }
 
 func filterGitUnsafeActiveWorktreeTargetsWithInspector(ctx context.Context, targets []types.DebrisInfo, inspector worktreeGitInspector) ([]types.DebrisInfo, map[string]cleanAuditReason) {
