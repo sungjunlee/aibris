@@ -1,7 +1,7 @@
 ---
 id: AIB-90
 title: Dogfood Git-aware reclamation and refresh documentation
-status: To Do
+status: Done
 labels:
   - documentation
   - docs
@@ -9,6 +9,7 @@ labels:
 priority: medium
 milestone: Evidence-Based Worktree Reclamation
 created_date: '2026-07-12'
+completed_date: '2026-07-13'
 ---
 ## Description
 ## Parent
@@ -29,9 +30,9 @@ created_date: '2026-07-12'
 
 ## Acceptance Criteria
 
-- [ ] Missing upstream accounts for zero locked rows in dogfood.
-- [ ] Dirty and unreferenced detached states remain locked.
-- [ ] Multi-member units are inspected rather than generically unavailable.
-- [ ] At least 10 GB is recommended on the preserved baseline shape.
-- [ ] Branch refs and parent worktree metadata are verified after controlled removal.
-- [ ] Docs match shipped command behavior.
+- [x] Missing upstream accounts for zero locked rows in dogfood.
+- [x] Dirty and unreferenced detached states remain locked.
+- [x] Multi-member units are inspected rather than generically unavailable.
+- [x] At least 10 GB is recommended on the preserved baseline shape.
+- [x] Branch refs and parent worktree metadata are verified after controlled removal.
+- [x] Docs match shipped command behavior.

@@ -1,7 +1,7 @@
 ---
 id: AIB-87
 title: Implement hierarchical retention and recommendation policy
-status: To Do
+status: Done
 labels:
   - enhancement
   - ux
@@ -10,6 +10,7 @@ labels:
 priority: medium
 milestone: Evidence-Based Worktree Reclamation
 created_date: '2026-07-12'
+completed_date: '2026-07-13'
 ---
 ## Description
 ## Parent
@@ -31,8 +32,8 @@ created_date: '2026-07-12'
 
 ## Acceptance Criteria
 
-- [ ] Activity within 6 hours is locked regardless of --age.
-- [ ] The three most recent units per canonical repository are reviewable.
-- [ ] The fourth safe old large unit becomes recommended.
-- [ ] Historical session existence alone does not protect forever.
-- [ ] A multi-repository unit is retained when top-3 in any member repository.
+- [x] Activity within 6 hours is locked regardless of --age.
+- [x] The three most recent units per canonical repository are reviewable.
+- [x] The fourth safe old large unit becomes recommended.
+- [x] Historical session existence alone does not protect forever.
+- [x] A multi-repository unit is retained when top-3 in any member repository.

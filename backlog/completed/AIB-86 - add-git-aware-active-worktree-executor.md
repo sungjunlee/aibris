@@ -1,7 +1,7 @@
 ---
 id: AIB-86
 title: Add Git-aware active worktree executor
-status: To Do
+status: Done
 labels:
   - enhancement
   - cli
@@ -9,6 +9,7 @@ labels:
 priority: medium
 milestone: Evidence-Based Worktree Reclamation
 created_date: '2026-07-12'
+completed_date: '2026-07-13'
 ---
 ## Description
 ## Parent
@@ -31,9 +32,9 @@ created_date: '2026-07-12'
 
 ## Acceptance Criteria
 
-- [ ] Attached local-only branch refs and OIDs survive removal.
-- [ ] Referenced detached commits remain reachable.
-- [ ] Git-aware failure never falls back to raw active-path deletion.
-- [ ] Failed multi-member preflight removes nothing.
-- [ ] Receipts do not overstate bytes for partially removed units.
-- [ ] CLI --force does not become Git removal force.
+- [x] Attached local-only branch refs and OIDs survive removal.
+- [x] Referenced detached commits remain reachable.
+- [x] Git-aware failure never falls back to raw active-path deletion.
+- [x] Failed multi-member preflight removes nothing.
+- [x] Receipts do not overstate bytes for partially removed units.
+- [x] CLI --force does not become Git removal force.

@@ -1,13 +1,14 @@
 ---
 id: AIB-84
 title: Replace upstream safety with ref reachability
-status: To Do
+status: Done
 labels:
   - enhancement
   - safety
 priority: medium
 milestone: Evidence-Based Worktree Reclamation
 created_date: '2026-07-12'
+completed_date: '2026-07-13'
 ---
 ## Description
 ## Parent
@@ -28,8 +29,8 @@ created_date: '2026-07-12'
 
 ## Acceptance Criteria
 
-- [ ] A clean named branch without upstream is not locked.
-- [ ] A gone upstream does not independently lock a row.
-- [ ] Referenced detached HEAD proceeds to soft policy.
-- [ ] Unreferenced detached HEAD and dirty/untracked state remain locked.
-- [ ] Stable reason codes cover every evidence result.
+- [x] A clean named branch without upstream is not locked.
+- [x] A gone upstream does not independently lock a row.
+- [x] Referenced detached HEAD proceeds to soft policy.
+- [x] Unreferenced detached HEAD and dirty/untracked state remain locked.
+- [x] Stable reason codes cover every evidence result.

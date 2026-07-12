@@ -1,7 +1,7 @@
 ---
 id: AIB-88
 title: Reclassify guided rows and orthogonalize age controls
-status: To Do
+status: Done
 labels:
   - enhancement
   - ux
@@ -10,6 +10,7 @@ labels:
 priority: medium
 milestone: Evidence-Based Worktree Reclamation
 created_date: '2026-07-12'
+completed_date: '2026-07-13'
 ---
 ## Description
 ## Parent
@@ -30,8 +31,8 @@ created_date: '2026-07-12'
 
 ## Acceptance Criteria
 
-- [ ] Recent activity is locked, not reviewable.
-- [ ] Upstream absence never maps directly to locked.
-- [ ] Age replanning cannot unlock recent or unrecoverable state.
-- [ ] User overrides survive replanning when rows remain selectable.
-- [ ] TTY and text modes show identical class and reason.
+- [x] Recent activity is locked, not reviewable.
+- [x] Upstream absence never maps directly to locked.
+- [x] Age replanning cannot unlock recent or unrecoverable state.
+- [x] User overrides survive replanning when rows remain selectable.
+- [x] TTY and text modes show identical class and reason.

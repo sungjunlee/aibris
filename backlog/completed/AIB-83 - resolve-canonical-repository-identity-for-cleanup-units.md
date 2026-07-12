@@ -1,7 +1,7 @@
 ---
 id: AIB-83
 title: Resolve canonical repository identity for cleanup units
-status: To Do
+status: Done
 labels:
   - enhancement
   - scanner
@@ -9,6 +9,7 @@ labels:
 priority: medium
 milestone: Evidence-Based Worktree Reclamation
 created_date: '2026-07-12'
+completed_date: '2026-07-13'
 ---
 ## Description
 ## Parent
@@ -29,7 +30,7 @@ created_date: '2026-07-12'
 
 ## Acceptance Criteria
 
-- [ ] Differently named worktrees from one repository share an identity.
-- [ ] Same-basename repositories remain distinct.
-- [ ] Multi-repository units expose every member repository deterministically.
-- [ ] Retention inputs no longer depend on path-derived project labels.
+- [x] Differently named worktrees from one repository share an identity.
+- [x] Same-basename repositories remain distinct.
+- [x] Multi-repository units expose every member repository deterministically.
+- [x] Retention inputs no longer depend on path-derived project labels.

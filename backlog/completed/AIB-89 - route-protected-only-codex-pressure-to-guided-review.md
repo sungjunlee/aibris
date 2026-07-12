@@ -1,7 +1,7 @@
 ---
 id: AIB-89
 title: Route protected-only Codex pressure to guided review
-status: To Do
+status: Done
 labels:
   - enhancement
   - ux
@@ -9,6 +9,7 @@ labels:
 priority: medium
 milestone: Evidence-Based Worktree Reclamation
 created_date: '2026-07-12'
+completed_date: '2026-07-13'
 ---
 ## Description
 ## Parent
@@ -29,8 +30,8 @@ created_date: '2026-07-12'
 
 ## Acceptance Criteria
 
-- [ ] Protected-only high-pressure state opens guided review with zero selected.
-- [ ] Enter with zero selected performs no preview or deletion.
-- [ ] Explicit classic selectors and --no-guide remain classic.
-- [ ] Non-TTY input never hangs.
-- [ ] --dry-run remains delete-free.
+- [x] Protected-only high-pressure state opens guided review with zero selected.
+- [x] Enter with zero selected performs no preview or deletion.
+- [x] Explicit classic selectors and --no-guide remain classic.
+- [x] Non-TTY input never hangs.
+- [x] --dry-run remains delete-free.

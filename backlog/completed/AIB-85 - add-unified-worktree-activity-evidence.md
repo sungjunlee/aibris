@@ -1,7 +1,7 @@
 ---
 id: AIB-85
 title: Add unified worktree activity evidence
-status: To Do
+status: Done
 labels:
   - enhancement
   - cli
@@ -9,6 +9,7 @@ labels:
 priority: medium
 milestone: Evidence-Based Worktree Reclamation
 created_date: '2026-07-12'
+completed_date: '2026-07-13'
 ---
 ## Description
 ## Parent
@@ -30,7 +31,7 @@ created_date: '2026-07-12'
 
 ## Acceptance Criteria
 
-- [ ] Session, reflog, and fallback precedence is deterministic.
-- [ ] A multi-member unit uses the newest member activity.
-- [ ] Activity-index outage fails closed for automatic recommendation.
-- [ ] Context cancellation and cache behavior are tested.
+- [x] Session, reflog, and fallback precedence is deterministic.
+- [x] A multi-member unit uses the newest member activity.
+- [x] Activity-index outage fails closed for automatic recommendation.
+- [x] Context cancellation and cache behavior are tested.
