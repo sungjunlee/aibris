@@ -16,7 +16,7 @@ confirmation path before deletion.
 ## Non-goals
 
 - General Mac system maintenance, app uninstall, daemon scheduling, or GUI.
-- Git worktree creation or repository management.
+- Git worktree creation, branch deletion, or arbitrary repository management.
 - Deleting arbitrary user-provided paths.
 - Broad system cleanup outside development debris conventions.
 - Automatic inference that recent or ambiguous files are safe to delete.
@@ -66,7 +66,7 @@ Flags:
 
 | Flag | Default | Behavior |
 |------|---------|----------|
-| `--age`, `-a` | `7d` | Only include items older than this duration. Supports `h`, `d`, `w`, `mo`, and `y`; Go duration units such as `m` and `s` are also accepted. Must be positive. |
+| `--age`, `-a` | `7d` | Classic cleanup includes only items older than this duration. In guided cleanup an explicit value changes only the minimum idle age. Supports `h`, `d`, `w`, `mo`, and `y`; Go duration units such as `m` and `s` are also accepted. Must be positive. |
 | `--category`, `-c` | empty | Comma-separated category filter. Empty means all categories allowed by `--risky`. |
 | `--tool`, `-t` | empty | Comma-separated tool filter. Empty means all tools. |
 | `--root` | `$HOME` | Repeatable scan root. Each root must resolve under `$HOME`. |
@@ -74,23 +74,28 @@ Flags:
 | `--interactive`, `-i` | `false` | Confirm each item before deleting. |
 | `--risky` | `false` | Include risky categories such as AI logs. |
 | `--include-active-worktrees` | `false` | Include active Git worktrees in cleanup candidates. |
-| `--force`, `-f` | `false` | Skip the final confirmation prompt. |
-| `--guide` | `false` | Force the guided Codex worktree cleanup flow. When category/tool filters are omitted, it implies `--category worktree --tool codex`. When age is omitted, it uses the guided 1-day review window; explicit `--age` values are respected. |
-| `--no-guide` | `false` | Keep the classic cleanup audit/executor route even when useful guided Codex worktree recommendations are available. |
+| `--force`, `-f` | `false` | Skip the final confirmation prompt. It does not bypass hard locks or force Git worktree removal. |
+| `--guide` | `false` | Force the guided Codex worktree cleanup flow. When category/tool filters are omitted, it implies `--category worktree --tool codex`. When age is omitted, guided cleanup uses a 3-day minimum idle age; explicit `--age` changes only that value. |
+| `--no-guide` | `false` | Keep the classic cleanup audit/executor route even when active Codex pressure would open guided review. |
 
 Behavior:
 
 1. Parse and validate `--age`.
 2. Warn when `--age` is shorter than one hour.
 3. Obtain scan results from a fresh compatible scan cache or by scanning providers.
-4. Filter by age, category, tool, risky status, and worktree health.
+4. Choose guided or classic cleanup. Classic cleanup filters by age, category,
+   tool, risky status, and worktree health. Guided cleanup builds physical
+   cleanup units, collects Git and activity evidence, and applies the
+   hierarchical policy below.
 5. Print a cleanup audit with policy, scan source, eligible totals, and skipped reasons.
 6. If no targets match, print `No items to clean.` and exit 0.
 7. If `--dry-run` is set, print targets and total candidate space without deleting.
 8. If `--interactive` is set, ask per item.
 9. If not forced, print the target plan and ask for one final confirmation.
-10. Delete targets through cleaner safety checks.
-11. Print a cleanup receipt with target count, freed bytes, and protected/skipped totals.
+10. Delete ordinary and orphaned targets through cleaner safety checks. Delete
+    active worktree members through the Git-aware executor.
+11. Print a cleanup receipt with removed, partial, and failed unit counts,
+    truthful freed bytes, and protected/skipped totals.
 
 Command-backed cleanup:
 
@@ -107,32 +112,77 @@ Human `clean` output must include a cleanup audit before deletion:
 - scan summary with found, eligible, and protected/skipped totals
 - category rows with found, eligible, protected/skipped, and main reason
 - target plan with reason text before confirmation or dry-run completion
-- cleanup receipt after execution that reports target count and freed bytes without claiming per-item success counts
+- cleanup receipt after execution with removed, partial, and failed unit counts,
+  truthful freed bytes, and protected/skipped totals
 
 The audit is human output only. `scan --json` remains the machine-readable surface for agents and scripts.
 
 Default guided Codex worktree cleanup:
 
-- Plain `clean` and `clean --dry-run` build a selected/protected plan for
-  active Codex worktrees when no classic selector is supplied and useful guided
-  recommendations exist.
+- Plain `clean` and `clean --dry-run` build a guided plan when no classic
+  selector is supplied, at least one validated active Codex cleanup unit exists,
+  and pressure is at least 256 MB or three units. Routing does not require an
+  initially recommended row, so protected-only pressure is still reviewable.
 - Classic selectors such as `--category`, `--tool`, `--risky`,
   `--include-active-worktrees`, `--interactive`, and `--force` keep the classic
   cleanup route unless `--guide` is explicit.
 - `--root` only narrows scan scope; it does not disable default guided routing.
 - `--no-guide` disables the default guided route and keeps the classic audit.
 - `--guide` explicitly forces guided Codex worktree cleanup.
-- Selected rows are conservative low-risk recommendations, not automatic
-  deletion. Protected rows remain visible and can be toggled by number.
+- `recommended` rows start selected. `reviewable` rows are soft-policy holds and
+  may be toggled. `locked` rows remain visible and cannot be selected.
 - The planner must fail closed when Codex activity or git safety evidence is
   unavailable or unsafe.
 - Codex activity uses metadata only: session metadata, working-directory paths,
   timestamps, and cache file metadata. It must not read conversation bodies.
-- Git safety protects current working directories, dirty worktrees, unpushed
-  commits, and unknown upstream comparisons.
+- Git safety protects current working directories, dirty or untracked members,
+  unreadable evidence, and detached HEADs not reachable from named refs.
+  Missing or gone upstream is explanatory metadata, not a lock. An attached
+  local branch remains recoverable without an upstream.
 - Pressing Enter renders the existing dry-run target plan for selected rows.
 - Real deletion still requires confirmation unless `--force` is explicitly set;
   `--dry-run` never deletes.
+
+Guided cleanup unit and policy contract:
+
+- One canonical target path is one physical cleanup unit, counted and removed
+  once. Every direct or one-level nested `.git` member is inspected; any hard
+  failure locks the entire unit.
+- Canonical, symlink-resolved Git common-dir is repository identity. Display
+  project names do not control retention, and a multi-repository unit is
+  retained when any member repository retains it.
+- Member activity is the maximum trusted timestamp from matching Codex session
+  metadata, per-worktree HEAD reflog, and scanner metadata fallback. Codex
+  activity availability remains a separate required signal.
+- Policy order is hard lock, recent-three repository retention, minimum idle
+  age, minimum size, then recommendation.
+- Hard locks are: current working directory containment; dirty or untracked
+  members; unavailable Git or Codex activity evidence; detached HEAD not
+  reachable from a named local or remote ref; and activity within 6 hours.
+- The three most recent units per canonical repository are reviewable. Ranking
+  includes locked units and is deterministic by activity then stable unit key.
+- The guided minimum idle age defaults to 3 days and the recommendation size to
+  256 MB. Younger or smaller safe units are reviewable.
+- Explicit `--age` and prompt age controls change only minimum idle age. They do
+  not alter the 6-hour lock or recent-three ranking. User selection overrides
+  survive replanning while a row remains selectable.
+
+Git-aware active execution contract:
+
+- Capture repository identity, HEAD, refs, and member set before confirmation;
+  rebuild and compare them immediately before mutation.
+- Preflight every member before removing any member. A changed HEAD, new or
+  missing member, dirty state, CWD containment, or lost recoverability aborts
+  the whole unit before mutation.
+- Remove each active member with `git --git-dir=<common-dir> worktree remove
+  <path>`, without `--force`. Never fall back to raw recursive deletion when
+  this command fails.
+- After removal, verify the member path and parent worktree metadata are gone,
+  attached branch refs still resolve to the captured OID, and a captured named
+  ref still reaches a detached HEAD.
+- For a partial multi-member failure, stop, preserve the remaining container,
+  identify each removed and remaining member, and credit no bytes unless the
+  physical unit is gone.
 
 ### FR4 - AI-guided Skill Workflow
 
@@ -140,13 +190,17 @@ Default guided Codex worktree cleanup:
 
 1. Run `aibris scan --json`.
 2. Summarize by project, category, size, and age.
-3. For active Codex worktree bloat, prefer `aibris clean --dry-run` so the
-   user can review low-risk defaults and protected rows through the default
-   guided route.
+3. For an unscoped active Codex worktree cleanup, use the separate no-selector
+   guided branch: preview with `aibris clean --dry-run`, ask again, and execute
+   with `aibris clean` only after the user approves the guided selection.
 4. For ordinary cleanup groups, ask the user which groups to remove.
-5. Run `aibris clean ... --dry-run`.
-6. Ask for confirmation again.
-7. Run `aibris clean ...` only after explicit approval.
+5. For a scoped cleanup, build the command from every approved `--category`,
+   `--tool`, repeatable `--root`, and `--age` value and every applicable routing
+   or safety flag.
+6. Run that exact scoped command with `--dry-run` appended.
+7. Ask for confirmation again.
+8. Run the exact same scoped command after explicit approval, removing only
+   `--dry-run`. Never replace it with plain `aibris clean`.
 
 ## Supported Categories
 
@@ -160,17 +214,19 @@ Default guided Codex worktree cleanup:
 
 ## Worktree Health
 
-`WorktreeAdapter` detects Git worktree health by reading `.git` files:
+`WorktreeAdapter` detects linked Git metadata health by reading `.git` files:
 
 | Status | Meaning |
 |--------|---------|
-| `active` | `.git` exists and parent repository metadata still exists. |
+| `active` | `.git` exists and parent repository metadata still exists. This means linked, not recently used. |
 | `orphaned` | `.git` exists but parent repository metadata is gone. |
 | `plain-dir` | No valid worktree metadata was found. |
 
 Cleanup excludes `active` worktrees by default. `orphaned` worktrees remain
 eligible when age/category/tool filters match. Use `--include-active-worktrees`
-to intentionally include active worktrees.
+to intentionally include active worktrees in classic cleanup. The default
+guided Codex route may recommend linked active units only after the cleanup-unit
+policy passes.
 
 Worktree discovery is convention-based rather than a fixed tool list. Hidden
 owner directories are intentionally allowed when they contain worktree roots,
@@ -207,7 +263,14 @@ deduplicated, and collapsed when one root is nested inside another.
 - `node_modules` discovered under valid home-scoped scan roots must remain
   eligible for cleanup safety checks.
 - Risky categories must be excluded unless `--risky` is set.
-- Active worktrees must be excluded unless `--include-active-worktrees` is set.
+- Classic cleanup must exclude active worktrees unless
+  `--include-active-worktrees` is set. Guided Codex recommendations instead
+  require cleanup-unit hard safety.
+- Active worktree execution must preserve branch refs, revalidate the full
+  member set, use non-forced Git worktree removal, and fail closed without raw
+  path fallback.
+- `--force` must only skip final confirmation; it must not unlock rows or become
+  Git's force option.
 - Command-backed cleanup must use argv-only execution and context cancellation.
 - `--dry-run` must never delete.
 - `clean` must ask for confirmation unless `--force` or `--interactive` is set.
