@@ -304,30 +304,13 @@ func createCleanCodexGitWorktree(t *testing.T, home, id string) string {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git unavailable")
 	}
-	remote := filepath.Join(home, "remote.git")
-	seed := filepath.Join(home, "seed")
+	repository := filepath.Join(home, "repositories", "repo")
 	worktree := filepath.Join(home, ".codex", "worktrees", id)
-
-	runGit(t, "", "init", "--bare", remote)
-	if err := os.MkdirAll(seed, 0755); err != nil {
-		t.Fatal(err)
-	}
-	runGit(t, seed, "init")
-	runGit(t, seed, "config", "user.email", "test@example.com")
-	runGit(t, seed, "config", "user.name", "Aibris Test")
-	if err := os.WriteFile(filepath.Join(seed, "README.md"), []byte("fixture\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	runGit(t, seed, "add", ".")
-	runGit(t, seed, "commit", "-m", "initial")
-	runGit(t, seed, "branch", "-M", "main")
-	runGit(t, seed, "remote", "add", "origin", remote)
-	runGit(t, seed, "push", "-u", "origin", "main")
-	runGit(t, "", "--git-dir", remote, "symbolic-ref", "HEAD", "refs/heads/main")
+	newGitFixtureRepoAt(t, repository)
 	if err := os.MkdirAll(filepath.Dir(worktree), 0755); err != nil {
 		t.Fatal(err)
 	}
-	runGit(t, "", "clone", "--branch", "main", remote, worktree)
+	runGitFixture(t, repository, "worktree", "add", "-b", id, worktree, "HEAD")
 	return worktree
 }
 

@@ -84,10 +84,14 @@ classic cleanup audit and executor route.`,
 		}
 
 		var guidedState guidedCleanState
+		usefulGuidedCodexReview := false
 		if shouldPrepareGuidedClean(cmd) {
+			usefulGuidedCodexReview = hasGuidedCodexCleanupPressure(ctx, result.Worktrees)
+		}
+		if cleanGuide || usefulGuidedCodexReview {
 			guidedState = buildGuidedCleanState(ctx, result, source, guidedAge, "")
 		}
-		experience, reason, err := chooseCleanExperience(cleanExperienceInputFromCommand(cmd, hasSelectedGuidedCleanTargets(guidedState)))
+		experience, reason, err := chooseCleanExperience(cleanExperienceInputFromCommand(cmd, usefulGuidedCodexReview))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
@@ -214,6 +218,9 @@ const (
 	cleanExperienceClassic cleanExperience = "classic"
 	cleanExperienceGuided  cleanExperience = "guided-codex"
 
+	guidedCodexCleanupPressureMinSize       int64 = 256 * 1024 * 1024
+	guidedCodexCleanupPressureUnitThreshold       = 3
+
 	guidedCleanReasonAuto     = "active Codex worktrees are the largest cleanup decision"
 	guidedCleanReasonExplicit = "requested by --guide"
 )
@@ -277,6 +284,35 @@ func shouldPrepareGuidedClean(cmd *cobra.Command) bool {
 		return false
 	}
 	return !cleanExperienceInputFromCommand(cmd, false).hasClassicSelector()
+}
+
+func hasGuidedCodexCleanupPressure(ctx context.Context, items []types.DebrisInfo) bool {
+	unitCount, totalSize := guidedCodexCleanupPressure(ctx, items)
+	return isGuidedCodexCleanupPressureValuable(unitCount, totalSize)
+}
+
+func isGuidedCodexCleanupPressureValuable(unitCount int, totalSize int64) bool {
+	return unitCount > 0 && (totalSize >= guidedCodexCleanupPressureMinSize || unitCount >= guidedCodexCleanupPressureUnitThreshold)
+}
+
+func guidedCodexCleanupPressure(ctx context.Context, items []types.DebrisInfo) (int, int64) {
+	candidates := make([]types.DebrisInfo, 0, len(items))
+	for _, item := range items {
+		if isActiveCodexWorktree(item) && item.Source == ".codex" {
+			candidates = append(candidates, item)
+		}
+	}
+
+	units, err := buildWorktreeCleanupUnits(ctx, candidates)
+	if err != nil || len(units) == 0 {
+		return 0, 0
+	}
+
+	var totalSize int64
+	for _, unit := range units {
+		totalSize += unit.Size
+	}
+	return len(units), totalSize
 }
 
 func confirmCleanExecution() bool {
