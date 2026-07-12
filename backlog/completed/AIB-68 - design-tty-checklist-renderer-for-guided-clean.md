@@ -10,6 +10,7 @@ priority: medium
 milestone: Default Guided Clean
 created_date: '2026-07-09'
 updated_date: '2026-07-09 22:56'
+completed_date: '2026-07-10'
 ---
 ## Description
 Part of #62
@@ -35,3 +36,9 @@ The next product step after default guided routing is a compact terminal selecti
 - [x] Age threshold changes update projected deletion totals in the design.
 - [x] The design includes empty, all-active, all-risky, and non-TTY states.
 - [x] Implementation risks and dependencies are identified before coding begins.
+
+## Completion Evidence
+
+- PR #72 merged as `ad0400f`.
+- `docs/GUIDED_CLEAN_TTY_CHECKLIST.md` landed.
+- Issue #68 closed as completed.

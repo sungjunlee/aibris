@@ -10,6 +10,7 @@ labels:
 priority: medium
 milestone: Default Guided Clean
 created_date: '2026-07-09'
+completed_date: '2026-07-10'
 ---
 ## Description
 ## Context
@@ -41,15 +42,11 @@ Codex-heavy usage can create enough active worktrees to fill disk before a simpl
 - [x] #66 Refresh docs and dogfood around default clean --dry-run
 - [x] #67 Release v0.6.1 default guided clean
 
-Suggested order: #63 first, #64 alongside or immediately after #63, #65 before release, #66 after routing behavior is stable, then #67.
-
 ### v0.7.0: Interactive checklist
 
 - [x] #68 Design TTY checklist renderer for guided clean
 - [x] #69 Implement TTY checklist UI with text fallback
 - [x] #70 Release v0.7.0 guided checklist UI
-
-Suggested order: #68 after the v0.6.1 route exists, #69 after #68, then #70.
 
 ## Done Criteria
 

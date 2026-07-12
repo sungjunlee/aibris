@@ -1,7 +1,7 @@
 ---
 id: AIB-66
 title: Refresh docs and dogfood around default clean --dry-run
-status: In Progress
+status: Done
 labels:
   - documentation
   - ux
@@ -9,6 +9,7 @@ labels:
 priority: medium
 milestone: Default Guided Clean
 created_date: '2026-07-09'
+completed_date: '2026-07-10'
 ---
 ## Description
 Part of #62
@@ -33,3 +34,8 @@ The user-facing documentation and dogfood evidence need to match the new product
 - [x] Help text and docs agree on routing semantics.
 - [x] Dogfood evidence records guided recommendations and selected deletion impact.
 - [x] Documentation avoids presenting `--guide` as a feature users must know in advance.
+
+## Completion Evidence
+
+- PR #73 merged as `edfa80f`.
+- Issue #66 closed as completed.

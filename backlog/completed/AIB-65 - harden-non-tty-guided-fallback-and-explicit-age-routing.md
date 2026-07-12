@@ -1,7 +1,7 @@
 ---
 id: AIB-65
 title: Harden non-TTY guided fallback and explicit age routing
-status: To Do
+status: Done
 labels:
   - enhancement
   - cli
@@ -9,6 +9,7 @@ labels:
 priority: medium
 milestone: Default Guided Clean
 created_date: '2026-07-09'
+completed_date: '2026-07-10'
 ---
 ## Description
 Part of #62
@@ -29,9 +30,13 @@ A better default must remain safe in scripts, CI, piped output, and terminal con
 
 ## Acceptance Criteria
 
-- [ ] Non-TTY `aibris clean --dry-run` exits after printing a deterministic plan.
-- [ ] Non-TTY `aibris clean` does not block waiting for input.
-- [ ] `--age 1d` and `--age 7d` visibly affect guided recommendation totals.
-- [ ] Tests cover TTY and non-TTY routing behavior.
-- [ ] Error/help text tells users how to proceed safely when deletion cannot be confirmed.
+- [x] Non-TTY `aibris clean --dry-run` exits after printing a deterministic plan.
+- [x] Non-TTY `aibris clean` does not block waiting for input.
+- [x] `--age 1d` and `--age 7d` visibly affect guided recommendation totals.
+- [x] Tests cover TTY and non-TTY routing behavior.
+- [x] Error/help text tells users how to proceed safely when deletion cannot be confirmed.
 
+## Completion Evidence
+
+- PR #71 merged as `e67078b`.
+- Issue #65 closed as completed.

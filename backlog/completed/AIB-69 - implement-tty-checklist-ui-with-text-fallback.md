@@ -10,6 +10,7 @@ labels:
 priority: medium
 milestone: Default Guided Clean
 created_date: '2026-07-09'
+completed_date: '2026-07-10'
 ---
 ## Description
 Part of #62
@@ -36,3 +37,9 @@ Guided cleanup should let users act on recommendations directly from the default
 - [x] Selection changes update projected freed-space totals.
 - [x] Deletion only executes after explicit final confirmation.
 - [x] Text fallback remains usable and covered by tests.
+
+## Completion Evidence
+
+- PR #76 merged as `dd85f64`.
+- Non-TTY and pseudo-TTY dogfood passed without deletion.
+- Issue #69 closed as completed.
