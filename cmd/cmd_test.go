@@ -278,24 +278,37 @@ func withStdin(t *testing.T, input string) func() {
 
 func saveUsefulGuidedCleanFixture(t *testing.T, home, id string, modTime time.Time) string {
 	t.Helper()
-	worktree := createCleanCodexGitWorktree(t, home, id)
-	if err := os.Chtimes(worktree, modTime, modTime); err != nil {
-		t.Fatal(err)
+	oldest := modTime
+	if minimum := time.Now().Add(-7 * 24 * time.Hour); oldest.After(minimum) {
+		oldest = minimum
 	}
-	saveFreshCodexActivityCacheFixture(t)
-	saveCleanCacheFixture(t, home, []types.DebrisInfo{
-		{
+	ids := []string{id + "-newer-1", id + "-newer-2", id + "-newer-3", id}
+	items := make([]types.DebrisInfo, 0, len(ids))
+	var worktree string
+	for i, fixtureID := range ids {
+		path := createCleanCodexGitWorktree(t, home, fixtureID)
+		activity := oldest.Add(time.Duration(3-i) * 24 * time.Hour)
+		if err := os.Chtimes(path, activity, activity); err != nil {
+			t.Fatal(err)
+		}
+		if fixtureID == id {
+			worktree = path
+		}
+		items = append(items, types.DebrisInfo{
 			Tool:     types.ToolCodex,
 			Category: types.CategoryWorktree,
-			ID:       id,
+			ID:       fixtureID,
 			Project:  "project",
 			Source:   ".codex",
-			Path:     worktree,
+			Path:     path,
 			Size:     512 * 1024 * 1024,
-			ModTime:  modTime,
+			ModTime:  activity,
 			Status:   types.WorktreeActive,
-		},
-	})
+		})
+	}
+	runGitFixture(t, filepath.Join(home, "repositories", "repo"), "reflog", "expire", "--expire=now", "--all")
+	saveFreshCodexActivityCacheFixture(t)
+	saveCleanCacheFixture(t, home, items)
 	return worktree
 }
 
@@ -305,8 +318,10 @@ func createCleanCodexGitWorktree(t *testing.T, home, id string) string {
 		t.Skip("git unavailable")
 	}
 	repository := filepath.Join(home, "repositories", "repo")
+	if _, err := os.Stat(repository); os.IsNotExist(err) {
+		newGitFixtureRepoAt(t, repository)
+	}
 	worktree := filepath.Join(home, ".codex", "worktrees", id)
-	newGitFixtureRepoAt(t, repository)
 	if err := os.MkdirAll(filepath.Dir(worktree), 0755); err != nil {
 		t.Fatal(err)
 	}
