@@ -102,7 +102,7 @@ func PlanWorktreeCleanup(units []WorktreeCleanupUnit, policy CleanupPolicy) Clea
 		case retained[cleanupUnitStableKey(unit)]:
 			decision.Class = DecisionReviewable
 			decision.Reasons = decisionReasons(DecisionReasonRepositoryRetention)
-		case unit.LastActivity.After(policy.Now.Add(-policy.MinIdleAge)):
+		case !unit.LastActivity.Before(policy.Now.Add(-policy.MinIdleAge)):
 			decision.Class = DecisionReviewable
 			decision.Reasons = decisionReasons(DecisionReasonMinimumIdleAge)
 		case unit.Size < policy.MinSize:

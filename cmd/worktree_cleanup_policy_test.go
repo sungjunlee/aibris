@@ -155,6 +155,22 @@ func TestPlanWorktreeCleanupPolicyMatrix(t *testing.T) {
 			},
 		},
 		{
+			name: "exact minimum idle age remains reviewable",
+			units: []WorktreeCleanupUnit{
+				cleanupPolicyUnit("retained", now.Add(-24*time.Hour), 512*cleanupPolicyMiB, "/repos/idle-boundary/.git"),
+				cleanupPolicyUnit("boundary", now.Add(-DefaultMinIdleAge), 512*cleanupPolicyMiB, "/repos/idle-boundary/.git"),
+			},
+			policy: func() CleanupPolicy {
+				policy := defaultPolicy
+				policy.KeepPerRepository = 1
+				return policy
+			}(),
+			want: map[string]cleanupPolicyWant{
+				"retained": {DecisionReviewable, []DecisionReasonCode{DecisionReasonRepositoryRetention}},
+				"boundary": {DecisionReviewable, []DecisionReasonCode{DecisionReasonMinimumIdleAge}},
+			},
+		},
+		{
 			name: "historical session presence has no policy effect beyond last activity",
 			units: func() []WorktreeCleanupUnit {
 				units := []WorktreeCleanupUnit{
