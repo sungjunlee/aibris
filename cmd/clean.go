@@ -58,9 +58,6 @@ classic cleanup audit and executor route.`,
 			fmt.Fprintf(os.Stderr, "error: --age must be positive (got %s)\n", cleanAge)
 			os.Exit(1)
 		}
-		if age < time.Hour {
-			fmt.Fprintf(os.Stderr, "Warning: --age %s will match ALL items including active ones.\n", cleanAge)
-		}
 		guidedAge := guidedCleanAge(cmd, age)
 		if cleanGuide {
 			age = applyGuidedCleanDefaults(cmd, age)
@@ -89,12 +86,19 @@ classic cleanup audit and executor route.`,
 			usefulGuidedCodexReview = hasGuidedCodexCleanupPressure(ctx, result.Worktrees)
 		}
 		if cleanGuide || usefulGuidedCodexReview {
-			guidedState = buildGuidedCleanState(ctx, result, source, guidedAge, "")
+			guidedState, err = buildGuidedCleanState(ctx, result, source, guidedAge, "")
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: preparing guided cleanup: %v\n", err)
+				os.Exit(1)
+			}
 		}
 		experience, reason, err := chooseCleanExperience(cleanExperienceInputFromCommand(cmd, usefulGuidedCodexReview))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
+		}
+		if experience == cleanExperienceClassic && age < time.Hour {
+			fmt.Fprintf(os.Stderr, "Warning: --age %s will match ALL items including active ones.\n", cleanAge)
 		}
 
 		var categories []types.Category
@@ -207,7 +211,7 @@ func applyGuidedCleanDefaults(cmd *cobra.Command, age time.Duration) time.Durati
 
 func guidedCleanAge(cmd *cobra.Command, age time.Duration) time.Duration {
 	if !cmd.Flags().Changed("age") {
-		return guidedCodexDefaultAge
+		return DefaultMinIdleAge
 	}
 	return age
 }
