@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -14,12 +15,19 @@ import (
 // WorktreeCleanupUnit is one canonical physical deletion target. A unit may
 // contain more than one Git worktree member, but its size is counted once.
 type WorktreeCleanupUnit struct {
-	TargetPath      string
-	Size            int64
-	Source          string
-	Members         []GitWorktreeMember
-	HardLocked      bool
-	HardLockReasons []GitEvidenceReason
+	TargetPath             string
+	Size                   int64
+	Source                 string
+	Members                []GitWorktreeMember
+	LastActivity           time.Time
+	ActivitySource         WorktreeActivitySource
+	ActivityMember         string
+	ActivityAvailable      bool
+	CodexActivityAvailable bool
+	CodexActivitySource    string
+	CodexActivityError     string
+	HardLocked             bool
+	HardLockReasons        []GitEvidenceReason
 }
 
 // GitWorktreeMember identifies an actual direct or one-level nested Git
@@ -40,10 +48,17 @@ type GitWorktreeMember struct {
 	// EvidenceAvailable reports whether repository identity metadata resolved.
 	// GitEvidenceAvailable separately reports whether the recoverability
 	// inspection completed; both are required for a member to pass hard safety.
-	EvidenceAvailable    bool
-	EvidenceError        string
-	GitEvidenceAvailable bool
-	GitEvidenceError     string
+	EvidenceAvailable      bool
+	EvidenceError          string
+	GitEvidenceAvailable   bool
+	GitEvidenceError       string
+	LastActivity           time.Time
+	ActivitySource         WorktreeActivitySource
+	ActivityAvailable      bool
+	ActivityEvidence       []WorktreeActivityEvidence
+	CodexActivityAvailable bool
+	CodexActivitySource    string
+	CodexActivityError     string
 }
 
 type worktreeCleanupUnitRows struct {
@@ -54,8 +69,15 @@ type worktreeCleanupUnitRows struct {
 // BuildWorktreeCleanupUnits adapts scanner rows into deterministic physical
 // cleanup units without changing the persisted DebrisInfo or scan JSON shape.
 func BuildWorktreeCleanupUnits(items []types.DebrisInfo) ([]WorktreeCleanupUnit, error) {
+	return buildWorktreeCleanupUnits(context.Background(), items)
+}
+
+func buildWorktreeCleanupUnits(ctx context.Context, items []types.DebrisInfo) ([]WorktreeCleanupUnit, error) {
 	grouped := make(map[string][]types.DebrisInfo)
 	for _, item := range items {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if item.Category != types.CategoryWorktree {
 			continue
 		}
@@ -76,9 +98,15 @@ func BuildWorktreeCleanupUnits(items []types.DebrisInfo) ([]WorktreeCleanupUnit,
 
 	units := make([]WorktreeCleanupUnit, 0, len(groups))
 	for _, group := range groups {
-		members, err := discoverGitWorktreeMembers(group.targetPath)
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		members, err := discoverGitWorktreeMembers(ctx, group.targetPath)
 		if err != nil {
 			return nil, fmt.Errorf("enumerating Git worktree members under %q: %w", group.targetPath, err)
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
 		if len(members) == 0 {
 			continue
@@ -96,9 +124,12 @@ func BuildWorktreeCleanupUnits(items []types.DebrisInfo) ([]WorktreeCleanupUnit,
 	return units, nil
 }
 
-func discoverGitWorktreeMembers(targetPath string) ([]GitWorktreeMember, error) {
+func discoverGitWorktreeMembers(ctx context.Context, targetPath string) ([]GitWorktreeMember, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if hasGitWorktreeMetadata(targetPath) {
-		return []GitWorktreeMember{buildGitWorktreeMember(targetPath)}, nil
+		return []GitWorktreeMember{buildGitWorktreeMember(ctx, targetPath)}, nil
 	}
 
 	entries, err := os.ReadDir(targetPath)
@@ -108,6 +139,9 @@ func discoverGitWorktreeMembers(targetPath string) ([]GitWorktreeMember, error) 
 
 	memberPaths := make(map[string]bool)
 	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if !entry.IsDir() {
 			continue
 		}
@@ -129,7 +163,10 @@ func discoverGitWorktreeMembers(targetPath string) ([]GitWorktreeMember, error) 
 
 	members := make([]GitWorktreeMember, 0, len(paths))
 	for _, path := range paths {
-		members = append(members, buildGitWorktreeMember(path))
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		members = append(members, buildGitWorktreeMember(ctx, path))
 	}
 	return members, nil
 }
@@ -140,7 +177,7 @@ func hasGitWorktreeMetadata(path string) bool {
 	return err == nil && (info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0)
 }
 
-func buildGitWorktreeMember(worktreePath string) GitWorktreeMember {
+func buildGitWorktreeMember(ctx context.Context, worktreePath string) GitWorktreeMember {
 	member := GitWorktreeMember{
 		WorktreePath: worktreePath,
 		Upstream:     GitUpstreamMetadata{State: GitUpstreamUnavailable},
@@ -156,7 +193,7 @@ func buildGitWorktreeMember(worktreePath string) GitWorktreeMember {
 	member.DisplayRepository = displayRepository
 	member.EvidenceAvailable = true
 
-	ctx, cancel := context.WithTimeout(context.Background(), gitEvidenceCommandTimeout)
+	ctx, cancel := context.WithTimeout(ctx, gitEvidenceCommandTimeout)
 	defer cancel()
 	inspectGitWorktreeEvidence(ctx, &member, runWorktreeGitCommand)
 	return member

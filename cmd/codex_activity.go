@@ -43,6 +43,7 @@ type codexActivityIndex struct {
 	Source    string
 	Age       time.Duration
 	Worktrees map[string]codexWorktreeActivity
+	Members   map[string]codexWorktreeActivity
 	Projects  map[string]codexProjectActivity
 	Err       error
 }
@@ -467,6 +468,7 @@ func indexFromCodexActivityCache(cache codexActivityCache, age time.Duration, so
 		Source:    source,
 		Age:       age,
 		Worktrees: cache.Worktrees,
+		Members:   aggregateCodexMemberActivity(cache.Files),
 		Projects:  cache.Projects,
 		Err:       err,
 	}
@@ -487,9 +489,40 @@ func unavailableCodexActivityIndex(err error) codexActivityIndex {
 		Available: false,
 		Source:    codexActivitySourceUnavailable,
 		Worktrees: make(map[string]codexWorktreeActivity),
+		Members:   make(map[string]codexWorktreeActivity),
 		Projects:  make(map[string]codexProjectActivity),
 		Err:       err,
 	}
+}
+
+func aggregateCodexMemberActivity(files map[string]codexActivityFileRecord) map[string]codexWorktreeActivity {
+	members := make(map[string]codexWorktreeActivity)
+	paths := make([]string, 0, len(files))
+	for path := range files {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+
+	for _, path := range paths {
+		record := files[path]
+		if !record.Valid || record.WorktreeID == "" || record.Project == "" || record.Timestamp.IsZero() {
+			continue
+		}
+		key := codexActivityMemberKey(record.WorktreeID, record.Project)
+		activity := members[key]
+		activity.WorktreeID = record.WorktreeID
+		activity.Project = record.Project
+		activity.SessionCount++
+		if record.Timestamp.After(activity.LatestSession) {
+			activity.LatestSession = record.Timestamp
+		}
+		members[key] = activity
+	}
+	return members
+}
+
+func codexActivityMemberKey(worktreeID, project string) string {
+	return worktreeID + "\x00" + project
 }
 
 func codexActivityWorktreeFromCWD(cwd string) (string, string, bool) {
