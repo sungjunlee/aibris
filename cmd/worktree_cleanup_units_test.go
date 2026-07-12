@@ -300,22 +300,19 @@ func TestBuildWorktreeCleanupUnitsOrdersMultipleRepositoriesDeterministically(t 
 	if len(units) != 1 || len(units[0].Members) != 2 {
 		t.Fatalf("units = %+v; want one unit with two members", units)
 	}
-	wantMembers := []GitWorktreeMember{
-		{
-			WorktreePath:      alphaPath,
-			RepositoryID:      alphaCommonDir,
-			DisplayRepository: "alpha",
-			EvidenceAvailable: true,
-		},
-		{
-			WorktreePath:      zetaPath,
-			RepositoryID:      zetaCommonDir,
-			DisplayRepository: "zeta",
-			EvidenceAvailable: true,
-		},
+	wantIdentities := []struct {
+		worktreePath      string
+		repositoryID      string
+		displayRepository string
+	}{
+		{alphaPath, alphaCommonDir, "alpha"},
+		{zetaPath, zetaCommonDir, "zeta"},
 	}
-	if !reflect.DeepEqual(units[0].Members, wantMembers) {
-		t.Fatalf("Members = %+v; want %+v", units[0].Members, wantMembers)
+	for i, member := range units[0].Members {
+		want := wantIdentities[i]
+		if member.WorktreePath != want.worktreePath || member.RepositoryID != want.repositoryID || member.DisplayRepository != want.displayRepository || !member.EvidenceAvailable {
+			t.Fatalf("member[%d] identity = %+v; want path=%q repository=%q display=%q available", i, member, want.worktreePath, want.repositoryID, want.displayRepository)
+		}
 	}
 
 	items[0], items[1] = items[1], items[0]
@@ -367,8 +364,14 @@ func TestBuildWorktreeCleanupUnitsSurfacesRepositoryMetadataFailures(t *testing.
 	wantFailure := []string{"ambiguous Git metadata", "unreadable Git metadata"}
 	for i, unit := range units {
 		member := unit.Members[0]
+		if !unit.HardLocked || len(unit.HardLockReasons) != 1 || unit.HardLockReasons[0].Code != GitReasonEvidenceUnavailable {
+			t.Errorf("unit[%d] hard safety = (%t, %+v); want evidence-unavailable lock", i, unit.HardLocked, unit.HardLockReasons)
+		}
 		if member.EvidenceAvailable {
 			t.Errorf("unit[%d].EvidenceAvailable = true; want false", i)
+		}
+		if member.GitEvidenceAvailable || !member.HardLocked || member.Reason.Code != GitReasonEvidenceUnavailable {
+			t.Errorf("unit[%d] Git evidence = %+v; want unavailable hard lock", i, member)
 		}
 		if member.RepositoryID != "" || member.DisplayRepository != "" {
 			t.Errorf("unit[%d] repository identity = (%q, %q); want empty", i, member.RepositoryID, member.DisplayRepository)

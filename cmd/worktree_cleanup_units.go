@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,22 +14,36 @@ import (
 // WorktreeCleanupUnit is one canonical physical deletion target. A unit may
 // contain more than one Git worktree member, but its size is counted once.
 type WorktreeCleanupUnit struct {
-	TargetPath string
-	Size       int64
-	Source     string
-	Members    []GitWorktreeMember
+	TargetPath      string
+	Size            int64
+	Source          string
+	Members         []GitWorktreeMember
+	HardLocked      bool
+	HardLockReasons []GitEvidenceReason
 }
 
 // GitWorktreeMember identifies an actual direct or one-level nested Git
 // worktree contained by a cleanup unit.
 type GitWorktreeMember struct {
-	WorktreePath      string
-	RepositoryID      string
-	DisplayRepository string
-	// EvidenceAvailable currently reports whether repository identity metadata
-	// was resolved. Later Git evidence stages can fail closed from this seam.
-	EvidenceAvailable bool
-	EvidenceError     string
+	WorktreePath         string
+	RepositoryID         string
+	DisplayRepository    string
+	BranchRef            string
+	HeadOID              string
+	ContainingLocalRefs  []string
+	ContainingRemoteRefs []string
+	Upstream             GitUpstreamMetadata
+	Dirty                bool
+	Recoverable          bool
+	HardLocked           bool
+	Reason               GitEvidenceReason
+	// EvidenceAvailable reports whether repository identity metadata resolved.
+	// GitEvidenceAvailable separately reports whether the recoverability
+	// inspection completed; both are required for a member to pass hard safety.
+	EvidenceAvailable    bool
+	EvidenceError        string
+	GitEvidenceAvailable bool
+	GitEvidenceError     string
 }
 
 type worktreeCleanupUnitRows struct {
@@ -68,11 +83,14 @@ func BuildWorktreeCleanupUnits(items []types.DebrisInfo) ([]WorktreeCleanupUnit,
 		if len(members) == 0 {
 			continue
 		}
+		hardLockReasons := cleanupUnitHardLockReasons(members)
 		units = append(units, WorktreeCleanupUnit{
-			TargetPath: group.targetPath,
-			Size:       cleanupUnitSize(group.items),
-			Source:     cleanupUnitSource(group.items),
-			Members:    members,
+			TargetPath:      group.targetPath,
+			Size:            cleanupUnitSize(group.items),
+			Source:          cleanupUnitSource(group.items),
+			Members:         members,
+			HardLocked:      len(hardLockReasons) > 0,
+			HardLockReasons: hardLockReasons,
 		})
 	}
 	return units, nil
@@ -123,17 +141,35 @@ func hasGitWorktreeMetadata(path string) bool {
 }
 
 func buildGitWorktreeMember(worktreePath string) GitWorktreeMember {
-	member := GitWorktreeMember{WorktreePath: worktreePath}
+	member := GitWorktreeMember{
+		WorktreePath: worktreePath,
+		Upstream:     GitUpstreamMetadata{State: GitUpstreamUnavailable},
+	}
 	repositoryID, displayRepository, err := resolveRepositoryIdentity(worktreePath)
 	if err != nil {
 		member.EvidenceError = err.Error()
+		markGitEvidenceUnavailable(&member, err)
 		return member
 	}
 
 	member.RepositoryID = repositoryID
 	member.DisplayRepository = displayRepository
 	member.EvidenceAvailable = true
+
+	ctx, cancel := context.WithTimeout(context.Background(), gitEvidenceCommandTimeout)
+	defer cancel()
+	inspectGitWorktreeEvidence(ctx, &member, runWorktreeGitCommand)
 	return member
+}
+
+func cleanupUnitHardLockReasons(members []GitWorktreeMember) []GitEvidenceReason {
+	reasons := make([]GitEvidenceReason, 0, len(members))
+	for _, member := range members {
+		if member.HardLocked {
+			reasons = append(reasons, member.Reason)
+		}
+	}
+	return reasons
 }
 
 func resolveRepositoryIdentity(worktreePath string) (string, string, error) {
