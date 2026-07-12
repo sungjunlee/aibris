@@ -1,6 +1,6 @@
 ---
 milestone: Default Guided Clean
-status: active
+status: completed
 started: 2026-07-09
 due: 2026-07-16
 objectives:
@@ -85,3 +85,4 @@ Make `aibris clean` the pleasing guided path for Codex worktree bloat without we
 - 2026-07-10: Squash-merged PR #76 as `dd85f64`, closing #69. Started #70 release prep on `codex/issue-70-release-v0.7.0` with v0.7.0 changelog and install example updates.
 - 2026-07-10: Verified #70 release prep locally: `go test ./...`, `go build ./...`, `go vet ./...`, backlog doctor, `goreleaser release --snapshot --clean`, non-TTY dry-run dogfood, and pseudo-TTY dry-run dogfood all passed without deletion.
 - 2026-07-10: Squash-merged PR #77 as `ca643c9`, pushed annotated tag `v0.7.0`, verified release workflow `29058905357`, confirmed GitHub Release assets plus `checksums.txt`, and smoke-tested `install.sh` returning `aibris version 0.7.0`.
+- 2026-07-12: Sprint closed. 8/8 tasks completed.
