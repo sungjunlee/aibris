@@ -1,7 +1,7 @@
 ---
 id: AIB-91
 title: Release v0.8.0 evidence-based worktree reclamation
-status: To Do
+status: In Progress
 labels:
   - documentation
   - devops
@@ -29,8 +29,26 @@ created_date: '2026-07-12'
 
 ## Acceptance Criteria
 
-- [ ] All milestone implementation issues are closed or explicitly deferred.
-- [ ] go test ./..., go build ./..., and go vet ./... pass.
-- [ ] goreleaser release --snapshot --clean passes.
+- [x] All milestone implementation issues are closed or explicitly deferred.
+- [x] go test ./..., go build ./..., and go vet ./... pass.
+- [x] goreleaser release --snapshot --clean passes.
 - [ ] Annotated v0.8.0 tag and GitHub Release assets publish successfully.
 - [ ] Installer smoke reports aibris version 0.8.0.
+
+## Preparation Evidence
+
+- 2026-07-13: Prepared from `origin/main` at `5066289`. Merged PRs #92-#100
+  map to implementation issues #82-#90; the release orchestrator verified all
+  nine issues closed through the GitHub API.
+- 2026-07-13: Added dated v0.8.0 changelog notes covering cleanup units,
+  evidence-based policy, Git-aware removal, and hard-safety boundaries. Version
+  remains tag-derived through the existing GoReleaser ldflags.
+- 2026-07-13: `go test ./...`, `go build ./...`, and `go vet ./...` passed with
+  `GOCACHE` redirected to the executor's writable temporary directory.
+- 2026-07-13: The executor's network-isolated snapshot attempt identified
+  uncached module dependencies. The release orchestrator then ran
+  `goreleaser release --snapshot --clean` with normal network access; it
+  succeeded for all six Darwin/Linux/Windows amd64/arm64 archives, emitted
+  `checksums.txt`, and recorded tag-derived `v0.7.0-next` snapshot metadata.
+- Tag creation, GitHub Release publication, and installer smoke testing are
+  intentionally left to the release orchestrator.
