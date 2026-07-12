@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/sungjunlee/aibris/internal/types"
@@ -151,6 +152,29 @@ func TestBuildWorktreeCleanupUnits(t *testing.T) {
 				t.Fatalf("units depend on scanner row order:\nfirst:  %+v\nsecond: %+v", units, gotAgain)
 			}
 		})
+	}
+}
+
+func TestBuildWorktreeCleanupUnitsReturnsErrorWhenTargetDisappears(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "worktrees", "disappeared")
+	if err := os.MkdirAll(target, 0755); err != nil {
+		t.Fatal(err)
+	}
+	item := cleanupUnitItem(target, 100, ".codex")
+	if err := os.RemoveAll(target); err != nil {
+		t.Fatal(err)
+	}
+
+	units, err := BuildWorktreeCleanupUnits([]types.DebrisInfo{item})
+	if err == nil {
+		t.Fatal("BuildWorktreeCleanupUnits() error = nil; want target filesystem error")
+	}
+	if !strings.Contains(err.Error(), target) {
+		t.Errorf("BuildWorktreeCleanupUnits() error = %q; want target path %q", err, target)
+	}
+	if len(units) != 0 {
+		t.Errorf("BuildWorktreeCleanupUnits() units = %+v; want no units", units)
 	}
 }
 
