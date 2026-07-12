@@ -273,13 +273,54 @@ func printCleanAudit(audit cleanAudit, opts types.PruneOptions) {
 	fmt.Println()
 }
 
-func printCleanupReceipt(targetCount int, freed int64, audit cleanAudit) {
+func printCleanupReceipt(targetCount int, receipt cleanExecutionReceipt, audit cleanAudit) {
+	printExecutionReceiptSummary(targetCount, receipt)
+	fmt.Printf("  protected/skipped %d %s   %s\n",
+		audit.TotalBlockedCount, itemNoun(audit.TotalBlockedCount), cleaner.FormatSize(audit.TotalBlockedSize))
+}
+
+func printGuidedCleanupReceipt(targetCount int, receipt cleanExecutionReceipt) {
+	printExecutionReceiptSummary(targetCount, receipt)
+}
+
+func printExecutionReceiptSummary(targetCount int, receipt cleanExecutionReceipt) {
+	removed, partial, failed := receipt.counts()
 	fmt.Println()
 	fmt.Println("cleanup receipt")
 	fmt.Printf("  targets    %d %s\n", targetCount, itemNoun(targetCount))
-	fmt.Printf("  freed      %s\n", cleaner.FormatSize(freed))
-	fmt.Printf("  protected/skipped %d %s   %s\n",
-		audit.TotalBlockedCount, itemNoun(audit.TotalBlockedCount), cleaner.FormatSize(audit.TotalBlockedSize))
+	fmt.Printf("  removed    %d %s\n", removed, itemNoun(removed))
+	fmt.Printf("  partial    %d %s\n", partial, itemNoun(partial))
+	fmt.Printf("  failed     %d %s\n", failed, itemNoun(failed))
+	fmt.Printf("  freed      %s\n", cleaner.FormatSize(receipt.FreedBytes))
+}
+
+func printWorktreeExecutionReceipts(receipt cleanExecutionReceipt) {
+	printedHeader := false
+	for _, unit := range receipt.Units {
+		if !isActiveWorktreeTarget(unit.Target) {
+			continue
+		}
+		if !printedHeader {
+			fmt.Println()
+			fmt.Println("worktree execution receipt")
+			printedHeader = true
+		}
+		fmt.Printf("  unit      %-7s %s\n", unit.State, unit.Target.Path)
+		for _, member := range unit.Members {
+			state := "not removed"
+			if member.Removed {
+				state = "removed"
+			}
+			fmt.Printf("    member  %-11s %s\n", state, member.WorktreePath)
+			if member.Error != "" {
+				fmt.Printf("      error %s\n", member.Error)
+			}
+		}
+		fmt.Printf("    physical-removed %t   freed %s\n", unit.PhysicalRemoved, cleaner.FormatSize(unit.FreedBytes))
+		if unit.Error != "" {
+			fmt.Printf("    error    %s\n", unit.Error)
+		}
+	}
 }
 
 func cleanTargetReason(w types.DebrisInfo) string {

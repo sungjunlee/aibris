@@ -197,6 +197,33 @@ func TestExecute_GenericWorktreeUnderHome(t *testing.T) {
 	}
 }
 
+func TestExecute_RejectsRawActiveWorktreeRemoval(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	worktreePath := filepath.Join(home, ".codex", "worktrees", "active")
+	if err := os.MkdirAll(worktreePath, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	total, err := Execute([]types.DebrisInfo{{
+		ID:       "active",
+		Tool:     types.ToolCodex,
+		Category: types.CategoryWorktree,
+		Status:   types.WorktreeActive,
+		Path:     worktreePath,
+		Size:     4,
+	}})
+	if err == nil || !strings.Contains(err.Error(), "requires Git-aware removal") {
+		t.Fatalf("Execute() error = %v; want Git-aware removal rejection", err)
+	}
+	if total != 0 {
+		t.Errorf("total = %d; want 0", total)
+	}
+	if _, err := os.Stat(worktreePath); err != nil {
+		t.Errorf("active worktree path was changed: %v", err)
+	}
+}
+
 func TestContainsTool(t *testing.T) {
 	tests := []struct {
 		name  string

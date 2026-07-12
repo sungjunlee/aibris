@@ -127,7 +127,7 @@ classic cleanup audit and executor route.`,
 		if experience == cleanExperienceGuided {
 			opts.Age = guidedAge
 			guidedState.Reason = reason
-			if err := runGuidedCodexClean(opts, guidedState); err != nil {
+			if err := runGuidedCodexClean(ctx, opts, guidedState); err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
 			}
@@ -152,10 +152,12 @@ classic cleanup audit and executor route.`,
 			fmt.Println("[DRY-RUN] No files were removed.")
 			return
 		}
+		prepared := prepareCleanExecution(ctx, targets)
 
 		if opts.Interactive {
-			total := interactiveClean(targets)
-			printCleanupReceipt(len(targets), total, audit)
+			receipt := interactiveClean(ctx, prepared)
+			printWorktreeExecutionReceipts(receipt)
+			printCleanupReceipt(len(targets), receipt, audit)
 			return
 		}
 
@@ -166,11 +168,12 @@ classic cleanup audit and executor route.`,
 			}
 		}
 
-		total, err := cleaner.Execute(targets)
+		receipt, err := executePreparedCleanTargets(ctx, prepared, defaultActiveWorktreeExecutionOptions())
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error during cleanup: %v\n", err)
 		}
-		printCleanupReceipt(len(targets), total, audit)
+		printWorktreeExecutionReceipts(receipt)
+		printCleanupReceipt(len(targets), receipt, audit)
 	},
 }
 
@@ -544,17 +547,18 @@ func cleanTargetContains(parent, child string) bool {
 	return !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-func interactiveClean(targets []types.DebrisInfo) int64 {
+func interactiveClean(ctx context.Context, targets []preparedCleanTarget) cleanExecutionReceipt {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: getting home dir: %v\n", err)
-		return 0
+		return cleanExecutionReceipt{}
 	}
 	displayHome := resolvedDisplayHome(home)
 
-	var total int64
+	var result cleanExecutionReceipt
 	scanner := bufio.NewScanner(os.Stdin)
-	for _, w := range targets {
+	for _, target := range targets {
+		w := target.Item
 		if !cleaner.IsSafeTarget(home, w) {
 			fmt.Fprintf(os.Stderr, "  error: unsafe path %q rejected\n", w.Path)
 			continue
@@ -567,17 +571,18 @@ func interactiveClean(targets []types.DebrisInfo) int64 {
 		}
 		response := strings.TrimSpace(strings.ToLower(scanner.Text()))
 		if response == "y" || response == "yes" {
-			freed, err := cleaner.Execute([]types.DebrisInfo{w})
+			receipt, err := executePreparedCleanTargets(ctx, []preparedCleanTarget{target}, defaultActiveWorktreeExecutionOptions())
+			result.Units = append(result.Units, receipt.Units...)
+			result.FreedBytes += receipt.FreedBytes
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "  error: %v\n", err)
 				continue
 			}
-			total += freed
 		} else {
 			fmt.Printf("  skipped\n")
 		}
 	}
-	return total
+	return result
 }
 
 func printCleanPlan(targets []types.DebrisInfo, mode cleanPlanMode) {
