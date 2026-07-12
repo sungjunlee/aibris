@@ -91,21 +91,14 @@ func enrichWorktreeCleanupActivity(ctx context.Context, units []WorktreeCleanupU
 		unit.ActivitySource = ""
 		unit.ActivityMember = ""
 		unit.ActivityAvailable = false
-		unit.CodexActivityAvailable = activity.Available
-		unit.CodexActivitySource = activity.Source
-		unit.CodexActivityError = ""
-		if activity.Err != nil {
-			unit.CodexActivityError = activity.Err.Error()
-		} else if !activity.Available {
-			unit.CodexActivityError = errCodexActivityUnavailable.Error()
-		}
+		unit.CodexActivityAvailable, unit.CodexActivitySource, unit.CodexActivityError = codexActivityAvailability(unit.Source, activity)
 
 		for memberIndex := range unit.Members {
 			member := &unit.Members[memberIndex]
 			rows := scannerRows[unit.TargetPath]
 			fallback := memberFallbackActivity(member.WorktreePath, unit.TargetPath, rows)
 			identity := memberCodexIdentity(member.WorktreePath, rows)
-			if err := collectMemberActivity(ctx, member, fallback, identity, activity, opts.runner); err != nil {
+			if err := collectMemberActivity(ctx, member, fallback, identity, unit.Source, activity, opts.runner); err != nil {
 				return err
 			}
 			if !member.ActivityAvailable {
@@ -123,25 +116,18 @@ func enrichWorktreeCleanupActivity(ctx context.Context, units []WorktreeCleanupU
 	return nil
 }
 
-func collectMemberActivity(ctx context.Context, member *GitWorktreeMember, fallback time.Time, identity codexActivityIdentity, activity codexActivityIndex, runner worktreeGitCommandRunner) error {
+func collectMemberActivity(ctx context.Context, member *GitWorktreeMember, fallback time.Time, identity codexActivityIdentity, source string, activity codexActivityIndex, runner worktreeGitCommandRunner) error {
 	member.LastActivity = time.Time{}
 	member.ActivitySource = ""
 	member.ActivityAvailable = false
 	member.ActivityEvidence = nil
-	member.CodexActivityAvailable = activity.Available
-	member.CodexActivitySource = activity.Source
-	member.CodexActivityError = ""
-	if activity.Err != nil {
-		member.CodexActivityError = activity.Err.Error()
-	} else if !activity.Available {
-		member.CodexActivityError = errCodexActivityUnavailable.Error()
-	}
+	member.CodexActivityAvailable, member.CodexActivitySource, member.CodexActivityError = codexActivityAvailability(source, activity)
 
 	session := WorktreeActivityEvidence{
 		Source:    WorktreeActivityCodexSession,
-		Available: activity.Available,
+		Available: member.CodexActivityAvailable,
 	}
-	if !activity.Available {
+	if !member.CodexActivityAvailable {
 		session.Error = member.CodexActivityError
 	} else {
 		if worktreeID, project, ok := codexActivityWorktreeFromCWD(member.WorktreePath); ok {
@@ -181,6 +167,19 @@ func collectMemberActivity(ctx context.Context, member *GitWorktreeMember, fallb
 		}
 	}
 	return nil
+}
+
+func codexActivityAvailability(source string, activity codexActivityIndex) (bool, string, string) {
+	if source != ".codex" {
+		return false, codexActivitySourceUnavailable, fmt.Sprintf("codex activity unsupported for worktree source %q", source)
+	}
+	if activity.Err != nil {
+		return false, activity.Source, activity.Err.Error()
+	}
+	if !activity.Available {
+		return false, activity.Source, errCodexActivityUnavailable.Error()
+	}
+	return true, activity.Source, ""
 }
 
 func headReflogActivity(ctx context.Context, worktreePath string, runner worktreeGitCommandRunner) (WorktreeActivityEvidence, error) {
