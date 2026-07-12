@@ -112,7 +112,8 @@ Human `clean` output must include a cleanup audit before deletion:
 - scan summary with found, eligible, and protected/skipped totals
 - category rows with found, eligible, protected/skipped, and main reason
 - target plan with reason text before confirmation or dry-run completion
-- cleanup receipt after execution that reports target count and freed bytes without claiming per-item success counts
+- cleanup receipt after execution with removed, partial, and failed unit counts,
+  truthful freed bytes, and protected/skipped totals
 
 The audit is human output only. `scan --json` remains the machine-readable surface for agents and scripts.
 
