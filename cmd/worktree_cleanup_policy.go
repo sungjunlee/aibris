@@ -240,8 +240,15 @@ func cleanupUnitContainsPath(target, path string) bool {
 	if target == "" || path == "" {
 		return false
 	}
-	target = filepath.Clean(target)
-	path = filepath.Clean(path)
+	var ok bool
+	target, ok = cleanTargetPathKey(target)
+	if !ok {
+		return false
+	}
+	path, ok = cleanTargetPathKey(path)
+	if !ok {
+		return false
+	}
 	if target == path {
 		return true
 	}

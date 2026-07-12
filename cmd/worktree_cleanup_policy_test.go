@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -255,6 +257,39 @@ func TestPlanWorktreeCleanupUsesDefaultPolicyValues(t *testing.T) {
 	if policy.RecentActivityWindow != 6*time.Hour || policy.KeepPerRepository != 3 || policy.MinIdleAge != 3*24*time.Hour || policy.MinSize != 256*cleanupPolicyMiB {
 		t.Fatalf("default policy = %+v", policy)
 	}
+}
+
+func TestPlanWorktreeCleanupCanonicalizesSymlinkCWD(t *testing.T) {
+	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	root := t.TempDir()
+	target := filepath.Join(root, "real", "current")
+	if err := os.MkdirAll(filepath.Join(target, "nested"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(root, "alias")
+	if err := os.Symlink(target, alias); err != nil {
+		t.Fatal(err)
+	}
+
+	current := cleanupPolicyUnit("current", now.Add(-7*24*time.Hour), 512*cleanupPolicyMiB, "/repos/shared/.git")
+	current.TargetPath = target
+	current.Members[0].WorktreePath = filepath.Join(target, "member-a")
+	newer := cleanupPolicyUnit("newer", now.Add(-4*24*time.Hour), 512*cleanupPolicyMiB, "/repos/shared/.git")
+	policy := DefaultCleanupPolicy(now)
+	policy.CurrentWorkingDirectory = filepath.Join(alias, "nested")
+	policy.KeepPerRepository = 1
+
+	plan := PlanWorktreeCleanup([]WorktreeCleanupUnit{current, newer}, policy)
+	for _, decision := range plan.Decisions {
+		if decision.Unit.TargetPath != target {
+			continue
+		}
+		if decision.Class != DecisionLocked || !reflect.DeepEqual(cleanupPolicyReasonCodes(decision), []DecisionReasonCode{DecisionReasonCurrentWorkingDirectory}) {
+			t.Fatalf("symlink CWD decision = (%q, %v); want current-directory lock", decision.Class, cleanupPolicyReasonCodes(decision))
+		}
+		return
+	}
+	t.Fatalf("decision for target %q not found", target)
 }
 
 type cleanupPolicyWant struct {
