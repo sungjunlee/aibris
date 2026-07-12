@@ -1,7 +1,7 @@
 ---
 id: AIB-80
 title: '[Epic] Build recoverable worktree cleanup units'
-status: To Do
+status: Done
 labels:
   - enhancement
   - scanner
@@ -9,6 +9,7 @@ labels:
 priority: medium
 milestone: Evidence-Based Worktree Reclamation
 created_date: '2026-07-12'
+completed_date: '2026-07-13'
 ---
 ## Description
 ## Context
@@ -28,14 +29,20 @@ Planning PR: https://github.com/sungjunlee/aibris/pull/79
 
 ## Done Criteria
 
-- [ ] Every child issue is closed by merged work.
-- [ ] Active worktree removal preserves branch refs and cleans parent worktree metadata.
-- [ ] Dirty, unreadable, and unreferenced detached state remains locked.
-- [ ] `go test ./...`, `go build ./...`, and `go vet ./...` pass.
+- [x] Every child issue is closed by merged work.
+- [x] Active worktree removal preserves branch refs and cleans parent worktree metadata.
+- [x] Dirty, unreadable, and unreferenced detached state remains locked.
+- [x] `go test ./...`, `go build ./...`, and `go vet ./...` pass.
 
 ## Child Issues
 
-- [ ] #82 Model physical cleanup units and nested Git members
-- [ ] #83 Resolve canonical repository identity for cleanup units
-- [ ] #84 Replace upstream safety with ref reachability
-- [ ] #86 Add Git-aware active worktree executor
+- [x] #82 Model physical cleanup units and nested Git members
+- [x] #83 Resolve canonical repository identity for cleanup units
+- [x] #84 Replace upstream safety with ref reachability
+- [x] #86 Add Git-aware active worktree executor
+
+## Completion Evidence
+
+- PRs #92, #93, #94, and #97 merged; issues #82, #83, #84, and #86 closed.
+- Controlled removal preserved branch refs and parent worktree metadata.
+- v0.8.0 validation and release workflow passed.
