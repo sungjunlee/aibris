@@ -23,6 +23,12 @@
 - Dirty, unreadable, recently active, current-directory, and unreferenced
   detached worktrees remain locked. `--force` skips only final confirmation and
   never forces Git worktree removal or bypasses hard-safety checks.
+- Controlled dogfood limited the live `$HOME` exercise to read-only inspection
+  and dry-run planning, then verified branch-preserving removal with a
+  disposable linked worktree under a temporary `HOME`.
+- Cleanup documentation now keeps approved selectors, roots, age, routing, and
+  safety flags identical between preview and execution, removing only
+  `--dry-run` after approval.
 
 ## [0.7.0] - 2026-07-10
 
