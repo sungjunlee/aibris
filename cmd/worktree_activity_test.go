@@ -136,6 +136,39 @@ func TestEnrichWorktreeCleanupActivityMakesCodexOutageExplicit(t *testing.T) {
 	}
 }
 
+func TestEnrichWorktreeCleanupActivityFallsBackToWorktreeSession(t *testing.T) {
+	base := time.Date(2026, 7, 12, 12, 0, 0, 0, time.UTC)
+	root := t.TempDir()
+	target := filepath.Join(root, ".codex", "worktrees", "activity-id")
+	units := []WorktreeCleanupUnit{{TargetPath: target, Members: []GitWorktreeMember{{WorktreePath: target}}}}
+	index := availableActivityIndex("activity-id", "project-a", base.Add(2*time.Hour))
+	items := []types.DebrisInfo{{
+		ID:       "activity-id",
+		Source:   ".codex",
+		Category: types.CategoryWorktree,
+		Project:  "project-a",
+		Path:     target,
+		ModTime:  base,
+	}}
+
+	err := enrichWorktreeCleanupActivity(context.Background(), units, items, worktreeActivityOptions{
+		index:  &index,
+		runner: reflogRunner(map[string]time.Time{}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	member := units[0].Members[0]
+	if !member.ActivityAvailable || !member.LastActivity.Equal(base.Add(2*time.Hour)) || member.ActivitySource != WorktreeActivityCodexSession {
+		t.Errorf("member activity = (%t, %s, %q); want worktree-level Codex session fallback", member.ActivityAvailable, member.LastActivity, member.ActivitySource)
+	}
+	session := activityEvidenceForSource(member, WorktreeActivityCodexSession)
+	if !session.Available || !session.Timestamp.Equal(base.Add(2*time.Hour)) {
+		t.Errorf("session evidence = %+v; want available worktree-level timestamp", session)
+	}
+}
+
 func TestEnrichWorktreeCleanupActivityUsesNewestMemberDeterministically(t *testing.T) {
 	base := time.Date(2026, 7, 12, 12, 0, 0, 0, time.UTC)
 	root := t.TempDir()

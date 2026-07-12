@@ -148,7 +148,7 @@ func collectMemberActivity(ctx context.Context, member *GitWorktreeMember, fallb
 			identity = codexActivityIdentity{worktreeID: worktreeID, project: project}
 		}
 		matching, found := activity.Members[codexActivityMemberKey(identity.worktreeID, identity.project)]
-		if !found && len(activity.Members) == 0 {
+		if !found {
 			matching, found = activity.Worktrees[identity.worktreeID]
 		}
 		if found {
