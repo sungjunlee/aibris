@@ -207,6 +207,196 @@ func TestBuildWorktreeCleanupUnitsCanonicalizesSymlinkTargets(t *testing.T) {
 	}
 }
 
+func TestBuildWorktreeCleanupUnitsUsesCanonicalRepositoryIdentity(t *testing.T) {
+	root := t.TempDir()
+	root, _ = cleanTargetPathKey(root)
+	repositoryPath := filepath.Join(root, "repositories", "canonical-name")
+	commonDir := filepath.Join(repositoryPath, ".git")
+	aliasPath := filepath.Join(root, "aliases", "display-alias")
+	if err := os.MkdirAll(filepath.Dir(aliasPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(repositoryPath, aliasPath); err != nil {
+		t.Fatal(err)
+	}
+
+	first := filepath.Join(root, "worktrees", "feature-one")
+	second := filepath.Join(root, "worktrees", "unrelated-worktree-name")
+	createCleanupUnitLinkedWorktree(t, first, commonDir, "first", commonDir)
+	createCleanupUnitLinkedWorktree(t, second, commonDir, "second", filepath.Join(aliasPath, ".git"))
+
+	units, err := BuildWorktreeCleanupUnits([]types.DebrisInfo{
+		cleanupUnitItem(second, 200, ".codex"),
+		cleanupUnitItem(first, 100, ".codex"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(units) != 2 {
+		t.Fatalf("units = %d; want 2 (%+v)", len(units), units)
+	}
+	for _, unit := range units {
+		member := unit.Members[0]
+		if member.RepositoryID != commonDir {
+			t.Errorf("RepositoryID = %q; want canonical common-dir %q", member.RepositoryID, commonDir)
+		}
+		if member.DisplayRepository != "canonical-name" {
+			t.Errorf("DisplayRepository = %q; want canonical-name", member.DisplayRepository)
+		}
+		if !member.EvidenceAvailable || member.EvidenceError != "" {
+			t.Errorf("repository evidence = (%t, %q); want available", member.EvidenceAvailable, member.EvidenceError)
+		}
+	}
+}
+
+func TestBuildWorktreeCleanupUnitsKeepsSameBasenameRepositoriesDistinct(t *testing.T) {
+	root := t.TempDir()
+	firstCommonDir := filepath.Join(root, "owner-a", "project", ".git")
+	secondCommonDir := filepath.Join(root, "owner-b", "project", ".git")
+	first := filepath.Join(root, "worktrees", "first")
+	second := filepath.Join(root, "worktrees", "second")
+	createCleanupUnitLinkedWorktree(t, first, firstCommonDir, "first", firstCommonDir)
+	createCleanupUnitLinkedWorktree(t, second, secondCommonDir, "second", secondCommonDir)
+
+	units, err := BuildWorktreeCleanupUnits([]types.DebrisInfo{
+		cleanupUnitItem(first, 100, ".codex"),
+		cleanupUnitItem(second, 200, ".codex"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(units) != 2 {
+		t.Fatalf("units = %d; want 2 (%+v)", len(units), units)
+	}
+	firstMember := units[0].Members[0]
+	secondMember := units[1].Members[0]
+	if firstMember.DisplayRepository != "project" || secondMember.DisplayRepository != "project" {
+		t.Fatalf("display repositories = %q, %q; want project, project", firstMember.DisplayRepository, secondMember.DisplayRepository)
+	}
+	if firstMember.RepositoryID == secondMember.RepositoryID {
+		t.Fatalf("same-basename repositories share identity %q", firstMember.RepositoryID)
+	}
+}
+
+func TestBuildWorktreeCleanupUnitsOrdersMultipleRepositoriesDeterministically(t *testing.T) {
+	root := t.TempDir()
+	root, _ = cleanTargetPathKey(root)
+	target := filepath.Join(root, "worktrees", "multi-repository")
+	alphaPath := filepath.Join(target, "alpha-member")
+	zetaPath := filepath.Join(target, "zeta-member")
+	alphaCommonDir := filepath.Join(root, "repositories", "alpha", ".git")
+	zetaCommonDir := filepath.Join(root, "repositories", "zeta", ".git")
+	createCleanupUnitLinkedWorktree(t, zetaPath, zetaCommonDir, "zeta", zetaCommonDir)
+	createCleanupUnitLinkedWorktree(t, alphaPath, alphaCommonDir, "alpha", alphaCommonDir)
+
+	items := []types.DebrisInfo{
+		cleanupUnitItem(target, 400, ".relay"),
+		cleanupUnitItem(target, 400, ".codex"),
+	}
+	units, err := BuildWorktreeCleanupUnits(items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(units) != 1 || len(units[0].Members) != 2 {
+		t.Fatalf("units = %+v; want one unit with two members", units)
+	}
+	wantMembers := []GitWorktreeMember{
+		{
+			WorktreePath:      alphaPath,
+			RepositoryID:      alphaCommonDir,
+			DisplayRepository: "alpha",
+			EvidenceAvailable: true,
+		},
+		{
+			WorktreePath:      zetaPath,
+			RepositoryID:      zetaCommonDir,
+			DisplayRepository: "zeta",
+			EvidenceAvailable: true,
+		},
+	}
+	if !reflect.DeepEqual(units[0].Members, wantMembers) {
+		t.Fatalf("Members = %+v; want %+v", units[0].Members, wantMembers)
+	}
+
+	items[0], items[1] = items[1], items[0]
+	gotAgain, err := BuildWorktreeCleanupUnits(items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(units, gotAgain) {
+		t.Fatalf("multi-repository unit is not deterministic:\nfirst:  %+v\nsecond: %+v", units, gotAgain)
+	}
+}
+
+func TestBuildWorktreeCleanupUnitsSurfacesRepositoryMetadataFailures(t *testing.T) {
+	root := t.TempDir()
+	ambiguousTarget := filepath.Join(root, "worktrees", "ambiguous")
+	if err := os.MkdirAll(ambiguousTarget, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ambiguousTarget, ".git"), []byte("gitdir: one\ngitdir: two\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	unreadableTarget := filepath.Join(root, "worktrees", "unreadable")
+	gitDir := filepath.Join(root, "metadata", "unreadable", "worktrees", "member")
+	if err := os.MkdirAll(gitDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(gitDir, "commondir"), []byte("../../missing.git\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(unreadableTarget, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(unreadableTarget, ".git"), []byte("gitdir: "+gitDir+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	units, err := BuildWorktreeCleanupUnits([]types.DebrisInfo{
+		cleanupUnitItem(unreadableTarget, 200, ".codex"),
+		cleanupUnitItem(ambiguousTarget, 100, ".codex"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(units) != 2 {
+		t.Fatalf("units = %d; want 2 (%+v)", len(units), units)
+	}
+
+	wantFailure := []string{"ambiguous Git metadata", "unreadable Git metadata"}
+	for i, unit := range units {
+		member := unit.Members[0]
+		if member.EvidenceAvailable {
+			t.Errorf("unit[%d].EvidenceAvailable = true; want false", i)
+		}
+		if member.RepositoryID != "" || member.DisplayRepository != "" {
+			t.Errorf("unit[%d] repository identity = (%q, %q); want empty", i, member.RepositoryID, member.DisplayRepository)
+		}
+		if !strings.Contains(member.EvidenceError, wantFailure[i]) {
+			t.Errorf("unit[%d].EvidenceError = %q; want %q", i, member.EvidenceError, wantFailure[i])
+		}
+	}
+}
+
+func createCleanupUnitLinkedWorktree(t *testing.T, worktreePath, commonDir, name, gitFileCommonDir string) {
+	t.Helper()
+	gitDir := filepath.Join(commonDir, "worktrees", name)
+	if err := os.MkdirAll(gitDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(gitDir, "commondir"), []byte("../..\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(worktreePath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	gitFileGitDir := filepath.Join(gitFileCommonDir, "worktrees", name)
+	if err := os.WriteFile(filepath.Join(worktreePath, ".git"), []byte("gitdir: "+gitFileGitDir+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func createCleanupUnitGitFile(t *testing.T, worktreePath, name string) {
 	t.Helper()
 	if err := os.MkdirAll(worktreePath, 0755); err != nil {
