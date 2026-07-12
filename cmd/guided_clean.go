@@ -506,6 +506,7 @@ func replanGuidedCleanAge(state guidedCleanState, age time.Duration) (guidedClea
 	}
 	overrides := guidedCleanSelectionOverrides(state)
 	next := state
+	next.Rows = append([]guidedCleanRow(nil), state.Rows...)
 	next.Policy = fillCleanupPolicy(state.Policy)
 	next.Policy.MinIdleAge = age
 	decisions := make(map[string]WorktreeCleanupDecision, len(state.Units))

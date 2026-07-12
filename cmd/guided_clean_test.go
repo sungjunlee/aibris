@@ -16,8 +16,8 @@ func TestPromptGuidedCleanRendersAndTogglesSelection(t *testing.T) {
 		ScanSource: scanSource{Kind: scanSourceCached, Age: 12 * time.Second},
 		Activity:   codexActivityIndex{Available: true, Source: codexActivitySourceCache, Age: 3 * time.Second},
 		Rows: []guidedCleanRow{
-			{Number: 1, Row: guidedCodexWorktreeRow{Item: guidedCleanItem("one", 4<<30), Reason: guidedCodexReasonZeroSessions}, Policy: guidedCleanPolicyRecommended, Selected: true},
-			{Number: 2, Row: guidedCodexWorktreeRow{Item: guidedCleanItem("two", 2<<30), Reason: guidedCodexProtectionNewestProjectWorktree}, Policy: guidedCleanPolicyReviewable},
+			{Number: 1, Row: guidedCodexWorktreeRow{Item: guidedCleanItem("one", 4<<30), Reason: "eligible for cleanup recommendation"}, Policy: guidedCleanPolicyRecommended, Selected: true},
+			{Number: 2, Row: guidedCodexWorktreeRow{Item: guidedCleanItem("two", 2<<30), Reason: "retained by cleanup policy"}, Policy: guidedCleanPolicyReviewable},
 		},
 	}
 	var output bytes.Buffer
@@ -43,7 +43,7 @@ func TestPromptGuidedCleanRendersAndTogglesSelection(t *testing.T) {
 func TestPromptGuidedCleanTTYModeRendersChecklistLabel(t *testing.T) {
 	state := guidedCleanState{
 		Rows: []guidedCleanRow{
-			{Number: 1, Row: guidedCodexWorktreeRow{Item: guidedCleanItem("one", 4<<30), Reason: guidedCodexReasonZeroSessions}, Policy: guidedCleanPolicyRecommended, Selected: true},
+			{Number: 1, Row: guidedCodexWorktreeRow{Item: guidedCleanItem("one", 4<<30), Reason: "eligible for cleanup recommendation"}, Policy: guidedCleanPolicyRecommended, Selected: true},
 		},
 	}
 	var output bytes.Buffer
@@ -66,8 +66,8 @@ func TestPromptGuidedCleanTTYModeRendersChecklistLabel(t *testing.T) {
 func TestPromptGuidedCleanEnterReturnsDefaultSelectionForPreview(t *testing.T) {
 	state := guidedCleanState{
 		Rows: []guidedCleanRow{
-			{Number: 1, Row: guidedCodexWorktreeRow{Item: guidedCleanItem("one", 4<<30), Reason: guidedCodexReasonZeroSessions}, Policy: guidedCleanPolicyRecommended, Selected: true},
-			{Number: 2, Row: guidedCodexWorktreeRow{Item: guidedCleanItem("two", 2<<30), Reason: guidedCodexProtectionNewestProjectWorktree}, Policy: guidedCleanPolicyReviewable},
+			{Number: 1, Row: guidedCodexWorktreeRow{Item: guidedCleanItem("one", 4<<30), Reason: "eligible for cleanup recommendation"}, Policy: guidedCleanPolicyRecommended, Selected: true},
+			{Number: 2, Row: guidedCodexWorktreeRow{Item: guidedCleanItem("two", 2<<30), Reason: "retained by cleanup policy"}, Policy: guidedCleanPolicyReviewable},
 		},
 	}
 	var output bytes.Buffer
@@ -114,7 +114,7 @@ func TestPromptGuidedCleanDoesNotToggleLockedRows(t *testing.T) {
 				Number: 1,
 				Row: guidedCodexWorktreeRow{
 					Item:   guidedCleanItem("locked", 4<<30),
-					Reason: guidedCodexProtectionCurrentWorkingDirectory,
+					Reason: "current working directory",
 				},
 				Policy: guidedCleanPolicyLocked,
 			},
@@ -220,13 +220,33 @@ func TestGuidedCleanAgeReplanKeepsUserDeselectOverride(t *testing.T) {
 	}
 }
 
+func TestGuidedCleanAgeReplanDoesNotMutatePriorState(t *testing.T) {
+	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	state := guidedCleanupPolicyState(now, 24*time.Hour)
+	before := append([]guidedCleanRow(nil), state.Rows...)
+
+	next, _, _ := applyGuidedCleanCommand(state, "age 7d")
+
+	if len(state.Rows) != len(before) {
+		t.Fatalf("prior row count = %d; want %d", len(state.Rows), len(before))
+	}
+	for i := range before {
+		if state.Rows[i].Policy != before[i].Policy || state.Rows[i].Selected != before[i].Selected || state.Rows[i].Row.Reason != before[i].Row.Reason {
+			t.Fatalf("prior row %d mutated: got %+v; want %+v", i, state.Rows[i], before[i])
+		}
+	}
+	if len(next.Rows) > 0 && len(state.Rows) > 0 && &next.Rows[0] == &state.Rows[0] {
+		t.Fatal("replanned rows share backing storage with prior state")
+	}
+}
+
 func TestGuidedCleanupPolicyDecisionsDriveClassesAndAgeReplan(t *testing.T) {
 	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
 	units := guidedClassificationUnits(now)
 	policy := DefaultCleanupPolicy(now)
 	items := guidedCleanupItems(units)
 	state := newGuidedCleanStateFromCleanupPlan(
-		scanSource{}, "", guidedPlanActivity(), policy, units, items, PlanWorktreeCleanup(units, policy),
+		scanSource{}, "", guidedCleanTestActivity(), policy, units, items, PlanWorktreeCleanup(units, policy),
 	)
 
 	assertGuidedRow := func(key string, class guidedCleanPolicy, selected bool, reason string) guidedCleanRow {
@@ -280,7 +300,7 @@ func TestRenderGuidedCleanTTYAndTextSharePolicyClassAndReasonData(t *testing.T) 
 	units := guidedClassificationUnits(now)
 	policy := DefaultCleanupPolicy(now)
 	state := newGuidedCleanStateFromCleanupPlan(
-		scanSource{}, "", guidedPlanActivity(), policy, units, guidedCleanupItems(units), PlanWorktreeCleanup(units, policy),
+		scanSource{}, "", guidedCleanTestActivity(), policy, units, guidedCleanupItems(units), PlanWorktreeCleanup(units, policy),
 	)
 	var textOutput bytes.Buffer
 	var ttyOutput bytes.Buffer
@@ -438,7 +458,7 @@ func guidedCleanupPolicyState(now time.Time, minIdleAge time.Duration) guidedCle
 		})
 	}
 	plan := PlanWorktreeCleanup(units, policy)
-	return newGuidedCleanStateFromCleanupPlan(scanSource{}, "", guidedPlanActivity(), policy, units, items, plan)
+	return newGuidedCleanStateFromCleanupPlan(scanSource{}, "", guidedCleanTestActivity(), policy, units, items, plan)
 }
 
 func guidedClassificationUnits(now time.Time) []WorktreeCleanupUnit {
@@ -511,4 +531,8 @@ func guidedCleanItem(id string, size int64) types.DebrisInfo {
 		ModTime:  time.Now().Add(-48 * time.Hour),
 		Status:   types.WorktreeActive,
 	}
+}
+
+func guidedCleanTestActivity() codexActivityIndex {
+	return codexActivityIndex{Available: true, Source: codexActivitySourceCache}
 }
