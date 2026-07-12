@@ -83,7 +83,27 @@ months; bare `m` keeps the Go duration meaning of minutes.
 
 ## Agent Integration Pattern
 
-The intended AI-guided cleanup loop is:
+After scanning and receiving approval, choose one of these distinct branches.
+
+### Selector-preserving cleanup
+
+For a scoped cleanup, the preview and execution commands must be identical
+except that execution removes `--dry-run`. Preserve every user-approved
+`--category`, `--tool`, repeatable `--root`, and `--age` value, plus applicable
+routing and safety flags such as `--guide`, `--no-guide`, `--risky`,
+`--include-active-worktrees`, `--interactive`, and `--force`. Never follow a
+scoped preview with plain `aibris clean`.
+
+```bash
+aibris scan --json
+aibris clean --no-guide --root ~/path/to/project --category worktree --tool codex --age 7d --include-active-worktrees --dry-run
+aibris clean --no-guide --root ~/path/to/project --category worktree --tool codex --age 7d --include-active-worktrees
+```
+
+### No-selector guided Codex cleanup
+
+Use the plain-command pair only when the user approved an unscoped guided
+Codex review and did not approve any CLI selector or safety flag:
 
 ```bash
 aibris scan --json

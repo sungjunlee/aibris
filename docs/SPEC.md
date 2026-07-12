@@ -190,12 +190,17 @@ Git-aware active execution contract:
 
 1. Run `aibris scan --json`.
 2. Summarize by project, category, size, and age.
-3. For active Codex worktree bloat, prefer `aibris clean --dry-run` so the user
-   can review recommended, reviewable, and locked units with their evidence.
+3. For an unscoped active Codex worktree cleanup, use the separate no-selector
+   guided branch: preview with `aibris clean --dry-run`, ask again, and execute
+   with `aibris clean` only after the user approves the guided selection.
 4. For ordinary cleanup groups, ask the user which groups to remove.
-5. Run `aibris clean ... --dry-run`.
-6. Ask for confirmation again.
-7. Run `aibris clean ...` only after explicit approval.
+5. For a scoped cleanup, build the command from every approved `--category`,
+   `--tool`, repeatable `--root`, and `--age` value and every applicable routing
+   or safety flag.
+6. Run that exact scoped command with `--dry-run` appended.
+7. Ask for confirmation again.
+8. Run the exact same scoped command after explicit approval, removing only
+   `--dry-run`. Never replace it with plain `aibris clean`.
 
 ## Supported Categories
 

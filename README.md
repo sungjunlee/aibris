@@ -262,13 +262,17 @@ scan summary
   protected/skipped 2 items   1.3 GB
 ```
 
-So the common loop is fast and visible:
+For unscoped guided Codex cleanup, the no-selector loop is fast and visible:
 
 ```bash
 aibris scan
 aibris clean --dry-run
 aibris clean
 ```
+
+This plain-command pair is not a substitute for a scoped cleanup. If the user
+approves selectors or safety flags, keep every flag and value identical in the
+preview and execution commands and remove only `--dry-run` for execution.
 
 When stdout is an interactive terminal, scans use a single-line spinner while
 providers run. In non-interactive logs, progress falls back to plain
@@ -336,9 +340,19 @@ New tools can be added by implementing the `DebrisProvider` interface.
 
 ### Agent Workflow
 
+No-selector guided Codex cleanup:
+
 ```bash
 aibris scan --json
 aibris clean --dry-run
+aibris clean
+```
+
+Scoped cleanup keeps every approved selector and safety flag identical between
+preview and execution; only `--dry-run` is removed:
+
+```bash
+aibris scan --json
 aibris clean --no-guide --category worktree --age 7d --dry-run
 aibris clean --no-guide --category worktree --age 7d
 ```
@@ -346,7 +360,9 @@ aibris clean --no-guide --category worktree --age 7d
 The intended agent flow is: scan, summarize by project/category/age, use guided
 review for active Codex pressure, run a dry-run, ask again, then execute. Treat
 `active` as linked Git metadata, not proof of recent use; rely on the guided
-class and reason before proposing an active unit.
+class and reason before proposing an active unit. A scoped execution must never
+fall back to plain `aibris clean`: preserve all approved `--category`, `--tool`,
+`--root`, `--age`, routing, and safety flags.
 
 ### Contributing
 
