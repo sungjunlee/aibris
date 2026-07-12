@@ -1,13 +1,14 @@
 ---
 id: AIB-91
 title: Release v0.8.0 evidence-based worktree reclamation
-status: In Progress
+status: Done
 labels:
   - documentation
   - devops
 priority: medium
 milestone: Evidence-Based Worktree Reclamation
 created_date: '2026-07-12'
+completed_date: '2026-07-13'
 ---
 ## Description
 ## Parent
@@ -32,8 +33,8 @@ created_date: '2026-07-12'
 - [x] All milestone implementation issues are closed or explicitly deferred.
 - [x] go test ./..., go build ./..., and go vet ./... pass.
 - [x] goreleaser release --snapshot --clean passes.
-- [ ] Annotated v0.8.0 tag and GitHub Release assets publish successfully.
-- [ ] Installer smoke reports aibris version 0.8.0.
+- [x] Annotated v0.8.0 tag and GitHub Release assets publish successfully.
+- [x] Installer smoke reports aibris version 0.8.0.
 
 ## Preparation Evidence
 
@@ -50,5 +51,8 @@ created_date: '2026-07-12'
   `goreleaser release --snapshot --clean` with normal network access; it
   succeeded for all six Darwin/Linux/Windows amd64/arm64 archives, emitted
   `checksums.txt`, and recorded tag-derived `v0.7.0-next` snapshot metadata.
-- Tag creation, GitHub Release publication, and installer smoke testing are
-  intentionally left to the release orchestrator.
+- 2026-07-13: Annotated tag `v0.8.0` points to release commit `3d1dad3`.
+  Release workflow `29201631207` published six platform archives and
+  `checksums.txt` successfully.
+- 2026-07-13: The tagged installer installed into a disposable prefix and both
+  its smoke output and the installed binary reported `aibris version 0.8.0`.

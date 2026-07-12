@@ -1,6 +1,6 @@
 ---
 milestone: Evidence-Based Worktree Reclamation
-status: active
+status: completed
 started: 2026-07-12
 due: 2026-07-26
 objectives: []
@@ -28,34 +28,34 @@ unrecoverable state and preserving branch refs during Git-aware removal.
 
 ### Batch 1 - Cleanup Unit Foundation
 
-- [ ] #82 Model physical cleanup units and nested Git members (~90min)
+- [x] #82 Model physical cleanup units and nested Git members (~90min)
 
 ### Batch 2 - Independent Evidence
 
-- [ ] #83 Resolve canonical repository identity for cleanup units (~60min)
-- [ ] #84 Replace upstream safety with ref reachability (~90min)
-- [ ] #85 Add unified worktree activity evidence (~90min)
+- [x] #83 Resolve canonical repository identity for cleanup units (~60min)
+- [x] #84 Replace upstream safety with ref reachability (~90min)
+- [x] #85 Add unified worktree activity evidence (~90min)
 
 ### Batch 3 - Git-Aware Execution
 
-- [ ] #86 Add Git-aware active worktree executor (~120min)
+- [x] #86 Add Git-aware active worktree executor (~120min)
 
 ### Batch 4 - Hierarchical Policy
 
-- [ ] #87 Implement hierarchical retention and recommendation policy (~120min)
+- [x] #87 Implement hierarchical retention and recommendation policy (~120min)
 
 ### Batch 5 - Guided Product Cutover
 
-- [ ] #88 Reclassify guided rows and orthogonalize age controls (~75min)
-- [ ] #89 Route protected-only Codex pressure to guided review (~60min)
+- [x] #88 Reclassify guided rows and orthogonalize age controls (~75min)
+- [x] #89 Route protected-only Codex pressure to guided review (~60min)
 
 ### Batch 6 - Dogfood And Documentation
 
-- [ ] #90 Dogfood Git-aware reclamation and refresh documentation (~120min)
+- [x] #90 Dogfood Git-aware reclamation and refresh documentation (~120min)
 
 ### Batch 7 - Release
 
-- [ ] #91 Release v0.8.0 evidence-based worktree reclamation (~60min)
+- [x] #91 Release v0.8.0 evidence-based worktree reclamation (~60min)
 
 ## Definition Of Done
 
@@ -108,3 +108,9 @@ unrecoverable state and preserving branch refs during Git-aware removal.
 - 2026-07-12: Pulled all 12 GitHub issues into local task mirrors and created
   this dependency-ordered active sprint. Planning PR #79 remains the merge gate
   before implementation dispatch.
+- 2026-07-13: Issues #82-#91 closed through merged PRs #92-#101. Independent
+  Claude and Codex review rounds caught dead code, state aliasing, receipt-doc
+  drift, and selector-scope leakage before merge.
+- 2026-07-13: Release workflow `29201631207` published v0.8.0 with six platform
+  archives plus checksums; tagged installer smoke reported
+  `aibris version 0.8.0` from a disposable prefix.
