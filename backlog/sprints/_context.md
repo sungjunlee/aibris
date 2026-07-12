@@ -19,7 +19,8 @@
 - `Guided Codex Cleanup` milestone #3 and `Default Guided Clean` milestone #4
   are complete. They shipped the activity index, conservative planner, default
   guided route, and v0.7.0 checklist model.
-- The proposed next initiative is `Evidence-Based Worktree Reclamation`, using
+- The active next initiative is GitHub milestone #5 `Evidence-Based Worktree
+  Reclamation`, with epics #80/#81 and leaf issues #82-#91. It uses
   `docs/superpowers/specs/2026-07-10-evidence-based-worktree-reclamation-prd.md`
   as the planning source of truth for cleanup units, ref reachability,
   per-repository retention, and Git-aware active removal.

@@ -1,8 +1,10 @@
 # Evidence-Based Worktree Reclamation PRD
 
 Date: 2026-07-10
-Status: Proposed PRD
+Status: Accepted and registered
 Target release: v0.8.0 candidate
+GitHub milestone: [#5 Evidence-Based Worktree Reclamation](https://github.com/sungjunlee/aibris/milestone/5)
+Planning PR: [#79 Define evidence-based worktree reclamation](https://github.com/sungjunlee/aibris/pull/79)
 
 ## Summary
 
@@ -894,46 +896,45 @@ remains the escape hatch.
 Keep the richer cleanup-unit model internal for v0.8.0. A future schema revision
 may expose it deliberately with versioning.
 
-## Proposed Milestone And Epic Decomposition
+## Registered Milestone And Epic Decomposition
 
 ### Milestone
 
-**Evidence-Based Worktree Reclamation**
+[#5 Evidence-Based Worktree Reclamation](https://github.com/sungjunlee/aibris/milestone/5)
 
 Goal: reclaim substantial stale Codex worktree space while hard-locking live,
 dirty, unreadable, and unrecoverable state, then ship the policy and Git-aware
 executor as `v0.8.0`.
 
-Backlog prerequisite: the completed `Default Guided Clean` work is still marked
-`status: active` in its local sprint file. Close that sprint and promote any
-durable context before initializing this milestone's sprint; never create a
-second active sprint file.
+Backlog prerequisite completed on 2026-07-12: the prior `Default Guided Clean`
+sprint and GitHub milestone #4 were closed before this milestone's active sprint
+was initialized.
 
-### Epic A: Build Recoverable Cleanup Units
+### Epic A: [#80 Build Recoverable Cleanup Units](https://github.com/sungjunlee/aibris/issues/80)
 
 Owns physical identity, Git evidence, and safe execution.
 
-### Epic B: Make Guided Retention Policy Useful
+### Epic B: [#81 Make Guided Retention Policy Useful](https://github.com/sungjunlee/aibris/issues/81)
 
 Owns activity, retention, recommendation policy, routing, output, and rollout.
 
 ## Recommended Issue Split
 
-Issue numbers are intentionally left TBD until GitHub creation. The order below
-is the source of truth for later milestone and sprint planning.
+The registered issue numbers and order below are the source of truth for the
+active milestone sprint.
 
 | Order | Epic | Issue | Scope | Depends on | Done signal |
 | ---: | --- | --- | --- | --- | --- |
-| 1 | A | Model physical cleanup units and nested Git members | Build deterministic one-target/many-member internal model without changing public scan JSON | none | Direct, nested, duplicate, and two-member fixtures pass |
-| 2 | A | Resolve canonical repository identity | Add common-dir identity, same-basename separation, and multi-repository unit membership | 1 | Retention input groups by canonical repository |
-| 3 | A | Replace upstream safety with ref reachability | Collect branch, HEAD, containing refs, dirty state, and stable reasons | 1 | Named no-upstream and referenced detached states pass; unreferenced detached locks |
-| 4 | B | Add unified worktree activity evidence | Combine session metadata, HEAD reflog, and fallback timestamps without reading bodies | 1 | Per-member and per-unit last activity tests pass |
-| 5 | A | Add Git-aware active worktree executor | Preflight, Git removal, branch preservation, multi-member handling, truthful receipts | 2, 3 | Integration tests prove refs preserved and no raw fallback |
-| 6 | B | Implement hierarchical retention and recommendation policy | Separate 6h lock, top-3 retention, 3d idle age, 256 MB size, and remove no-low-risk indefinite protection | 2, 3, 4 | Policy matrix and deterministic reason tests pass |
-| 7 | B | Reclassify guided rows and orthogonalize age controls | Map locked/retained/recommended correctly and make age affect idle only | 6 | TTY/text parity and age-replan tests pass |
-| 8 | B | Route protected-only Codex pressure to guided review | Use pressure rather than selected count while preserving classic selectors | 6 | Default/classic/non-TTY command tests pass |
-| 9 | A + B | Dogfood Git-aware reclamation and refresh docs | Capture before/after evidence and one controlled branch-preserving removal | 5, 7, 8 | DOGFOOD, SPEC, README, skill, and evidence updated |
-| 10 | A + B | Release v0.8.0 | Version, changelog, snapshot, CI, tag, GitHub Release, installer smoke | 9 | Published release and installer report v0.8.0 |
+| 1 | A | [#82 Model physical cleanup units and nested Git members](https://github.com/sungjunlee/aibris/issues/82) | Build deterministic one-target/many-member internal model without changing public scan JSON | none | Direct, nested, duplicate, and two-member fixtures pass |
+| 2 | A | [#83 Resolve canonical repository identity](https://github.com/sungjunlee/aibris/issues/83) | Add common-dir identity, same-basename separation, and multi-repository unit membership | #82 | Retention input groups by canonical repository |
+| 3 | A | [#84 Replace upstream safety with ref reachability](https://github.com/sungjunlee/aibris/issues/84) | Collect branch, HEAD, containing refs, dirty state, and stable reasons | #82 | Named no-upstream and referenced detached states pass; unreferenced detached locks |
+| 4 | B | [#85 Add unified worktree activity evidence](https://github.com/sungjunlee/aibris/issues/85) | Combine session metadata, HEAD reflog, and fallback timestamps without reading bodies | #82 | Per-member and per-unit last activity tests pass |
+| 5 | A | [#86 Add Git-aware active worktree executor](https://github.com/sungjunlee/aibris/issues/86) | Preflight, Git removal, branch preservation, multi-member handling, truthful receipts | #83, #84 | Integration tests prove refs preserved and no raw fallback |
+| 6 | B | [#87 Implement hierarchical retention and recommendation policy](https://github.com/sungjunlee/aibris/issues/87) | Separate 6h lock, top-3 retention, 3d idle age, 256 MB size, and remove no-low-risk indefinite protection | #83, #84, #85 | Policy matrix and deterministic reason tests pass |
+| 7 | B | [#88 Reclassify guided rows and orthogonalize age controls](https://github.com/sungjunlee/aibris/issues/88) | Map locked/retained/recommended correctly and make age affect idle only | #87 | TTY/text parity and age-replan tests pass |
+| 8 | B | [#89 Route protected-only Codex pressure to guided review](https://github.com/sungjunlee/aibris/issues/89) | Use pressure rather than selected count while preserving classic selectors | #87 | Default/classic/non-TTY command tests pass |
+| 9 | A + B | [#90 Dogfood Git-aware reclamation and refresh docs](https://github.com/sungjunlee/aibris/issues/90) | Capture before/after evidence and one controlled branch-preserving removal | #86, #88, #89 | DOGFOOD, SPEC, README, skill, and evidence updated |
+| 10 | A + B | [#91 Release v0.8.0](https://github.com/sungjunlee/aibris/issues/91) | Version, changelog, snapshot, CI, tag, GitHub Release, installer smoke | #90 | Published release and installer report v0.8.0 |
 
 ## Suggested Delivery Batches
 
