@@ -1,7 +1,7 @@
 ---
 id: AIB-69
 title: Implement TTY checklist UI with text fallback
-status: To Do
+status: Done
 labels:
   - enhancement
   - ux
@@ -10,6 +10,7 @@ labels:
 priority: medium
 milestone: Default Guided Clean
 created_date: '2026-07-09'
+completed_date: '2026-07-10'
 ---
 ## Description
 Part of #62
@@ -31,9 +32,14 @@ Guided cleanup should let users act on recommendations directly from the default
 
 ## Acceptance Criteria
 
-- [ ] Guided TTY mode renders a checkbox-style list of candidate deletions.
-- [ ] Low-risk recommendations are selected by default.
-- [ ] Selection changes update projected freed-space totals.
-- [ ] Deletion only executes after explicit final confirmation.
-- [ ] Text fallback remains usable and covered by tests.
+- [x] Guided TTY mode renders a checkbox-style list of candidate deletions.
+- [x] Low-risk recommendations are selected by default.
+- [x] Selection changes update projected freed-space totals.
+- [x] Deletion only executes after explicit final confirmation.
+- [x] Text fallback remains usable and covered by tests.
 
+## Completion Evidence
+
+- PR #76 merged as `dd85f64`.
+- Non-TTY and pseudo-TTY dogfood passed without deletion.
+- Issue #69 closed as completed.

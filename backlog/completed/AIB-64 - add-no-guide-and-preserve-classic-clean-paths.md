@@ -1,7 +1,7 @@
 ---
 id: AIB-64
 title: Add --no-guide and preserve classic clean paths
-status: To Do
+status: Done
 labels:
   - enhancement
   - cli
@@ -9,6 +9,7 @@ labels:
 priority: medium
 milestone: Default Guided Clean
 created_date: '2026-07-09'
+completed_date: '2026-07-10'
 ---
 ## Description
 Part of #62
@@ -28,9 +29,13 @@ Making guided cleanup the default must not remove the predictable executor path 
 
 ## Acceptance Criteria
 
-- [ ] `aibris clean --no-guide` uses the classic filter/delete flow.
-- [ ] Explicit selector commands keep classic behavior unless `--guide` is explicitly supplied.
-- [ ] Conflicting flags have deterministic behavior and tests.
-- [ ] `aibris clean --help` documents the guided default and `--no-guide` escape hatch.
-- [ ] Existing clean tests still pass without weakening safety expectations.
+- [x] `aibris clean --no-guide` uses the classic filter/delete flow.
+- [x] Explicit selector commands keep classic behavior unless `--guide` is explicitly supplied.
+- [x] Conflicting flags have deterministic behavior and tests.
+- [x] `aibris clean --help` documents the guided default and `--no-guide` escape hatch.
+- [x] Existing clean tests still pass without weakening safety expectations.
 
+## Completion Evidence
+
+- PR #71 merged as `e67078b`.
+- Issue #64 closed as completed.

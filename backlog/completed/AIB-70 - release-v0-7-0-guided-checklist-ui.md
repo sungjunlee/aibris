@@ -1,13 +1,14 @@
 ---
 id: AIB-70
 title: Release v0.7.0 guided checklist UI
-status: To Do
+status: Done
 labels:
   - documentation
   - devops
 priority: medium
 milestone: Default Guided Clean
 created_date: '2026-07-09'
+completed_date: '2026-07-10'
 ---
 ## Description
 Part of #62
@@ -27,9 +28,15 @@ The interactive checklist changes the main cleanup experience enough to warrant 
 
 ## Acceptance Criteria
 
-- [ ] Version metadata reflects v0.7.0.
-- [ ] Changelog/release notes describe checklist selection behavior and defaults.
-- [ ] `go build ./...` passes.
-- [ ] `go vet ./...` passes.
-- [ ] Git tag and GitHub release exist for v0.7.0.
+- [x] Version metadata reflects v0.7.0.
+- [x] Changelog/release notes describe checklist selection behavior and defaults.
+- [x] `go build ./...` passes.
+- [x] `go vet ./...` passes.
+- [x] Git tag and GitHub release exist for v0.7.0.
 
+## Completion Evidence
+
+- PR #77 merged as `ca643c9`.
+- Release workflow `29058905357` succeeded.
+- GitHub Release `v0.7.0` exists with published assets and `checksums.txt`.
+- Issue #70 closed as completed.

@@ -1,204 +1,186 @@
-# Dogfood Notes
+# Evidence-Based Reclamation Dogfood
 
-These notes capture real local runs used to validate release behavior. Paths
-and counts are machine-specific; the point is to preserve observed CLI shape
-and safety behavior.
+These notes record the sanitized evidence used for issue #90. The real `$HOME`
+exercise was limited to scan, Git inspection, and dry-run planning. The only
+deletion was a disposable branch-backed linked worktree under a temporary
+`HOME`; all temporary repositories and worktrees were removed afterward.
 
-## 2026-06-06 - Scan UX After PR #30
+## Preserved 2026-07-10 Before Baseline
 
-Command:
+The v0.7.0 planner treated missing upstream comparison as hard safety. Its
+preserved 39-unit, 33.9 GB baseline was:
 
-```bash
-go run . scan --root /Users/sjlee/workspace/active/harness-stack
-```
+| Class | Units | Size |
+| --- | ---: | ---: |
+| Recommended | 3 | 3.1 GB |
+| Reviewable | 2 | 0.1 GB |
+| Locked | 34 | 30.7 GB |
+| Total | 39 | 33.9 GB |
 
-Output:
+The locked-reason distribution was:
 
-```text
-scan
-  roots  ~/workspace/active/harness-stack
+| Reason | Units | Size |
+| --- | ---: | ---: |
+| Upstream comparison unavailable | 26 | 17.2 GB |
+| Dirty files and upstream comparison unavailable | 6 | 11.0 GB |
+| Git status unavailable | 2 | 2.5 GB |
 
-  scanning node_modules
-  scanning build-cache
-  scanning pip-cache
-  scanning cursor
-  scanning ai-logs
-  scanning windsurf
-  scanning codex
-  found    build-cache    0 items   0 B
-  found    pip-cache      0 items   0 B
-  found    windsurf       0 items   0 B
-  found    cursor         0 items   0 B
-  found    ai-logs        0 items   0 B
-  found    codex          1 items   1.4 MB
-  found    node_modules   0 items   0 B
+Canonical Git common-dir inspection reduced 26 path-derived project labels to
+six repositories plus unresolved units. Twelve detached HEADs accounted for
+6.0 GB; all twelve were reachable from named refs. Two physical targets had two
+nested Git members each, but the old single-member inspector reported them as
+unavailable.
 
-summary
-  found       1 item
-  found size  1.4 MB
-  default clean 0 B
-  protected   1.4 MB active worktrees; use --include-active-worktrees after review
+## 2026-07-13 Live Read-Only Run
 
-by category
-  worktree        1   1.4 MB
-
-largest
-    1.4 MB  worktree      elegant-ardinghelli dev-relay          active 49d
-
-next
-  aibris clean --dry-run
-  aibris scan --json
-```
-
-Notes:
-
-- Non-interactive output stayed log-friendly with plain `scanning` and `found`
-  lines.
-- The active worktree appeared in scan output but remains protected from
-  default cleanup.
-
-## 2026-06-29 - Clean Audit Output
-
-Command:
+Commands:
 
 ```bash
-go run . clean --root /Users/sjlee/workspace/active/harness-stack/aibris --dry-run
+aibris scan --json
+printf '\n' | aibris clean --dry-run
+printf '\n' | aibris clean --dry-run --age 14d
 ```
 
-Output:
+The full scan found 140 items / 20.5 GB. Worktrees accounted for 43 items /
+14.7 GB across Codex, Claude, and other convention owners. Guided cleanup
+considered the 19 active `.codex` cleanup units / 6.8 GB.
+
+This run happened inside a read-only `$HOME` sandbox, so Codex activity was
+unavailable. The planner correctly failed closed instead of substituting weak
+evidence or fabricating a recommendation:
 
 ```text
-clean
-  roots  ~/workspace/active/harness-stack/aibris
-
-  scanning node_modules
-  scanning build-cache
-  scanning pip-cache
-  scanning cursor
-  scanning ai-logs
-  scanning windsurf
-  scanning codex
-  found    pip-cache      0 items   0 B
-
-  found    cursor         0 items   0 B
-
-  found    ai-logs        0 items   0 B
-
-  found    windsurf       0 items   0 B
-
-  found    codex          0 items   0 B
-
-  found    build-cache    0 items   0 B
-
-  found    node_modules   0 items   0 B
-
-  policy  age>7d, risky=false, active-worktrees=protected
-  scan    live
-
-scan summary
-  scanned    7 sources   0 items   0 B
-  eligible   0 items   0 B
-  protected/skipped 0 items   0 B
-
-  matched  0 candidates   0 B
-
-No items to clean.
-```
-
-## 2026-07-07 - Guided Codex Cleanup Dry Run
-
-Command:
-
-```bash
-printf '\n' | GOCACHE=/private/tmp/aibris-gocache-55 go run . clean --guide --dry-run --root /Users/sjlee/.codex
-```
-
-Output:
-
-```text
-clean
-  roots  ~/.codex
-
-  scanning node_modules
-  scanning build-cache 
-  scanning pip-cache   
-  scanning cursor      
-  scanning ai-logs     
-  scanning windsurf    
-  scanning codex       
-  found    cursor         0 items   0 B
-
-  found    windsurf       0 items   0 B
-
-  found    pip-cache      0 items   0 B
-
-  found    ai-logs        2 items   1.4 GB
-
-  found    build-cache    0 items   0 B
-
-  found    node_modules  24 items   22.2 GB
-
-  found    codex         40 items   41.4 GB
-
 guided codex worktree cleanup
+  policy     idle>3d, recent<6h locked, keep=3/repo, min-size=256.0 MB
 
 scan
   source     live
-  activity   indexed
+  activity   unavailable
 
 summary
-  selected   3 items   3.1 GB
-  protected  36 items   37.3 GB
+  selected   0 items   0 B
+  projected  0 B
+  protected  19 items   6.8 GB
+```
 
-selected for cleanup
-  [x]  1    1.0 GB  baby_ops-issue-184-export active 11d         zero matching Codex sessions
-  [x]  2    1.0 GB  baby_ops-issue-185-filters active 11d         zero matching Codex sessions
-  [x]  3    1.0 GB  baby_ops-issue-186-empty-states active 11d         zero matching Codex sessions
+Changing `--age` to `14d` changed only the header to `idle>14d`; the 6-hour
+lock and recent-three setting stayed fixed. All rows remained locked because
+activity evidence was unavailable, not because age replanning silently changed
+another safety input.
 
-protected
-  [ ]  4    7.3 GB  07af                     active 14d         dirty files, upstream comparison unavailable
-  [ ]  5    5.2 GB  d9f73c9f-9ace-43aa-88d5-853c79dcf8d1 active 12d         dirty files, upstream comparison unavailable
-  [ ]  6    4.6 GB  baby_ops-dogfood-install active 11d         dirty files, upstream comparison unavailable
-  [ ]  7    2.3 GB  3247                     active 2d          upstream comparison unavailable
-  [ ]  8    1.6 GB  beopjalal-actions-runner-labels active 13d         upstream comparison unavailable
-  [ ]  9    1.1 GB  baby_ops-uiux-integration-pass active 10d         dirty files, upstream comparison unavailable
-  [ ] 10    1.1 GB  5e0a                     active 6d          upstream comparison unavailable
-  [ ] 11    1.1 GB  baby_ops-v3-visual-smoke active 7d          upstream comparison unavailable
-  [ ] 12    1.0 GB  cdf9                     active 11d         upstream comparison unavailable
-  [ ] 13    1.0 GB  baby_ops-correction-sheet-visual-qa active 13d         upstream comparison unavailable
-  [ ] 14    1.0 GB  baby_ops-correction-type-expansion active 13d         upstream comparison unavailable
-  [ ] 15    1.0 GB  baby_ops-delete-undo     active 13d         upstream comparison unavailable
-  [ ] 16    1.0 GB  baby_ops-correction-trust-final active 13d         upstream comparison unavailable
-  [ ] 17    1.0 GB  baby_ops-manual-fallback active 13d         upstream comparison unavailable
-  [ ] 18    1.0 GB  baby_ops-correction-a11y active 13d         upstream comparison unavailable
-  [ ] 19    1.0 GB  baby_ops-feeding-amount  active 13d         upstream comparison unavailable
-  [ ] 20    1.0 GB  baby_ops-source-detail   active 13d         upstream comparison unavailable
-  [ ] 21    1.0 GB  baby_ops-mvp-0-5-design-spike active 13d         upstream comparison unavailable
-  [ ] 22    1.0 GB  6f885429-e3e8-43db-97a6-074fd8f16c3d active 15d         git status unavailable
-  [ ] 23  506.4 MB  caab                     active 2d          upstream comparison unavailable
-  ... 16 more protected   1.1 GB
+### Sanitized Git Evidence
 
-Enter numbers to toggle, Enter to preview, q to abort: clean plan
-  mode     dry-run
-  targets  3 items   3.1 GB
+Read-only member inspection produced this distribution. Repository names and
+paths are replaced by stable aliases.
 
-targets
-      size  category      name         project            age/status     action       reason
-    1.0 GB  worktree      baby_ops-issue-184-export baby_ops-issue-184-export active 11d     remove-path  active worktree
-    ~/.codex/worktrees/baby_ops-issue-184-export
-    1.0 GB  worktree      baby_ops-issue-185-filters baby_ops-issue-185-filters active 11d     remove-path  active worktree
-    ~/.codex/worktrees/baby_ops-issue-185-filters
-    1.0 GB  worktree      baby_ops-issue-186-empty-states baby_ops-issue-186-empty-states active 11d     remove-path  active worktree
-    ~/.codex/worktrees/baby_ops-issue-186-empty-states
+| Evidence | Distribution |
+| --- | --- |
+| Canonical repositories | 5 groups containing 8, 4, 4, 2, and 1 units |
+| Unit member count | 19 one-member units; no live multi-member unit remained |
+| Worktree state | 11 clean, 8 dirty or untracked |
+| HEAD state | 8 attached, 11 detached |
+| Detached reachability | 11 reachable from named refs, 0 unreferenced |
+| Attached upstream | 4 configured, 4 missing or gone |
 
-[DRY-RUN] Preview complete.
+The corresponding visible reason counts were:
+
+| Reason or metadata | Rows | Policy effect |
+| --- | ---: | --- |
+| Activity evidence unavailable | 19 | Hard lock |
+| Dirty or untracked files | 8 | Additional hard lock |
+| Detached HEAD unreferenced | 0 | No live occurrence; hard lock is fixture-tested |
+| Upstream missing or gone | 4 | Explanation only; zero rows locked solely for upstream |
+
+This live state had drifted below the accepted 10 GB recommendation bar because
+required activity evidence was unavailable. The observed recommendation remains
+truthfully 0 B.
+
+## Deterministic Accepted-Baseline Fixture
+
+`TestEvidenceBasedReclamationBaseline` preserves the accepted 39-unit /
+33.9 GB shape without depending on mutable local state:
+
+| Decision | Units | Size |
+| --- | ---: | ---: |
+| Hard locked | 8 | 13.5 GB |
+| Recent-three retained | 11 | 6.7 GB |
+| Age or size hold | 7 | 0.2 GB |
+| Recommended | 13 | 13.5 GB |
+| Total | 39 | 33.9 GB |
+
+The fixture includes six dirty units, one unreferenced detached HEAD, one unit
+with unavailable Git evidence, an attached branch with no upstream, a detached
+HEAD reachable from a named remote ref, and a safe two-member cleanup unit. It
+asserts that:
+
+- all dirty, unreferenced-detached, and unavailable-evidence units remain
+  locked;
+- missing upstream does not lock an otherwise safe unit;
+- the two-member unit is inspected and recommended as one physical target;
+- canonical repository IDs, rather than display names, drive recent-three
+  retention;
+- recommended bytes are 13.5 GB, above the 10 GB acceptance threshold; and
+- raising minimum idle age changes recommendations while leaving hard locks and
+  recent-three retention unchanged.
+
+Temporary-Git integration tests separately discover both nested `.git` members,
+aggregate a dirty member into a unit lock, preflight every member before
+mutation, and verify partial receipts do not claim freed bytes. This guards the
+member-inspection seam rather than only feeding prebuilt members to the policy.
+
+Run it with:
+
+```bash
+go test ./cmd -run TestEvidenceBasedReclamationBaseline -count=1
+```
+
+## Disposable Git-Aware Removal
+
+A temporary repository was initialized with `main`, then a local-only branch
+`preserve-me` was checked out as a linked worktree under
+`<temp-home>/.codex/worktrees/disposable`. The worktree was made old enough for
+the classic selector and previewed first:
+
+```bash
+HOME=<temp-home> aibris clean \
+  --root <temp-home>/.codex \
+  --category worktree \
+  --include-active-worktrees \
+  --age 1h \
+  --dry-run
+```
+
+Sanitized preview:
+
+```text
+policy  age>1h, risky=false, active-worktrees=included
+eligible   1 item   4.0 KB
+matched    1 candidate   4.0 KB
 [DRY-RUN] No files were removed.
 ```
 
-Notes:
+The same command without `--dry-run` used `--force` only to make this automated
+fixture non-interactive. The executor did not pass force to Git:
 
-- The guide default-selected 3 low-risk Codex worktrees while protecting 36
-  active worktrees with dirty, unavailable upstream, newest, or other safety
-  reasons.
-- Pressing Enter handed the selected rows to the normal dry-run clean plan.
-- `--dry-run` completed without deleting files.
+```text
+removing worktree member 1/1: <temp-home>/.codex/worktrees/disposable ...
+removed worktree member: <temp-home>/.codex/worktrees/disposable
+
+worktree execution receipt
+  unit      removed <temp-home>/.codex/worktrees/disposable
+    member  removed <temp-home>/.codex/worktrees/disposable
+    physical-removed true   freed 4.0 KB
+```
+
+Postconditions:
+
+| Check | Before | After |
+| --- | --- | --- |
+| `refs/heads/preserve-me` | captured OID | same OID |
+| Physical member path | exists | absent |
+| Parent `git worktree list` | parent + disposable member | parent only |
+| Unrelated `main` worktree | present | present |
+
+This exercises the shipped preflight, non-forced `git worktree remove`, branch
+verification, metadata verification, and receipt path. No real user worktree was
+deleted.

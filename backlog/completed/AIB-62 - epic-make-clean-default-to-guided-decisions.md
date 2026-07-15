@@ -1,7 +1,7 @@
 ---
 id: AIB-62
 title: '[Epic] Make clean default to guided decisions'
-status: To Do
+status: Done
 labels:
   - enhancement
   - ux
@@ -10,6 +10,7 @@ labels:
 priority: medium
 milestone: Default Guided Clean
 created_date: '2026-07-09'
+completed_date: '2026-07-10'
 ---
 ## Description
 ## Context
@@ -35,27 +36,22 @@ Codex-heavy usage can create enough active worktrees to fill disk before a simpl
 
 ### v0.6.1: Default guided routing
 
-- [ ] #63 Auto-enter guided cleanup from default clean
-- [ ] #64 Add --no-guide and preserve classic clean paths
-- [ ] #65 Harden non-TTY guided fallback and explicit age routing
-- [ ] #66 Refresh docs and dogfood around default clean --dry-run
-- [ ] #67 Release v0.6.1 default guided clean
-
-Suggested order: #63 first, #64 alongside or immediately after #63, #65 before release, #66 after routing behavior is stable, then #67.
+- [x] #63 Auto-enter guided cleanup from default clean
+- [x] #64 Add --no-guide and preserve classic clean paths
+- [x] #65 Harden non-TTY guided fallback and explicit age routing
+- [x] #66 Refresh docs and dogfood around default clean --dry-run
+- [x] #67 Release v0.6.1 default guided clean
 
 ### v0.7.0: Interactive checklist
 
-- [ ] #68 Design TTY checklist renderer for guided clean
-- [ ] #69 Implement TTY checklist UI with text fallback
-- [ ] #70 Release v0.7.0 guided checklist UI
-
-Suggested order: #68 after the v0.6.1 route exists, #69 after #68, then #70.
+- [x] #68 Design TTY checklist renderer for guided clean
+- [x] #69 Implement TTY checklist UI with text fallback
+- [x] #70 Release v0.7.0 guided checklist UI
 
 ## Done Criteria
 
-- [ ] Plain `aibris clean --dry-run` surfaces the guided analysis without requiring users to know `--guide`.
-- [ ] Plain `aibris clean` keeps deletion confirmation and low-risk recommendation framing.
-- [ ] Explicit classic cleanup flags remain predictable and script-friendly.
-- [ ] Non-TTY operation never hangs.
-- [ ] Docs, dogfood notes, version bumps, tags, and GitHub releases are complete for v0.6.1 and v0.7.0.
-
+- [x] Plain `aibris clean --dry-run` surfaces the guided analysis without requiring users to know `--guide`.
+- [x] Plain `aibris clean` keeps deletion confirmation and low-risk recommendation framing.
+- [x] Explicit classic cleanup flags remain predictable and script-friendly.
+- [x] Non-TTY operation never hangs.
+- [x] Docs, dogfood notes, version bumps, tags, and GitHub releases are complete for v0.6.1 and v0.7.0.

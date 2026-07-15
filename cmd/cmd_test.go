@@ -217,8 +217,17 @@ func resetCleanFlags() {
 	cleanRisky = false
 	cleanForce = false
 	cleanGuide = false
+	cleanNoGuide = false
 	cleanRoots = nil
 	cleanIncludeActiveWorktrees = false
+	for _, name := range []string{"age", "category", "tool", "dry-run", "interactive", "risky", "force", "guide", "no-guide", "root", "include-active-worktrees", "help"} {
+		if flag := cleanCmd.Flags().Lookup(name); flag != nil {
+			flag.Changed = false
+			if name != "root" {
+				_ = flag.Value.Set(flag.DefValue)
+			}
+		}
+	}
 }
 
 func saveCleanCacheFixture(t *testing.T, home string, items []types.DebrisInfo) {
@@ -245,6 +254,140 @@ func saveCleanCacheFixture(t *testing.T, home string, items []types.DebrisInfo) 
 	}
 }
 
+func withStdin(t *testing.T, input string) func() {
+	t.Helper()
+	oldStdin := os.Stdin
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if input != "" {
+		if _, err := w.WriteString(input); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	os.Stdin = r
+	return func() {
+		os.Stdin = oldStdin
+		r.Close()
+	}
+}
+
+func saveUsefulGuidedCleanFixture(t *testing.T, home, id string, modTime time.Time) string {
+	t.Helper()
+	oldest := modTime
+	if minimum := time.Now().Add(-7 * 24 * time.Hour); oldest.After(minimum) {
+		oldest = minimum
+	}
+	ids := []string{id + "-newer-1", id + "-newer-2", id + "-newer-3", id}
+	items := make([]types.DebrisInfo, 0, len(ids))
+	var worktree string
+	for i, fixtureID := range ids {
+		path := createCleanCodexGitWorktree(t, home, fixtureID)
+		activity := oldest.Add(time.Duration(3-i) * 24 * time.Hour)
+		if err := os.Chtimes(path, activity, activity); err != nil {
+			t.Fatal(err)
+		}
+		if fixtureID == id {
+			worktree = path
+		}
+		items = append(items, types.DebrisInfo{
+			Tool:     types.ToolCodex,
+			Category: types.CategoryWorktree,
+			ID:       fixtureID,
+			Project:  "project",
+			Source:   ".codex",
+			Path:     path,
+			Size:     512 * 1024 * 1024,
+			ModTime:  activity,
+			Status:   types.WorktreeActive,
+		})
+	}
+	runGitFixture(t, filepath.Join(home, "repositories", "repo"), "reflog", "expire", "--expire=now", "--all")
+	saveFreshCodexActivityCacheFixture(t)
+	saveCleanCacheFixture(t, home, items)
+	return worktree
+}
+
+func createCleanCodexGitWorktree(t *testing.T, home, id string) string {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git unavailable")
+	}
+	repository := filepath.Join(home, "repositories", "repo")
+	if _, err := os.Stat(repository); os.IsNotExist(err) {
+		newGitFixtureRepoAt(t, repository)
+	}
+	worktree := filepath.Join(home, ".codex", "worktrees", id)
+	if err := os.MkdirAll(filepath.Dir(worktree), 0755); err != nil {
+		t.Fatal(err)
+	}
+	runGitFixture(t, repository, "worktree", "add", "-b", id, worktree, "HEAD")
+	return worktree
+}
+
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=Aibris Test",
+		"GIT_AUTHOR_EMAIL=test@example.com",
+		"GIT_COMMITTER_NAME=Aibris Test",
+		"GIT_COMMITTER_EMAIL=test@example.com",
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, out)
+	}
+}
+
+func saveFreshCodexActivityCacheFixture(t *testing.T) {
+	t.Helper()
+	path, err := codexActivityCachePath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	sessionPath := filepath.Join(filepath.Dir(path), "unrelated.jsonl")
+	if err := saveCodexActivityCache(path, codexActivityCache{
+		SchemaVersion: codexActivityCacheSchemaVersion,
+		CreatedAt:     now,
+		Files: map[string]codexActivityFileRecord{
+			sessionPath: {
+				Path:       sessionPath,
+				ModTime:    now,
+				Size:       128,
+				Valid:      true,
+				WorktreeID: "unrelated",
+				Project:    "other-project",
+				Timestamp:  now.Add(-time.Hour),
+			},
+		},
+		Worktrees: map[string]codexWorktreeActivity{
+			"unrelated": {
+				WorktreeID:    "unrelated",
+				Project:       "other-project",
+				SessionCount:  1,
+				LatestSession: now.Add(-time.Hour),
+			},
+		},
+		Projects: map[string]codexProjectActivity{
+			"other-project": {
+				Project:       "other-project",
+				SessionCount:  1,
+				LatestSession: now.Add(-time.Hour),
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCleanCmd_NegativeAge(t *testing.T) {
 	if os.Getenv("GO_TEST_SUBPROCESS") == "1" {
 		resetCleanFlags()
@@ -260,6 +403,24 @@ func TestCleanCmd_NegativeAge(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "--age must be positive") {
 		t.Errorf("expected '--age must be positive' in output, got: %s", out)
+	}
+}
+
+func TestCleanCmd_GuideNoGuideErrors(t *testing.T) {
+	if os.Getenv("GO_TEST_GUIDE_NO_GUIDE_SUBPROCESS") == "1" {
+		resetCleanFlags()
+		rootCmd.SetArgs([]string{"clean", "--guide", "--no-guide"})
+		rootCmd.Execute()
+		return
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=TestCleanCmd_GuideNoGuideErrors$")
+	cmd.Env = append(os.Environ(), "GO_TEST_GUIDE_NO_GUIDE_SUBPROCESS=1")
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected exit error for --guide --no-guide, got: %s", out)
+	}
+	if !strings.Contains(string(out), "cannot use --guide with --no-guide") {
+		t.Errorf("expected guide/no-guide conflict error, got: %s", out)
 	}
 }
 
@@ -434,6 +595,154 @@ func TestCleanCmd_DryRun(t *testing.T) {
 	})
 	if !strings.Contains(output, "[DRY-RUN]") {
 		t.Errorf("output missing [DRY-RUN]; got: %s", output)
+	}
+}
+
+func TestCleanCmd_DryRunDefaultsToGuidedWhenUsefulCodexReviewExists(t *testing.T) {
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	worktree := saveUsefulGuidedCleanFixture(t, home, "hash-guided", time.Now().Add(-48*time.Hour))
+	defer withStdin(t, "")()
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--dry-run"})
+		rootCmd.Execute()
+	})
+
+	for _, want := range []string{
+		"guided codex worktree cleanup",
+		"reason     active Codex worktrees are the largest cleanup decision",
+		"selected   1 item",
+		"clean plan",
+		"mode     dry-run",
+		"[DRY-RUN] No files were removed.",
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("output missing %q; got: %s", want, output)
+		}
+	}
+	if _, err := os.Stat(worktree); err != nil {
+		t.Fatalf("dry-run should not remove worktree: %v", err)
+	}
+}
+
+func TestCleanCmd_NoGuideKeepsClassicCleanRoute(t *testing.T) {
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	worktree := saveUsefulGuidedCleanFixture(t, home, "hash-classic", time.Now().Add(-48*time.Hour))
+	defer withStdin(t, "")()
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--dry-run", "--no-guide"})
+		rootCmd.Execute()
+	})
+
+	if strings.Contains(output, "guided codex worktree cleanup") {
+		t.Fatalf("--no-guide should not enter guided route; got: %s", output)
+	}
+	for _, want := range []string{"scan summary", "active worktree protected", "No items to clean."} {
+		if !strings.Contains(output, want) {
+			t.Errorf("classic output missing %q; got: %s", want, output)
+		}
+	}
+	if _, err := os.Stat(worktree); err != nil {
+		t.Fatalf("--no-guide dry-run should not remove worktree: %v", err)
+	}
+}
+
+func TestCleanCmd_ExplicitSelectorsKeepClassicRouteUnlessGuideSupplied(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		args []string
+	}{
+		{name: "category", args: []string{"--category=worktree"}},
+		{name: "tool", args: []string{"--tool=codex"}},
+		{name: "risky", args: []string{"--risky"}},
+		{name: "include active", args: []string{"--include-active-worktrees"}},
+		{name: "interactive", args: []string{"--interactive"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			resetCleanFlags()
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			saveUsefulGuidedCleanFixture(t, home, "hash-"+strings.ReplaceAll(tt.name, " ", "-"), time.Now().Add(-48*time.Hour))
+			defer withStdin(t, "")()
+
+			args := append([]string{"clean", "--dry-run"}, tt.args...)
+			output := captureOutput(func() {
+				rootCmd.SetArgs(args)
+				rootCmd.Execute()
+			})
+
+			if strings.Contains(output, "guided codex worktree cleanup") {
+				t.Fatalf("explicit selector %v should keep classic route; got: %s", tt.args, output)
+			}
+			if !strings.Contains(output, "scan summary") {
+				t.Fatalf("classic output missing scan summary for %v; got: %s", tt.args, output)
+			}
+		})
+	}
+
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	saveUsefulGuidedCleanFixture(t, home, "hash-guide-override", time.Now().Add(-48*time.Hour))
+	defer withStdin(t, "")()
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--dry-run", "--tool=codex", "--guide"})
+		rootCmd.Execute()
+	})
+	for _, want := range []string{"guided codex worktree cleanup", "reason     requested by --guide"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("--guide should override explicit selector; missing %q in: %s", want, output)
+		}
+	}
+}
+
+func TestCleanCmd_DefaultGuidedNonTTYCleanDoesNotBlockOrDelete(t *testing.T) {
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	worktree := saveUsefulGuidedCleanFixture(t, home, "hash-non-tty", time.Now().Add(-48*time.Hour))
+	defer withStdin(t, "")()
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean"})
+		rootCmd.Execute()
+	})
+
+	for _, want := range []string{
+		"guided codex worktree cleanup",
+		"clean plan",
+		"No confirmation received; rerun with --dry-run to review or --force to delete selected targets.",
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("non-TTY output missing %q; got: %s", want, output)
+		}
+	}
+	if _, err := os.Stat(worktree); err != nil {
+		t.Fatalf("non-TTY clean without confirmation should not remove worktree: %v", err)
+	}
+}
+
+func TestCleanCmd_HelpDocumentsDefaultGuidedCleanAndNoGuide(t *testing.T) {
+	resetCleanFlags()
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--help"})
+		rootCmd.Execute()
+	})
+
+	for _, want := range []string{
+		"With no classic cleanup filters, clean uses guided Codex worktree review by default when useful.",
+		"--no-guide",
+		"Use classic cleanup even when guided Codex review is available",
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("help output missing %q; got: %s", want, output)
+		}
 	}
 }
 

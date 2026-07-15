@@ -1,8 +1,9 @@
 ---
 milestone: Default Guided Clean
-status: active
+status: completed
 started: 2026-07-09
 due: 2026-07-16
+completed: 2026-07-10
 objectives:
   - Make plain clean and clean --dry-run surface guided Codex worktree decisions by default when that is the valuable path.
   - Preserve classic clean behavior for explicit filters, scripts, non-TTY contexts, and opt-out usage.
@@ -26,23 +27,23 @@ Make `aibris clean` the pleasing guided path for Codex worktree bloat without we
 
 ### Batch 1 - v0.6.1 Runtime Route
 
-- [~] #63 Auto-enter guided cleanup from default clean → PR #71 (ready_to_merge; CI passed; review threads resolved) [branch:codex/issue-63-default-guided-runtime]
-- [~] #64 Add --no-guide and preserve classic clean paths → PR #71 (ready_to_merge; CI passed; review threads resolved) [branch:codex/issue-63-default-guided-runtime]
-- [~] #65 Harden non-TTY guided fallback and explicit age routing → PR #71 (ready_to_merge; CI passed; review threads resolved) [branch:codex/issue-63-default-guided-runtime]
+- [x] #63 Auto-enter guided cleanup from default clean → PR #71 merged as `e67078b`
+- [x] #64 Add --no-guide and preserve classic clean paths → PR #71 merged as `e67078b`
+- [x] #65 Harden non-TTY guided fallback and explicit age routing → PR #71 merged as `e67078b`
 
 ### Batch 2 - v0.6.1 Docs And Dogfood
 
-- [ ] #66 Refresh docs and dogfood around default clean --dry-run
+- [x] #66 Refresh docs and dogfood around default clean --dry-run → PR #73 merged as `edfa80f`
 
 ### Batch 3 - v0.6.1 Release
 
-- [ ] #67 Release v0.6.1 default guided clean
+- [x] #67 Release v0.6.1 default guided clean → PR #74 merged as `788c69b`, tag `v0.6.1` published
 
 ### Batch 4 - v0.7.0 Checklist Follow-Up
 
-- [ ] #68 Design TTY checklist renderer for guided clean
-- [ ] #69 Implement TTY checklist UI with text fallback
-- [ ] #70 Release v0.7.0 guided checklist UI
+- [x] #68 Design TTY checklist renderer for guided clean → PR #72 merged as `ad0400f`
+- [x] #69 Implement TTY checklist UI with text fallback → shared selection model, TTY checklist mode, text fallback tests
+- [x] #70 Release v0.7.0 guided checklist UI → PR #77 merged as `ca643c9`, tag `v0.7.0` published
 
 ## Definition Of Done
 
@@ -77,3 +78,12 @@ Make `aibris clean` the pleasing guided path for Codex worktree bloat without we
 - 2026-07-09: Prepared release handoffs and relay-plan artifacts for #67 (`req-20260709141058411`, `/tmp/dispatch-67.md`, `/tmp/rubric-67.yaml`) and #70 (`req-20260709141058572`, `/tmp/dispatch-70.md`, `/tmp/rubric-70.yaml`), with dry-run dispatch validation passing. GitHub issue comments were posted through the connector after local `gh` could not connect to `api.github.com`.
 - 2026-07-09: PR #71 received a Codex P1 review that `--force` must not auto-enter guided cleanup. Fixed on PR branch commit `e5490cc` by treating `--force` as a classic selector while preserving explicit `--guide --force`; verified `go test ./...`, `go build ./...`, `go vet ./...`, and backlog doctor locally. GitHub Actions CI passed, the Codex inline thread was replied to and resolved, and CodeRabbit is processing the new commit.
 - 2026-07-09: PR #71 received follow-up review on protected-only guided rows and a transient remote blob typo. Fixed routing to require selected guided targets before default reroute, restored the interactive skip print, and advanced PR #71 to `cdd08d0`. Local focused tests passed, GitHub Actions run `29030455743` passed on ubuntu and macOS, and all PR review threads are resolved. Next batch remains gated on PR #71 landing.
+- 2026-07-10: Squash-merged PR #71 as `e67078b`, closing #63-#65 and opening the #66 docs/dogfood gate. Started #66 on `codex/issue-66-docs-dogfood` from `origin/main`.
+- 2026-07-10: Squash-merged PR #73 as `edfa80f`, closing #66 and opening the v0.6.1 release gate. Started #67 on `codex/issue-67-release-v0.6.1` from `origin/main`.
+- 2026-07-10: Squash-merged PR #74 as `788c69b`, pushed annotated tag `v0.6.1`, verified release workflow `29057968415`, confirmed GitHub Release assets, and smoke-tested `install.sh` returning `aibris version 0.6.1`.
+- 2026-07-09: #68 design produced in `docs/GUIDED_CLEAN_TTY_CHECKLIST.md`; task AC checked locally and PR publication is pending verification.
+- 2026-07-10: Squash-merged PR #72 as `ad0400f`, closing #68. Implemented #69 on `codex/issue-69-tty-checklist-ui`: shared recommended/reviewable/locked selection model, TTY checklist mode routing, projected freed-space totals, age threshold replanning, and text fallback regression tests.
+- 2026-07-10: Squash-merged PR #76 as `dd85f64`, closing #69. Started #70 release prep on `codex/issue-70-release-v0.7.0` with v0.7.0 changelog and install example updates.
+- 2026-07-10: Verified #70 release prep locally: `go test ./...`, `go build ./...`, `go vet ./...`, backlog doctor, `goreleaser release --snapshot --clean`, non-TTY dry-run dogfood, and pseudo-TTY dry-run dogfood all passed without deletion.
+- 2026-07-10: Squash-merged PR #77 as `ca643c9`, pushed annotated tag `v0.7.0`, verified release workflow `29058905357`, confirmed GitHub Release assets plus `checksums.txt`, and smoke-tested `install.sh` returning `aibris version 0.7.0`.
+- 2026-07-10: Closed the Default Guided Clean sprint after verifying GitHub issues #62-#70 closed, PRs #71-#74/#76/#77 merged, release workflows for v0.6.1 and v0.7.0 succeeded, and release pages expose published assets.

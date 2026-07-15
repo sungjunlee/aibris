@@ -1,7 +1,7 @@
 ---
 id: AIB-63
 title: Auto-enter guided cleanup from default clean
-status: To Do
+status: Done
 labels:
   - enhancement
   - ux
@@ -10,6 +10,7 @@ labels:
 priority: medium
 milestone: Default Guided Clean
 created_date: '2026-07-09'
+completed_date: '2026-07-10'
 ---
 ## Description
 Part of #62
@@ -30,9 +31,13 @@ In v0.6.0, the smarter Codex worktree analysis exists behind `aibris clean --gui
 
 ## Acceptance Criteria
 
-- [ ] `aibris clean` with valuable Codex worktree candidates enters guided cleanup by default.
-- [ ] `aibris clean --dry-run` shows the guided plan and deletes nothing.
-- [ ] The guided default explains why each recommended item is low-risk before asking for confirmation.
-- [ ] The old deletion guardrails still apply: no dry-run means confirmation unless `--force` is explicitly used.
-- [ ] Tests cover default routing for clean and dry-run.
+- [x] `aibris clean` with valuable Codex worktree candidates enters guided cleanup by default.
+- [x] `aibris clean --dry-run` shows the guided plan and deletes nothing.
+- [x] The guided default explains why each recommended item is low-risk before asking for confirmation.
+- [x] The old deletion guardrails still apply: no dry-run means confirmation unless `--force` is explicitly used.
+- [x] Tests cover default routing for clean and dry-run.
 
+## Completion Evidence
+
+- PR #71 merged as `e67078b`.
+- Issue #63 closed as completed.
