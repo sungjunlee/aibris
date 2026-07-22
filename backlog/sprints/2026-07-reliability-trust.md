@@ -73,4 +73,6 @@ explicit maintainer release decision.
   non-zero. Full tests, build, and vet pass; issues remain in progress until
   the branch is published and reviewed.
 - 2026-07-23: Published PR #130 and moved #106/#107 to `status:in-review`.
+- 2026-07-23: PR #130 CI passed on macOS and Ubuntu; CodeRabbit reported no
+  blocking review result because its review quota was rate-limited.
   
