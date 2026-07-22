@@ -19,8 +19,8 @@ explicit maintainer release decision.
 
 ### Batch 1 — Make CLI outcomes truthful
 
-- [~] #106 Validate clean category and tool selector values (~45min) — branch: codex/reliability-trust
-- [~] #107 Propagate cleanup failures through process exit status (~60min) — branch: codex/reliability-trust
+- [~] #106 Validate clean category and tool selector values (~45min) — PR #130
+- [~] #107 Propagate cleanup failures through process exit status (~60min) — PR #130
 
 ### Batch 2 — Make inventory completeness explicit
 
@@ -72,4 +72,5 @@ explicit maintainer release decision.
   classic/interactive/guided execution failures preserve receipts and return
   non-zero. Full tests, build, and vet pass; issues remain in progress until
   the branch is published and reviewed.
+- 2026-07-23: Published PR #130 and moved #106/#107 to `status:in-review`.
   

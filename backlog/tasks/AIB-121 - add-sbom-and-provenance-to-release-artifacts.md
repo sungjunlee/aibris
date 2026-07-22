@@ -8,7 +8,7 @@ labels:
   - devops
   - type:chore
   - area:release
-priority: medium
+priority: high
 milestone: '0.x OSS Distribution & Release Trust'
 created_date: '2026-07-22'
 ---

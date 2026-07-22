@@ -4,6 +4,8 @@ title: Document 0.x compatibility and deprecation policy
 status: To Do
 labels:
   - documentation
+  - docs
+  - area:docs
   - area:oss
   - cli
   - type:chore

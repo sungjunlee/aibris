@@ -6,9 +6,10 @@ labels:
   - documentation
   - devops
   - cli
+  - safety
   - type:chore
   - area:release
-priority: medium
+priority: high
 milestone: 0.9.x Unified Cleanup Experience
 created_date: '2026-07-22'
 ---
