@@ -19,8 +19,8 @@ explicit maintainer release decision.
 
 ### Batch 1 — Make CLI outcomes truthful
 
-- [~] #106 Validate clean category and tool selector values (~45min) — branch: main
-- [~] #107 Propagate cleanup failures through process exit status (~60min) — branch: main
+- [~] #106 Validate clean category and tool selector values (~45min) — branch: codex/reliability-trust
+- [~] #107 Propagate cleanup failures through process exit status (~60min) — branch: codex/reliability-trust
 
 ### Batch 2 — Make inventory completeness explicit
 
@@ -67,4 +67,9 @@ explicit maintainer release decision.
 - 2026-07-23: Created no-date 0.x roadmap milestones #6-#9, opened issues
   #104-#129, mirrored all open issues locally, and activated this sprint for
   milestone #6. No v1.0.0 milestone was created.
+- 2026-07-23: Implemented and verified #106/#107 on
+  `codex/reliability-trust`. Invalid selectors now fail before scanning, and
+  classic/interactive/guided execution failures preserve receipts and return
+  non-zero. Full tests, build, and vet pass; issues remain in progress until
+  the branch is published and reviewed.
   

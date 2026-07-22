@@ -3,6 +3,7 @@ package cmd
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -63,6 +64,16 @@ classic cleanup audit and executor route.`,
 			age = applyGuidedCleanDefaults(cmd, age)
 			guidedAge = age
 		}
+		categories, err := parseCleanCategories(cleanCategory)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		tools, err := parseCleanTools(cleanTools)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
 
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer cancel()
@@ -99,26 +110,6 @@ classic cleanup audit and executor route.`,
 		}
 		if experience == cleanExperienceClassic && age < time.Hour {
 			fmt.Fprintf(os.Stderr, "Warning: --age %s will match ALL items including active ones.\n", cleanAge)
-		}
-
-		var categories []types.Category
-		if cleanCategory != "" {
-			for _, c := range strings.Split(cleanCategory, ",") {
-				c = strings.TrimSpace(c)
-				if c != "" {
-					categories = append(categories, types.Category(c))
-				}
-			}
-		}
-
-		var tools []types.Tool
-		if cleanTools != "" {
-			for _, t := range strings.Split(cleanTools, ",") {
-				t = strings.TrimSpace(t)
-				if t != "" {
-					tools = append(tools, types.Tool(t))
-				}
-			}
 		}
 
 		opts := types.PruneOptions{
@@ -163,9 +154,13 @@ classic cleanup audit and executor route.`,
 		prepared := prepareCleanExecution(ctx, targets)
 
 		if opts.Interactive {
-			receipt := interactiveClean(ctx, prepared)
+			receipt, err := interactiveClean(ctx, prepared)
 			printWorktreeExecutionReceipts(receipt)
 			printCleanupReceipt(len(targets), receipt, audit)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error during cleanup: %v\n", err)
+				os.Exit(1)
+			}
 			return
 		}
 
@@ -177,12 +172,101 @@ classic cleanup audit and executor route.`,
 		}
 
 		receipt, err := executePreparedCleanTargets(ctx, prepared, defaultActiveWorktreeExecutionOptions())
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error during cleanup: %v\n", err)
-		}
 		printWorktreeExecutionReceipts(receipt)
 		printCleanupReceipt(len(targets), receipt, audit)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error during cleanup: %v\n", err)
+			os.Exit(1)
+		}
 	},
+}
+
+var validCleanCategories = []types.Category{
+	types.CategoryWorktree,
+	types.CategoryNodeModules,
+	types.CategoryBuildCache,
+	types.CategoryOtherCache,
+	types.CategoryAILogs,
+}
+
+var validCleanTools = []types.Tool{
+	types.ToolCodex,
+	types.ToolClaude,
+	types.ToolCursor,
+	types.ToolWindsurf,
+	types.ToolNodeModules,
+	types.ToolBuildCache,
+	types.ToolPipCache,
+	types.ToolAILogs,
+}
+
+func parseCleanCategories(raw string) ([]types.Category, error) {
+	values, err := parseCleanSelector(raw, "category", categoryStrings(validCleanCategories))
+	if err != nil {
+		return nil, err
+	}
+	categories := make([]types.Category, len(values))
+	for i, value := range values {
+		categories[i] = types.Category(value)
+	}
+	return categories, nil
+}
+
+func parseCleanTools(raw string) ([]types.Tool, error) {
+	values, err := parseCleanSelector(raw, "tool", toolStrings(validCleanTools))
+	if err != nil {
+		return nil, err
+	}
+	tools := make([]types.Tool, len(values))
+	for i, value := range values {
+		tools[i] = types.Tool(value)
+	}
+	return tools, nil
+}
+
+func parseCleanSelector(raw, flag string, valid []string) ([]string, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	allowed := make(map[string]bool, len(valid))
+	for _, value := range valid {
+		allowed[value] = true
+	}
+	seen := make(map[string]bool)
+	var values []string
+	for _, value := range strings.Split(raw, ",") {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if !allowed[value] {
+			return nil, fmt.Errorf("invalid --%s value %q; valid values: %s", flag, value, strings.Join(valid, ", "))
+		}
+		if !seen[value] {
+			seen[value] = true
+			values = append(values, value)
+		}
+	}
+	if len(values) == 0 {
+		return nil, fmt.Errorf("--%s requires at least one value; valid values: %s", flag, strings.Join(valid, ", "))
+	}
+	return values, nil
+}
+
+func categoryStrings(values []types.Category) []string {
+	result := make([]string, len(values))
+	for i, value := range values {
+		result[i] = string(value)
+	}
+	return result
+}
+
+func toolStrings(values []types.Tool) []string {
+	result := make([]string, len(values))
+	for i, value := range values {
+		result[i] = string(value)
+	}
+	return result
 }
 
 func init() {
@@ -587,20 +671,22 @@ func cleanTargetContains(parent, child string) bool {
 	return !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-func interactiveClean(ctx context.Context, targets []preparedCleanTarget) cleanExecutionReceipt {
+func interactiveClean(ctx context.Context, targets []preparedCleanTarget) (cleanExecutionReceipt, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: getting home dir: %v\n", err)
-		return cleanExecutionReceipt{}
+		return cleanExecutionReceipt{}, fmt.Errorf("getting home dir: %w", err)
 	}
 	displayHome := resolvedDisplayHome(home)
 
 	var result cleanExecutionReceipt
+	var errs []error
 	scanner := bufio.NewScanner(os.Stdin)
 	for _, target := range targets {
 		w := target.Item
 		if !cleaner.IsSafeTarget(home, w) {
-			fmt.Fprintf(os.Stderr, "  error: unsafe path %q rejected\n", w.Path)
+			err := fmt.Errorf("unsafe path %q rejected", w.Path)
+			fmt.Fprintf(os.Stderr, "  error: %v\n", err)
+			errs = append(errs, err)
 			continue
 		}
 		fmt.Println()
@@ -616,13 +702,14 @@ func interactiveClean(ctx context.Context, targets []preparedCleanTarget) cleanE
 			result.FreedBytes += receipt.FreedBytes
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "  error: %v\n", err)
+				errs = append(errs, err)
 				continue
 			}
 		} else {
 			fmt.Printf("  skipped\n")
 		}
 	}
-	return result
+	return result, errors.Join(errs...)
 }
 
 func printCleanPlan(targets []types.DebrisInfo, mode cleanPlanMode) {

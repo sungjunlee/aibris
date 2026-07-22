@@ -16,10 +16,10 @@ Unknown values such as --category mystery and --tool mystery currently produce a
 
 ## Acceptance criteria
 
-- [ ] Unknown category values fail before scanning.
-- [ ] Unknown tool values fail before scanning.
-- [ ] Errors include the invalid value and the valid choices.
-- [ ] Comma-separated values are trimmed, deduplicated, and validated independently.
-- [ ] Existing valid category and tool combinations remain compatible.
-- [ ] Command tests assert stderr and non-zero exit behavior.
-- [ ] go test ./..., go build ./..., and go vet ./... pass.
+- [x] Unknown category values fail before scanning.
+- [x] Unknown tool values fail before scanning.
+- [x] Errors include the invalid value and the valid choices.
+- [x] Comma-separated values are trimmed, deduplicated, and validated independently.
+- [x] Existing valid category and tool combinations remain compatible.
+- [x] Command tests assert stderr and non-zero exit behavior.
+- [x] go test ./..., go build ./..., and go vet ./... pass.
