@@ -1,6 +1,6 @@
 project_name: "aibris"
 default_status: "To Do"
-statuses: ["To Do", "In Progress", "Done"]
+statuses: ["To Do", "In Progress", "Blocked", "In Review", "Done"]
 task_prefix: "AIB"
 labels:
   - cli
@@ -11,6 +11,13 @@ labels:
 milestones:
   - "Scan + Clean Safety"
   - "Guided Codex Cleanup"
+  - "Default Guided Clean"
+  - "Evidence-Based Worktree Reclamation"
+  - "0.8.x Reliability & Trust"
+  - "0.9.x Unified Cleanup Experience"
+  - "0.x OSS Distribution & Release Trust"
+  - "0.x Automation & Schema"
+  - "Future"
 definition_of_done:
   - "go test ./..."
   - "go build ./..."

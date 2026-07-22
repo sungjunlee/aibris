@@ -19,8 +19,22 @@
 - `Guided Codex Cleanup` milestone #3 and `Default Guided Clean` milestone #4
   are complete. They shipped the activity index, conservative planner, default
   guided route, and v0.7.0 checklist model.
-- The active next initiative is GitHub milestone #5 `Evidence-Based Worktree
-  Reclamation`, with epics #80/#81 and leaf issues #82-#91. It uses
-  `docs/superpowers/specs/2026-07-10-evidence-based-worktree-reclamation-prd.md`
-  as the planning source of truth for cleanup units, ref reachability,
-  per-repository retention, and Git-aware active removal.
+- `Evidence-Based Worktree Reclamation` milestone #5 is complete. It shipped
+  v0.8.0 with cleanup-unit identity, ref reachability, per-repository retention,
+  unified activity evidence, and Git-aware active removal.
+- The active initiative is milestone #6 `0.8.x Reliability & Trust`, tracked by
+  epic #104 and issues #105-#111. It closes default-flow, selector-validation,
+  exit-status, partial-scan, black-box testing, and public-contract gaps before
+  broader feature work.
+- Planned follow-on milestones have no due dates: #7 `0.9.x Unified Cleanup
+  Experience`, #8 `0.x OSS Distribution & Release Trust`, and #9 `0.x
+  Automation & Schema`. Long-horizon configuration and performance work stays
+  in the existing `Future` milestone.
+
+## Release Posture
+
+- The project intentionally remains in the 0.x series until the maintainer is
+  satisfied with the product experience. Do not create or schedule a v1.0.0
+  milestone merely because the current roadmap is complete.
+- Milestones describe capability and quality gates, not promised dates. A 0.x
+  release is cut only after its behavior is dogfooded and explicitly approved.
