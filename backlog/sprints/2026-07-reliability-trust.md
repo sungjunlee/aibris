@@ -19,8 +19,8 @@ explicit maintainer release decision.
 
 ### Batch 1 — Make CLI outcomes truthful
 
-- [~] #106 Validate clean category and tool selector values (~45min) — PR #130
-- [~] #107 Propagate cleanup failures through process exit status (~60min) — PR #130
+- [~] #106 Validate clean category and tool selector values (~45min) → PR #130 (reviewing)
+- [~] #107 Propagate cleanup failures through process exit status (~60min) → PR #130 (reviewing)
 
 ### Batch 2 — Make inventory completeness explicit
 
