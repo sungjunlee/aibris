@@ -28,7 +28,7 @@ explicit maintainer release decision.
 
 ### Batch 3 — Repair the default cleanup journey
 
-- [~] #105 Keep all-category cleanup visible when guided review activates (~2h) → `codex/all-category-guided-clean`
+- [~] #105 Keep all-category cleanup visible when guided review activates (~2h) → PR #132 (reviewing)
 
 ### Batch 4 — Lock the public CLI contract
 
@@ -94,4 +94,5 @@ explicit maintainer release decision.
   normalization, locked active worktrees remain outside classic selection,
   and non-TTY EOF behavior is documented. Full tests, build, vet, and diff
   checks pass locally.
+- 2026-07-23: Published PR #132 and moved #105 to `status:in-review`.
   
