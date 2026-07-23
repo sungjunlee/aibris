@@ -278,6 +278,13 @@ When stdout is an interactive terminal, scans use a single-line spinner while
 providers run. In non-interactive logs, progress falls back to plain
 `scanning` / `found` lines.
 
+If a provider fails but other providers return usable results, `scan` labels
+the inventory as partial, lists the failed providers, emits the retained human
+or JSON result, and exits with status 1. Partial scans are never cached for
+cleanup, and `clean` requires a complete scan before it can plan or remove
+anything. A partial scan also invalidates any previous cleanup scan cache.
+Cancellation remains a hard failure.
+
 ### Safety
 
 - **Independent age policies**: classic cleanup defaults to `--age 7d`; guided

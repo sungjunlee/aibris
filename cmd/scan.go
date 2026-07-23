@@ -44,6 +44,9 @@ var scanCmd = &cobra.Command{
 			}
 			writeLastScanCache(roots, result)
 			printJSON(result)
+			if result.Partial() {
+				os.Exit(1)
+			}
 			return
 		}
 
@@ -67,6 +70,9 @@ var scanCmd = &cobra.Command{
 
 		writeLastScanCache(roots, result)
 		printHumanScanResult(ctx, result)
+		if result.Partial() {
+			os.Exit(1)
+		}
 	},
 }
 
@@ -98,20 +104,34 @@ type jsonSummary struct {
 	ByTool     map[string]jsonSummaryEntry `json:"by_tool"`
 }
 
+type jsonProviderError struct {
+	Tool    string `json:"tool"`
+	Message string `json:"message"`
+}
+
 type jsonOutput struct {
-	Worktrees []jsonWorktree `json:"worktrees"`
-	Summary   jsonSummary    `json:"summary"`
+	Worktrees      []jsonWorktree      `json:"worktrees"`
+	Summary        jsonSummary         `json:"summary"`
+	Partial        bool                `json:"partial,omitempty"`
+	ProviderErrors []jsonProviderError `json:"provider_errors,omitempty"`
 }
 
 func printJSON(r *types.ScanResult) {
 	out := jsonOutput{
 		Worktrees: make([]jsonWorktree, len(r.Worktrees)),
+		Partial:   r.Partial(),
 		Summary: jsonSummary{
 			TotalCount: r.TotalCount,
 			TotalSize:  r.TotalSize,
 			ByCategory: make(map[string]jsonSummaryEntry, len(r.ByCategory)),
 			ByTool:     make(map[string]jsonSummaryEntry, len(r.ByTool)),
 		},
+	}
+	for _, providerErr := range r.ProviderErrors {
+		out.ProviderErrors = append(out.ProviderErrors, jsonProviderError{
+			Tool:    string(providerErr.Tool),
+			Message: providerErr.Message,
+		})
 	}
 	for i, w := range r.Worktrees {
 		cleanupCommand := append([]string(nil), w.CleanupCommand...)
@@ -303,19 +323,31 @@ func isTerminal(file *os.File) bool {
 
 func printHumanScanResult(ctx context.Context, r *types.ScanResult) {
 	fmt.Println("summary")
+	if r.Partial() {
+		fmt.Println("  completeness partial (results are incomplete)")
+		for _, providerErr := range r.ProviderErrors {
+			fmt.Printf("  failed      %-12s %s\n", providerErr.Tool, providerErr.Message)
+		}
+	}
 	fmt.Printf("  found       %d %s\n", r.TotalCount, itemNoun(r.TotalCount))
 	fmt.Printf("  found size  %s\n", cleaner.FormatSize(r.TotalSize))
-	defaultPolicy := types.PruneOptions{Age: 7 * 24 * time.Hour}
-	diagnostics := summarizeCleanup(r.Worktrees, defaultPolicy)
-	fmt.Printf("  default clean %s\n", cleaner.FormatSize(diagnostics.EligibleSize))
-	printCleanupDiagnostics(diagnostics, defaultPolicy)
+	if r.Partial() {
+		fmt.Println("  default clean unavailable until a complete scan succeeds")
+	} else {
+		defaultPolicy := types.PruneOptions{Age: 7 * 24 * time.Hour}
+		diagnostics := summarizeCleanup(r.Worktrees, defaultPolicy)
+		fmt.Printf("  default clean %s\n", cleaner.FormatSize(diagnostics.EligibleSize))
+		printCleanupDiagnostics(diagnostics, defaultPolicy)
+	}
 
 	printCategorySummary(r.ByCategory)
 	printLargestItems(r.Worktrees)
 	printCodexActivityRecommendations(ctx, r.Worktrees)
 
 	fmt.Println("\nnext")
-	if r.TotalCount > 0 {
+	if r.Partial() {
+		fmt.Println("  retry aibris scan; cleanup is disabled for this result")
+	} else if r.TotalCount > 0 {
 		fmt.Println("  aibris clean --dry-run")
 	}
 	fmt.Println("  aibris scan --json")

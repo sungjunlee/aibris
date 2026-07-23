@@ -99,6 +99,13 @@ func TestScanResult_Empty(t *testing.T) {
 	if len(r.Worktrees) != 0 {
 		t.Errorf("Worktrees = %d; want 0", len(r.Worktrees))
 	}
+	if r.Partial() {
+		t.Error("Partial() = true; want complete empty scan")
+	}
+	r.ProviderErrors = []ScanProviderError{{Tool: ToolCodex, Message: "boom"}}
+	if !r.Partial() {
+		t.Error("Partial() = false; want provider error to mark scan partial")
+	}
 }
 
 func TestPruneOptions_Defaults(t *testing.T) {

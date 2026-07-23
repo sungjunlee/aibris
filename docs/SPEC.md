@@ -275,7 +275,11 @@ deduplicated, and collapsed when one root is nested inside another.
 - `--dry-run` must never delete.
 - `clean` must ask for confirmation unless `--force` or `--interactive` is set.
 - Context cancellation must be checked during scans and directory walks.
-- Adapter failures must not silently abort unrelated providers.
+- Adapter failures must not silently abort unrelated providers. A usable
+  partial scan must identify failed providers in human and JSON output, emit
+  the retained result, and exit with status 1.
+- Partial scans must not be cached or accepted as cleanup prerequisites.
+  Cancellation remains a hard failure with no usable partial result.
 
 ## Architecture
 

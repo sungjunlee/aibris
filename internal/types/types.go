@@ -75,11 +75,25 @@ type DebrisInfo struct {
 
 // ScanResult aggregates all debris found by all adapters.
 type ScanResult struct {
-	Worktrees  []DebrisInfo
-	TotalCount int
-	TotalSize  int64
-	ByCategory map[Category]CategorySummary
-	ByTool     map[Tool]ToolSummary
+	Worktrees      []DebrisInfo
+	TotalCount     int
+	TotalSize      int64
+	ByCategory     map[Category]CategorySummary
+	ByTool         map[Tool]ToolSummary
+	ProviderErrors []ScanProviderError
+}
+
+// Partial reports whether one or more providers failed while other usable
+// scan results were retained.
+func (r *ScanResult) Partial() bool {
+	return r != nil && len(r.ProviderErrors) > 0
+}
+
+// ScanProviderError records a provider failure without discarding successful
+// results from unrelated providers.
+type ScanProviderError struct {
+	Tool    Tool
+	Message string
 }
 
 // ScanOptions configures discovery scope for scan providers.

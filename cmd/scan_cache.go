@@ -26,12 +26,23 @@ func writeLastScanCache(roots []string, result *types.ScanResult) {
 	if result == nil {
 		return
 	}
+	if result.Partial() {
+		invalidateLastScanCache()
+		return
+	}
 	_ = saveLastScanCache(lastScanCache{
 		SchemaVersion: lastScanCacheSchemaVersion,
 		CreatedAt:     time.Now(),
 		Roots:         append([]string(nil), roots...),
 		Result:        *result,
 	})
+}
+
+func invalidateLastScanCache() {
+	path, err := lastScanCachePath()
+	if err == nil {
+		_ = os.Remove(path)
+	}
 }
 
 func saveLastScanCache(cache lastScanCache) error {
@@ -59,6 +70,9 @@ func readFreshLastScanCache(roots []string) (*types.ScanResult, time.Duration, b
 		return nil, age, false
 	}
 	if !slices.Equal(cache.Roots, roots) {
+		return nil, age, false
+	}
+	if cache.Result.Partial() {
 		return nil, age, false
 	}
 	return &cache.Result, age, true

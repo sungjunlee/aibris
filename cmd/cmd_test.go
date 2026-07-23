@@ -13,8 +13,23 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
+
+type failingScanProvider struct{}
+
+func (failingScanProvider) Name() types.Tool {
+	return types.ToolCodex
+}
+
+func (failingScanProvider) Category() types.Category {
+	return types.CategoryWorktree
+}
+
+func (failingScanProvider) Scan(context.Context, types.ScanOptions) ([]types.DebrisInfo, error) {
+	return nil, errors.New("fixture provider failure")
+}
 
 // createWorktreeGit creates a minimal git .git file and parent metadata
 // so that the WorktreeAdapter detects the worktree as active.
@@ -146,6 +161,21 @@ func TestScanCmd_WritesLastScanCache(t *testing.T) {
 	}
 	if cache.Result.TotalCount != 1 {
 		t.Errorf("cache TotalCount = %d; want 1", cache.Result.TotalCount)
+	}
+}
+
+func TestWriteLastScanCacheSkipsPartialResult(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	writeLastScanCache([]string{home}, &types.ScanResult{})
+	if _, ok := readLastScanCache(); !ok {
+		t.Fatal("complete scan cache fixture was not written")
+	}
+	writeLastScanCache([]string{home}, &types.ScanResult{
+		ProviderErrors: []types.ScanProviderError{{Tool: types.ToolCodex, Message: "boom"}},
+	})
+	if _, ok := readLastScanCache(); ok {
+		t.Fatal("partial scan must invalidate the previous clean cache")
 	}
 }
 
@@ -1358,11 +1388,11 @@ func TestParseCleanSelectorsTrimAndDeduplicate(t *testing.T) {
 		t.Fatalf("categories = %v, want %v", categories, want)
 	}
 
-	tools, err := parseCleanTools(" codex,claude,codex ")
+	tools, err := parseCleanTools(" codex,unknown,claude,codex ")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := []types.Tool{types.ToolCodex, types.ToolClaude}; !reflect.DeepEqual(tools, want) {
+	if want := []types.Tool{types.ToolCodex, types.ToolUnknown, types.ToolClaude}; !reflect.DeepEqual(tools, want) {
 		t.Fatalf("tools = %v, want %v", tools, want)
 	}
 
@@ -1396,8 +1426,9 @@ func TestInteractiveCleanReturnsRejectedTargetError(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "unsafe path") {
 		t.Fatalf("interactiveClean() error = %v, want unsafe path rejection", err)
 	}
-	if len(receipt.Units) != 1 || receipt.FreedBytes != 42 {
-		t.Fatalf("receipt = %+v, want successful target retained alongside error", receipt)
+	removed, partial, failed := receipt.counts()
+	if len(receipt.Units) != 2 || receipt.FreedBytes != 42 || removed != 1 || partial != 0 || failed != 1 {
+		t.Fatalf("receipt = %+v, want one successful and one failed target", receipt)
 	}
 	if !pathDoesNotExist(safePath) {
 		t.Fatalf("safe target %q was not removed", safePath)
@@ -1614,6 +1645,120 @@ func TestPrintJSON_Empty(t *testing.T) {
 	}
 	if len(out.Summary.ByTool) != 0 {
 		t.Errorf("ByTool = %d entries; want 0", len(out.Summary.ByTool))
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(output), &raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := raw["partial"]; ok {
+		t.Error("successful JSON output unexpectedly includes partial")
+	}
+	if _, ok := raw["provider_errors"]; ok {
+		t.Error("successful JSON output unexpectedly includes provider_errors")
+	}
+}
+
+func TestPrintJSON_PartialScan(t *testing.T) {
+	r := &types.ScanResult{
+		ByCategory: make(map[types.Category]types.CategorySummary),
+		ByTool:     make(map[types.Tool]types.ToolSummary),
+		ProviderErrors: []types.ScanProviderError{
+			{Tool: types.ToolCodex, Message: "permission denied"},
+		},
+	}
+
+	output := captureOutput(func() {
+		printJSON(r)
+	})
+
+	var out jsonOutput
+	if err := json.Unmarshal([]byte(output), &out); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, output)
+	}
+	if !out.Partial {
+		t.Fatal("Partial = false; want true")
+	}
+	if len(out.ProviderErrors) != 1 || out.ProviderErrors[0].Tool != "codex" || out.ProviderErrors[0].Message != "permission denied" {
+		t.Fatalf("ProviderErrors = %+v", out.ProviderErrors)
+	}
+}
+
+func TestPrintHumanScanResultLabelsPartialScan(t *testing.T) {
+	r := &types.ScanResult{
+		ByCategory: make(map[types.Category]types.CategorySummary),
+		ByTool:     make(map[types.Tool]types.ToolSummary),
+		ProviderErrors: []types.ScanProviderError{
+			{Tool: types.ToolCodex, Message: "permission denied"},
+		},
+	}
+
+	output := captureOutput(func() {
+		printHumanScanResult(context.Background(), r)
+	})
+	for _, want := range []string{
+		"completeness partial",
+		"failed      codex",
+		"default clean unavailable",
+		"cleanup is disabled",
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("partial scan output missing %q: %s", want, output)
+		}
+	}
+	if strings.Contains(output, "aibris clean --dry-run") {
+		t.Errorf("partial scan must not recommend cleanup: %s", output)
+	}
+}
+
+func TestScanCmd_PartialJSONExitsNonZeroAfterOutput(t *testing.T) {
+	if os.Getenv("GO_TEST_PARTIAL_SCAN_SUBPROCESS") == "1" {
+		resetScanFlags()
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		failing := scanner.New(nil)
+		failing.Providers = append(failing.Providers, failingScanProvider{})
+		scanner.DefaultScanner = failing
+		rootCmd.SetArgs([]string{"scan", "--json"})
+		rootCmd.Execute()
+		return
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=TestScanCmd_PartialJSONExitsNonZeroAfterOutput$")
+	cmd.Env = append(os.Environ(), "GO_TEST_PARTIAL_SCAN_SUBPROCESS=1")
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if err == nil {
+		t.Fatalf("partial scan exited successfully: %s", stdout.String())
+	}
+	var out jsonOutput
+	if jsonErr := json.Unmarshal([]byte(stdout.String()), &out); jsonErr != nil {
+		t.Fatalf("partial scan stdout is not valid JSON: %v\nstdout: %s\nstderr: %s", jsonErr, stdout.String(), stderr.String())
+	}
+	if !out.Partial || len(out.ProviderErrors) != 1 {
+		t.Fatalf("partial scan JSON = %+v", out)
+	}
+	if !strings.Contains(stderr.String(), "scan:codex:fixture provider failure") {
+		t.Errorf("stderr missing provider failure: %s", stderr.String())
+	}
+}
+
+func TestRequireCompleteScanRejectsPartialResult(t *testing.T) {
+	err := requireCompleteScan(&types.ScanResult{
+		ProviderErrors: []types.ScanProviderError{
+			{Tool: types.ToolCodex, Message: "private path detail"},
+			{Tool: types.ToolClaude, Message: "another detail"},
+		},
+	})
+	if err == nil {
+		t.Fatal("requireCompleteScan() error = nil")
+	}
+	if !strings.Contains(err.Error(), "failed providers: codex, claude") {
+		t.Errorf("requireCompleteScan() error = %q", err)
+	}
+	if strings.Contains(err.Error(), "private path") {
+		t.Errorf("clean prerequisite error leaks provider detail: %q", err)
 	}
 }
 

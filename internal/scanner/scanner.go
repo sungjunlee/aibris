@@ -139,6 +139,11 @@ func (s *Scanner) ScanWithOptions(ctx context.Context, opts types.ScanOptions) (
 			fmt.Fprintf(s.errw(), "scan:%s:%v\n", p.Name(), err)
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				cancelErr = err
+			} else {
+				result.ProviderErrors = append(result.ProviderErrors, types.ScanProviderError{
+					Tool:    p.Name(),
+					Message: err.Error(),
+				})
 			}
 			continue
 		}
@@ -153,6 +158,9 @@ func (s *Scanner) ScanWithOptions(ctx context.Context, opts types.ScanOptions) (
 	if cancelErr != nil {
 		return nil, cancelErr
 	}
+	sort.Slice(result.ProviderErrors, func(i, j int) bool {
+		return result.ProviderErrors[i].Tool < result.ProviderErrors[j].Tool
+	})
 
 	result.TotalCount = len(result.Worktrees)
 	for _, w := range result.Worktrees {
