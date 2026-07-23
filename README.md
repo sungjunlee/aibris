@@ -202,9 +202,10 @@ cannot hide classic candidates. In dry-run output, a classic target nested
 inside a selected guided cleanup unit is reported as covered by that parent and
 is not counted or previewed twice.
 
-For piped or other non-TTY input, EOF accepts the guided default selection and
-continues to the classic audit deterministically. Without `--dry-run` or
-`--force`, missing confirmation still causes no deletion.
+For piped or other non-TTY input, EOF accepts the guided default selection.
+`--dry-run` then continues to the classic audit deterministically. In deletion
+mode without `--force`, missing or declined guided confirmation aborts the
+whole cleanup flow before classic targets can run.
 
 Confirm before deleting anything:
 

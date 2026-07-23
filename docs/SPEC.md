@@ -136,7 +136,9 @@ Default guided Codex worktree cleanup:
   may be toggled. `locked` rows remain visible and cannot be selected.
 - Guided review owns active Codex worktree rows, then the classic audit exposes
   remaining eligible categories. Blank input or non-TTY EOF accepts the guided
-  defaults and continues; `q` aborts the whole cleanup flow.
+  defaults in dry-run mode and continues; `q` aborts the whole cleanup flow.
+- In deletion mode, declining or failing to provide the guided final
+  confirmation aborts the whole command before classic targets can execute.
 - Dry-run target normalization treats selected guided cleanup units as parents,
   so nested classic candidates are reported as covered and never double-counted.
 - The planner must fail closed when Codex activity or git safety evidence is

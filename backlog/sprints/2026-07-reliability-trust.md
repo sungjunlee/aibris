@@ -95,4 +95,7 @@ explicit maintainer release decision.
   and non-TTY EOF behavior is documented. Full tests, build, vet, and diff
   checks pass locally.
 - 2026-07-23: Published PR #132 and moved #105 to `status:in-review`.
+- 2026-07-23: Addressed PR #132 Codex review: declining or omitting the guided
+  final confirmation now aborts the entire command before classic execution.
+  CI-equivalent race/coverage tests, build, vet, and diff checks pass locally.
   

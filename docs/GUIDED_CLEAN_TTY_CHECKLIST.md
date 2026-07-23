@@ -138,6 +138,8 @@ The checklist never deletes. Acceptance follows this path:
 4. Otherwise prepare active-unit identity before confirmation.
 5. Ask the normal final confirmation unless `--interactive` or `--force`
    controls that prompt.
+   A missing or declined confirmation aborts the whole command before the
+   classic phase.
 6. Rebuild and compare all active member evidence immediately before mutation.
 7. Remove active members with non-forced Git worktree semantics and verify refs,
    paths, and parent metadata.

@@ -213,7 +213,7 @@ func runGuidedCodexClean(ctx context.Context, opts types.PruneOptions, state gui
 	}
 	if !opts.Force {
 		if !confirmCleanExecution() {
-			return guidedCleanRunResult{HadSelection: true}, nil
+			return guidedCleanRunResult{Aborted: true, HadSelection: true}, nil
 		}
 	}
 	receipt, err := executePreparedCleanTargets(ctx, prepared, defaultActiveWorktreeExecutionOptions())

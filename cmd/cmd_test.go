@@ -755,6 +755,9 @@ func TestCleanCmd_DefaultGuidedNonTTYCleanDoesNotBlockOrDelete(t *testing.T) {
 			t.Errorf("non-TTY output missing %q; got: %s", want, output)
 		}
 	}
+	if strings.Contains(output, "scan summary") {
+		t.Errorf("declined guided confirmation must abort before classic cleanup: %s", output)
+	}
 	if _, err := os.Stat(worktree); err != nil {
 		t.Fatalf("non-TTY clean without confirmation should not remove worktree: %v", err)
 	}
