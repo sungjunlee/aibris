@@ -80,11 +80,16 @@ type CleanupPlanTotals struct {
 	VisibleRows       int
 	PhysicalTargets   int
 	PhysicalBytes     int64
+	EligibleTargets   int
+	EligibleBytes     int64
 	SelectedTargets   int
 	SelectedBytes     int64
+	ReviewableTargets int
+	ReviewableBytes   int64
 	UnselectedRows    int
 	HardLockedRows    int
 	HardLockedTargets int
+	HardLockedBytes   int64
 }
 
 // UnifiedCleanupPlan is the shared, renderer-independent state for mixed
@@ -260,10 +265,7 @@ func (p UnifiedCleanupPlan) SelectedPhysicalTargets() []types.DebrisInfo {
 }
 
 func (p UnifiedCleanupPlan) Totals() CleanupPlanTotals {
-	totals := CleanupPlanTotals{
-		VisibleRows:     len(p.Rows),
-		PhysicalTargets: len(p.Targets),
-	}
+	totals := CleanupPlanTotals{VisibleRows: len(p.Rows)}
 	for _, row := range p.Rows {
 		switch row.Selection {
 		case CleanupPlanUnselected:
@@ -272,18 +274,30 @@ func (p UnifiedCleanupPlan) Totals() CleanupPlanTotals {
 			totals.HardLockedRows++
 		}
 	}
-	for _, target := range p.Targets {
-		if target.Selection == CleanupPlanLocked {
-			totals.HardLockedTargets++
-		}
-	}
-	for _, target := range normalizeCleanupPlanPhysicalTargets(p.Targets) {
+	physical := normalizeCleanupPlanPhysicalTargets(p.Targets)
+	totals.PhysicalTargets = len(physical)
+	for _, target := range physical {
 		totals.PhysicalBytes += target.Size
 	}
 	selected := p.SelectedPhysicalTargets()
 	totals.SelectedTargets = len(selected)
 	for _, target := range selected {
 		totals.SelectedBytes += target.Size
+	}
+	eligible := normalizedCleanupPlanTargetsBySelection(p.Targets, CleanupPlanSelected, CleanupPlanUnselected)
+	totals.EligibleTargets = len(eligible)
+	for _, target := range eligible {
+		totals.EligibleBytes += target.Size
+	}
+	reviewable := normalizedCleanupPlanTargetsBySelection(p.Targets, CleanupPlanUnselected)
+	totals.ReviewableTargets = len(reviewable)
+	for _, target := range reviewable {
+		totals.ReviewableBytes += target.Size
+	}
+	locked := normalizedCleanupPlanTargetsBySelection(p.Targets, CleanupPlanLocked)
+	totals.HardLockedTargets = len(locked)
+	for _, target := range locked {
+		totals.HardLockedBytes += target.Size
 	}
 	return totals
 }
@@ -378,6 +392,20 @@ func normalizeCleanupPlanPhysicalTargets(targets []CleanupPhysicalTarget) []type
 	items := make([]types.DebrisInfo, 0, len(targets))
 	for _, target := range targets {
 		items = append(items, target.Item)
+	}
+	return normalizeCleanTargets(items)
+}
+
+func normalizedCleanupPlanTargetsBySelection(targets []CleanupPhysicalTarget, selections ...CleanupPlanSelection) []types.DebrisInfo {
+	allowed := make(map[CleanupPlanSelection]bool, len(selections))
+	for _, selection := range selections {
+		allowed[selection] = true
+	}
+	items := make([]types.DebrisInfo, 0, len(targets))
+	for _, target := range targets {
+		if allowed[target.Selection] {
+			items = append(items, target.Item)
+		}
 	}
 	return normalizeCleanTargets(items)
 }

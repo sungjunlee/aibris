@@ -73,3 +73,9 @@ selector.
 - 2026-07-23: PR #135 passed race-enabled Ubuntu and macOS CI and was
   squash-merged. Closed #113 and removed its transient `status:in-review`
   label; CodeRabbit reported no review because its quota was rate-limited.
+- 2026-07-23: Implemented #114 on `codex/mixed-cleanup-review`. One review
+  renderer now presents selected, reviewable, and protected mixed-category
+  rows from `UnifiedCleanupPlan`; text and TTY prompts mutate the same target
+  selection, omit empty sections, and preserve reasons. Found/eligible/
+  selected/reviewable/protected totals normalize nested paths. Narrow and wide
+  golden tests plus the full race/build/vet suite pass.

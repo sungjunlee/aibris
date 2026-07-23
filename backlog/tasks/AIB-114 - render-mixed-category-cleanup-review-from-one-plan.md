@@ -1,7 +1,7 @@
 ---
 id: AIB-114
 title: Render mixed-category cleanup review from one plan
-status: To Do
+status: In Progress
 labels:
   - enhancement
   - ux
@@ -19,9 +19,9 @@ Show cache, dependency, orphaned worktree, and guided active-worktree decisions 
 
 ## Acceptance criteria
 
-- [ ] The audit shows found, eligible, selected, reviewable, and protected totals without double counting.
-- [ ] Guided worktree reasons remain visible without obscuring other categories.
-- [ ] TTY interaction and text fallback use the same plan state.
-- [ ] A user can accept defaults, toggle selectable rows, or abort.
-- [ ] Empty sections are omitted without hiding a non-empty section.
-- [ ] Snapshot or golden tests cover narrow and wide terminals where applicable.
+- [x] The audit shows found, eligible, selected, reviewable, and protected totals without double counting.
+- [x] Guided worktree reasons remain visible without obscuring other categories.
+- [x] TTY interaction and text fallback use the same plan state.
+- [x] A user can accept defaults, toggle selectable rows, or abort.
+- [x] Empty sections are omitted without hiding a non-empty section.
+- [x] Snapshot or golden tests cover narrow and wide terminals where applicable.
