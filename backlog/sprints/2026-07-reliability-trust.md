@@ -28,7 +28,7 @@ explicit maintainer release decision.
 
 ### Batch 3 — Repair the default cleanup journey
 
-- [~] #105 Keep all-category cleanup visible when guided review activates (~2h) → PR #132 (reviewing)
+- [x] #105 Keep all-category cleanup visible when guided review activates (~2h) → PR #132 (merged)
 
 ### Batch 4 — Lock the public CLI contract
 
@@ -98,4 +98,7 @@ explicit maintainer release decision.
 - 2026-07-23: Addressed PR #132 Codex review: declining or omitting the guided
   final confirmation now aborts the entire command before classic execution.
   CI-equivalent race/coverage tests, build, vet, and diff checks pass locally.
+- 2026-07-23: PR #132 passed macOS and Ubuntu CI, its only Codex review thread
+  was resolved, and it was squash-merged. Closed #105 and removed its transient
+  `status:in-review` label.
   

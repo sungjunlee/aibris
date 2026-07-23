@@ -1,7 +1,7 @@
 ---
 id: AIB-105
 title: Keep all-category cleanup visible when guided review activates
-status: In Review
+status: Done
 labels:
   - enhancement
   - ux
