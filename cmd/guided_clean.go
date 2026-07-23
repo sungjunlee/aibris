@@ -52,6 +52,12 @@ type guidedCleanState struct {
 	CanReplan  bool
 }
 
+type guidedCleanRunResult struct {
+	PreviewTargets []types.DebrisInfo
+	Aborted        bool
+	HadSelection   bool
+}
+
 func buildGuidedCleanState(ctx context.Context, result *types.ScanResult, source scanSource, minIdleAge time.Duration, reason string) (guidedCleanState, error) {
 	items := activeCodexWorktrees(result.Worktrees)
 	units, err := buildWorktreeCleanupUnits(ctx, items)
@@ -181,21 +187,21 @@ func guidedMemberReason(unit WorktreeCleanupUnit, member GitWorktreeMember, reas
 	return reason
 }
 
-func runGuidedCodexClean(ctx context.Context, opts types.PruneOptions, state guidedCleanState) error {
+func runGuidedCodexClean(ctx context.Context, opts types.PruneOptions, state guidedCleanState) (guidedCleanRunResult, error) {
 	targets, aborted, err := promptGuidedCleanForFiles(os.Stdin, os.Stdout, state)
 	if err != nil || aborted {
-		return err
+		return guidedCleanRunResult{Aborted: aborted}, err
 	}
 	if len(targets) == 0 {
 		fmt.Fprintln(os.Stdout, "No items selected.")
-		return nil
+		return guidedCleanRunResult{}, nil
 	}
 
 	printCleanPlan(targets, cleanPlanModeDryRun)
 	fmt.Fprintln(os.Stdout, "[DRY-RUN] Preview complete.")
 	if opts.DryRun {
 		fmt.Fprintln(os.Stdout, "[DRY-RUN] No files were removed.")
-		return nil
+		return guidedCleanRunResult{PreviewTargets: targets, HadSelection: true}, nil
 	}
 	prepared := prepareCleanExecution(ctx, targets)
 
@@ -203,20 +209,20 @@ func runGuidedCodexClean(ctx context.Context, opts types.PruneOptions, state gui
 		receipt, err := interactiveClean(ctx, prepared)
 		printWorktreeExecutionReceipts(receipt)
 		printGuidedCleanupReceipt(len(targets), receipt)
-		return err
+		return guidedCleanRunResult{HadSelection: true}, err
 	}
 	if !opts.Force {
 		if !confirmCleanExecution() {
-			return nil
+			return guidedCleanRunResult{HadSelection: true}, nil
 		}
 	}
 	receipt, err := executePreparedCleanTargets(ctx, prepared, defaultActiveWorktreeExecutionOptions())
 	printWorktreeExecutionReceipts(receipt)
 	printGuidedCleanupReceipt(len(targets), receipt)
 	if err != nil {
-		return err
+		return guidedCleanRunResult{HadSelection: true}, err
 	}
-	return nil
+	return guidedCleanRunResult{HadSelection: true}, nil
 }
 
 func promptGuidedCleanForFiles(input *os.File, output *os.File, state guidedCleanState) ([]types.DebrisInfo, bool, error) {

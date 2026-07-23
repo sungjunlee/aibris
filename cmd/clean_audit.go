@@ -56,6 +56,7 @@ const (
 	cleanReasonMissingPath    cleanAuditReason = "path no longer exists"
 	cleanReasonDuplicatePath  cleanAuditReason = "duplicate cleanup target path"
 	cleanReasonNestedTarget   cleanAuditReason = "covered by selected parent"
+	cleanReasonOverlapTarget  cleanAuditReason = "overlaps selected cleanup target"
 	cleanReasonEligible       cleanAuditReason = "eligible for cleanup"
 )
 
@@ -164,6 +165,9 @@ func (s *cleanAuditTargetSet) exclusionReason(item types.DebrisInfo) cleanAuditR
 		if cleanTargetContains(targetPath, path) {
 			return cleanReasonNestedTarget
 		}
+		if cleanTargetContains(path, targetPath) {
+			return cleanReasonOverlapTarget
+		}
 	}
 	return cleanReasonMissingPath
 }
@@ -225,6 +229,8 @@ func cleanAuditReasonText(reason cleanAuditReason, opts types.PruneOptions) stri
 		return "duplicate cleanup target path"
 	case cleanReasonNestedTarget:
 		return "covered by selected parent"
+	case cleanReasonOverlapTarget:
+		return "overlaps selected cleanup target"
 	default:
 		return string(reason)
 	}

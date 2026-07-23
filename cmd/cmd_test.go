@@ -647,6 +647,8 @@ func TestCleanCmd_DryRunDefaultsToGuidedWhenUsefulCodexReviewExists(t *testing.T
 		"clean plan",
 		"mode     dry-run",
 		"[DRY-RUN] No files were removed.",
+		"scan summary",
+		"No additional classic items to clean.",
 	} {
 		if !strings.Contains(output, want) {
 			t.Errorf("output missing %q; got: %s", want, output)

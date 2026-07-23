@@ -133,13 +133,17 @@ The checklist never deletes. Acceptance follows this path:
 
 1. Normalize selected physical targets.
 2. Render the normal dry-run clean plan.
-3. Stop when `--dry-run` is set.
+3. If `--dry-run` is set, retain the selected guided parents for overlap
+   normalization without deleting them.
 4. Otherwise prepare active-unit identity before confirmation.
 5. Ask the normal final confirmation unless `--interactive` or `--force`
    controls that prompt.
 6. Rebuild and compare all active member evidence immediately before mutation.
 7. Remove active members with non-forced Git worktree semantics and verify refs,
    paths, and parent metadata.
+8. Continue to the classic all-category audit. During dry-run, normalize
+   classic targets together with selected guided parents so nested paths are
+   not previewed twice.
 
 `--force` skips only final confirmation. It does not select locked rows and is
 never translated into `git worktree remove --force`.
@@ -155,13 +159,15 @@ back to raw recursive deletion.
 Empty guided state:
 
 - Render the empty sections.
-- Blank input or EOF returns `No items selected.`
+- Blank input or EOF returns `No items selected.` and continues to the classic
+  all-category audit.
 
 Protected-only pressure:
 
 - Open guided review when the pressure threshold is met.
 - Show zero selected and every reason.
-- Blank input or EOF performs no preview and no deletion.
+- Blank input or EOF performs no guided worktree preview or deletion, then
+  continues to classic candidates.
 
 Unavailable activity:
 
