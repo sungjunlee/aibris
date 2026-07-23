@@ -36,7 +36,7 @@ explicit maintainer release decision.
 
 ### Batch 5 — Refresh public trust surfaces
 
-- [~] #110 Refresh public security, community, and roadmap contracts (~45min) → `codex/public-trust-docs`
+- [~] #110 Refresh public security, community, and roadmap contracts (~45min) → PR #134 (reviewing)
 
 ### Batch 6 — Close the milestone without forcing a version
 
@@ -121,4 +121,5 @@ explicit maintainer release decision.
   link is gone, and ROADMAP.md records the maintainer-controlled 0.x posture.
   Root tests now validate public local links and community/roadmap invariants.
   CI-equivalent race/coverage tests, build, vet, and diff checks pass.
+- 2026-07-23: Published PR #134 and moved #110 to `status:in-review`.
   
