@@ -43,11 +43,16 @@ type cliContractResult struct {
 }
 
 func runCLIContract(t *testing.T, home string, extraEnv map[string]string, args ...string) cliContractResult {
+	return runCLIContractWithInput(t, home, extraEnv, "", args...)
+}
+
+func runCLIContractWithInput(t *testing.T, home string, extraEnv map[string]string, input string, args ...string) cliContractResult {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	cmd := newCLIContractCommand(t, ctx, home, extraEnv, args...)
+	cmd.Stdin = strings.NewReader(input)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -181,6 +186,33 @@ func TestCLIContractDryRunDoesNotDelete(t *testing.T) {
 	}
 	if _, err := os.Stat(modules); err != nil {
 		t.Fatalf("dry-run removed target: %v", err)
+	}
+}
+
+func TestCLIContractDeclinedPromptDoesNotDelete(t *testing.T) {
+	home := t.TempDir()
+	modules := filepath.Join(home, "workspace", "app", "node_modules")
+	if err := os.MkdirAll(filepath.Join(modules, "pkg"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-8 * 24 * time.Hour)
+	if err := os.Chtimes(modules, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	result := runCLIContractWithInput(t, home, nil, "n\n",
+		"clean", "--no-guide", "--age=1h", "--category=node_modules")
+	if result.ExitCode != 0 {
+		t.Fatalf("declined prompt exit = %d\nstdout:\n%s\nstderr:\n%s", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	if !strings.Contains(result.Stdout, "Proceed? [y/N]: Aborted.") {
+		t.Errorf("declined prompt stdout missing abort contract: %s", result.Stdout)
+	}
+	if result.Stderr != "" {
+		t.Errorf("declined prompt stderr = %q", result.Stderr)
+	}
+	if _, err := os.Stat(modules); err != nil {
+		t.Fatalf("declined prompt removed target: %v", err)
 	}
 }
 

@@ -106,8 +106,8 @@ explicit maintainer release decision.
   asserts stdout, stderr, and exit status independently.
 - 2026-07-23: Implemented #109 with compiled-process coverage for invalid
   flags/selectors/roots, dry-run safety, SIGINT cancellation, and cleanup
-  execution failure. The six contracts add about two seconds locally and use
-  no timing sleeps. CI-equivalent race/coverage tests, build, vet, and diff
-  checks pass.
+  execution failure. A seventh contract verifies declined confirmation without
+  deletion. The suite adds about two seconds locally and uses no timing sleeps.
+  CI-equivalent race/coverage tests, build, vet, and diff checks pass.
 - 2026-07-23: Published PR #133 and moved #109 to `status:in-review`.
   
