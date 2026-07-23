@@ -1,7 +1,7 @@
 ---
 id: AIB-108
 title: Define complete versus partial scan semantics
-status: To Do
+status: In Progress
 labels:
   - documentation
   - enhancement

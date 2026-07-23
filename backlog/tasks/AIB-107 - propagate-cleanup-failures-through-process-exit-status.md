@@ -1,7 +1,7 @@
 ---
 id: AIB-107
 title: Propagate cleanup failures through process exit status
-status: In Review
+status: In Progress
 labels:
   - cli
   - safety

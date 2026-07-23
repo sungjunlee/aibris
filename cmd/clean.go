@@ -195,6 +195,7 @@ var validCleanTools = []types.Tool{
 	types.ToolCursor,
 	types.ToolWindsurf,
 	types.ToolNodeModules,
+	types.ToolUnknown,
 	types.ToolBuildCache,
 	types.ToolPipCache,
 	types.ToolAILogs,
@@ -453,6 +454,9 @@ func printCleanHeader(roots []string) {
 
 func scanForClean(ctx context.Context, roots []string) (*types.ScanResult, scanSource, error) {
 	if result, age, ok := readFreshLastScanCache(roots); ok {
+		if err := requireCompleteScan(result); err != nil {
+			return nil, scanSource{}, err
+		}
 		return result, scanSource{Kind: scanSourceCached, Age: age}, nil
 	}
 
@@ -465,8 +469,22 @@ func scanForClean(ctx context.Context, roots []string) (*types.ScanResult, scanS
 	if err != nil {
 		return nil, scanSource{}, err
 	}
+	if err := requireCompleteScan(result); err != nil {
+		return nil, scanSource{}, err
+	}
 	writeLastScanCache(roots, result)
 	return result, scanSource{Kind: scanSourceLive}, nil
+}
+
+func requireCompleteScan(result *types.ScanResult) error {
+	if result == nil || !result.Partial() {
+		return nil
+	}
+	providers := make([]string, 0, len(result.ProviderErrors))
+	for _, providerErr := range result.ProviderErrors {
+		providers = append(providers, string(providerErr.Tool))
+	}
+	return fmt.Errorf("cleanup requires a complete scan; failed providers: %s", strings.Join(providers, ", "))
 }
 
 func shortDurationString(d time.Duration) string {
@@ -686,6 +704,7 @@ func interactiveClean(ctx context.Context, targets []preparedCleanTarget) (clean
 		if !cleaner.IsSafeTarget(home, w) {
 			err := fmt.Errorf("unsafe path %q rejected", w.Path)
 			fmt.Fprintf(os.Stderr, "  error: %v\n", err)
+			result.Units = append(result.Units, failedCleanUnitReceipt(w, nil, err))
 			errs = append(errs, err)
 			continue
 		}

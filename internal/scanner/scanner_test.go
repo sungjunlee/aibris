@@ -184,6 +184,13 @@ func TestScan_ProviderError(t *testing.T) {
 	if result.TotalCount != 1 {
 		t.Errorf("TotalCount = %d; want 1", result.TotalCount)
 	}
+	if !result.Partial() {
+		t.Fatal("Partial() = false; want provider failure to mark usable result partial")
+	}
+	wantErrors := []types.ScanProviderError{{Tool: types.ToolCodex, Message: "boom"}}
+	if !reflect.DeepEqual(result.ProviderErrors, wantErrors) {
+		t.Errorf("ProviderErrors = %+v; want %+v", result.ProviderErrors, wantErrors)
+	}
 }
 
 func TestScan_ProgressEvents(t *testing.T) {

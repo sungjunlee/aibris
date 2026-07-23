@@ -19,12 +19,12 @@ explicit maintainer release decision.
 
 ### Batch 1 — Make CLI outcomes truthful
 
-- [~] #106 Validate clean category and tool selector values (~45min) → PR #130 (reviewing)
-- [~] #107 Propagate cleanup failures through process exit status (~60min) → PR #130 (reviewing)
+- [~] #106 Validate clean category and tool selector values (~45min) → PR #130 merged; review follow-up in progress
+- [~] #107 Propagate cleanup failures through process exit status (~60min) → PR #130 merged; review follow-up in progress
 
 ### Batch 2 — Make inventory completeness explicit
 
-- [ ] #108 Define complete versus partial scan semantics (~60min)
+- [~] #108 Define complete versus partial scan semantics (~60min) → `codex/partial-scan-contract`
 
 ### Batch 3 — Repair the default cleanup journey
 
@@ -75,4 +75,8 @@ explicit maintainer release decision.
 - 2026-07-23: Published PR #130 and moved #106/#107 to `status:in-review`.
 - 2026-07-23: PR #130 CI passed on macOS and Ubuntu; CodeRabbit reported no
   blocking review result because its review quota was rate-limited.
+- 2026-07-23: Squash-merged PR #130. Reopened #106/#107 after finding two
+  actionable inline review comments through the API: preserve `--tool unknown`
+  compatibility and record interactive safety rejections in cleanup receipts.
+  Started both follow-ups with #108 on `codex/partial-scan-contract`.
   
