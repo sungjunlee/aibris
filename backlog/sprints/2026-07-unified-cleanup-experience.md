@@ -65,3 +65,8 @@ selector.
   implementation sprint. Reassessment confirmed #113 as the dependency for
   renderer and execution work; release gate #117 stays outside active
   execution pending maintainer approval.
+- 2026-07-23: Implemented #113 on `codex/unified-cleanup-plan`. The new
+  renderer-independent model separates visible rows from exact physical
+  targets, propagates descendant hard locks, normalizes overlap-safe totals,
+  adapts classic and worktree policies, and validates cancellation, partial
+  scans, and stale evidence. Race tests, build, and vet pass locally.
