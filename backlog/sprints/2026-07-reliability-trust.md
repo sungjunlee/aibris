@@ -19,12 +19,12 @@ explicit maintainer release decision.
 
 ### Batch 1 — Make CLI outcomes truthful
 
-- [~] #106 Validate clean category and tool selector values (~45min) → PR #130 merged; review follow-up in progress
-- [~] #107 Propagate cleanup failures through process exit status (~60min) → PR #130 merged; review follow-up in progress
+- [~] #106 Validate clean category and tool selector values (~45min) → PR #131 (reviewing)
+- [~] #107 Propagate cleanup failures through process exit status (~60min) → PR #131 (reviewing)
 
 ### Batch 2 — Make inventory completeness explicit
 
-- [~] #108 Define complete versus partial scan semantics (~60min) → `codex/partial-scan-contract`
+- [~] #108 Define complete versus partial scan semantics (~60min) → PR #131 (reviewing)
 
 ### Batch 3 — Repair the default cleanup journey
 
@@ -79,4 +79,9 @@ explicit maintainer release decision.
   actionable inline review comments through the API: preserve `--tool unknown`
   compatibility and record interactive safety rejections in cleanup receipts.
   Started both follow-ups with #108 on `codex/partial-scan-contract`.
+- 2026-07-23: Published PR #131 for the #106/#107 review follow-ups and #108.
+  Partial scans now retain usable results but label failed providers, emit
+  machine-readable failure metadata, exit non-zero, invalidate the cleanup
+  cache, and cannot authorize clean. Full tests, build, vet, and diff checks
+  pass locally.
   
