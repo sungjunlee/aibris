@@ -32,7 +32,7 @@ explicit maintainer release decision.
 
 ### Batch 4 — Lock the public CLI contract
 
-- [~] #109 Add black-box CLI contract tests (~90min) → PR #133 (reviewing)
+- [x] #109 Add black-box CLI contract tests (~90min) → PR #133 (merged)
 
 ### Batch 5 — Refresh public trust surfaces
 
@@ -110,4 +110,7 @@ explicit maintainer release decision.
   deletion. The suite adds about two seconds locally and uses no timing sleeps.
   CI-equivalent race/coverage tests, build, vet, and diff checks pass.
 - 2026-07-23: Published PR #133 and moved #109 to `status:in-review`.
+- 2026-07-23: PR #133 passed race-enabled macOS and Ubuntu CI and was
+  squash-merged with no inline review findings. Closed #109 and removed its
+  transient `status:in-review` label.
   
