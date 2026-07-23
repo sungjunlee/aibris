@@ -243,7 +243,7 @@ func TestCleanCmd_GuidedDryRunContinuesWithMixedCategoryCandidates(t *testing.T)
 		"scan summary",
 		"node_modules",
 		"matched  1 candidate",
-		modules,
+		filepath.Join("workspace", "app", "node_modules"),
 	} {
 		if !strings.Contains(output, want) {
 			t.Errorf("mixed guided output missing %q: %s", want, output)
