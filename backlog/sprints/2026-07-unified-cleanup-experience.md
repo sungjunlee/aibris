@@ -19,7 +19,7 @@ selector.
 
 ### Batch 1 — Establish one source of cleanup truth
 
-- [ ] #113 Design the unified cleanup plan model (~2h)
+- [x] #113 Design the unified cleanup plan model (~2h) → PR #135 (merged)
 
 ### Batch 2 — Review every category together
 
@@ -70,3 +70,6 @@ selector.
   targets, propagates descendant hard locks, normalizes overlap-safe totals,
   adapts classic and worktree policies, and validates cancellation, partial
   scans, and stale evidence. Race tests, build, and vet pass locally.
+- 2026-07-23: PR #135 passed race-enabled Ubuntu and macOS CI and was
+  squash-merged. Closed #113 and removed its transient `status:in-review`
+  label; CodeRabbit reported no review because its quota was rate-limited.

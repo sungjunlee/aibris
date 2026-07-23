@@ -1,7 +1,7 @@
 ---
 id: AIB-113
 title: Design the unified cleanup plan model
-status: In Progress
+status: Done
 labels:
   - enhancement
   - cli
