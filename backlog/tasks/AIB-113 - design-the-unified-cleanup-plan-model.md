@@ -1,7 +1,7 @@
 ---
 id: AIB-113
 title: Design the unified cleanup plan model
-status: To Do
+status: In Progress
 labels:
   - enhancement
   - cli
@@ -19,9 +19,9 @@ Define one internal plan that can represent eligible classic targets, recommende
 
 ## Acceptance criteria
 
-- [ ] The model distinguishes physical targets from visible rows.
-- [ ] It represents selectable, unselected, and hard-locked decisions.
-- [ ] Size accounting is deterministic and overlap-safe.
-- [ ] Classic and guided policies can populate the same plan without policy duplication.
-- [ ] The design includes cancellation, stale evidence, and partial-scan behavior.
-- [ ] Focused unit tests cover mixed-category plans.
+- [x] The model distinguishes physical targets from visible rows.
+- [x] It represents selectable, unselected, and hard-locked decisions.
+- [x] Size accounting is deterministic and overlap-safe.
+- [x] Classic and guided policies can populate the same plan without policy duplication.
+- [x] The design includes cancellation, stale evidence, and partial-scan behavior.
+- [x] Focused unit tests cover mixed-category plans.
