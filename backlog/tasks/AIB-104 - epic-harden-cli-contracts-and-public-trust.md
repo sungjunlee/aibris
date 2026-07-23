@@ -1,7 +1,7 @@
 ---
 id: AIB-104
 title: '[Epic] Harden CLI contracts and public trust'
-status: To Do
+status: Done
 labels:
   - documentation
   - enhancement
@@ -30,6 +30,6 @@ Make aibris predictable for humans, scripts, and AI agents before expanding its 
 
 ## Completion criteria
 
-- [ ] Every child issue in this milestone is closed or explicitly deferred with rationale.
-- [ ] go test ./..., go build ./..., and go vet ./... pass.
-- [ ] A release decision is recorded without implying v1.0 readiness.
+- [x] Every child issue in this milestone is closed or explicitly deferred with rationale.
+- [x] go test ./..., go build ./..., and go vet ./... pass.
+- [x] A release decision is recorded without implying v1.0 readiness.

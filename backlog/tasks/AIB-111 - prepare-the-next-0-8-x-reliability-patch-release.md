@@ -26,3 +26,10 @@ Ship the reliability work as a 0.8.x patch only after the milestone contracts ar
 - [ ] install.sh is smoke-tested against the published release assets and checksums.
 - [ ] GitHub Release notes use the curated changelog rather than an unfiltered commit dump.
 - [ ] Post-release scan and dry-run dogfood evidence is recorded without deleting real user data.
+
+## Release decision
+
+Deferred on 2026-07-23 pending explicit maintainer approval. Do not create a
+tag, date, or release commitment merely because #105-#110 are complete.
+Published-asset installation verification and post-release read-only dogfood
+remain intentionally open until an actual 0.8.x patch is approved.

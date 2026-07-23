@@ -40,8 +40,8 @@ explicit maintainer release decision.
 
 ### Batch 6 — Close the milestone without forcing a version
 
-- [ ] #104 [Epic] Harden CLI contracts and public trust (~20min)
-- [ ] #111 Prepare the next 0.8.x reliability patch release (~60min)
+- [x] #104 [Epic] Harden CLI contracts and public trust (~20min) → #105-#110 complete
+- [ ] #111 Prepare the next 0.8.x reliability patch release (~60min) → deferred pending maintainer approval
 
 ## Running Context
 
@@ -125,4 +125,9 @@ explicit maintainer release decision.
 - 2026-07-23: PR #134 passed macOS and Ubuntu CI and was squash-merged with no
   inline review findings. Closed #110 and removed its transient
   `status:in-review` label.
+- 2026-07-23: Closed epic #104 after #105-#110 merged and all verification
+  gates passed. Explicitly deferred #111: the milestone stays open and no
+  version, tag, date, or v1.0.0 readiness claim is created until maintainer
+  approval. Published-asset install verification and post-release read-only
+  dogfood remain open by design.
   
