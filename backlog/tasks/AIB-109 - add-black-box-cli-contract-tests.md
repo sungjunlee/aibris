@@ -1,7 +1,7 @@
 ---
 id: AIB-109
 title: Add black-box CLI contract tests
-status: In Progress
+status: In Review
 labels:
   - enhancement
   - devops

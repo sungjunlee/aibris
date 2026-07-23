@@ -32,7 +32,7 @@ explicit maintainer release decision.
 
 ### Batch 4 — Lock the public CLI contract
 
-- [~] #109 Add black-box CLI contract tests (~90min) → `codex/black-box-cli-contracts`
+- [~] #109 Add black-box CLI contract tests (~90min) → PR #133 (reviewing)
 
 ### Batch 5 — Refresh public trust surfaces
 
@@ -109,4 +109,5 @@ explicit maintainer release decision.
   execution failure. The six contracts add about two seconds locally and use
   no timing sleeps. CI-equivalent race/coverage tests, build, vet, and diff
   checks pass.
+- 2026-07-23: Published PR #133 and moved #109 to `status:in-review`.
   
