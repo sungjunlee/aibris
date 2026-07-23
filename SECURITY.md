@@ -41,9 +41,11 @@ aggressive cleanup are usually normal bugs or feature requests.
 
 ## Supported Versions
 
+Security fixes are provided for the latest released 0.x minor line. Because the
+project is pre-1.0, older minor lines do not receive backports. Upgrade to the
+latest release before reporting or validating a fix.
+
 | Version | Supported |
 |---------|-----------|
-| 0.5.x   | Yes       |
-| 0.4.x   | Yes       |
-| 0.3.x   | Yes       |
-| <=0.2.x | No        |
+| 0.8.x   | Yes       |
+| <=0.7.x | No        |

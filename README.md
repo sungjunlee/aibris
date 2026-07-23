@@ -387,6 +387,12 @@ fall back to plain `aibris clean`: preserve all approved `--category`, `--tool`,
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) for architecture and development guidelines.
 
+### Roadmap
+
+See [ROADMAP.md](ROADMAP.md). The project intentionally remains in the 0.x
+series until the maintainer is satisfied; milestones are capability gates, not
+promised release dates or an implied v1.0.0 schedule.
+
 ### License
 
 MIT — see [LICENSE](LICENSE).
