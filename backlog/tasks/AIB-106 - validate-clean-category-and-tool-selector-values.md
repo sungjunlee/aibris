@@ -1,7 +1,7 @@
 ---
 id: AIB-106
 title: Validate clean category and tool selector values
-status: In Review
+status: Done
 labels:
   - cli
   - type:bug

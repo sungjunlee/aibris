@@ -19,12 +19,12 @@ explicit maintainer release decision.
 
 ### Batch 1 — Make CLI outcomes truthful
 
-- [~] #106 Validate clean category and tool selector values (~45min) → PR #131 (reviewing)
-- [~] #107 Propagate cleanup failures through process exit status (~60min) → PR #131 (reviewing)
+- [x] #106 Validate clean category and tool selector values (~45min) → PR #131 (merged)
+- [x] #107 Propagate cleanup failures through process exit status (~60min) → PR #131 (merged)
 
 ### Batch 2 — Make inventory completeness explicit
 
-- [~] #108 Define complete versus partial scan semantics (~60min) → PR #131 (reviewing)
+- [x] #108 Define complete versus partial scan semantics (~60min) → PR #131 (merged)
 
 ### Batch 3 — Repair the default cleanup journey
 
@@ -84,4 +84,6 @@ explicit maintainer release decision.
   machine-readable failure metadata, exit non-zero, invalidate the cleanup
   cache, and cannot authorize clean. Full tests, build, vet, and diff checks
   pass locally.
+- 2026-07-23: PR #131 passed macOS and Ubuntu CI and was squash-merged. Closed
+  #106/#107/#108 and removed their transient `status:in-review` labels.
   
