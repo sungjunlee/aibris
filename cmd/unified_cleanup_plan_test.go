@@ -50,10 +50,13 @@ func TestBuildUnifiedCleanupPlanMixedCategoriesAndLockedDescendant(t *testing.T)
 		t.Fatalf("selected paths = %#v, want %#v", got, want)
 	}
 	totals := plan.Totals()
-	if totals.VisibleRows != 5 || totals.PhysicalTargets != 5 ||
-		totals.PhysicalBytes != 440 || totals.SelectedTargets != 2 ||
+	if totals.VisibleRows != 5 || totals.PhysicalTargets != 4 ||
+		totals.PhysicalBytes != 440 || totals.EligibleTargets != 3 ||
+		totals.EligibleBytes != 240 || totals.SelectedTargets != 2 ||
 		totals.SelectedBytes != 180 || totals.UnselectedRows != 1 ||
-		totals.HardLockedRows != 2 || totals.HardLockedTargets != 2 {
+		totals.ReviewableTargets != 1 || totals.ReviewableBytes != 60 ||
+		totals.HardLockedRows != 2 || totals.HardLockedTargets != 1 ||
+		totals.HardLockedBytes != 200 {
 		t.Fatalf("totals = %#v", totals)
 	}
 }
