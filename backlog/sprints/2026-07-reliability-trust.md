@@ -1,6 +1,6 @@
 ---
 milestone: 0.8.x Reliability & Trust
-status: active
+status: completed
 started: 2026-07-23
 due: TBD
 objectives: []
@@ -41,7 +41,12 @@ explicit maintainer release decision.
 ### Batch 6 — Close the milestone without forcing a version
 
 - [x] #104 [Epic] Harden CLI contracts and public trust (~20min) → #105-#110 complete
-- [ ] #111 Prepare the next 0.8.x reliability patch release (~60min) → deferred pending maintainer approval
+
+## Deferred Release Gate
+
+- #111 Prepare the next 0.8.x reliability patch release (~60min) remains open
+  in `status:todo` pending explicit maintainer approval. It is not counted as
+  completed sprint work, and milestone #6 remains open without a tag or date.
 
 ## Running Context
 
@@ -130,4 +135,8 @@ explicit maintainer release decision.
   version, tag, date, or v1.0.0 readiness claim is created until maintainer
   approval. Published-asset install verification and post-release read-only
   dogfood remain open by design.
+- 2026-07-23: Promoted the durable reliability contracts to project context
+  and transferred open release gate #111 out of sprint execution scope without
+  closing it or milestone #6.
   
+- 2026-07-23: Sprint closed. 7/7 tasks completed.

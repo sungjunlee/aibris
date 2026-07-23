@@ -22,11 +22,15 @@
 - `Evidence-Based Worktree Reclamation` milestone #5 is complete. It shipped
   v0.8.0 with cleanup-unit identity, ref reachability, per-repository retention,
   unified activity evidence, and Git-aware active removal.
-- The completed v0.8.0 evidence initiative is distinct from the current
-  milestone #6 `0.8.x Reliability & Trust` patch-readiness work, tracked by
-  epic #104 and issues #105-#111. This active sprint closes default-flow,
-  selector-validation, exit-status, partial-scan, black-box testing, and
-  public-contract gaps before a maintainer release decision.
+- Milestone #6 `0.8.x Reliability & Trust` completed its implementation scope:
+  default-flow visibility, selector validation, truthful exit status,
+  partial-scan semantics, black-box contracts, and public trust surfaces.
+  Release gate #111 remains open and explicitly deferred pending maintainer
+  approval, so milestone #6 stays open without a tag or promised date.
+- The next active product initiative is milestone #7 `0.9.x Unified Cleanup
+  Experience`: replace the interim guided-then-classic handoff with one
+  inspectable cleanup plan, mixed-category review, and a single confirmation
+  and execution contract.
 - Planned follow-on milestones have no due dates: #7 `0.9.x Unified Cleanup
   Experience`, #8 `0.x OSS Distribution & Release Trust`, and #9 `0.x
   Automation & Schema`. Long-horizon configuration and performance work stays
@@ -39,3 +43,5 @@
   milestone merely because the current roadmap is complete.
 - Milestones describe capability and quality gates, not promised dates. A 0.x
   release is cut only after its behavior is dogfooded and explicitly approved.
+- Open release-gate issues may outlive their implementation sprint. Never mark
+  one complete merely to close a sprint; carry it as explicitly deferred work.
