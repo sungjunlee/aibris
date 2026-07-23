@@ -1,7 +1,7 @@
 ---
 id: AIB-110
 title: Refresh public security, community, and roadmap contracts
-status: In Review
+status: Done
 labels:
   - documentation
   - docs

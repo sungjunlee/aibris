@@ -36,7 +36,7 @@ explicit maintainer release decision.
 
 ### Batch 5 — Refresh public trust surfaces
 
-- [~] #110 Refresh public security, community, and roadmap contracts (~45min) → PR #134 (reviewing)
+- [x] #110 Refresh public security, community, and roadmap contracts (~45min) → PR #134 (merged)
 
 ### Batch 6 — Close the milestone without forcing a version
 
@@ -122,4 +122,7 @@ explicit maintainer release decision.
   Root tests now validate public local links and community/roadmap invariants.
   CI-equivalent race/coverage tests, build, vet, and diff checks pass.
 - 2026-07-23: Published PR #134 and moved #110 to `status:in-review`.
+- 2026-07-23: PR #134 passed macOS and Ubuntu CI and was squash-merged with no
+  inline review findings. Closed #110 and removed its transient
+  `status:in-review` label.
   
