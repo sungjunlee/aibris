@@ -32,7 +32,7 @@ explicit maintainer release decision.
 
 ### Batch 4 — Lock the public CLI contract
 
-- [ ] #109 Add black-box CLI contract tests (~90min)
+- [~] #109 Add black-box CLI contract tests (~90min) → `codex/black-box-cli-contracts`
 
 ### Batch 5 — Refresh public trust surfaces
 
@@ -101,4 +101,12 @@ explicit maintainer release decision.
 - 2026-07-23: PR #132 passed macOS and Ubuntu CI, its only Codex review thread
   was resolved, and it was squash-merged. Closed #105 and removed its transient
   `status:in-review` label.
+- 2026-07-23: Started #109 on `codex/black-box-cli-contracts`. The test design
+  builds one real binary per package run, isolates HOME/cache/temp state, and
+  asserts stdout, stderr, and exit status independently.
+- 2026-07-23: Implemented #109 with compiled-process coverage for invalid
+  flags/selectors/roots, dry-run safety, SIGINT cancellation, and cleanup
+  execution failure. The six contracts add about two seconds locally and use
+  no timing sleeps. CI-equivalent race/coverage tests, build, vet, and diff
+  checks pass.
   
