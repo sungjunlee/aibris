@@ -1,7 +1,7 @@
 ---
 id: AIB-114
 title: Render mixed-category cleanup review from one plan
-status: In Progress
+status: Done
 labels:
   - enhancement
   - ux

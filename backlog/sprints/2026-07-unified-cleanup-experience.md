@@ -23,7 +23,7 @@ selector.
 
 ### Batch 2 — Review every category together
 
-- [ ] #114 Render mixed-category cleanup review from one plan (~3h)
+- [x] #114 Render mixed-category cleanup review from one plan (~3h) → PR #136 (merged)
 
 ### Batch 3 — Cross one execution boundary
 
@@ -79,3 +79,6 @@ selector.
   selection, omit empty sections, and preserve reasons. Found/eligible/
   selected/reviewable/protected totals normalize nested paths. Narrow and wide
   golden tests plus the full race/build/vet suite pass.
+- 2026-07-23: PR #136 passed race-enabled Ubuntu and macOS CI and was
+  squash-merged without inline review findings. Closed #114 and removed its
+  transient `status:in-review` label.
