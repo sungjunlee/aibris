@@ -1322,6 +1322,130 @@ func TestScanCmd_InvalidRoot(t *testing.T) {
 	}
 }
 
+func TestCleanCmd_InvalidSelector(t *testing.T) {
+	if selector := os.Getenv("GO_TEST_INVALID_CLEAN_SELECTOR"); selector != "" {
+		resetCleanFlags()
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		rootCmd.SetArgs([]string{"clean", "--dry-run", "--" + selector, "mystery"})
+		rootCmd.Execute()
+		return
+	}
+
+	for _, selector := range []string{"category", "tool"} {
+		t.Run(selector, func(t *testing.T) {
+			cmd := exec.Command(os.Args[0], "-test.run=TestCleanCmd_InvalidSelector$")
+			cmd.Env = append(os.Environ(), "GO_TEST_INVALID_CLEAN_SELECTOR="+selector)
+			out, err := cmd.CombinedOutput()
+			if err == nil {
+				t.Fatalf("expected exit error for invalid %s, got: %s", selector, out)
+			}
+			for _, want := range []string{"invalid --" + selector + " value \"mystery\"", "valid values:"} {
+				if !strings.Contains(string(out), want) {
+					t.Errorf("invalid %s output missing %q: %s", selector, want, out)
+				}
+			}
+		})
+	}
+}
+
+func TestParseCleanSelectorsTrimAndDeduplicate(t *testing.T) {
+	categories, err := parseCleanCategories(" node_modules,worktree,node_modules ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []types.Category{types.CategoryNodeModules, types.CategoryWorktree}; !reflect.DeepEqual(categories, want) {
+		t.Fatalf("categories = %v, want %v", categories, want)
+	}
+
+	tools, err := parseCleanTools(" codex,claude,codex ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []types.Tool{types.ToolCodex, types.ToolClaude}; !reflect.DeepEqual(tools, want) {
+		t.Fatalf("tools = %v, want %v", tools, want)
+	}
+
+	if _, err := parseCleanCategories(", ,"); err == nil || !strings.Contains(err.Error(), "requires at least one value") {
+		t.Fatalf("empty category error = %v", err)
+	}
+}
+
+func TestInteractiveCleanReturnsRejectedTargetError(t *testing.T) {
+	home := t.TempDir()
+	outside := t.TempDir()
+	t.Setenv("HOME", home)
+	unsafeTarget := preparedCleanTarget{Item: types.DebrisInfo{
+		Tool:     types.ToolNodeModules,
+		Category: types.CategoryNodeModules,
+		Path:     filepath.Join(outside, "node_modules"),
+	}}
+	safePath := filepath.Join(home, "workspace", "app", "node_modules")
+	if err := os.MkdirAll(safePath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	safeTarget := preparedCleanTarget{Item: types.DebrisInfo{
+		Tool:     types.ToolNodeModules,
+		Category: types.CategoryNodeModules,
+		Path:     safePath,
+		Size:     42,
+	}}
+	defer withStdin(t, "y\n")()
+
+	receipt, err := interactiveClean(context.Background(), []preparedCleanTarget{unsafeTarget, safeTarget})
+	if err == nil || !strings.Contains(err.Error(), "unsafe path") {
+		t.Fatalf("interactiveClean() error = %v, want unsafe path rejection", err)
+	}
+	if len(receipt.Units) != 1 || receipt.FreedBytes != 42 {
+		t.Fatalf("receipt = %+v, want successful target retained alongside error", receipt)
+	}
+	if !pathDoesNotExist(safePath) {
+		t.Fatalf("safe target %q was not removed", safePath)
+	}
+}
+
+func TestCleanCmd_CleanupFailureExitsNonZero(t *testing.T) {
+	if os.Getenv("GO_TEST_CLEAN_FAILURE_SUBPROCESS") == "1" {
+		resetCleanFlags()
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		cache := filepath.Join(home, ".cache", "go-build")
+		if err := os.MkdirAll(cache, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(cache, "entry"), []byte("cache"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		old := time.Now().Add(-2 * time.Hour)
+		if err := os.Chtimes(cache, old, old); err != nil {
+			t.Fatal(err)
+		}
+		fakeBin := filepath.Join(home, "bin")
+		if err := os.MkdirAll(fakeBin, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(fakeBin, "go"), []byte("#!/bin/sh\nexit 23\n"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("PATH", fakeBin)
+		rootCmd.SetArgs([]string{"clean", "--force", "--age=1h", "--category=build-cache"})
+		rootCmd.Execute()
+		return
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=TestCleanCmd_CleanupFailureExitsNonZero$")
+	cmd.Env = append(os.Environ(), "GO_TEST_CLEAN_FAILURE_SUBPROCESS=1")
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("cleanup failure exited successfully: %s", out)
+	}
+	for _, want := range []string{"cleanup receipt", "error during cleanup", "failed to remove 1 item"} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("cleanup failure output missing %q: %s", want, out)
+		}
+	}
+}
+
 func TestCleanCmd_Execute(t *testing.T) {
 	resetCleanFlags()
 	home := t.TempDir()

@@ -200,10 +200,10 @@ func runGuidedCodexClean(ctx context.Context, opts types.PruneOptions, state gui
 	prepared := prepareCleanExecution(ctx, targets)
 
 	if opts.Interactive {
-		receipt := interactiveClean(ctx, prepared)
+		receipt, err := interactiveClean(ctx, prepared)
 		printWorktreeExecutionReceipts(receipt)
 		printGuidedCleanupReceipt(len(targets), receipt)
-		return nil
+		return err
 	}
 	if !opts.Force {
 		if !confirmCleanExecution() {
