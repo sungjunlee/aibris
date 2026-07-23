@@ -1,7 +1,7 @@
 ---
 id: AIB-110
 title: Refresh public security, community, and roadmap contracts
-status: To Do
+status: In Review
 labels:
   - documentation
   - docs
@@ -20,10 +20,10 @@ Public documents contain stale supported-version and roadmap statements, and the
 
 ## Acceptance criteria
 
-- [ ] SECURITY.md names the actually supported 0.x release range.
-- [ ] SECURITY_AUDIT.md known limitations match current behavior.
-- [ ] backlog/sprints/_context.md no longer calls the completed v0.8 initiative active.
-- [ ] GitHub Discussions is enabled or every Discussions link is removed or replaced.
-- [ ] README and issue templates contain no broken repository-local links.
-- [ ] The roadmap explicitly says the project will remain in 0.x until the maintainer is satisfied.
-- [ ] A repeatable link or documentation consistency check is added where practical.
+- [x] SECURITY.md names the actually supported 0.x release range.
+- [x] SECURITY_AUDIT.md known limitations match current behavior.
+- [x] backlog/sprints/_context.md no longer calls the completed v0.8 initiative active.
+- [x] GitHub Discussions is enabled or every Discussions link is removed or replaced.
+- [x] README and issue templates contain no broken repository-local links.
+- [x] The roadmap explicitly says the project will remain in 0.x until the maintainer is satisfied.
+- [x] A repeatable link or documentation consistency check is added where practical.

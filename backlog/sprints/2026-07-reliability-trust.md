@@ -36,7 +36,7 @@ explicit maintainer release decision.
 
 ### Batch 5 — Refresh public trust surfaces
 
-- [ ] #110 Refresh public security, community, and roadmap contracts (~45min)
+- [~] #110 Refresh public security, community, and roadmap contracts (~45min) → PR #134 (reviewing)
 
 ### Batch 6 — Close the milestone without forcing a version
 
@@ -113,4 +113,13 @@ explicit maintainer release decision.
 - 2026-07-23: PR #133 passed race-enabled macOS and Ubuntu CI and was
   squash-merged with no inline review findings. Closed #109 and removed its
   transient `status:in-review` label.
+- 2026-07-23: Started #110 on `codex/public-trust-docs`. Scope: current 0.x
+  support policy, accurate security limitations, no dead Discussions link, an
+  explicit no-date 0.x roadmap, and repeatable local-link checks.
+- 2026-07-23: Implemented #110. Public security support now names 0.8.x, the
+  audit matches Git-aware and partial-scan behavior, the disabled Discussions
+  link is gone, and ROADMAP.md records the maintainer-controlled 0.x posture.
+  Root tests now validate public local links and community/roadmap invariants.
+  CI-equivalent race/coverage tests, build, vet, and diff checks pass.
+- 2026-07-23: Published PR #134 and moved #110 to `status:in-review`.
   

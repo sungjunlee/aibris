@@ -8,12 +8,17 @@ is a local cleanup tool, its primary risk is unintended local data loss.
 `aibris` scans known AI-development debris locations and can permanently delete
 matching directories or files. It uses conservative defaults:
 
-- cleanup targets must be older than `168h` by default
+- classic cleanup targets must be older than `168h` by default; guided
+  worktree recommendations use independent activity and retention gates
 - destructive operations reject paths outside the user's home directory
-- cleanup is limited to known-safe path families
+- cleanup is limited to validated home-scoped paths and Git worktree metadata
 - AI logs and similar sensitive artifacts require `--risky`
 - `--dry-run`, interactive mode, and confirmation prompts are available before
   deletion
+- active worktrees require Git-aware evidence and removal; raw recursive
+  deletion is not used as a fallback
+- partial scans are labeled, exit non-zero, invalidate cleanup caches, and
+  cannot authorize cleanup
 
 When a path or category is ambiguous, the tool should skip or reject it rather
 than broadening cleanup scope.
@@ -34,18 +39,23 @@ registered adapters and are filtered before deletion.
 
 ## Destructive Operation Boundaries
 
-All non-interactive deletion flows go through `cleaner.Execute`, which checks:
+Ordinary and orphaned targets go through the shared prepared cleanup executor
+and `cleaner.ExecuteWithContext`, which check:
 
 - the target path is absolute
 - the target is under `$HOME`
 - symlink-resolved home and target still keep the target under home when both
   paths can be resolved
-- the relative path contains a known-safe path component such as `.codex`,
+- non-worktree paths contain a known-safe path component such as `.codex`,
   `.claude`, `.cursor`, `.cache`, `.npm`, `.gradle`, `.cargo`, `Caches`,
-  `projects`, or `.codeium`
+  `projects`, `.codeium`, or `node_modules`
+- worktree paths carry scanner-validated active or orphaned Git metadata
 
-Interactive deletion uses the same `cleaner.IsSafePath` check before calling
-`os.RemoveAll`.
+Interactive cleanup uses the same prepared executor and target checks. Active
+worktrees use a separate Git-aware executor: it captures cleanup-unit identity,
+revalidates members and refs immediately before mutation, calls non-forced
+`git worktree remove`, verifies the result, and never falls back to raw path
+deletion after a Git failure.
 
 ## Path and Symlink Handling
 
@@ -83,6 +93,15 @@ Safety controls before deletion:
 - `aibris clean --force` is the only normal way to skip final confirmation
 - `--age` must be positive
 - `--age` below one hour prints a warning
+- unknown category and tool selectors fail before scanning
+- any execution failure is reflected in the receipt and process exit status
+
+Default guided review adds stricter active-worktree controls: recent activity,
+dirty state, current-directory membership, unreadable evidence, and unsafe
+detached commits hard-lock a cleanup unit. `--force` skips only final
+confirmation and cannot unlock a row or become Git's force option. After guided
+review, remaining classic categories stay visible; overlapping targets are
+normalized before dry-run output.
 
 The AI-guided workflow in `skills/aibris/SKILL.md` is stricter than the raw CLI:
 it requires dry-run first, user review, and then a second approval before real
@@ -114,6 +133,7 @@ Security-relevant behavior is covered by focused Go tests for:
 - worktree health detection
 - scanner context cancellation
 - command-level dry-run and forced cleanup flows
+- compiled-process stdout, stderr, prompt, signal, and exit-status contracts
 
 Release readiness requires:
 
@@ -127,9 +147,14 @@ go vet ./...
 
 - Deletion is permanent after confirmation; there is no restore command.
 - Size estimation can be slow for very large dependency or cache trees.
-- Worktree status is detected internally but not yet exposed as a user-facing
-  cleanup filter.
-- `node_modules` discovery currently focuses on `~/projects`.
+- Worktree health is visible and active worktrees are protected by default, but
+  there is no standalone `--status` selector.
+- `$HOME` discovery is intentionally bounded and prunes noisy/system
+  directories; explicitly excluded or unusually deep layouts may be missed.
 - Homebrew installation is documented as pending until the tap is published.
+- Release archives have checksums but do not yet publish an SBOM or signed
+  provenance.
+- Windows artifacts are built, but the full Windows behavior and support
+  contract has not yet been established.
 - The JSON top-level `worktrees` field contains all debris items for backward
   compatibility, not only worktrees.
