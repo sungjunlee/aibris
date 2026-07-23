@@ -40,6 +40,7 @@ var cleanCmd = &cobra.Command{
 	Long: `Clean up old AI tool debris.
 
 With no classic cleanup filters, clean uses guided Codex worktree review by default when useful.
+After guided worktree review, clean continues with the classic all-category audit.
 Use --no-guide, or pass an explicit classic selector such as --category, --tool,
 --risky, --force, --include-active-worktrees, or --interactive to keep the
 classic cleanup audit and executor route.`,
@@ -123,26 +124,43 @@ classic cleanup audit and executor route.`,
 			IncludeActiveWorktrees: cleanIncludeActiveWorktrees,
 		}
 
+		var guidedPreviewTargets []types.DebrisInfo
+		guidedHadSelection := false
 		if experience == cleanExperienceGuided {
-			opts.Age = guidedAge
+			guidedOpts := opts
+			guidedOpts.Age = guidedAge
 			guidedState.Reason = reason
-			if err := runGuidedCodexClean(ctx, opts, guidedState); err != nil {
+			guidedResult, err := runGuidedCodexClean(ctx, guidedOpts, guidedState)
+			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
 			}
-			return
+			if guidedResult.Aborted {
+				return
+			}
+			guidedPreviewTargets = guidedResult.PreviewTargets
+			guidedHadSelection = guidedResult.HadSelection
+			opts.IncludeActiveWorktrees = false
 		}
 
 		targets := cleaner.Filter(result.Worktrees, opts)
 		targets = filterExistingTargets(targets)
 		targets = normalizeCleanTargets(targets)
 		targets, gitSafetyProtections := filterGitUnsafeActiveWorktreeTargets(ctx, targets)
-		audit := buildCleanAudit(result.Worktrees, targets, opts, len(scanner.DefaultScanner.Providers), source, gitSafetyProtections)
+		auditTargets := targets
+		if len(guidedPreviewTargets) > 0 {
+			targets, auditTargets = mergeGuidedPreviewWithClassicTargets(guidedPreviewTargets, targets)
+		}
+		audit := buildCleanAudit(result.Worktrees, auditTargets, opts, len(scanner.DefaultScanner.Providers), source, gitSafetyProtections)
 		printCleanAudit(audit, opts)
 		printCleanCandidateSummary(targets)
 
 		if len(targets) == 0 {
-			fmt.Println("No items to clean.")
+			if guidedHadSelection {
+				fmt.Println("No additional classic items to clean.")
+			} else {
+				fmt.Println("No items to clean.")
+			}
 			return
 		}
 
@@ -179,6 +197,40 @@ classic cleanup audit and executor route.`,
 			os.Exit(1)
 		}
 	},
+}
+
+func mergeGuidedPreviewWithClassicTargets(guided, classic []types.DebrisInfo) ([]types.DebrisInfo, []types.DebrisInfo) {
+	guidedTargets := normalizeCleanTargets(guided)
+	guidedPaths := make([]string, 0, len(guidedTargets))
+	for _, target := range guidedTargets {
+		if path, ok := cleanTargetPathKey(target.Path); ok {
+			guidedPaths = append(guidedPaths, path)
+		}
+	}
+
+	classicTargets := make([]types.DebrisInfo, 0, len(classic))
+	for _, target := range classic {
+		path, ok := cleanTargetPathKey(target.Path)
+		if !ok {
+			continue
+		}
+		overlapsGuided := false
+		for _, guidedPath := range guidedPaths {
+			if path == guidedPath || cleanTargetContains(guidedPath, path) || cleanTargetContains(path, guidedPath) {
+				overlapsGuided = true
+				break
+			}
+		}
+		if !overlapsGuided {
+			classicTargets = append(classicTargets, target)
+		}
+	}
+	classicTargets = normalizeCleanTargets(classicTargets)
+
+	auditTargets := make([]types.DebrisInfo, 0, len(guidedTargets)+len(classicTargets))
+	auditTargets = append(auditTargets, guidedTargets...)
+	auditTargets = append(auditTargets, classicTargets...)
+	return classicTargets, auditTargets
 }
 
 var validCleanCategories = []types.Category{

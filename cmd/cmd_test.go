@@ -647,6 +647,8 @@ func TestCleanCmd_DryRunDefaultsToGuidedWhenUsefulCodexReviewExists(t *testing.T
 		"clean plan",
 		"mode     dry-run",
 		"[DRY-RUN] No files were removed.",
+		"scan summary",
+		"No additional classic items to clean.",
 	} {
 		if !strings.Contains(output, want) {
 			t.Errorf("output missing %q; got: %s", want, output)
@@ -752,6 +754,9 @@ func TestCleanCmd_DefaultGuidedNonTTYCleanDoesNotBlockOrDelete(t *testing.T) {
 		if !strings.Contains(output, want) {
 			t.Errorf("non-TTY output missing %q; got: %s", want, output)
 		}
+	}
+	if strings.Contains(output, "scan summary") {
+		t.Errorf("declined guided confirmation must abort before classic cleanup: %s", output)
 	}
 	if _, err := os.Stat(worktree); err != nil {
 		t.Fatalf("non-TTY clean without confirmation should not remove worktree: %v", err)

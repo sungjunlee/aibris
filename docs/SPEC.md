@@ -87,14 +87,17 @@ Behavior:
    tool, risky status, and worktree health. Guided cleanup builds physical
    cleanup units, collects Git and activity evidence, and applies the
    hierarchical policy below.
-5. Print a cleanup audit with policy, scan source, eligible totals, and skipped reasons.
-6. If no targets match, print `No items to clean.` and exit 0.
-7. If `--dry-run` is set, print targets and total candidate space without deleting.
-8. If `--interactive` is set, ask per item.
-9. If not forced, print the target plan and ask for one final confirmation.
-10. Delete ordinary and orphaned targets through cleaner safety checks. Delete
+5. After guided active-worktree review, continue with the classic audit for
+   remaining categories. Normalize selected guided parents with classic
+   targets so nested paths are not counted or previewed twice.
+6. Print a cleanup audit with policy, scan source, eligible totals, and skipped reasons.
+7. If no targets match, print `No items to clean.` and exit 0.
+8. If `--dry-run` is set, print targets and total candidate space without deleting.
+9. If `--interactive` is set, ask per item.
+10. If not forced, print the target plan and ask for one final confirmation.
+11. Delete ordinary and orphaned targets through cleaner safety checks. Delete
     active worktree members through the Git-aware executor.
-11. Print a cleanup receipt with removed, partial, and failed unit counts,
+12. Print a cleanup receipt with removed, partial, and failed unit counts,
     truthful freed bytes, and protected/skipped totals.
 
 Command-backed cleanup:
@@ -131,6 +134,13 @@ Default guided Codex worktree cleanup:
 - `--guide` explicitly forces guided Codex worktree cleanup.
 - `recommended` rows start selected. `reviewable` rows are soft-policy holds and
   may be toggled. `locked` rows remain visible and cannot be selected.
+- Guided review owns active Codex worktree rows, then the classic audit exposes
+  remaining eligible categories. Blank input or non-TTY EOF accepts the guided
+  defaults in dry-run mode and continues; `q` aborts the whole cleanup flow.
+- In deletion mode, declining or failing to provide the guided final
+  confirmation aborts the whole command before classic targets can execute.
+- Dry-run target normalization treats selected guided cleanup units as parents,
+  so nested classic candidates are reported as covered and never double-counted.
 - The planner must fail closed when Codex activity or git safety evidence is
   unavailable or unsafe.
 - Codex activity uses metadata only: session metadata, working-directory paths,

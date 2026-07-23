@@ -1,7 +1,7 @@
 ---
 id: AIB-105
 title: Keep all-category cleanup visible when guided review activates
-status: To Do
+status: In Review
 labels:
   - enhancement
   - ux
@@ -23,9 +23,9 @@ Guided worktree decisions must not hide safe candidates from other categories. T
 
 ## Acceptance criteria
 
-- [ ] A no-selector dry-run reports eligible non-worktree candidates even when guided Codex pressure exists.
-- [ ] Hard-locked worktrees remain locked and cannot be selected.
-- [ ] Guided and classic target normalization does not double-count overlapping paths.
-- [ ] Non-TTY behavior is deterministic and documented.
-- [ ] Regression tests cover guided-selected, guided-empty, and mixed-category cases.
-- [ ] go test ./..., go build ./..., and go vet ./... pass.
+- [x] A no-selector dry-run reports eligible non-worktree candidates even when guided Codex pressure exists.
+- [x] Hard-locked worktrees remain locked and cannot be selected.
+- [x] Guided and classic target normalization does not double-count overlapping paths.
+- [x] Non-TTY behavior is deterministic and documented.
+- [x] Regression tests cover guided-selected, guided-empty, and mixed-category cases.
+- [x] go test ./..., go build ./..., and go vet ./... pass.

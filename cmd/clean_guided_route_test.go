@@ -126,12 +126,20 @@ func TestCleanCmd_ProtectedOnlyPressureOpensGuidedDryRun(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	for _, want := range []string{"guided codex worktree cleanup", "selected   0 items", "No items selected."} {
+	for _, want := range []string{
+		"guided codex worktree cleanup",
+		"selected   0 items",
+		"No items selected.",
+		"scan summary",
+		"node_modules",
+		"matched  1 candidate",
+		"clean plan",
+	} {
 		if !strings.Contains(output, want) {
 			t.Errorf("protected-only guided output missing %q; got: %s", want, output)
 		}
 	}
-	for _, unwanted := range []string{"scan summary", "clean plan", "[DRY-RUN] Preview complete."} {
+	for _, unwanted := range []string{"[DRY-RUN] Preview complete."} {
 		if strings.Contains(output, unwanted) {
 			t.Errorf("zero selection should not emit %q; got: %s", unwanted, output)
 		}
@@ -157,7 +165,13 @@ func TestCleanCmd_ProtectedOnlyEnterDoesNotPreviewOrDelete(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	for _, want := range []string{"guided codex worktree cleanup", "selected   0 items", "No items selected."} {
+	for _, want := range []string{
+		"guided codex worktree cleanup",
+		"selected   0 items",
+		"No items selected.",
+		"scan summary",
+		"No items to clean.",
+	} {
 		if !strings.Contains(output, want) {
 			t.Errorf("zero-selection output missing %q; got: %s", want, output)
 		}
@@ -185,13 +199,156 @@ func TestCleanCmd_ProtectedOnlyNonTTYReturnsWithoutDeleting(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	for _, want := range []string{"guided codex worktree cleanup", "No items selected."} {
+	for _, want := range []string{"guided codex worktree cleanup", "No items selected.", "scan summary", "No items to clean."} {
 		if !strings.Contains(output, want) {
 			t.Errorf("non-TTY protected-only output missing %q; got: %s", want, output)
 		}
 	}
 	if _, err := os.Stat(worktree); err != nil {
 		t.Fatalf("non-TTY protected-only clean removed worktree: %v", err)
+	}
+}
+
+func TestCleanCmd_GuidedDryRunContinuesWithMixedCategoryCandidates(t *testing.T) {
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	worktree := saveUsefulGuidedCleanFixture(t, home, "mixed-guided", time.Now().Add(-8*24*time.Hour))
+	modules := filepath.Join(home, "workspace", "app", "node_modules")
+	if err := os.MkdirAll(filepath.Join(modules, "pkg"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-8 * 24 * time.Hour)
+	if err := os.Chtimes(modules, old, old); err != nil {
+		t.Fatal(err)
+	}
+	appendCleanCacheItem(t, types.DebrisInfo{
+		Tool:     types.ToolNodeModules,
+		Category: types.CategoryNodeModules,
+		ID:       "app",
+		Path:     modules,
+		Size:     64 * 1024 * 1024,
+		ModTime:  old,
+	})
+	defer withStdin(t, "")()
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--dry-run"})
+		rootCmd.Execute()
+	})
+
+	for _, want := range []string{
+		"guided codex worktree cleanup",
+		"selected   1 item",
+		"scan summary",
+		"node_modules",
+		"matched  1 candidate",
+		filepath.Join("workspace", "app", "node_modules"),
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("mixed guided output missing %q: %s", want, output)
+		}
+	}
+	if strings.Count(output, "clean plan") != 2 {
+		t.Errorf("mixed guided dry-run should preview guided and classic phases: %s", output)
+	}
+	if _, err := os.Stat(worktree); err != nil {
+		t.Fatalf("dry-run removed guided worktree: %v", err)
+	}
+	if _, err := os.Stat(modules); err != nil {
+		t.Fatalf("dry-run removed classic candidate: %v", err)
+	}
+}
+
+func TestCleanCmd_GuidedDryRunNormalizesNestedClassicCandidate(t *testing.T) {
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	worktree := saveUsefulGuidedCleanFixture(t, home, "nested-guided", time.Now().Add(-8*24*time.Hour))
+	modules := filepath.Join(worktree, "node_modules")
+	if err := os.MkdirAll(filepath.Join(modules, "pkg"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-8 * 24 * time.Hour)
+	if err := os.Chtimes(modules, old, old); err != nil {
+		t.Fatal(err)
+	}
+	appendCleanCacheItem(t, types.DebrisInfo{
+		Tool:     types.ToolNodeModules,
+		Category: types.CategoryNodeModules,
+		ID:       "nested",
+		Path:     modules,
+		Size:     64 * 1024 * 1024,
+		ModTime:  old,
+	})
+	defer withStdin(t, "")()
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--dry-run"})
+		rootCmd.Execute()
+	})
+
+	for _, want := range []string{"selected   1 item", "covered by selected parent", "matched  0 candidates", "No additional classic items to clean."} {
+		if !strings.Contains(output, want) {
+			t.Errorf("nested guided output missing %q: %s", want, output)
+		}
+	}
+	if strings.Count(output, "clean plan") != 1 {
+		t.Errorf("nested candidate should not create a second clean plan: %s", output)
+	}
+	if _, err := os.Stat(modules); err != nil {
+		t.Fatalf("dry-run removed nested candidate: %v", err)
+	}
+}
+
+func TestMergeGuidedPreviewWithClassicTargetsPrefersGuidedOnAnyOverlap(t *testing.T) {
+	root := t.TempDir()
+	guidedPath := filepath.Join(root, "parent", "guided")
+	guided := types.DebrisInfo{
+		Tool:     types.ToolCodex,
+		Category: types.CategoryWorktree,
+		Path:     guidedPath,
+	}
+	classicAncestor := types.DebrisInfo{
+		Tool:     types.ToolBuildCache,
+		Category: types.CategoryBuildCache,
+		Path:     filepath.Dir(guidedPath),
+	}
+	classicDescendant := types.DebrisInfo{
+		Tool:     types.ToolNodeModules,
+		Category: types.CategoryNodeModules,
+		Path:     filepath.Join(guidedPath, "node_modules"),
+	}
+	classicUnrelated := types.DebrisInfo{
+		Tool:     types.ToolPipCache,
+		Category: types.CategoryOtherCache,
+		Path:     filepath.Join(root, "unrelated"),
+	}
+
+	classicTargets, auditTargets := mergeGuidedPreviewWithClassicTargets(
+		[]types.DebrisInfo{guided},
+		[]types.DebrisInfo{classicAncestor, classicDescendant, classicUnrelated},
+	)
+
+	if len(classicTargets) != 1 || classicTargets[0].Path != classicUnrelated.Path {
+		t.Fatalf("classic targets = %+v; want only unrelated target", classicTargets)
+	}
+	if len(auditTargets) != 2 {
+		t.Fatalf("audit targets = %+v; want guided and unrelated targets", auditTargets)
+	}
+}
+
+func appendCleanCacheItem(t *testing.T, item types.DebrisInfo) {
+	t.Helper()
+	cache, ok := readLastScanCache()
+	if !ok {
+		t.Fatal("clean cache fixture missing")
+	}
+	cache.Result.Worktrees = append(cache.Result.Worktrees, item)
+	cache.Result.TotalCount = len(cache.Result.Worktrees)
+	cache.Result.TotalSize += item.Size
+	if err := saveLastScanCache(cache); err != nil {
+		t.Fatal(err)
 	}
 }
 

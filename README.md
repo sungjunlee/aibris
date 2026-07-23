@@ -195,6 +195,18 @@ locked row and is never passed to `git worktree remove`. Use `--no-guide` to
 keep the classic cleanup audit/executor route, or `--guide` to force guided
 Codex review.
 
+When default guided review activates, it owns active Codex worktree decisions
+and then continues into the classic audit for orphaned worktrees, dependencies,
+caches, and other eligible categories. An empty guided selection therefore
+cannot hide classic candidates. In dry-run output, a classic target nested
+inside a selected guided cleanup unit is reported as covered by that parent and
+is not counted or previewed twice.
+
+For piped or other non-TTY input, EOF accepts the guided default selection.
+`--dry-run` then continues to the classic audit deterministically. In deletion
+mode without `--force`, missing or declined guided confirmation aborts the
+whole cleanup flow before classic targets can run.
+
 Confirm before deleting anything:
 
 ```text
