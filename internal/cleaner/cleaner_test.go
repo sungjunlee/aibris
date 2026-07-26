@@ -354,6 +354,39 @@ func TestFilter_WorktreeStatusPolicy(t *testing.T) {
 	}
 }
 
+func TestFilter_AgentStateEligibilityUsesClassificationNotAge(t *testing.T) {
+	recent := time.Now()
+	old := time.Now().Add(-20 * 365 * 24 * time.Hour)
+	items := []types.DebrisInfo{
+		{ID: "orphaned", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassOrphaned, ModTime: recent},
+		{ID: "live", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassLive, ModTime: old},
+		{ID: "undetermined", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassUndetermined, ModTime: old},
+		{ID: "node-old", Tool: types.ToolNodeModules, Category: types.CategoryNodeModules, ModTime: old},
+		{ID: "node-recent", Tool: types.ToolNodeModules, Category: types.CategoryNodeModules, ModTime: recent},
+	}
+	opts := types.PruneOptions{
+		Age:                    10 * 365 * 24 * time.Hour,
+		Risky:                  true,
+		Force:                  true,
+		IncludeActiveWorktrees: true,
+	}
+
+	filtered := Filter(items, opts)
+	ids := make(map[string]bool)
+	for _, item := range filtered {
+		ids[item.ID] = true
+	}
+	if !ids["orphaned"] {
+		t.Error("orphaned agent-state should be eligible despite an age cutoff that excludes it")
+	}
+	if ids["live"] || ids["undetermined"] {
+		t.Errorf("protected agent-state selected under --risky/--force equivalents: %v", ids)
+	}
+	if !ids["node-old"] || ids["node-recent"] {
+		t.Errorf("pre-existing node_modules age behavior changed: %v", ids)
+	}
+}
+
 func TestFilter_NoFilter(t *testing.T) {
 	opts := types.PruneOptions{Age: 168 * time.Hour}
 	worktrees := []types.DebrisInfo{

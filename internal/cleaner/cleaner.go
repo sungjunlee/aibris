@@ -86,9 +86,20 @@ func Filter(worktrees []types.DebrisInfo, opts types.PruneOptions) []types.Debri
 	for _, w := range worktrees {
 		matchCat := len(opts.Categories) == 0 || containsCategory(opts.Categories, w.Category)
 		matchTool := len(opts.Tools) == 0 || containsTool(opts.Tools, w.Tool)
+		if !matchCat || !matchTool {
+			continue
+		}
+		if w.Category == types.CategoryAgentState {
+			// Agent-state recoverability is proved by its recorded cwd; directory
+			// age says nothing about whether the associated work still exists.
+			if w.Classification == types.EntryClassOrphaned {
+				filtered = append(filtered, w)
+			}
+			continue
+		}
 		riskyOk := opts.Risky || !w.Category.IsRisky()
 		worktreeOk := opts.IncludeActiveWorktrees || w.Category != types.CategoryWorktree || w.Status != types.WorktreeActive
-		if matchCat && matchTool && riskyOk && worktreeOk && w.ModTime.Before(cutoff) {
+		if riskyOk && worktreeOk && w.ModTime.Before(cutoff) {
 			filtered = append(filtered, w)
 		}
 	}

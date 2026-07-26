@@ -1385,11 +1385,11 @@ func TestCleanCmd_InvalidSelector(t *testing.T) {
 }
 
 func TestParseCleanSelectorsTrimAndDeduplicate(t *testing.T) {
-	categories, err := parseCleanCategories(" node_modules,worktree,node_modules ")
+	categories, err := parseCleanCategories(" node_modules,agent-state,worktree,node_modules ")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := []types.Category{types.CategoryNodeModules, types.CategoryWorktree}; !reflect.DeepEqual(categories, want) {
+	if want := []types.Category{types.CategoryNodeModules, types.CategoryAgentState, types.CategoryWorktree}; !reflect.DeepEqual(categories, want) {
 		t.Fatalf("categories = %v, want %v", categories, want)
 	}
 
@@ -1986,6 +1986,70 @@ func TestPrintJSON_DerivedRiskAndReasonForCategories(t *testing.T) {
 		if item.Reason == "" {
 			t.Errorf("%s reason is empty", item.ID)
 		}
+	}
+}
+
+func TestPrintJSON_AgentStateClassificationAndReason(t *testing.T) {
+	now := time.Date(2026, 7, 27, 12, 0, 0, 0, time.UTC)
+	absentCWD := "/home/user/workspace/removed/project_with-state"
+	r := &types.ScanResult{
+		Worktrees: []types.DebrisInfo{
+			{
+				Tool:           types.ToolClaude,
+				Category:       types.CategoryAgentState,
+				ID:             "encoded-project-key",
+				Path:           "/home/user/.claude/projects/encoded-project-key",
+				ModTime:        now,
+				Classification: types.EntryClassOrphaned,
+				Reason:         "recorded cwd does not exist: " + absentCWD,
+			},
+			{
+				Tool:     types.ToolCodex,
+				Category: types.CategoryWorktree,
+				ID:       "worktree-without-classification",
+				Path:     "/home/user/.codex/worktrees/worktree-without-classification",
+				ModTime:  now,
+				Status:   types.WorktreeActive,
+			},
+		},
+		TotalCount: 2,
+		ByCategory: map[types.Category]types.CategorySummary{
+			types.CategoryAgentState: {Count: 1},
+			types.CategoryWorktree:   {Count: 1},
+		},
+		ByTool: map[types.Tool]types.ToolSummary{
+			types.ToolClaude: {Count: 1},
+			types.ToolCodex:  {Count: 1},
+		},
+	}
+
+	output := captureOutput(func() {
+		printJSON(r)
+	})
+
+	var out jsonOutput
+	if err := json.Unmarshal([]byte(output), &out); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, output)
+	}
+	agentState := out.Worktrees[0]
+	if agentState.Classification != "orphaned" {
+		t.Errorf("Classification = %q; want orphaned", agentState.Classification)
+	}
+	if agentState.Status != "" {
+		t.Errorf("Status = %q; want empty for non-worktree agent-state", agentState.Status)
+	}
+	if !strings.Contains(agentState.Reason, absentCWD) {
+		t.Errorf("Reason = %q; want absent cwd %q", agentState.Reason, absentCWD)
+	}
+
+	var raw struct {
+		Worktrees []map[string]json.RawMessage `json:"worktrees"`
+	}
+	if err := json.Unmarshal([]byte(output), &raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := raw.Worktrees[1]["classification"]; ok {
+		t.Error("worktree without classification emitted a misleading classification field")
 	}
 }
 

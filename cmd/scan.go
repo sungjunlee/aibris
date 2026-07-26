@@ -86,6 +86,7 @@ type jsonWorktree struct {
 	Size           int64    `json:"size"`
 	ModTime        string   `json:"mod_time"`
 	Status         string   `json:"status"`
+	Classification string   `json:"classification,omitempty"`
 	Risk           string   `json:"risk"`
 	Reason         string   `json:"reason"`
 	CleanupKind    string   `json:"cleanup_kind"`
@@ -148,6 +149,7 @@ func printJSON(r *types.ScanResult) {
 			Size:           w.Size,
 			ModTime:        w.ModTime.Format(time.RFC3339),
 			Status:         string(w.Status),
+			Classification: string(w.Classification),
 			Risk:           itemRisk(w),
 			Reason:         itemReason(w),
 			CleanupKind:    string(cleanupKind(w)),
@@ -610,6 +612,9 @@ func itemRisk(w types.DebrisInfo) string {
 }
 
 func itemReason(w types.DebrisInfo) string {
+	if w.Reason != "" {
+		return w.Reason
+	}
 	switch w.Category {
 	case types.CategoryWorktree:
 		switch w.Status {
@@ -626,6 +631,15 @@ func itemReason(w types.DebrisInfo) string {
 		return "build cache; can be regenerated"
 	case types.CategoryOtherCache:
 		return "package cache; can be regenerated"
+	case types.CategoryAgentState:
+		switch w.Classification {
+		case types.EntryClassLive:
+			return "recorded cwd exists"
+		case types.EntryClassOrphaned:
+			return "recorded cwd does not exist"
+		default:
+			return "recorded cwd could not be determined"
+		}
 	case types.CategoryAILogs:
 		return "AI tool logs; requires --risky to clean"
 	default:

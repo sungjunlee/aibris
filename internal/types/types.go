@@ -33,6 +33,7 @@ const (
 	CategoryNodeModules Category = "node_modules"
 	CategoryBuildCache  Category = "build-cache"
 	CategoryOtherCache  Category = "other-cache"
+	CategoryAgentState  Category = "agent-state"
 	CategoryAILogs      Category = "ai-logs"
 )
 
@@ -40,7 +41,7 @@ const (
 // AI logs and unknown categories default to risky (safe-by-default).
 func (c Category) IsRisky() bool {
 	switch c {
-	case CategoryWorktree, CategoryNodeModules, CategoryBuildCache, CategoryOtherCache:
+	case CategoryWorktree, CategoryNodeModules, CategoryBuildCache, CategoryOtherCache, CategoryAgentState:
 		return false
 	case "": // backward compat: pre-Category entries are safe
 		return false
@@ -58,6 +59,16 @@ const (
 	WorktreePlain    WorktreeStatus = "plain-dir" // no .git file (plain directory)
 )
 
+// EntryClass describes whether an agent-state entry's recorded working
+// directory still exists.
+type EntryClass string
+
+const (
+	EntryClassLive         EntryClass = "live"
+	EntryClassOrphaned     EntryClass = "orphaned"
+	EntryClassUndetermined EntryClass = "undetermined"
+)
+
 // DebrisInfo describes a single debris item found during scanning.
 type DebrisInfo struct {
 	Tool           Tool
@@ -69,6 +80,8 @@ type DebrisInfo struct {
 	Size           int64
 	ModTime        time.Time
 	Status         WorktreeStatus // empty for non-worktree debris
+	Classification EntryClass     // empty for debris without entry classification
+	Reason         string
 	CleanupKind    CleanupKind
 	CleanupCommand []string
 }
