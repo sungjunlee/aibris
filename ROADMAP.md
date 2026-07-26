@@ -23,6 +23,24 @@ The milestone may produce a 0.8.x patch release, but it has no promised date.
 - execute one normalized selection with one receipt and confirmation contract
 - dogfood the complete journey before any release decision
 
+## Then: 0.10.x Agent State Store Coverage
+
+The 2026-07-26 coverage audit in `docs/DOGFOOD.md` measured one real developer
+home and found aibris discovering about 15% of the agent-produced debris surface
+while fully covering generic build debris that general-purpose cleaners already
+handle. The gap is provider coverage, not policy or rendering.
+
+- classify session-store entries whose recorded working directory is gone
+- discover session, transcript, and run-manifest stores as retention decisions
+- find worktree containers regardless of nesting depth and member layout
+- admit worktree units from any agent tool into guided review
+- cover agent byproduct stores
+- state the product boundary honestly: complement general-purpose cleaners
+  rather than compete with them
+
+Transcripts are user content. Surfacing them is in scope; reclaiming them by
+default is not.
+
 ## Parallel 0.x Tracks
 
 ### OSS Distribution & Release Trust
