@@ -27,6 +27,9 @@ Also uncovered: `~/.relay/runs` 933 MB, `~/.cursor/chats` 674 MB,
 
 - [ ] Providers discover codex sessions, cursor chats, claude projects, relay
       runs, and gstack projects.
+- [ ] `~/.codex/sessions` orphaned-session detection lands here (moved from
+      AIB-138). Reuse the recorded-cwd classifier from AIB-138 L1 and report an
+      aggregate orphaned count and size per time bucket, not one item per file.
 - [ ] Size is reported per store and per time bucket, not as one opaque total.
 - [ ] Transcripts are never cleaned by default and not by `--risky` alone; an
       explicit retention selector is required.

@@ -20,6 +20,12 @@ content that is surfaced rather than reclaimed.
 ### Batch 1 — Establish the proof-based tier (gating)
 
 - [ ] #138 Add provable-orphan cleanup for agent session stores (~3h)
+  - relay-ready request `req-20260726233000943`, three ordered leaves
+  - [ ] `L1-claude-store-classification` — `agent-state` category, additive
+        `Classification` field, `~/.claude/projects` recorded-cwd reader
+  - [ ] `L2-cursor-store-classification` — same classifier via `worker.log`,
+        migrate `~/.cursor/projects` off `ai-logs`
+  - [ ] `L3-orphan-clean-eligibility` — no age gate, #113 plan-model integration
 
 ### Batch 2 — Fix discovery shape and cover byproducts
 
@@ -74,3 +80,13 @@ content that is surfaced rather than reclaimed.
 - 2026-07-26: Opened the milestone from the coverage audit. Paused the 0.9.x
   sprint so exactly one sprint owns execution; #115, #116, #112, and the #117
   release gate remain open and unchanged in milestone #7.
+- 2026-07-26: Shaped #138 through proposal-first relay-ready after route
+  preflight returned `needs_split`. Persisted `req-20260726233000943` with three
+  ordered leaves. Two decisions: an additive `Classification` field rather than
+  widening `DebrisInfo.Status`, which keeps the JSON `status` domain frozen for
+  #124; and migrating `~/.cursor/projects` from `ai-logs` to a non-risky
+  `agent-state` category with orphan-only default eligibility. Shaping also moved
+  the `~/.codex/sessions` reader out of #138 into #139 — a day directory holds
+  sessions from many working directories, so there is no directory-level cwd to
+  classify against and per-file reporting would emit 6,711 items. Issue bodies,
+  task files, and both issues' comments record the move.

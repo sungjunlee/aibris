@@ -28,9 +28,18 @@ Measured on 2026-07-26: `~/.claude/projects` 81 orphans / 162 MB,
 - [ ] Orphan status is derived from the store's recorded cwd, never from decoding
       the directory name. The encoding is lossy — `/`, `.`, and `_` all collapse
       to `-` — and decoding produced false positives during the audit.
-- [ ] Readers exist for `~/.claude/projects/<key>/*.jsonl`,
-      `~/.cursor/projects/<key>/worker.log`, and
-      `~/.codex/sessions/**/rollout-*.jsonl`.
+- [ ] Readers exist for `~/.claude/projects/<key>/*.jsonl` and
+      `~/.cursor/projects/<key>/worker.log`. `~/.codex/sessions` moved to AIB-139
+      during shaping: a day directory holds sessions from many working
+      directories, so there is no directory-level cwd to classify against, and
+      per-file reporting would emit 6,711 items.
+- [ ] `DebrisInfo` gains an additive `Classification` field; the existing
+      `Status WorktreeStatus` field and the JSON `status` value domain are
+      unchanged, keeping AIB-124 schema work unblocked.
+- [ ] `~/.cursor/projects` migrates from `ai-logs` to a new non-risky
+      `agent-state` category. Only `orphaned` becomes default-clean; `live` and
+      `undetermined` stay protected with reasons. The public contract change is
+      stated in CHANGELOG and `docs/CATEGORY.md`.
 - [ ] An entry whose cwd cannot be determined is undetermined and never cleanable.
 - [ ] Metadata only; conversation bodies are never parsed for content.
 - [ ] Orphans are eligible under default `clean` without `--risky` and without `--age`.
