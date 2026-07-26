@@ -1,6 +1,6 @@
 ---
 milestone: 0.9.x Unified Cleanup Experience
-status: active
+status: paused
 started: 2026-07-23
 due: TBD
 objectives: []
@@ -82,3 +82,10 @@ selector.
 - 2026-07-23: PR #136 passed race-enabled Ubuntu and macOS CI and was
   squash-merged without inline review findings. Closed #114 and removed its
   transient `status:in-review` label.
+- 2026-07-26: Paused pending #138. The coverage audit in `docs/DOGFOOD.md`
+  measured the default path reclaiming 0 B in every agent-specific category, so
+  three to four new categories are queued behind epic #137. Freezing the
+  execution contract in #115 against the current guided/classic pair would
+  likely mean reopening it. #115, #116, #112, and the #117 release gate stay
+  open and unchanged; the #113 plan model is kept. Resume after #138 shows
+  whether the model absorbs a category with no age gate.
