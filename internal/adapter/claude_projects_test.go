@@ -142,6 +142,9 @@ func TestClaudeProjectAdapter_DivergentRecordedCWDsClassifyLive(t *testing.T) {
 	if results[0].Classification != types.EntryClassLive {
 		t.Fatalf("Classification = %q; want live from divergent recorded cwds", results[0].Classification)
 	}
+	if got, want := results[0].Project, filepath.Base(liveCWD); got != want {
+		t.Fatalf("Project = %q; want live cwd basename %q", got, want)
+	}
 	if !strings.Contains(results[0].Reason, liveCWD) {
 		t.Fatalf("Reason = %q; want live cwd %q", results[0].Reason, liveCWD)
 	}

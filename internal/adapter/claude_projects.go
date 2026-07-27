@@ -103,7 +103,6 @@ func classifyClaudeProjectEntry(ctx context.Context, entryPath string) (types.En
 		return "", "", "", err
 	}
 
-	var project string
 	var liveCWD string
 	var absentCWD string
 	var unverifiableCWD string
@@ -111,9 +110,6 @@ func classifyClaudeProjectEntry(ctx context.Context, entryPath string) (types.En
 	for _, cwd := range evidence.cwds {
 		if err := ctx.Err(); err != nil {
 			return "", "", "", err
-		}
-		if project == "" {
-			project = projectNameFromRecordedCWD(cwd)
 		}
 		if _, err := os.Stat(cwd); err == nil {
 			if liveCWD == "" {
@@ -132,13 +128,13 @@ func classifyClaudeProjectEntry(ctx context.Context, entryPath string) (types.En
 	if liveCWD != "" {
 		return types.EntryClassLive,
 			fmt.Sprintf("recorded cwd exists: %s (%d distinct recorded cwd(s) checked)", liveCWD, len(evidence.cwds)),
-			project,
+			projectNameFromRecordedCWD(liveCWD),
 			nil
 	}
 	if unverifiableCWD != "" {
 		return types.EntryClassUndetermined,
 			"recorded cwd existence could not be verified: " + unverifiableCWD,
-			project,
+			projectNameFromRecordedCWD(unverifiableCWD),
 			nil
 	}
 	if evidence.unverifiableRecords > 0 {
@@ -146,13 +142,13 @@ func classifyClaudeProjectEntry(ctx context.Context, entryPath string) (types.En
 			return types.EntryClassUndetermined,
 				fmt.Sprintf("%d recorded cwd(s) do not exist, but %d session record(s) were unparseable or ended without a readable cwd; first: %s",
 					absentCount, evidence.unverifiableRecords, evidence.firstUnverifiableRecord),
-				project,
+				projectNameFromRecordedCWD(absentCWD),
 				nil
 		}
 		return types.EntryClassUndetermined,
 			fmt.Sprintf("%d session record(s) were unparseable or ended without a readable cwd; first: %s",
 				evidence.unverifiableRecords, evidence.firstUnverifiableRecord),
-			project,
+			"",
 			nil
 	}
 	if len(evidence.unverifiableFiles) > 0 {
@@ -160,20 +156,20 @@ func classifyClaudeProjectEntry(ctx context.Context, entryPath string) (types.En
 			return types.EntryClassUndetermined,
 				fmt.Sprintf("%d recorded cwd(s) do not exist, but session metadata could not be verified: %s",
 					absentCount, evidence.unverifiableFiles[0]),
-				project,
+				projectNameFromRecordedCWD(absentCWD),
 				nil
 		}
 		return types.EntryClassUndetermined,
 			"session metadata could not be verified: " + evidence.unverifiableFiles[0],
-			project,
+			"",
 			nil
 	}
 	if len(evidence.cwds) == 0 {
-		return types.EntryClassUndetermined, "no recorded cwd could be read from session metadata", project, nil
+		return types.EntryClassUndetermined, "no recorded cwd could be read from session metadata", "", nil
 	}
 	return types.EntryClassOrphaned,
 		fmt.Sprintf("all %d distinct recorded cwd(s) do not exist; first: %s", len(evidence.cwds), absentCWD),
-		project,
+		projectNameFromRecordedCWD(absentCWD),
 		nil
 }
 
