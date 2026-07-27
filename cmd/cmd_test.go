@@ -862,7 +862,7 @@ func TestCleanCmd_ReusesFreshCurrentSchemaLastScanCache(t *testing.T) {
 	}
 }
 
-func TestCleanCmd_RejectsPreviousSchemaLastScanCacheAndRunsLiveScan(t *testing.T) {
+func TestCleanCmd_RejectsPreCursorAgentStateSchemaLastScanCacheAndRunsLiveScan(t *testing.T) {
 	resetCleanFlags()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -876,13 +876,13 @@ func TestCleanCmd_RejectsPreviousSchemaLastScanCacheAndRunsLiveScan(t *testing.T
 		t.Fatal(err)
 	}
 
-	const preAgentStateSchemaVersion = 1
-	if lastScanCacheSchemaVersion <= preAgentStateSchemaVersion {
-		t.Fatalf("current cache schema = %d; must reject pre-agent-state schema %d",
-			lastScanCacheSchemaVersion, preAgentStateSchemaVersion)
+	const preCursorAgentStateSchemaVersion = 2
+	if lastScanCacheSchemaVersion <= preCursorAgentStateSchemaVersion {
+		t.Fatalf("current cache schema = %d; must reject pre-Cursor-agent-state schema %d",
+			lastScanCacheSchemaVersion, preCursorAgentStateSchemaVersion)
 	}
 	if err := saveLastScanCache(lastScanCache{
-		SchemaVersion: preAgentStateSchemaVersion,
+		SchemaVersion: preCursorAgentStateSchemaVersion,
 		CreatedAt:     time.Now(),
 		Roots:         []string{resolvedWorkspace},
 		Result:        types.ScanResult{},

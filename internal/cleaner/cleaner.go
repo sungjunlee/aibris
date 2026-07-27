@@ -121,16 +121,24 @@ func ExecuteWithContext(ctx context.Context, worktrees []types.DebrisInfo) (int6
 			fmt.Fprintf(os.Stderr, "error: unsafe path %q rejected\n", w.Path)
 			continue
 		}
-		if w.Tool == types.ToolClaude && w.Category == types.CategoryAgentState {
-			classification, err := adapter.ClassifyClaudeProjectEntry(ctx, w.Path)
+		if w.Category == types.CategoryAgentState &&
+			(w.Tool == types.ToolClaude || w.Tool == types.ToolCursor) {
+			var classification types.EntryClass
+			var err error
+			switch w.Tool {
+			case types.ToolClaude:
+				classification, err = adapter.ClassifyClaudeProjectEntry(ctx, w.Path)
+			case types.ToolCursor:
+				classification, err = adapter.ClassifyCursorProjectEntry(ctx, w.Path)
+			}
 			if err != nil {
-				err = fmt.Errorf("revalidating Claude agent-state %q: %w", w.Path, err)
+				err = fmt.Errorf("revalidating %s agent-state %q: %w", w.Tool, w.Path, err)
 				errs = append(errs, err)
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				continue
 			}
 			if classification != types.EntryClassOrphaned {
-				err := fmt.Errorf("claude agent-state %q is no longer orphaned (classified %s)", w.Path, classification)
+				err := fmt.Errorf("%s agent-state %q is no longer orphaned (classified %s)", w.Tool, w.Path, classification)
 				errs = append(errs, err)
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				continue

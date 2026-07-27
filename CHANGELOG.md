@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Changed
+- Cursor project-store entries under `~/.cursor/projects` now use the
+  `agent-state` category and recorded `workspacePath=` classification instead
+  of the risky `ai-logs` category. `--category ai-logs` no longer selects these
+  entries; `--category agent-state` does. Windsurf and the generic AI log
+  provider remain in `ai-logs`.
+
+### Safety
+- Orphaned Cursor agent-state is cleanable by default without an age gate.
+  Live and undetermined entries remain protected even with `--risky --force`,
+  and cleanup revalidates the recorded workspace immediately before deletion.
+
 ## [0.8.0] - 2026-07-13
 
 ### Added

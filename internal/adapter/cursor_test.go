@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/sungjunlee/aibris/internal/types"
@@ -14,6 +15,9 @@ func TestCursorAdapter_Name(t *testing.T) {
 	a := &CursorAdapter{}
 	if got := a.Name(); got != types.ToolCursor {
 		t.Errorf("Name() = %q; want %q", got, types.ToolCursor)
+	}
+	if got := a.Category(); got != types.CategoryAgentState {
+		t.Errorf("Category() = %q; want %q", got, types.CategoryAgentState)
 	}
 }
 
@@ -67,8 +71,201 @@ func TestCursorAdapter_SingleProject(t *testing.T) {
 	if results[0].Tool != types.ToolCursor {
 		t.Errorf("Tool = %q; want %q", results[0].Tool, types.ToolCursor)
 	}
-	if results[0].Category != types.CategoryAILogs {
-		t.Errorf("Category = %q; want %q", results[0].Category, types.CategoryAILogs)
+	if results[0].Category != types.CategoryAgentState {
+		t.Errorf("Category = %q; want %q", results[0].Category, types.CategoryAgentState)
+	}
+	if results[0].Classification != types.EntryClassUndetermined {
+		t.Errorf("Classification = %q; want undetermined without worker.log", results[0].Classification)
+	}
+}
+
+func TestCursorAdapter_ClassifiesLiveOrphanedAndUndetermined(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	base := filepath.Join(home, ".cursor", "projects")
+	liveCWD := filepath.Join(home, "workspace", "active", "live-project")
+	if err := os.MkdirAll(liveCWD, 0755); err != nil {
+		t.Fatal(err)
+	}
+	orphanedCWD := filepath.Join(home, "workspace", "removed", "recorded_project")
+
+	writeCursorWorkerLog(t, filepath.Join(base, "live-entry"),
+		"[info] runServer socketPath="+filepath.Join(home, ".cursor", "projects", "live-entry", "worker.sock")+"\n"+
+			"[debug] npxPath=/opt/toolchain/bin/npx\n"+
+			"[info] workspacePath=relative/path\n"+
+			"[info] workspacePath="+filepath.Join(home, ".cursor", "internal-workspace")+"\n"+
+			"[info] workspacePath="+liveCWD+"\n"+
+			"[info] workspacePath="+orphanedCWD+"\n")
+	lossyKey := "Users-sjlee-relay-worktrees-71f21a78-dear-scene-ai-gat-7bf2787"
+	writeCursorWorkerLog(t, filepath.Join(base, lossyKey),
+		"[debug] npxPath=/opt/toolchain/bin/npx\n"+
+			"[info] workspacePath="+orphanedCWD+"\n")
+	if err := os.MkdirAll(filepath.Join(base, "no-worker-log"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := (&CursorAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 3 {
+		t.Fatalf("results = %d; want 3", len(results))
+	}
+	byID := make(map[string]types.DebrisInfo)
+	for _, item := range results {
+		byID[item.ID] = item
+		if item.Tool != types.ToolCursor {
+			t.Errorf("%s Tool = %q; want cursor", item.ID, item.Tool)
+		}
+		if item.Category != types.CategoryAgentState {
+			t.Errorf("%s Category = %q; want agent-state", item.ID, item.Category)
+		}
+		if item.Reason == "" {
+			t.Errorf("%s Reason is empty", item.ID)
+		}
+	}
+
+	if got := byID["live-entry"].Classification; got != types.EntryClassLive {
+		t.Errorf("live Classification = %q; want live", got)
+	}
+	orphaned := byID[lossyKey]
+	if orphaned.Classification != types.EntryClassOrphaned {
+		t.Errorf("orphaned Classification = %q; want orphaned", orphaned.Classification)
+	}
+	if orphaned.Project != filepath.Base(orphanedCWD) {
+		t.Errorf("orphaned Project = %q; want recorded cwd basename %q",
+			orphaned.Project, filepath.Base(orphanedCWD))
+	}
+	if orphaned.Project == lossyKey {
+		t.Error("orphaned Project was derived from the lossy entry directory name")
+	}
+	if got := byID["no-worker-log"].Classification; got != types.EntryClassUndetermined {
+		t.Errorf("missing worker.log Classification = %q; want undetermined", got)
+	}
+}
+
+func TestCursorAdapter_NoWorkspacePathDoesNotFallBackToToolchainPath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	entryPath := filepath.Join(home, ".cursor", "projects", "toolchain-only")
+	toolchainPath := filepath.Join(home, "toolchain", "bin", "npx")
+	if err := os.MkdirAll(filepath.Dir(toolchainPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(toolchainPath, nil, 0644); err != nil {
+		t.Fatal(err)
+	}
+	writeCursorWorkerLog(t, entryPath,
+		"[info] socketPath="+filepath.Join(home, ".cursor", "projects", "toolchain-only", "worker.sock")+"\n"+
+			"[debug] Starting language server npxPath="+toolchainPath+"\n")
+
+	classification, reason, _, err := classifyCursorProjectEntry(context.Background(), entryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if classification != types.EntryClassUndetermined {
+		t.Fatalf("Classification = %q; want undetermined; reason: %s", classification, reason)
+	}
+	if strings.Contains(reason, toolchainPath) {
+		t.Fatalf("Reason = %q; toolchain path must not become cwd evidence", reason)
+	}
+}
+
+func TestCursorAdapter_OnlyCursorWorkspacePathsAreUndetermined(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	entryPath := filepath.Join(home, ".cursor", "projects", "cursor-only")
+	writeCursorWorkerLog(t, entryPath,
+		"[info] workspacePath="+filepath.Join(home, ".cursor", "projects", "another-entry")+"\n")
+
+	classification, reason, _, err := classifyCursorProjectEntry(context.Background(), entryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if classification != types.EntryClassUndetermined {
+		t.Fatalf("Classification = %q; want undetermined; reason: %s", classification, reason)
+	}
+}
+
+func TestCursorAdapter_RepoJSONAndDirectoryNameAreNotPathFallbacks(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	key := "Users-sjlee-relay-worktrees-71f21a78-dear-scene-ai-gat-7bf2787"
+	entryPath := filepath.Join(home, ".cursor", "projects", key)
+	if err := os.MkdirAll(entryPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	livePath := filepath.Join(home, "workspace", "must-not-be-used")
+	if err := os.MkdirAll(livePath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(entryPath, "repo.json"),
+		[]byte(`{"id":"`+livePath+`"}`),
+		0644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	classification, reason, project, err := classifyCursorProjectEntry(context.Background(), entryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if classification != types.EntryClassUndetermined {
+		t.Fatalf("Classification = %q; want undetermined; reason: %s", classification, reason)
+	}
+	if project != "" {
+		t.Fatalf("Project = %q; want no label without recorded workspacePath", project)
+	}
+}
+
+func TestCursorAdapter_UnreadableWorkerLogIsUndetermined(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	entryPath := filepath.Join(home, ".cursor", "projects", "unreadable-worker")
+	if err := os.MkdirAll(entryPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(
+		filepath.Join(home, "missing-worker-log"),
+		filepath.Join(entryPath, "worker.log"),
+	); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	classification, reason, _, err := classifyCursorProjectEntry(context.Background(), entryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if classification != types.EntryClassUndetermined {
+		t.Fatalf("Classification = %q; want undetermined; reason: %s", classification, reason)
+	}
+	if !strings.Contains(reason, "worker.log") {
+		t.Fatalf("Reason = %q; want unreadable worker.log evidence", reason)
+	}
+}
+
+func TestCursorAdapter_UnavailableRecordedCWDAncestorIsUndetermined(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	entryPath := filepath.Join(home, ".cursor", "projects", "unmounted-volume")
+	recordedCWD := filepath.Join(
+		string(filepath.Separator),
+		"Volumes",
+		"aibris-definitely-unmounted-cursor-volume",
+		"project",
+	)
+	writeCursorWorkerLog(t, entryPath, "[info] workspacePath="+recordedCWD+"\n")
+
+	classification, reason, _, err := classifyCursorProjectEntry(context.Background(), entryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if classification != types.EntryClassUndetermined {
+		t.Fatalf("Classification = %q; want undetermined; reason: %s", classification, reason)
+	}
+	if !strings.Contains(reason, "surrounding tree is unavailable") {
+		t.Fatalf("Reason = %q; want shared unavailable-ancestor barrier", reason)
 	}
 }
 
@@ -125,5 +322,15 @@ func TestCursorAdapter_ContextCancellation(t *testing.T) {
 	}
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("expected Canceled, got %v", err)
+	}
+}
+
+func writeCursorWorkerLog(t *testing.T, entryPath, content string) {
+	t.Helper()
+	if err := os.MkdirAll(entryPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(entryPath, "worker.log"), []byte(content), 0644); err != nil {
+		t.Fatal(err)
 	}
 }
