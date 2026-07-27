@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -97,6 +98,13 @@ type recordedCWDEvidence struct {
 	firstUnverifiableRecord string
 }
 
+// ClassifyClaudeProjectEntry re-derives the cleanup-driving classification
+// from the current contents of a Claude project-store entry.
+func ClassifyClaudeProjectEntry(ctx context.Context, entryPath string) (types.EntryClass, error) {
+	classification, _, _, err := classifyClaudeProjectEntry(ctx, entryPath)
+	return classification, err
+}
+
 func classifyClaudeProjectEntry(ctx context.Context, entryPath string) (types.EntryClass, string, string, error) {
 	evidence, err := recordedCWDsFromClaudeProject(ctx, entryPath)
 	if err != nil {
@@ -106,6 +114,8 @@ func classifyClaudeProjectEntry(ctx context.Context, entryPath string) (types.En
 	var liveCWD string
 	var absentCWD string
 	var unverifiableCWD string
+	var unavailableCWD string
+	var unavailableAncestor string
 	absentCount := 0
 	for _, cwd := range evidence.cwds {
 		if err := ctx.Err(); err != nil {
@@ -116,9 +126,20 @@ func classifyClaudeProjectEntry(ctx context.Context, entryPath string) (types.En
 				liveCWD = cwd
 			}
 		} else if errors.Is(err, os.ErrNotExist) {
-			absentCount++
-			if absentCWD == "" {
-				absentCWD = cwd
+			proven, ancestor, proofErr := recordedCWDAbsenceProven(cwd)
+			switch {
+			case proofErr != nil:
+				if unverifiableCWD == "" {
+					unverifiableCWD = cwd
+				}
+			case proven:
+				absentCount++
+				if absentCWD == "" {
+					absentCWD = cwd
+				}
+			case unavailableCWD == "":
+				unavailableCWD = cwd
+				unavailableAncestor = ancestor
 			}
 		} else if unverifiableCWD == "" {
 			unverifiableCWD = cwd
@@ -135,6 +156,13 @@ func classifyClaudeProjectEntry(ctx context.Context, entryPath string) (types.En
 		return types.EntryClassUndetermined,
 			"recorded cwd existence could not be verified: " + unverifiableCWD,
 			projectNameFromRecordedCWD(unverifiableCWD),
+			nil
+	}
+	if unavailableCWD != "" {
+		return types.EntryClassUndetermined,
+			fmt.Sprintf("recorded cwd surrounding tree is unavailable: %s (nearest existing ancestor: %s)",
+				unavailableCWD, unavailableAncestor),
+			projectNameFromRecordedCWD(unavailableCWD),
 			nil
 	}
 	if evidence.unverifiableRecords > 0 {
@@ -173,12 +201,69 @@ func classifyClaudeProjectEntry(ctx context.Context, entryPath string) (types.En
 		nil
 }
 
+// recordedCWDAbsenceProven accepts ENOENT as deletion evidence only when the
+// closest existing directory is in a container whose surrounding tree is
+// expected to be locally available: the user's home or a temp root.
+func recordedCWDAbsenceProven(cwd string) (bool, string, error) {
+	for ancestor := filepath.Dir(cwd); ; ancestor = filepath.Dir(ancestor) {
+		info, err := os.Stat(ancestor)
+		switch {
+		case err == nil:
+			if !info.IsDir() {
+				return false, ancestor, nil
+			}
+			plausible, err := plausibleRecordedCWDContainer(ancestor)
+			return plausible, ancestor, err
+		case !errors.Is(err, os.ErrNotExist):
+			return false, ancestor, err
+		}
+		parent := filepath.Dir(ancestor)
+		if parent == ancestor {
+			return false, ancestor, nil
+		}
+	}
+}
+
+func plausibleRecordedCWDContainer(path string) (bool, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false, err
+	}
+	roots := []string{home, os.TempDir()}
+	if filepath.Separator == '/' {
+		roots = append(roots, "/tmp", "/var/tmp")
+	}
+	for _, root := range roots {
+		if pathWithinContainer(path, root) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func pathWithinContainer(path, root string) bool {
+	path = filepath.Clean(path)
+	root = filepath.Clean(root)
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		path = filepath.Clean(resolved)
+	}
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		root = filepath.Clean(resolved)
+	}
+	rel, err := filepath.Rel(root, path)
+	return err == nil &&
+		(rel == "." || (rel != ".." && !filepath.IsAbs(rel) &&
+			!strings.HasPrefix(rel, ".."+string(filepath.Separator))))
+}
+
 func recordedCWDsFromClaudeProject(ctx context.Context, entryPath string) (recordedCWDEvidence, error) {
 	var evidence recordedCWDEvidence
 	entries, err := os.ReadDir(entryPath)
 	if err != nil {
 		evidence.unverifiableFiles = append(evidence.unverifiableFiles, filepath.Base(entryPath))
-		return evidence, nil
+		// Deliberately fail closed: unreadable project metadata is unverifiable
+		// evidence for this entry, not a reason to abort the entire scan.
+		return evidence, nil //nolint:nilerr
 	}
 	seen := make(map[string]bool)
 	for _, entry := range entries {
@@ -226,7 +311,7 @@ func readRecordedCWDs(ctx context.Context, path string) (recordedCWDReadResult, 
 	if err != nil {
 		return recordedCWDReadResult{}, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	reader := bufio.NewReader(file)
 	var extractor cwdMetadataExtractor
@@ -234,7 +319,7 @@ func readRecordedCWDs(ctx context.Context, path string) (recordedCWDReadResult, 
 	cwdFound := false
 	lineNumber := 1
 	recordUnverifiable := func() {
-		if cwdFound || !extractor.unverifiableRecord() {
+		if !extractor.unverifiableRecord(cwdFound) {
 			return
 		}
 		result.unverifiableRecords++
@@ -247,8 +332,8 @@ func readRecordedCWDs(ctx context.Context, path string) (recordedCWDReadResult, 
 			return result, err
 		}
 		fragment, readErr := reader.ReadSlice('\n')
-		if !cwdFound {
-			if cwd := extractor.feed(fragment); cwd != "" {
+		if cwd := extractor.feed(fragment); cwd != "" {
+			if !cwdFound {
 				result.cwds = append(result.cwds, cwd)
 				cwdFound = true
 			}
@@ -329,14 +414,15 @@ func (e *cwdMetadataExtractor) reset() {
 	*e = cwdMetadataExtractor{}
 }
 
-func (e *cwdMetadataExtractor) unverifiableRecord() bool {
+func (e *cwdMetadataExtractor) unverifiableRecord(cwdFound bool) bool {
 	// A complete JSON object can legitimately be a cwd-less event. Incomplete
 	// or invalid JSON, or a present but unusable cwd field, is unreadable
-	// evidence even if another line had a cwd.
-	return e.recordContent && (e.invalid || !e.complete || e.cwdFieldSeen)
+	// evidence. A parsed cwd does not make a malformed surrounding record valid.
+	return e.recordContent && (e.invalid || !e.complete || (e.cwdFieldSeen && !cwdFound))
 }
 
 func (e *cwdMetadataExtractor) feed(data []byte) string {
+	var foundCWD string
 	for i := 0; i < len(data); {
 		b := data[i]
 		if !isJSONWhitespace(b) {
@@ -348,7 +434,9 @@ func (e *cwdMetadataExtractor) feed(data []byte) string {
 		}
 		if e.inString {
 			if cwd := e.feedStringByte(b); cwd != "" {
-				return cwd
+				if foundCWD == "" {
+					foundCWD = cwd
+				}
 			}
 			i++
 			continue
@@ -461,7 +549,7 @@ func (e *cwdMetadataExtractor) feed(data []byte) string {
 		}
 		i++
 	}
-	return ""
+	return foundCWD
 }
 
 func (e *cwdMetadataExtractor) startKeyString() {
@@ -575,6 +663,7 @@ func (e *cwdMetadataExtractor) feedStringByte(b byte) string {
 	if e.stringIsCWD && !e.cwdTooLong {
 		var cwd string
 		if json.Unmarshal(e.cwdRaw, &cwd) == nil && filepath.IsAbs(cwd) {
+			e.finishValue()
 			return filepath.Clean(cwd)
 		}
 	}

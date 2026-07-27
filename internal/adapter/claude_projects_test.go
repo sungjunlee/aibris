@@ -272,13 +272,13 @@ func TestClaudeProjectAdapter_AbsentCWDAndMalformedRecordAreUndetermined(t *test
 	}
 }
 
-func TestClaudeProjectAdapter_StopsValidatingRecordAfterRecordedCWD(t *testing.T) {
+func TestClaudeProjectAdapter_TruncatedRecordAfterRecordedCWDIsUndetermined(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	absentCWD := filepath.Join(home, "workspace", "removed", "metadata-only")
 	sessionPath := filepath.Join(home, ".claude", "projects", "early-cwd", "session.jsonl")
 	writeClaudeProjectSession(t, sessionPath,
-		claudeSessionLine(t, absentCWD)+" trailing transcript bytes are not parsed\n")
+		"{\"cwd\":"+mustMarshalJSON(t, absentCWD))
 
 	results, err := (&ClaudeProjectAdapter{}).Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
@@ -287,8 +287,60 @@ func TestClaudeProjectAdapter_StopsValidatingRecordAfterRecordedCWD(t *testing.T
 	if len(results) != 1 {
 		t.Fatalf("results = %d; want 1", len(results))
 	}
-	if results[0].Classification != types.EntryClassOrphaned {
-		t.Fatalf("Classification = %q; want orphaned after stopping at cwd", results[0].Classification)
+	if results[0].Classification != types.EntryClassUndetermined {
+		t.Fatalf("Classification = %q; want undetermined for structurally incomplete cwd record", results[0].Classification)
+	}
+	if !strings.Contains(results[0].Reason, "unparseable") {
+		t.Fatalf("Reason = %q; want unparseable structural evidence", results[0].Reason)
+	}
+}
+
+func TestClaudeProjectAdapter_UnmountedVolumeAncestorBarrierIsUndetermined(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	recordedCWD := filepath.Join(
+		string(filepath.Separator),
+		"Volumes",
+		"aibris-definitely-unmounted-volume",
+		"project",
+	)
+	entryPath := filepath.Join(home, ".claude", "projects", "unmounted-volume")
+	writeClaudeProjectSession(t, filepath.Join(entryPath, "session.jsonl"),
+		claudeSessionLine(t, recordedCWD)+"\n")
+
+	classification, reason, _, err := classifyClaudeProjectEntry(context.Background(), entryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if classification != types.EntryClassUndetermined {
+		t.Fatalf("Classification = %q; want undetermined; reason: %s", classification, reason)
+	}
+	if !strings.Contains(reason, "surrounding tree is unavailable") {
+		t.Fatalf("Reason = %q; want unavailable surrounding-tree evidence", reason)
+	}
+	if strings.Contains(reason, "existence could not be verified") {
+		t.Fatalf("Reason = %q; unavailable tree must differ from unreadable evidence", reason)
+	}
+}
+
+func TestClaudeProjectAdapter_MissingParentExistingGrandparentClassifiesOrphaned(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	grandparent := filepath.Join(home, "workspace")
+	if err := os.MkdirAll(grandparent, 0755); err != nil {
+		t.Fatal(err)
+	}
+	recordedCWD := filepath.Join(grandparent, "missing-parent", "project")
+	entryPath := filepath.Join(home, ".claude", "projects", "missing-parent")
+	writeClaudeProjectSession(t, filepath.Join(entryPath, "session.jsonl"),
+		claudeSessionLine(t, recordedCWD)+"\n")
+
+	classification, reason, _, err := classifyClaudeProjectEntry(context.Background(), entryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if classification != types.EntryClassOrphaned {
+		t.Fatalf("Classification = %q; want orphaned; reason: %s", classification, reason)
 	}
 }
 
@@ -422,6 +474,15 @@ func claudeSessionLine(t *testing.T, cwd string) string {
 		Message: "private transcript content must not be parsed",
 		CWD:     cwd,
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+func mustMarshalJSON(t *testing.T, value string) string {
+	t.Helper()
+	data, err := json.Marshal(value)
 	if err != nil {
 		t.Fatal(err)
 	}

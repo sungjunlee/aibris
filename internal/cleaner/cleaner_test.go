@@ -2,6 +2,7 @@ package cleaner
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -502,6 +504,55 @@ func TestExecute_NonExistent(t *testing.T) {
 	}
 	if total != 100 {
 		t.Errorf("total = %d; want 100 (RemoveAll succeeds on non-existent)", total)
+	}
+}
+
+func TestExecute_RevalidatesOrphanedAgentStateBeforeDelete(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	entryPath := filepath.Join(home, ".claude", "projects", "recreated-cwd")
+	recordedCWD := filepath.Join(home, "workspace", "recreated")
+	if err := os.MkdirAll(entryPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	record, err := json.Marshal(struct {
+		CWD string `json:"cwd"`
+	}{CWD: recordedCWD})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(entryPath, "session.jsonl"), append(record, '\n'), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	classification, err := adapter.ClassifyClaudeProjectEntry(context.Background(), entryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if classification != types.EntryClassOrphaned {
+		t.Fatalf("planned Classification = %q; want orphaned", classification)
+	}
+	planned := types.DebrisInfo{
+		ID:             "recreated-cwd",
+		Tool:           types.ToolClaude,
+		Category:       types.CategoryAgentState,
+		Path:           entryPath,
+		Size:           int64(len(record) + 1),
+		Classification: classification,
+	}
+	if err := os.MkdirAll(recordedCWD, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	total, err := Execute([]types.DebrisInfo{planned})
+	if err == nil || !strings.Contains(err.Error(), "no longer orphaned") {
+		t.Fatalf("Execute() error = %v; want fail-closed revalidation error", err)
+	}
+	if total != 0 {
+		t.Fatalf("total = %d; want 0", total)
+	}
+	if _, err := os.Stat(entryPath); err != nil {
+		t.Fatalf("agent-state entry was removed after cwd recreation: %v", err)
 	}
 }
 
