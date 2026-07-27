@@ -70,15 +70,20 @@ is no Trash or undo flow.
 
 ## Risky Categories
 
+The Cursor project store (`~/.cursor/projects`) is `agent-state`, not
+`ai-logs`. Orphaned entries are eligible for cleanup by default with no age
+gate, while `live` and `undetermined` entries are always protected. The
+classification is proved from the workspace path recorded in each entry rather
+than inferred from the entry name or path.
+
 `ai-logs` and any unknown future category are risky by default. They are excluded
 from cleanup unless the user passes `--risky`.
 
 Risky examples include:
 
-- AI session archives
-- command audit logs
-- file history
-- Cursor and Windsurf project/session logs
+- generic `ai-logs` provider artifacts, including AI session archives, command
+  audit logs, and file history
+- Windsurf project/session logs
 
 These may contain useful debugging history or sensitive prompts, so a cleanup
 miss is safer than accidental deletion.
