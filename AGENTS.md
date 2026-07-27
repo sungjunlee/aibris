@@ -34,7 +34,8 @@ CLI 자체는 dumb executor. Q&A와 판단은 AI 스킬이负责.
 - `Name()`은 kebab-case 단일 소문자 (e.g. `codex`, `claude`)
 - `Scan()`은 context 취소를 존중해야 함
 - 발견된 모든 경로의 크기를 `estimateDirSize()`로 계산 (WalkDir 기반)
-- 프로젝트명은 `detectProjectName()`으로 추론 (숨김 디렉토리 제외)
+- worktree 컨테이너처럼 프로젝트가 하위 디렉토리인 adapter는 `detectProjectName()`으로 추론 (숨김 디렉토리 제외)
+- recorded cwd 자체가 프로젝트를 가리키는 store adapter는 `projectNameFromRecordedCWD()`로 마지막 경로 조각을 사용 (파일시스템 조회 금지)
 - `internal/scanner/scanner.go` 의 `providers` 목록에 등록
 
 **1-1. Worktree discovery 변경시 꼭 지킬 것**

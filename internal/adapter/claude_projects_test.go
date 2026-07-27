@@ -200,19 +200,61 @@ func TestClaudeProjectAdapter_AggregatesEveryRecordedCWDInOneSession(t *testing.
 	}
 }
 
-func TestClaudeProjectAdapter_ProjectFromRecordedCWD(t *testing.T) {
+func TestClaudeProjectAdapter_AbsentCWDAndMalformedRecordAreUndetermined(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	recordedCWD := filepath.Join(home, "workspace")
-	if err := os.MkdirAll(filepath.Join(recordedCWD, "visible-project"), 0755); err != nil {
+	absentCWD := filepath.Join(home, "workspace", "removed", "orphan-label")
+	sessionPath := filepath.Join(home, ".claude", "projects", "mixed-records", "session.jsonl")
+	writeClaudeProjectSession(t, sessionPath,
+		claudeSessionLine(t, absentCWD)+"\n"+
+			"{\"message\": nope, \"cwd\":\"/must-not-be-used\"}\n")
+
+	results, err := (&ClaudeProjectAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
 		t.Fatal(err)
 	}
+	if len(results) != 1 {
+		t.Fatalf("results = %d; want 1", len(results))
+	}
+	if results[0].Classification != types.EntryClassUndetermined {
+		t.Fatalf("Classification = %q; want undetermined", results[0].Classification)
+	}
+	if !strings.Contains(results[0].Reason, "unparseable") ||
+		!strings.Contains(results[0].Reason, "session.jsonl:2") {
+		t.Fatalf("Reason = %q; want unparseable record and line evidence", results[0].Reason)
+	}
+}
+
+func TestClaudeProjectAdapter_StopsValidatingRecordAfterRecordedCWD(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	absentCWD := filepath.Join(home, "workspace", "removed", "metadata-only")
+	sessionPath := filepath.Join(home, ".claude", "projects", "early-cwd", "session.jsonl")
+	writeClaudeProjectSession(t, sessionPath,
+		claudeSessionLine(t, absentCWD)+" trailing transcript bytes are not parsed\n")
+
+	results, err := (&ClaudeProjectAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results = %d; want 1", len(results))
+	}
+	if results[0].Classification != types.EntryClassOrphaned {
+		t.Fatalf("Classification = %q; want orphaned after stopping at cwd", results[0].Classification)
+	}
+}
+
+func TestClaudeProjectAdapter_ProjectLabelsComeFromRecordedCWDBasenames(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	base := filepath.Join(home, ".claude", "projects")
 	writeClaudeProjectSession(t,
-		filepath.Join(home, ".claude", "projects", "with-project", "session.jsonl"),
-		claudeSessionLine(t, recordedCWD)+"\n")
+		filepath.Join(base, "baby-entry", "session.jsonl"),
+		claudeSessionLine(t, filepath.Join(home, "workspace", "removed", "baby_ops"))+"\n")
 	writeClaudeProjectSession(t,
-		filepath.Join(home, ".claude", "projects", "without-project", "session.jsonl"),
-		claudeSessionLine(t, filepath.Join(home, "missing-workspace"))+"\n")
+		filepath.Join(base, "relay-entry", "session.jsonl"),
+		claudeSessionLine(t, filepath.Join(home, "workspace", "removed", "dev-relay"))+"\n")
 
 	results, err := (&ClaudeProjectAdapter{}).Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
@@ -222,11 +264,19 @@ func TestClaudeProjectAdapter_ProjectFromRecordedCWD(t *testing.T) {
 	for _, item := range results {
 		byID[item.ID] = item
 	}
-	if got := byID["with-project"].Project; got != "visible-project" {
-		t.Fatalf("Project = %q; want visible-project from detectProjectName", got)
+	if got := byID["baby-entry"].Project; got != "baby_ops" {
+		t.Fatalf("baby-entry Project = %q; want absent cwd basename baby_ops", got)
 	}
-	if got := byID["without-project"].Project; got != "" {
-		t.Fatalf("Project = %q; want empty when detectProjectName cannot infer one", got)
+	if got := byID["relay-entry"].Project; got != "dev-relay" {
+		t.Fatalf("relay-entry Project = %q; want absent cwd basename dev-relay", got)
+	}
+	if byID["baby-entry"].Project == byID["relay-entry"].Project {
+		t.Fatalf("different recorded cwd basenames collapsed to label %q", byID["baby-entry"].Project)
+	}
+	for _, id := range []string{"baby-entry", "relay-entry"} {
+		if got := byID[id].Classification; got != types.EntryClassOrphaned {
+			t.Fatalf("%s Classification = %q; want orphaned", id, got)
+		}
 	}
 }
 
