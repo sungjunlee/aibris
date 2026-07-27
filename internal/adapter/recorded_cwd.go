@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -20,14 +19,6 @@ type recordedCWDEvidence struct {
 }
 
 type recordedCWDEvidenceGatherer func(context.Context, string) (recordedCWDEvidence, error)
-
-var recordedCWDDeviceID = func(_ string, info os.FileInfo) (uint64, error) {
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok {
-		return 0, fmt.Errorf("recorded cwd device metadata unavailable")
-	}
-	return uint64(stat.Dev), nil
-}
 
 func classifyRecordedCWDEntry(
 	ctx context.Context,
