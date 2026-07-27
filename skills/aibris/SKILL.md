@@ -247,7 +247,7 @@ aibris clean --age 1h --dry-run        # 1시간 이상 (매우 공격적, 경�
 # interactive (항목별로 y/N 확인 후 실제 삭제)
 aibris clean --interactive
 
-# risky 카테고리 포함 (ai-logs, cursor, windsurf 등)
+# risky 카테고리 포함 (ai-logs, windsurf 등; Cursor project store 제외)
 aibris clean --risky --dry-run
 
 # classic 경로에서 active worktree까지 포함
@@ -267,7 +267,8 @@ aibris clean --category node_modules
 | `node_modules` | ✅ 안전 | `$HOME` scan root 아래 npm project dependencies | node_modules |
 | `build-cache` | ✅ 안전 | Go/Xcode/Gradle/npm/Cargo caches | build-cache |
 | `other-cache` | ✅ 안전 | Python/uv pip caches | pip-cache |
-| `ai-logs` | 🚫 `--risky` 필요 | AI tool session logs, file history, archived sessions | ai-logs, cursor, windsurf |
+| `agent-state` | ✅ orphaned만, age gate 없음 | recorded cwd로 판정한 project store. live/undetermined는 항상 보호 | claude, cursor |
+| `ai-logs` | 🚫 `--risky` 필요 | AI tool session logs, file history, archived sessions | ai-logs, windsurf |
 
 ## 주의사항
 

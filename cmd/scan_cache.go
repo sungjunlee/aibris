@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	lastScanCacheSchemaVersion = 2
+	lastScanCacheSchemaVersion = 3
 	lastScanCacheMaxAge        = 5 * time.Minute
 )
 

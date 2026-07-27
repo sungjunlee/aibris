@@ -75,12 +75,19 @@ func TestScan_NoResults(t *testing.T) {
 }
 
 func TestDefaultProvidersIncludeClaudeProjectAgentState(t *testing.T) {
+	foundClaude := false
+	foundCursor := false
 	for _, provider := range defaultProviders {
 		if provider.Name() == types.ToolClaude && provider.Category() == types.CategoryAgentState {
-			return
+			foundClaude = true
+		}
+		if provider.Name() == types.ToolCursor && provider.Category() == types.CategoryAgentState {
+			foundCursor = true
 		}
 	}
-	t.Fatal("default providers do not include Claude project agent-state discovery")
+	if !foundClaude || !foundCursor {
+		t.Fatalf("default providers agent-state discovery: Claude=%t Cursor=%t; want both", foundClaude, foundCursor)
+	}
 }
 
 func TestScan_SingleProvider(t *testing.T) {

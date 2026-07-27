@@ -76,7 +76,7 @@ as an item list, not as a worktree-only list.
 | Field | Type | Description |
 |-------|------|-------------|
 | `tool` | string | Tool name (`codex`, `claude`, `unknown`, `cursor`, `windsurf`, `node_modules`, `build-cache`, `pip-cache`, `ai-logs`). Generic worktree owners may remain `unknown`. |
-| `category` | string | Debris category (`worktree`, `node_modules`, `build-cache`, `other-cache`, `ai-logs`) |
+| `category` | string | Debris category (`worktree`, `node_modules`, `build-cache`, `other-cache`, `agent-state`, `ai-logs`). Cursor entries under `~/.cursor/projects` use `agent-state`, not `ai-logs`. |
 | `id` | string | Unique identifier (hash, directory name, or cache key) |
 | `project` | string | Project name if detectable, empty otherwise |
 | `source` | string | Path-derived worktree source such as `.codex`, `.somename`, or `project-local`; empty for non-worktree items |
@@ -84,13 +84,21 @@ as an item list, not as a worktree-only list.
 | `size` | integer | Size in bytes |
 | `mod_time` | string | Last modification time in RFC 3339 format |
 | `status` | string | Worktree health (`active`, `orphaned`, `plain-dir`) or empty for non-worktree items |
+| `classification` | string | Agent-state health (`live`, `orphaned`, `undetermined`), omitted for items outside `agent-state`. Cursor project-store entries derive this from all distinct absolute `workspacePath=` values in `worker.log` that are outside `~/.cursor`; any live path wins and `orphaned` requires every usable path to be proven absent. |
 | `risk` | string | Derived cleanup risk (`low`, `medium`, `high`) |
 | `reason` | string | Short derived explanation for cleanup review |
 | `cleanup_kind` | string | Cleanup strategy (`remove-path` or `command`) |
 | `cleanup_command` | array | Argv command used when `cleanup_kind` is `command`; empty for path removal |
 
-`risk` and `reason` are presentation fields derived from `category` and
-`status`; they are intended for human and AI-assisted cleanup decisions.
+`risk` and `reason` are presentation fields derived from `category`, `status`,
+and `classification`; they are intended for human and AI-assisted cleanup
+decisions.
+
+For Cursor `agent-state`, `project` is the final path segment of the recorded
+workspace, not a decoded form of the project-store directory name. Missing,
+unreadable, or unusable `worker.log` evidence produces `undetermined`.
+Orphaned Cursor entries are eligible for default cleanup without an age gate;
+`live` and `undetermined` entries remain protected.
 
 ### `summary` object
 | Field | Type | Description |

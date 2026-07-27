@@ -11,6 +11,7 @@ AI-workflow artifact without broad filesystem cleanup.
 | `node_modules` | yes | medium | Project dependency folders under `$HOME` scan roots. They can be recreated with package managers. |
 | `build-cache` | yes | medium | Go, Xcode, Gradle, npm, and Cargo caches. They are usually safe but may slow the next build. |
 | `other-cache` | yes | low | pip and uv package caches. |
+| `agent-state` | orphaned only | low | Claude and Cursor project-store entries classified from recorded working directories. Orphaned entries have no age gate; `live` and `undetermined` entries are always protected. |
 | `ai-logs` | no | high | AI tool logs, archived sessions, file history, and similar records. Requires `--risky`. |
 
 Unknown or future categories should stay risky until they have explicit safety
@@ -22,13 +23,21 @@ rules.
 |------|----------|-------|
 | `codex` | `worktree` | Path-derived source `.codex`. |
 | `claude` | `worktree` | Path-derived source `.claude`. |
+| `claude` | `agent-state` | `~/.claude/projects` entries classified from session `cwd` metadata. |
+| `cursor` | `agent-state` | `~/.cursor/projects` entries classified from all distinct usable `workspacePath=` values in `worker.log`; any live workspace wins. |
 | `unknown` | `worktree` | Generic worktree convention discovery for future or local tools; inspect `source` for the path-derived owner. |
 | `node_modules` | `node_modules` | Dependency directories under scan roots, defaulting to `$HOME`. |
 | `build-cache` | `build-cache` | Language and platform build caches. |
 | `pip-cache` | `other-cache` | Python package caches. |
-| `cursor` | `ai-logs` | Cursor project/session logs. |
 | `windsurf` | `ai-logs` | Windsurf logs and cache-style AI artifacts. |
 | `ai-logs` | `ai-logs` | Codex and Claude log/history locations. |
+
+Cursor project-store migration is explicit at the category boundary:
+`--category ai-logs` no longer matches `~/.cursor/projects`, while
+`--category agent-state` now does. An orphaned Cursor entry is eligible for
+default cleanup immediately, without an age gate. A `live` or `undetermined`
+entry is protected even with `--risky --force`. The `ai-logs` category is not
+empty: it still includes the Windsurf adapter and the generic AI log provider.
 
 ## Filter Semantics
 

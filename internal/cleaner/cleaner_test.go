@@ -389,6 +389,30 @@ func TestFilter_AgentStateEligibilityUsesClassificationNotAge(t *testing.T) {
 	}
 }
 
+func TestFilter_CursorAgentStateEligibilityUsesClassificationNotRiskOrAge(t *testing.T) {
+	now := time.Now()
+	items := []types.DebrisInfo{
+		{ID: "cursor-orphaned", Tool: types.ToolCursor, Category: types.CategoryAgentState, Classification: types.EntryClassOrphaned, ModTime: now},
+		{ID: "cursor-live", Tool: types.ToolCursor, Category: types.CategoryAgentState, Classification: types.EntryClassLive, ModTime: time.Time{}},
+		{ID: "cursor-undetermined", Tool: types.ToolCursor, Category: types.CategoryAgentState, Classification: types.EntryClassUndetermined, ModTime: time.Time{}},
+	}
+	opts := types.PruneOptions{
+		Age: 100 * 365 * 24 * time.Hour,
+	}
+
+	filtered := Filter(items, opts)
+	if len(filtered) != 1 || filtered[0].ID != "cursor-orphaned" {
+		t.Fatalf("Filter() = %+v; want only orphaned Cursor agent-state", filtered)
+	}
+
+	opts.Risky = true
+	opts.Force = true
+	filtered = Filter(items, opts)
+	if len(filtered) != 1 || filtered[0].ID != "cursor-orphaned" {
+		t.Fatalf("Filter() with --risky --force equivalents = %+v; want only orphaned Cursor agent-state", filtered)
+	}
+}
+
 func TestEvaluateEligibility_AgentStateReasons(t *testing.T) {
 	observedAt := time.Now()
 	opts := types.PruneOptions{Age: 100 * 365 * 24 * time.Hour}
@@ -553,6 +577,50 @@ func TestExecute_RevalidatesOrphanedAgentStateBeforeDelete(t *testing.T) {
 	}
 	if _, err := os.Stat(entryPath); err != nil {
 		t.Fatalf("agent-state entry was removed after cwd recreation: %v", err)
+	}
+}
+
+func TestExecute_RevalidatesOrphanedCursorAgentStateBeforeDelete(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	entryPath := filepath.Join(home, ".cursor", "projects", "recreated-cwd")
+	recordedCWD := filepath.Join(home, "workspace", "recreated-cursor")
+	if err := os.MkdirAll(entryPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	workerLog := []byte("[info] workspacePath=" + recordedCWD + "\n")
+	if err := os.WriteFile(filepath.Join(entryPath, "worker.log"), workerLog, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	classification, err := adapter.ClassifyCursorProjectEntry(context.Background(), entryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if classification != types.EntryClassOrphaned {
+		t.Fatalf("planned Classification = %q; want orphaned", classification)
+	}
+	planned := types.DebrisInfo{
+		ID:             "recreated-cwd",
+		Tool:           types.ToolCursor,
+		Category:       types.CategoryAgentState,
+		Path:           entryPath,
+		Size:           int64(len(workerLog)),
+		Classification: classification,
+	}
+	if err := os.MkdirAll(recordedCWD, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	total, err := Execute([]types.DebrisInfo{planned})
+	if err == nil || !strings.Contains(err.Error(), "no longer orphaned") {
+		t.Fatalf("Execute() error = %v; want fail-closed Cursor revalidation error", err)
+	}
+	if total != 0 {
+		t.Fatalf("total = %d; want 0", total)
+	}
+	if _, err := os.Stat(entryPath); err != nil {
+		t.Fatalf("Cursor agent-state entry was removed after cwd recreation: %v", err)
 	}
 }
 

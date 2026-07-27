@@ -85,7 +85,7 @@ skills/
 | Tool | Category | clean 기본 | 기본 경로 |
 |------|----------|-----------|---------|
 | worktree (convention) | worktree | orphaned만 ✅ | bounded shallow `$HOME` discovery of `{worktrees,worktree,worktree-*,worktrees-*}/<entry>/` with direct or nested `.git` file |
-| cursor | ai-logs | 🚫 `--risky` | `~/.cursor/projects/<name>/` |
+| cursor | agent-state | orphaned만 ✅ (age gate 없음; live/undetermined 보호) | `~/.cursor/projects/<name>/` |
 | windsurf | ai-logs | 🚫 `--risky` | `~/.codeium/windsurf/` |
 | node_modules | node_modules | ✅ | `$HOME/**/node_modules/` with noisy directories pruned |
 | build-cache | build-cache | ✅ | `~/.cache/go-build/`, `~/.gradle/caches/`, `~/.npm/_cacache/`, `~/.cargo/registry/`, `~/Library/Caches/Xcode/` |
