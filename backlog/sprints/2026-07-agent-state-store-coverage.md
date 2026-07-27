@@ -26,8 +26,11 @@ content that is surfaced rather than reclaimed.
         `~/.claude/projects` recorded-cwd reader, **and** the eligibility rule,
         which moved here from L3 after the original contract proved
         self-contradictory.
-  - [ ] `L2-cursor-store-classification` — same classifier via `worker.log`,
-        migrate `~/.cursor/projects` off `ai-logs`
+  - [x] `L2-cursor-store-classification` → PR #148 (merged `8b86fe4`,
+        17 review rounds). Shared classifier extracted to `recorded_cwd.go`,
+        `~/.cursor/projects` migrated to `agent-state`, recorded cwd read from
+        `workspacePath=`. Six defects found after the code first passed clean —
+        five of them would have deleted a live workspace's store.
   - [ ] `L3-orphan-clean-eligibility` — narrowed: `UnifiedCleanupPlan` absorption,
         audit/dry-run/receipt surfaces, compiled CLI contract test, docs.
         Eligibility already landed in L1.
@@ -114,7 +117,45 @@ them in the next Done Criteria up front should cut that sharply.
 - **Measure as a same-session delta.** The absolute `19.2s` scan baseline is not
   reproducible — 11s to 39s on one machine depending on cache state. See #146.
 - **Put obligations where the capability is.** A Done Criterion asking the
-  executor to write the PR body cannot be met; the publish step generates it.
+  executor to write the PR body cannot be met. Note the publish step does not
+  generate one either — `publish-run.js` emits a stub (`Relay run <id>`), so the
+  measurement write-up is the orchestrator's job.
+
+### Patterns established by L2 — the measurement blind spot
+
+L2 took 17 rounds. Unlike L1, the code passed contract and quality on round 1
+with zero findings; every defect after that was found by *reading* rather than by
+measuring, because the real home lacked the triggering condition.
+
+- **Real-home measurement cannot find what the home does not contain.** L2's
+  orphan count was verified twice — once by the orchestrator before dispatch,
+  once by the executor with an independent script — and both agreed exactly at
+  `109 / 74,689,446 B`. Both were wrong in the same way. No workspace path on
+  this machine contains a space, no entry records multiple cwds, no orphan sits
+  at a mount root. Agreement between two measurements sharing a blind spot is not
+  verification.
+- **Write adversarial parser fixtures before measuring.** Every parser reading
+  real-world files needs fixtures for interior whitespace, truncated final
+  records, multiple records, and values that resolve to a binary rather than a
+  workspace — *before* trusting any count. Three of L2's five deletion bugs would
+  have been caught pre-dispatch by that alone.
+- **A migration must reconcile every contract, not the obvious three.** L2's
+  criteria named CHANGELOG, `docs/CATEGORY.md`, and `docs/JSON_SCHEMA.md`. The
+  routing claim actually lived in eight places, including `AGENTS.md`,
+  `docs/SPEC.md`, `SECURITY_AUDIT.md`, `README.md`, and `cmd/root.go` help text.
+  Rounds 5–7 went to finding them one at a time. Write "grep the repository and
+  reconcile every claim" into the criterion.
+- **Platform-specific code needs a cross-compile in the criteria.** A
+  `syscall.Stat_t` reference broke the Windows release target; CI ran only ubuntu
+  and macOS, so it would have surfaced at release. `GOOS=windows go build ./...`
+  is now a CI job.
+- **Fail-closed can fail in the useless direction.** On Windows the device lookup
+  returns a no-op rather than an error, because an error propagates as "absence
+  not proven" and would make every entry `undetermined`, zeroing reclamation on
+  that platform. Fail-closed is right only when the closed state is still useful.
+- **Verify `repeat` findings, trust `deepening`.** Held again in L2:
+  `deepening` findings were genuine every time, including two the orchestrator
+  had already reviewed and waved through.
 
 ## Progress
 
@@ -137,3 +178,35 @@ them in the next Done Criteria up front should cut that sharply.
   0 bytes. The count matches the pre-implementation Python audit exactly.
   Three follow-up issues opened from findings: #145 cache provider-set keying,
   #146 scan-timing methodology, #147 scan/clean normalization parity.
+- 2026-07-27: L2 dispatched → PR #148 → 17 review rounds → merged as `8b86fe4`.
+  `~/.cursor/projects` now reports `agent-state`: **111 orphaned /
+  75,648,816 B** reclaimable by default where the category previously returned
+  0 bytes, with 16 live and 11 undetermined protected. Combined with L1, default
+  `clean` now plans 193 agent-state items / 227.2 MB. The `~/.claude` invariant
+  held byte-identical throughout at 82 orphaned / 162,601,007 B / 11
+  undetermined.
+
+  The audit's `42 / 31.5 MB` cursor baseline was found unreproducible before
+  dispatch and abandoned as a target: 101 of the orphans are former
+  `~/.relay/worktrees` paths, which relay creates and reclaims every run, so the
+  count moves continuously — it drifted 109 → 111 during this run alone. Done
+  Criteria now require agreement with a same-session independent measurement.
+  Same failure mode as the `19.2s` scan baseline (#146).
+
+  The specified cwd rule ("first absolute path not under `~/.cursor`") was
+  measured wrong before dispatch — it resolves to the npx binary and finds
+  0 orphans across all 134 entries. Corrected to `workspacePath=` on #138.
+
+  Five further defects surfaced only in review, each of which would have deleted
+  a **live** workspace's store by default with no age gate: whitespace truncation
+  in the recorded path, reading only the first of several recorded paths, an
+  unterminated final log line accepted as complete, the mount-root barrier gap,
+  and — separately — a broken Windows release build. All fixed and fixture-
+  verified.
+
+  Four follow-ups opened: #149 mount-root barrier (fixed in this PR, closed),
+  #150 revalidation gate is a tool allowlist, #151 targets nested inside
+  protected entries, #152 Windows volume-boundary detection. **#150 should land
+  before #139 and #142**, since both add `agent-state` providers and a missing
+  allowlist entry means deletion without revalidation rather than a compile
+  error.
