@@ -818,7 +818,7 @@ func TestCleanCmd_DryRunShowsScanProgressAndCandidates(t *testing.T) {
 	}
 }
 
-func TestCleanCmd_UsesFreshLastScanCache(t *testing.T) {
+func TestCleanCmd_ReusesFreshCurrentSchemaLastScanCache(t *testing.T) {
 	resetScanFlags()
 	resetCleanFlags()
 	home := t.TempDir()
@@ -833,6 +833,14 @@ func TestCleanCmd_UsesFreshLastScanCache(t *testing.T) {
 		rootCmd.SetArgs([]string{"scan", "--root", workspace})
 		rootCmd.Execute()
 	})
+
+	cache, ok := readLastScanCache()
+	if !ok {
+		t.Fatal("expected current-schema scan cache")
+	}
+	if cache.SchemaVersion != lastScanCacheSchemaVersion {
+		t.Fatalf("cache SchemaVersion = %d; want current %d", cache.SchemaVersion, lastScanCacheSchemaVersion)
+	}
 
 	resetCleanFlags()
 	output := captureOutput(func() {
@@ -851,6 +859,53 @@ func TestCleanCmd_UsesFreshLastScanCache(t *testing.T) {
 	}
 	if !strings.Contains(output, filepath.Join("~", "workspace", "app", "node_modules")) {
 		t.Errorf("clean output missing cached target; got: %s", output)
+	}
+}
+
+func TestCleanCmd_RejectsPreviousSchemaLastScanCacheAndRunsLiveScan(t *testing.T) {
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	workspace := filepath.Join(home, "workspace")
+	modules := filepath.Join(workspace, "app", "node_modules")
+	os.MkdirAll(filepath.Join(modules, "pkg"), 0755)
+	past := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(modules, past, past)
+	resolvedWorkspace, err := filepath.EvalSymlinks(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const preAgentStateSchemaVersion = 1
+	if lastScanCacheSchemaVersion <= preAgentStateSchemaVersion {
+		t.Fatalf("current cache schema = %d; must reject pre-agent-state schema %d",
+			lastScanCacheSchemaVersion, preAgentStateSchemaVersion)
+	}
+	if err := saveLastScanCache(lastScanCache{
+		SchemaVersion: preAgentStateSchemaVersion,
+		CreatedAt:     time.Now(),
+		Roots:         []string{resolvedWorkspace},
+		Result:        types.ScanResult{},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--dry-run", "--age=1h", "--root", workspace, "--category=node_modules"})
+		rootCmd.Execute()
+	})
+
+	if strings.Contains(output, "scan    cached") {
+		t.Errorf("clean should reject the previous-schema cache; got: %s", output)
+	}
+	if !strings.Contains(output, "scanning ") {
+		t.Errorf("clean should show live scan progress after rejecting the previous schema; got: %s", output)
+	}
+	if !strings.Contains(output, "scan    live") {
+		t.Errorf("clean should report a live scan source after rejecting the previous schema; got: %s", output)
+	}
+	if !strings.Contains(output, filepath.Join("~", "workspace", "app", "node_modules")) {
+		t.Errorf("clean output missing live scan target; got: %s", output)
 	}
 }
 
@@ -1385,11 +1440,11 @@ func TestCleanCmd_InvalidSelector(t *testing.T) {
 }
 
 func TestParseCleanSelectorsTrimAndDeduplicate(t *testing.T) {
-	categories, err := parseCleanCategories(" node_modules,worktree,node_modules ")
+	categories, err := parseCleanCategories(" node_modules,agent-state,worktree,node_modules ")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := []types.Category{types.CategoryNodeModules, types.CategoryWorktree}; !reflect.DeepEqual(categories, want) {
+	if want := []types.Category{types.CategoryNodeModules, types.CategoryAgentState, types.CategoryWorktree}; !reflect.DeepEqual(categories, want) {
 		t.Fatalf("categories = %v, want %v", categories, want)
 	}
 
@@ -1986,6 +2041,70 @@ func TestPrintJSON_DerivedRiskAndReasonForCategories(t *testing.T) {
 		if item.Reason == "" {
 			t.Errorf("%s reason is empty", item.ID)
 		}
+	}
+}
+
+func TestPrintJSON_AgentStateClassificationAndReason(t *testing.T) {
+	now := time.Date(2026, 7, 27, 12, 0, 0, 0, time.UTC)
+	absentCWD := "/home/user/workspace/removed/project_with-state"
+	r := &types.ScanResult{
+		Worktrees: []types.DebrisInfo{
+			{
+				Tool:           types.ToolClaude,
+				Category:       types.CategoryAgentState,
+				ID:             "encoded-project-key",
+				Path:           "/home/user/.claude/projects/encoded-project-key",
+				ModTime:        now,
+				Classification: types.EntryClassOrphaned,
+				Reason:         "recorded cwd does not exist: " + absentCWD,
+			},
+			{
+				Tool:     types.ToolCodex,
+				Category: types.CategoryWorktree,
+				ID:       "worktree-without-classification",
+				Path:     "/home/user/.codex/worktrees/worktree-without-classification",
+				ModTime:  now,
+				Status:   types.WorktreeActive,
+			},
+		},
+		TotalCount: 2,
+		ByCategory: map[types.Category]types.CategorySummary{
+			types.CategoryAgentState: {Count: 1},
+			types.CategoryWorktree:   {Count: 1},
+		},
+		ByTool: map[types.Tool]types.ToolSummary{
+			types.ToolClaude: {Count: 1},
+			types.ToolCodex:  {Count: 1},
+		},
+	}
+
+	output := captureOutput(func() {
+		printJSON(r)
+	})
+
+	var out jsonOutput
+	if err := json.Unmarshal([]byte(output), &out); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, output)
+	}
+	agentState := out.Worktrees[0]
+	if agentState.Classification != "orphaned" {
+		t.Errorf("Classification = %q; want orphaned", agentState.Classification)
+	}
+	if agentState.Status != "" {
+		t.Errorf("Status = %q; want empty for non-worktree agent-state", agentState.Status)
+	}
+	if !strings.Contains(agentState.Reason, absentCWD) {
+		t.Errorf("Reason = %q; want absent cwd %q", agentState.Reason, absentCWD)
+	}
+
+	var raw struct {
+		Worktrees []map[string]json.RawMessage `json:"worktrees"`
+	}
+	if err := json.Unmarshal([]byte(output), &raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := raw.Worktrees[1]["classification"]; ok {
+		t.Error("worktree without classification emitted a misleading classification field")
 	}
 }
 

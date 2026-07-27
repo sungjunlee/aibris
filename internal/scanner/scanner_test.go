@@ -74,6 +74,15 @@ func TestScan_NoResults(t *testing.T) {
 	}
 }
 
+func TestDefaultProvidersIncludeClaudeProjectAgentState(t *testing.T) {
+	for _, provider := range defaultProviders {
+		if provider.Name() == types.ToolClaude && provider.Category() == types.CategoryAgentState {
+			return
+		}
+	}
+	t.Fatal("default providers do not include Claude project agent-state discovery")
+}
+
 func TestScan_SingleProvider(t *testing.T) {
 	t.Parallel()
 	s := New([]adapter.DebrisProvider{

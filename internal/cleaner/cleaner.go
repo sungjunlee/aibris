@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -81,14 +82,10 @@ func safeHomeRel(home, target string) (string, bool) {
 
 // Filter returns worktrees matching the given PruneOptions.
 func Filter(worktrees []types.DebrisInfo, opts types.PruneOptions) []types.DebrisInfo {
-	cutoff := time.Now().Add(-opts.Age)
+	observedAt := time.Now()
 	var filtered []types.DebrisInfo
 	for _, w := range worktrees {
-		matchCat := len(opts.Categories) == 0 || containsCategory(opts.Categories, w.Category)
-		matchTool := len(opts.Tools) == 0 || containsTool(opts.Tools, w.Tool)
-		riskyOk := opts.Risky || !w.Category.IsRisky()
-		worktreeOk := opts.IncludeActiveWorktrees || w.Category != types.CategoryWorktree || w.Status != types.WorktreeActive
-		if matchCat && matchTool && riskyOk && worktreeOk && w.ModTime.Before(cutoff) {
+		if eligible, _ := EvaluateEligibility(w, opts, observedAt); eligible {
 			filtered = append(filtered, w)
 		}
 	}
@@ -123,6 +120,21 @@ func ExecuteWithContext(ctx context.Context, worktrees []types.DebrisInfo) (int6
 			errs = append(errs, fmt.Errorf("unsafe path %q rejected", w.Path))
 			fmt.Fprintf(os.Stderr, "error: unsafe path %q rejected\n", w.Path)
 			continue
+		}
+		if w.Tool == types.ToolClaude && w.Category == types.CategoryAgentState {
+			classification, err := adapter.ClassifyClaudeProjectEntry(ctx, w.Path)
+			if err != nil {
+				err = fmt.Errorf("revalidating Claude agent-state %q: %w", w.Path, err)
+				errs = append(errs, err)
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				continue
+			}
+			if classification != types.EntryClassOrphaned {
+				err := fmt.Errorf("claude agent-state %q is no longer orphaned (classified %s)", w.Path, classification)
+				errs = append(errs, err)
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				continue
+			}
 		}
 		if cleanupKind(w) == types.CleanupCommand && len(w.CleanupCommand) > 0 {
 			fmt.Printf("running %d/%d: %s (%s) via %s ...\n",

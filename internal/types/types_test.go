@@ -15,6 +15,7 @@ func TestCategory_IsRisky(t *testing.T) {
 		{"node_modules is safe", CategoryNodeModules, false},
 		{"build-cache is safe", CategoryBuildCache, false},
 		{"other-cache is safe", CategoryOtherCache, false},
+		{"agent-state is safe", CategoryAgentState, false},
 		{"ai-logs is risky", CategoryAILogs, true},
 		{"empty string is safe (backward compat)", "", false},
 		{"unknown category is risky", Category("unknown-foo"), true},
@@ -60,6 +61,7 @@ func TestCategoryConstants(t *testing.T) {
 		{CategoryNodeModules, "node_modules"},
 		{CategoryBuildCache, "build-cache"},
 		{CategoryOtherCache, "other-cache"},
+		{CategoryAgentState, "agent-state"},
 		{CategoryAILogs, "ai-logs"},
 	}
 	for _, tt := range tests {
@@ -82,6 +84,9 @@ func TestDebrisInfo_ZeroValue(t *testing.T) {
 	}
 	if !w.ModTime.IsZero() {
 		t.Errorf("zero ModTime = %v; want zero", w.ModTime)
+	}
+	if w.Classification != "" {
+		t.Errorf("zero Classification = %q; want empty", w.Classification)
 	}
 }
 
@@ -130,13 +135,15 @@ func TestPruneOptions_Defaults(t *testing.T) {
 func TestDebrisInfo_Fields(t *testing.T) {
 	now := time.Now()
 	w := DebrisInfo{
-		Tool:     ToolCodex,
-		Category: CategoryWorktree,
-		ID:       "abc123",
-		Project:  "my-proj",
-		Path:     "/tmp/worktrees/abc123",
-		Size:     4096,
-		ModTime:  now,
+		Tool:           ToolCodex,
+		Category:       CategoryWorktree,
+		ID:             "abc123",
+		Project:        "my-proj",
+		Path:           "/tmp/worktrees/abc123",
+		Size:           4096,
+		ModTime:        now,
+		Classification: EntryClassLive,
+		Reason:         "recorded cwd exists",
 	}
 	if w.Tool != ToolCodex {
 		t.Errorf("Tool = %q; want %q", w.Tool, ToolCodex)
@@ -149,5 +156,27 @@ func TestDebrisInfo_Fields(t *testing.T) {
 	}
 	if w.ModTime != now {
 		t.Errorf("ModTime = %v; want %v", w.ModTime, now)
+	}
+	if w.Classification != EntryClassLive {
+		t.Errorf("Classification = %q; want %q", w.Classification, EntryClassLive)
+	}
+	if w.Reason != "recorded cwd exists" {
+		t.Errorf("Reason = %q; want recorded cwd exists", w.Reason)
+	}
+}
+
+func TestEntryClassConstants(t *testing.T) {
+	tests := []struct {
+		class EntryClass
+		want  string
+	}{
+		{EntryClassLive, "live"},
+		{EntryClassOrphaned, "orphaned"},
+		{EntryClassUndetermined, "undetermined"},
+	}
+	for _, tt := range tests {
+		if string(tt.class) != tt.want {
+			t.Errorf("EntryClass %q = %q; want %q", tt.class, string(tt.class), tt.want)
+		}
 	}
 }

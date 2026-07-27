@@ -170,6 +170,16 @@ func detectProjectName(path string) string {
 	return ""
 }
 
+// projectNameFromRecordedCWD labels a cwd-keyed store without requiring the
+// recorded directory to still exist.
+func projectNameFromRecordedCWD(path string) string {
+	cleanPath := filepath.Clean(path)
+	if cleanPath == string(filepath.Separator) || cleanPath == "." {
+		return ""
+	}
+	return filepath.Base(cleanPath)
+}
+
 func isHiddenDir(name string) bool {
 	return len(name) > 0 && name[0] == '.'
 }

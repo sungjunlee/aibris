@@ -238,6 +238,7 @@ var validCleanCategories = []types.Category{
 	types.CategoryNodeModules,
 	types.CategoryBuildCache,
 	types.CategoryOtherCache,
+	types.CategoryAgentState,
 	types.CategoryAILogs,
 }
 
@@ -324,7 +325,7 @@ func toolStrings(values []types.Tool) []string {
 
 func init() {
 	cleanCmd.Flags().StringVarP(&cleanAge, "age", "a", "7d", "Max age (7d, 2w, 1mo, 1y, 24h)")
-	cleanCmd.Flags().StringVarP(&cleanCategory, "category", "c", "", "Comma-separated categories (worktree,node_modules,build-cache,other-cache,ai-logs)")
+	cleanCmd.Flags().StringVarP(&cleanCategory, "category", "c", "", "Comma-separated categories (worktree,node_modules,build-cache,other-cache,agent-state,ai-logs)")
 	cleanCmd.Flags().StringVarP(&cleanTools, "tool", "t", "", "Comma-separated tools (codex,claude,cursor,windsurf,node_modules,build-cache,pip-cache,ai-logs)")
 	cleanCmd.Flags().BoolVar(&cleanDryRun, "dry-run", false, "Preview without deleting")
 	cleanCmd.Flags().BoolVarP(&cleanInteractive, "interactive", "i", false, "Confirm each deletion")

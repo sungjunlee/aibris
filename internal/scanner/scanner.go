@@ -20,6 +20,7 @@ var defaultProviders = []adapter.DebrisProvider{
 	&adapter.BuildCacheAdapter{},
 	&adapter.PipCacheAdapter{},
 	&adapter.CursorAdapter{},
+	&adapter.ClaudeProjectAdapter{},
 	&adapter.AILogsAdapter{},
 	&adapter.WindsurfAdapter{},
 	adapter.NewWorktreeAdapter(),

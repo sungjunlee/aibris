@@ -2,6 +2,7 @@ package cleaner
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -354,6 +356,68 @@ func TestFilter_WorktreeStatusPolicy(t *testing.T) {
 	}
 }
 
+func TestFilter_AgentStateEligibilityUsesClassificationNotAge(t *testing.T) {
+	recent := time.Now()
+	old := time.Now().Add(-20 * 365 * 24 * time.Hour)
+	items := []types.DebrisInfo{
+		{ID: "orphaned", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassOrphaned, ModTime: recent},
+		{ID: "live", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassLive, ModTime: old},
+		{ID: "undetermined", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassUndetermined, ModTime: old},
+		{ID: "node-old", Tool: types.ToolNodeModules, Category: types.CategoryNodeModules, ModTime: old},
+		{ID: "node-recent", Tool: types.ToolNodeModules, Category: types.CategoryNodeModules, ModTime: recent},
+	}
+	opts := types.PruneOptions{
+		Age:                    10 * 365 * 24 * time.Hour,
+		Risky:                  true,
+		Force:                  true,
+		IncludeActiveWorktrees: true,
+	}
+
+	filtered := Filter(items, opts)
+	ids := make(map[string]bool)
+	for _, item := range filtered {
+		ids[item.ID] = true
+	}
+	if !ids["orphaned"] {
+		t.Error("orphaned agent-state should be eligible despite an age cutoff that excludes it")
+	}
+	if ids["live"] || ids["undetermined"] {
+		t.Errorf("protected agent-state selected under --risky/--force equivalents: %v", ids)
+	}
+	if !ids["node-old"] || ids["node-recent"] {
+		t.Errorf("pre-existing node_modules age behavior changed: %v", ids)
+	}
+}
+
+func TestEvaluateEligibility_AgentStateReasons(t *testing.T) {
+	observedAt := time.Now()
+	opts := types.PruneOptions{Age: 100 * 365 * 24 * time.Hour}
+	tests := []struct {
+		name           string
+		classification types.EntryClass
+		wantEligible   bool
+		wantReason     EligibilityReason
+	}{
+		{"orphaned", types.EntryClassOrphaned, true, EligibilityReasonEligible},
+		{"live", types.EntryClassLive, false, EligibilityReasonAgentStateLive},
+		{"undetermined", types.EntryClassUndetermined, false, EligibilityReasonAgentStateUndetermined},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			item := types.DebrisInfo{
+				Category:       types.CategoryAgentState,
+				Classification: tt.classification,
+				ModTime:        observedAt.Add(-200 * 365 * 24 * time.Hour),
+			}
+			eligible, reason := EvaluateEligibility(item, opts, observedAt)
+			if eligible != tt.wantEligible || reason != tt.wantReason {
+				t.Fatalf("EvaluateEligibility() = %t/%q; want %t/%q",
+					eligible, reason, tt.wantEligible, tt.wantReason)
+			}
+		})
+	}
+}
+
 func TestFilter_NoFilter(t *testing.T) {
 	opts := types.PruneOptions{Age: 168 * time.Hour}
 	worktrees := []types.DebrisInfo{
@@ -440,6 +504,156 @@ func TestExecute_NonExistent(t *testing.T) {
 	}
 	if total != 100 {
 		t.Errorf("total = %d; want 100 (RemoveAll succeeds on non-existent)", total)
+	}
+}
+
+func TestExecute_RevalidatesOrphanedAgentStateBeforeDelete(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	entryPath := filepath.Join(home, ".claude", "projects", "recreated-cwd")
+	recordedCWD := filepath.Join(home, "workspace", "recreated")
+	if err := os.MkdirAll(entryPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	record, err := json.Marshal(struct {
+		CWD string `json:"cwd"`
+	}{CWD: recordedCWD})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(entryPath, "session.jsonl"), append(record, '\n'), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	classification, err := adapter.ClassifyClaudeProjectEntry(context.Background(), entryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if classification != types.EntryClassOrphaned {
+		t.Fatalf("planned Classification = %q; want orphaned", classification)
+	}
+	planned := types.DebrisInfo{
+		ID:             "recreated-cwd",
+		Tool:           types.ToolClaude,
+		Category:       types.CategoryAgentState,
+		Path:           entryPath,
+		Size:           int64(len(record) + 1),
+		Classification: classification,
+	}
+	if err := os.MkdirAll(recordedCWD, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	total, err := Execute([]types.DebrisInfo{planned})
+	if err == nil || !strings.Contains(err.Error(), "no longer orphaned") {
+		t.Fatalf("Execute() error = %v; want fail-closed revalidation error", err)
+	}
+	if total != 0 {
+		t.Fatalf("total = %d; want 0", total)
+	}
+	if _, err := os.Stat(entryPath); err != nil {
+		t.Fatalf("agent-state entry was removed after cwd recreation: %v", err)
+	}
+}
+
+func TestExecute_RevalidationRejectsBrokenSymlinkAncestor(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	entryPath := filepath.Join(home, ".claude", "projects", "broken-share")
+	recordedCWD := filepath.Join(home, "share", "project")
+	if err := os.MkdirAll(entryPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	record, err := json.Marshal(struct {
+		CWD string `json:"cwd"`
+	}{CWD: recordedCWD})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(entryPath, "session.jsonl"), append(record, '\n'), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	classification, err := adapter.ClassifyClaudeProjectEntry(context.Background(), entryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if classification != types.EntryClassOrphaned {
+		t.Fatalf("planned Classification = %q; want orphaned", classification)
+	}
+	planned := types.DebrisInfo{
+		ID:             "broken-share",
+		Tool:           types.ToolClaude,
+		Category:       types.CategoryAgentState,
+		Path:           entryPath,
+		Size:           int64(len(record) + 1),
+		Classification: classification,
+	}
+	if err := os.Symlink(
+		filepath.Join(home, "nonexistent-share-target"),
+		filepath.Join(home, "share"),
+	); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	total, err := Execute([]types.DebrisInfo{planned})
+	if err == nil || !strings.Contains(err.Error(), "classified undetermined") {
+		t.Fatalf("Execute() error = %v; want undetermined revalidation error", err)
+	}
+	if total != 0 {
+		t.Fatalf("total = %d; want 0", total)
+	}
+	if _, err := os.Stat(entryPath); err != nil {
+		t.Fatalf("agent-state entry was removed behind broken symlink barrier: %v", err)
+	}
+}
+
+func TestExecute_RevalidationRejectsBrokenSymlinkRecordedCWD(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	entryPath := filepath.Join(home, ".claude", "projects", "broken-project-link")
+	recordedCWD := filepath.Join(home, "project-link")
+	if err := os.MkdirAll(entryPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	record, err := json.Marshal(struct {
+		CWD string `json:"cwd"`
+	}{CWD: recordedCWD})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(entryPath, "session.jsonl"), append(record, '\n'), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	classification, err := adapter.ClassifyClaudeProjectEntry(context.Background(), entryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if classification != types.EntryClassOrphaned {
+		t.Fatalf("planned Classification = %q; want orphaned", classification)
+	}
+	planned := types.DebrisInfo{
+		ID:             "broken-project-link",
+		Tool:           types.ToolClaude,
+		Category:       types.CategoryAgentState,
+		Path:           entryPath,
+		Size:           int64(len(record) + 1),
+		Classification: classification,
+	}
+	if err := os.Symlink(filepath.Join(home, "nonexistent-project-target"), recordedCWD); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	total, err := Execute([]types.DebrisInfo{planned})
+	if err == nil || !strings.Contains(err.Error(), "classified undetermined") {
+		t.Fatalf("Execute() error = %v; want undetermined revalidation error", err)
+	}
+	if total != 0 {
+		t.Fatalf("total = %d; want 0", total)
+	}
+	if _, err := os.Stat(entryPath); err != nil {
+		t.Fatalf("agent-state entry was removed behind broken cwd symlink: %v", err)
 	}
 }
 
