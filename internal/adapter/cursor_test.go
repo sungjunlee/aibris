@@ -201,6 +201,36 @@ func TestCursorAdapter_WorkspacePathWhitespace(t *testing.T) {
 	})
 }
 
+func TestCursorAdapter_AnyLiveWorkspacePathWins(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	entryPath := filepath.Join(home, ".cursor", "projects", "moved-workspace")
+	absentCWD := filepath.Join(home, "workspace", "removed-project")
+	liveCWD := filepath.Join(home, "workspace", "live-project")
+	if err := os.MkdirAll(liveCWD, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeCursorWorkerLog(t, entryPath,
+		"[info] workspacePath="+absentCWD+"\n"+
+			"[info] workspacePath="+absentCWD+"\n"+
+			"[info] workspacePath="+liveCWD+"\n")
+
+	classification, reason, project, err := classifyCursorProjectEntry(context.Background(), entryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if classification != types.EntryClassLive {
+		t.Fatalf("Classification = %q; want live when a later recorded path exists; reason: %s",
+			classification, reason)
+	}
+	if !strings.Contains(reason, "2 distinct recorded cwd(s) checked") {
+		t.Fatalf("Reason = %q; want two distinct recorded paths", reason)
+	}
+	if project != filepath.Base(liveCWD) {
+		t.Fatalf("Project = %q; want live cwd basename %q", project, filepath.Base(liveCWD))
+	}
+}
+
 func TestCursorAdapter_NoWorkspacePathDoesNotFallBackToToolchainPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

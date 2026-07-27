@@ -28,7 +28,8 @@ confirmation, and path safety checks.
 | Dependencies | project `node_modules` directories | Yes |
 | Build caches | Go, npm, Gradle, Cargo, Xcode | Yes |
 | Python caches | pip and uv cache directories | Yes |
-| AI logs | Codex, Claude, Cursor, Windsurf logs | Only with `--risky` |
+| Agent state | Claude and Cursor project stores | Orphaned only; no age gate |
+| AI logs | Codex, Claude, Windsurf logs | Only with `--risky` |
 
 ### Install
 

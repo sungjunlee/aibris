@@ -24,7 +24,7 @@ rules.
 | `codex` | `worktree` | Path-derived source `.codex`. |
 | `claude` | `worktree` | Path-derived source `.claude`. |
 | `claude` | `agent-state` | `~/.claude/projects` entries classified from session `cwd` metadata. |
-| `cursor` | `agent-state` | `~/.cursor/projects` entries classified from the first usable `workspacePath=` in `worker.log`. |
+| `cursor` | `agent-state` | `~/.cursor/projects` entries classified from all distinct usable `workspacePath=` values in `worker.log`; any live workspace wins. |
 | `unknown` | `worktree` | Generic worktree convention discovery for future or local tools; inspect `source` for the path-derived owner. |
 | `node_modules` | `node_modules` | Dependency directories under scan roots, defaulting to `$HOME`. |
 | `build-cache` | `build-cache` | Language and platform build caches. |

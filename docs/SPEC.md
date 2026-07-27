@@ -220,7 +220,8 @@ Git-aware active execution contract:
 | `node_modules` | yes | `node_modules` | `$HOME/**/node_modules`, with noisy system/media/cache directories pruned |
 | `build-cache` | yes | `build-cache` | `~/.cache/go-build`, `~/.gradle/caches`, `~/.npm/_cacache`, `~/.cargo/registry`, `~/Library/Caches/Xcode` |
 | `other-cache` | yes | `pip-cache` | `~/.cache/pip`, `~/.cache/uv` |
-| `ai-logs` | no, requires `--risky` | `ai-logs`, `cursor`, `windsurf` | known Codex, Claude, Cursor, and Windsurf log/cache locations |
+| `agent-state` | orphaned only, no age gate | `claude`, `cursor` | recorded-cwd project stores; `live` and `undetermined` entries are protected |
+| `ai-logs` | no, requires `--risky` | `ai-logs`, `windsurf` | known Codex, Claude, and Windsurf log/cache locations |
 
 ## Worktree Health
 

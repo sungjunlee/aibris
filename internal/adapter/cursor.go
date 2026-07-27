@@ -108,7 +108,7 @@ func recordedCWDFromCursorProject(ctx context.Context, entryPath string) (record
 		return evidence, err
 	}
 	workerLog := filepath.Join(entryPath, "worker.log")
-	cwd, err := firstCursorWorkspacePath(ctx, workerLog, filepath.Join(home, ".cursor"))
+	cwds, err := cursorWorkspacePaths(ctx, workerLog, filepath.Join(home, ".cursor"))
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return recordedCWDEvidence{}, err
@@ -116,28 +116,32 @@ func recordedCWDFromCursorProject(ctx context.Context, entryPath string) (record
 		evidence.unverifiableFiles = append(evidence.unverifiableFiles, filepath.Base(workerLog))
 		return evidence, nil
 	}
-	if cwd != "" {
+	for _, cwd := range cwds {
 		evidence.cwds = append(evidence.cwds, cwd)
 		if strings.IndexFunc(cwd, unicode.IsSpace) >= 0 {
 			evidence.unverifiableRecords++
-			evidence.firstUnverifiableRecord = filepath.Base(workerLog) + ": ambiguous workspacePath=" + cwd
+			if evidence.firstUnverifiableRecord == "" {
+				evidence.firstUnverifiableRecord = filepath.Base(workerLog) + ": ambiguous workspacePath=" + cwd
+			}
 		}
 	}
 	return evidence, nil
 }
 
-func firstCursorWorkspacePath(ctx context.Context, workerLog, cursorRoot string) (string, error) {
+func cursorWorkspacePaths(ctx context.Context, workerLog, cursorRoot string) ([]string, error) {
 	file, err := os.Open(workerLog)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer func() { _ = file.Close() }()
 
+	var paths []string
+	seen := make(map[string]bool)
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 4096), maxCursorWorkerLogLineBytes)
 	for scanner.Scan() {
 		if err := ctx.Err(); err != nil {
-			return "", err
+			return nil, err
 		}
 		line := scanner.Text()
 		index := strings.Index(line, "workspacePath=")
@@ -146,13 +150,17 @@ func firstCursorWorkspacePath(ctx context.Context, workerLog, cursorRoot string)
 		}
 		value := strings.TrimSpace(line[index+len("workspacePath="):])
 		if filepath.IsAbs(value) && !cursorWorkspaceUnderStore(value, cursorRoot) {
-			return filepath.Clean(value), nil
+			value = filepath.Clean(value)
+			if !seen[value] {
+				seen[value] = true
+				paths = append(paths, value)
+			}
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return "", err
+		return nil, err
 	}
-	return "", nil
+	return paths, nil
 }
 
 func cursorWorkspaceUnderStore(path, cursorRoot string) bool {

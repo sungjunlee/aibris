@@ -20,7 +20,8 @@ Scans for:
   - node_modules (under scan roots, defaulting to $HOME)
   - build caches (Go, Xcode, Gradle, npm, Cargo)
   - pip/uv caches
-  - AI logs (Codex, Claude, Cursor — requires --risky)
+  - agent state (Claude, Cursor — orphaned only)
+  - AI logs (Codex, Claude, Windsurf — requires --risky)
 
 Run "aibris scan" first to see what's taking space,
 then "aibris clean --dry-run" to preview deletions.`,
