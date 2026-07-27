@@ -323,7 +323,60 @@ func TestClaudeProjectAdapter_UnmountedVolumeAncestorBarrierIsUndetermined(t *te
 	}
 }
 
-func TestClaudeProjectAdapter_MissingParentExistingGrandparentClassifiesOrphaned(t *testing.T) {
+func TestClaudeProjectAdapter_BrokenSymlinkAncestorBarrierIsUndetermined(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	share := filepath.Join(home, "share")
+	if err := os.Symlink(filepath.Join(home, "nonexistent-share-target"), share); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	recordedCWD := filepath.Join(share, "project")
+	entryPath := filepath.Join(home, ".claude", "projects", "broken-share")
+	writeClaudeProjectSession(t, filepath.Join(entryPath, "session.jsonl"),
+		claudeSessionLine(t, recordedCWD)+"\n")
+
+	results, err := (&ClaudeProjectAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results = %d; want 1", len(results))
+	}
+	if results[0].Classification != types.EntryClassUndetermined {
+		t.Fatalf("Classification = %q; want undetermined; reason: %s",
+			results[0].Classification, results[0].Reason)
+	}
+	if !strings.Contains(results[0].Reason, "surrounding tree is unavailable") {
+		t.Fatalf("Reason = %q; want unavailable surrounding-tree evidence", results[0].Reason)
+	}
+}
+
+func TestClaudeProjectAdapter_ReachableSymlinkAncestorStillClassifiesOrphaned(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	target := filepath.Join(home, "share-target")
+	if err := os.MkdirAll(target, 0755); err != nil {
+		t.Fatal(err)
+	}
+	share := filepath.Join(home, "share")
+	if err := os.Symlink(target, share); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	recordedCWD := filepath.Join(share, "missing-project")
+	entryPath := filepath.Join(home, ".claude", "projects", "reachable-share")
+	writeClaudeProjectSession(t, filepath.Join(entryPath, "session.jsonl"),
+		claudeSessionLine(t, recordedCWD)+"\n")
+
+	classification, reason, _, err := classifyClaudeProjectEntry(context.Background(), entryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if classification != types.EntryClassOrphaned {
+		t.Fatalf("Classification = %q; want orphaned; reason: %s", classification, reason)
+	}
+}
+
+func TestClaudeProjectAdapter_MissingParentWithExistingAncestorClassifiesOrphaned(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	grandparent := filepath.Join(home, "workspace")
@@ -465,7 +518,7 @@ func TestClaudeProjectAdapter_ContextCancellation(t *testing.T) {
 
 func claudeSessionLine(t *testing.T, cwd string) string {
 	t.Helper()
-	data, err := json.Marshal(struct {
+	data, _ := json.Marshal(struct {
 		Type    string `json:"type"`
 		Message string `json:"message"`
 		CWD     string `json:"cwd"`
@@ -474,18 +527,12 @@ func claudeSessionLine(t *testing.T, cwd string) string {
 		Message: "private transcript content must not be parsed",
 		CWD:     cwd,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	return string(data)
 }
 
 func mustMarshalJSON(t *testing.T, value string) string {
 	t.Helper()
-	data, err := json.Marshal(value)
-	if err != nil {
-		t.Fatal(err)
-	}
+	data, _ := json.Marshal(value)
 	return string(data)
 }
 

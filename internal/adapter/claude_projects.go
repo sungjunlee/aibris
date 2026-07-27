@@ -206,9 +206,15 @@ func classifyClaudeProjectEntry(ctx context.Context, entryPath string) (types.En
 // expected to be locally available: the user's home or a temp root.
 func recordedCWDAbsenceProven(cwd string) (bool, string, error) {
 	for ancestor := filepath.Dir(cwd); ; ancestor = filepath.Dir(ancestor) {
-		info, err := os.Stat(ancestor)
+		info, err := os.Lstat(ancestor)
 		switch {
 		case err == nil:
+			if info.Mode()&os.ModeSymlink != 0 {
+				info, err = os.Stat(ancestor)
+				if err != nil {
+					return false, ancestor, nil
+				}
+			}
 			if !info.IsDir() {
 				return false, ancestor, nil
 			}

@@ -130,7 +130,7 @@ func ExecuteWithContext(ctx context.Context, worktrees []types.DebrisInfo) (int6
 				continue
 			}
 			if classification != types.EntryClassOrphaned {
-				err := fmt.Errorf("Claude agent-state %q is no longer orphaned (classified %s)", w.Path, classification)
+				err := fmt.Errorf("claude agent-state %q is no longer orphaned (classified %s)", w.Path, classification)
 				errs = append(errs, err)
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				continue
