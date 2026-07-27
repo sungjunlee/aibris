@@ -129,6 +129,62 @@ func TestAgentStateStoreClassifiersRecordedCWDAncestorAvailability(t *testing.T)
 		}
 	})
 
+	t.Run("symlinked mount root is undetermined", func(t *testing.T) {
+		target := filepath.Join(home, "mounted-workspace-target")
+		if err := os.MkdirAll(target, 0755); err != nil {
+			t.Fatal(err)
+		}
+		ancestor := filepath.Join(home, "symlinked-mounted-workspace")
+		if err := os.Symlink(target, ancestor); err != nil {
+			t.Fatal(err)
+		}
+		parentInfo, err := os.Lstat(filepath.Dir(ancestor))
+		if err != nil {
+			t.Fatal(err)
+		}
+		parentDevice, err := recordedCWDDeviceID(filepath.Dir(ancestor), parentInfo)
+		if err != nil {
+			t.Fatal(err)
+		}
+		mountDevice := parentDevice ^ 1
+
+		originalDeviceID := recordedCWDDeviceID
+		recordedCWDDeviceID = func(path string, info os.FileInfo) (uint64, error) {
+			if path == ancestor {
+				if info.Mode()&os.ModeSymlink != 0 {
+					return parentDevice, nil
+				}
+				return mountDevice, nil
+			}
+			return originalDeviceID(path, info)
+		}
+		t.Cleanup(func() {
+			recordedCWDDeviceID = originalDeviceID
+		})
+
+		recordedCWD := filepath.Join(ancestor, "missing-project")
+		for _, store := range stores {
+			t.Run(store.name, func(t *testing.T) {
+				entryPath := filepath.Join(home, "."+store.name, "projects", "symlink-mount-root-entry")
+				store.write(t, entryPath, recordedCWD)
+
+				classification, reason, _, err := store.classify(context.Background(), entryPath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if classification != types.EntryClassUndetermined {
+					t.Fatalf("Classification = %q; want undetermined; reason: %s",
+						classification, reason)
+				}
+				if !strings.Contains(reason, "surrounding tree is unavailable") ||
+					!strings.Contains(reason, ancestor) {
+					t.Fatalf("Reason = %q; want unavailable surrounding tree naming ancestor %s",
+						reason, ancestor)
+				}
+			})
+		}
+	})
+
 	t.Run("ordinary missing directory is orphaned", func(t *testing.T) {
 		ancestor := filepath.Join(home, "ordinary-workspace")
 		if err := os.MkdirAll(ancestor, 0755); err != nil {

@@ -143,7 +143,6 @@ func recordedCWDAbsenceProven(cwd string) (bool, string, error) {
 		info, err := os.Lstat(ancestor)
 		switch {
 		case err == nil:
-			lstatInfo := info
 			if info.Mode()&os.ModeSymlink != 0 {
 				info, err = os.Stat(ancestor)
 				if err != nil {
@@ -160,7 +159,7 @@ func recordedCWDAbsenceProven(cwd string) (bool, string, error) {
 				if err != nil {
 					return false, ancestor, err
 				}
-				ancestorDevice, err := recordedCWDDeviceID(ancestor, lstatInfo)
+				ancestorDevice, err := recordedCWDDeviceID(ancestor, info)
 				if err != nil {
 					return false, ancestor, err
 				}
