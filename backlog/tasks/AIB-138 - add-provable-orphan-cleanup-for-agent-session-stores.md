@@ -1,7 +1,7 @@
 ---
 id: AIB-138
 title: Add provable-orphan cleanup for agent session stores
-status: To Do
+status: In Progress
 labels:
   - enhancement
   - cli
@@ -13,6 +13,14 @@ milestone: 0.10.x Agent State Store Coverage
 created_date: '2026-07-26'
 ---
 ## Description
+
+**L1 merged 2026-07-27 as PR #144 (`d9054b8`), 15 review rounds.** Delivered the
+`agent-state` category, the additive `Classification` field, the
+`~/.claude/projects` recorded-cwd reader, and the classification-driven
+eligibility rule. Measured: 81 orphaned entries / 161,634,387 B, matching the
+independent pre-implementation audit exactly. L2 (cursor store) and L3 (plan-model
+absorption, audit surfaces, docs) remain.
+
 ## Goal
 
 Classify agent session-store entries whose recorded working directory no longer
