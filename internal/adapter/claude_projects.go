@@ -206,9 +206,6 @@ func recordedCWDsFromClaudeProject(ctx context.Context, entryPath string) (recor
 					entry.Name(), readResult.firstUnverifiableLine)
 			}
 		}
-		if len(readResult.cwds) == 0 && readResult.unverifiableRecords == 0 && err == nil {
-			evidence.unverifiableFiles = append(evidence.unverifiableFiles, entry.Name())
-		}
 		for _, cwd := range readResult.cwds {
 			if !seen[cwd] {
 				seen[cwd] = true
@@ -226,9 +223,8 @@ type recordedCWDReadResult struct {
 }
 
 // readRecordedCWDs returns usable cwd metadata plus a count of malformed or
-// truncated records. Valid JSONL events without a cwd are allowed when another
-// record in the same file supplies one; an entirely cwd-less file is handled
-// separately as unverifiable file evidence.
+// truncated records. Valid JSONL events without a cwd are not working-directory
+// evidence, including when every record in the file is cwd-less.
 func readRecordedCWDs(ctx context.Context, path string) (recordedCWDReadResult, error) {
 	file, err := os.Open(path)
 	if err != nil {

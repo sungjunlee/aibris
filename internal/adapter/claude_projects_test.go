@@ -176,6 +176,50 @@ func TestClaudeProjectAdapter_AbsentCWDAndUnreadableSessionAreUndetermined(t *te
 	}
 }
 
+func TestRecordedCWDsFromClaudeProject_CwdlessFileIsNotUnverifiable(t *testing.T) {
+	entryPath := filepath.Join(t.TempDir(), "cwdless-file")
+	writeClaudeProjectSession(t, filepath.Join(entryPath, "session.jsonl"),
+		"{\"type\":\"assistant\",\"message\":\"ordinary event\"}\n"+
+			"{\"type\":\"summary\",\"summary\":\"ordinary summary\"}\n")
+
+	evidence, err := recordedCWDsFromClaudeProject(context.Background(), entryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(evidence.cwds) != 0 {
+		t.Fatalf("cwds = %v; want none", evidence.cwds)
+	}
+	if evidence.unverifiableRecords != 0 {
+		t.Fatalf("unverifiableRecords = %d; want 0", evidence.unverifiableRecords)
+	}
+	if len(evidence.unverifiableFiles) != 0 {
+		t.Fatalf("unverifiableFiles = %v; want none for a valid cwd-less file", evidence.unverifiableFiles)
+	}
+}
+
+func TestClaudeProjectAdapter_AbsentCWDAndCwdlessFileAreOrphaned(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	entryPath := filepath.Join(home, ".claude", "projects", "cwdless-after-absence")
+	absentCWD := filepath.Join(home, "workspace", "removed")
+	writeClaudeProjectSession(t, filepath.Join(entryPath, "s1.jsonl"),
+		claudeSessionLine(t, absentCWD)+"\n")
+	writeClaudeProjectSession(t, filepath.Join(entryPath, "s2.jsonl"),
+		"{\"type\":\"assistant\",\"message\":\"ordinary event\"}\n"+
+			"{\"type\":\"summary\",\"summary\":\"ordinary summary\"}\n")
+
+	classification, reason, _, err := classifyClaudeProjectEntry(context.Background(), entryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if classification != types.EntryClassOrphaned {
+		t.Fatalf("Classification = %q; want orphaned; reason: %s", classification, reason)
+	}
+	if !strings.Contains(reason, absentCWD) {
+		t.Fatalf("Reason = %q; want absent cwd %q", reason, absentCWD)
+	}
+}
+
 func TestClaudeProjectAdapter_AggregatesEveryRecordedCWDInOneSession(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -277,6 +321,25 @@ func TestClaudeProjectAdapter_ProjectLabelsComeFromRecordedCWDBasenames(t *testi
 		if got := byID[id].Classification; got != types.EntryClassOrphaned {
 			t.Fatalf("%s Classification = %q; want orphaned", id, got)
 		}
+	}
+}
+
+func TestClaudeProjectAdapter_AllFilesCwdlessAreUndetermined(t *testing.T) {
+	entryPath := filepath.Join(t.TempDir(), "all-cwdless")
+	writeClaudeProjectSession(t, filepath.Join(entryPath, "assistant.jsonl"),
+		"{\"type\":\"assistant\",\"message\":\"ordinary event\"}\n")
+	writeClaudeProjectSession(t, filepath.Join(entryPath, "summary.jsonl"),
+		"{\"type\":\"summary\",\"summary\":\"ordinary summary\"}\n")
+
+	classification, reason, _, err := classifyClaudeProjectEntry(context.Background(), entryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if classification != types.EntryClassUndetermined {
+		t.Fatalf("Classification = %q; want undetermined; reason: %s", classification, reason)
+	}
+	if !strings.Contains(reason, "no recorded cwd") {
+		t.Fatalf("Reason = %q; want no-recorded-cwd evidence", reason)
 	}
 }
 
