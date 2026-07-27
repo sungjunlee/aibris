@@ -469,44 +469,66 @@ func itemNoun(count int) string {
 }
 
 type cleanupDiagnostics struct {
-	EligibleCount int
-	EligibleSize  int64
-	ActiveCount   int
-	ActiveSize    int64
-	RiskyCount    int
-	RiskySize     int64
-	AgeCount      int
-	AgeSize       int64
-	FilterCount   int
-	FilterSize    int64
+	EligibleCount               int
+	EligibleSize                int64
+	ActiveCount                 int
+	ActiveSize                  int64
+	RiskyCount                  int
+	RiskySize                   int64
+	AgeCount                    int
+	AgeSize                     int64
+	FilterCount                 int
+	FilterSize                  int64
+	AgentStateLiveCount         int
+	AgentStateLiveSize          int64
+	AgentStateUndeterminedCount int
+	AgentStateUndeterminedSize  int64
+	OtherBlocked                map[cleaner.EligibilityReason]cleanupDiagnosticBucket
+}
+
+type cleanupDiagnosticBucket struct {
+	Count int
+	Size  int64
 }
 
 func summarizeCleanup(items []types.DebrisInfo, opts types.PruneOptions) cleanupDiagnostics {
-	cutoff := time.Now().Add(-opts.Age)
+	observedAt := time.Now()
 	var summary cleanupDiagnostics
 	for _, item := range items {
-		if !cmdContainsCategory(opts.Categories, item.Category) || !cmdContainsTool(opts.Tools, item.Tool) {
+		eligible, reason := cleaner.EvaluateEligibility(item, opts, observedAt)
+		if eligible {
+			summary.EligibleCount++
+			summary.EligibleSize += item.Size
+			continue
+		}
+		switch reason {
+		case cleaner.EligibilityReasonFiltered:
 			summary.FilterCount++
 			summary.FilterSize += item.Size
-			continue
-		}
-		if !opts.Risky && item.Category.IsRisky() {
+		case cleaner.EligibilityReasonRisky:
 			summary.RiskyCount++
 			summary.RiskySize += item.Size
-			continue
-		}
-		if !opts.IncludeActiveWorktrees && item.Category == types.CategoryWorktree && item.Status == types.WorktreeActive {
+		case cleaner.EligibilityReasonActiveWorktree:
 			summary.ActiveCount++
 			summary.ActiveSize += item.Size
-			continue
-		}
-		if !item.ModTime.Before(cutoff) {
+		case cleaner.EligibilityReasonAge:
 			summary.AgeCount++
 			summary.AgeSize += item.Size
-			continue
+		case cleaner.EligibilityReasonAgentStateLive:
+			summary.AgentStateLiveCount++
+			summary.AgentStateLiveSize += item.Size
+		case cleaner.EligibilityReasonAgentStateUndetermined:
+			summary.AgentStateUndeterminedCount++
+			summary.AgentStateUndeterminedSize += item.Size
+		default:
+			if summary.OtherBlocked == nil {
+				summary.OtherBlocked = make(map[cleaner.EligibilityReason]cleanupDiagnosticBucket)
+			}
+			bucket := summary.OtherBlocked[reason]
+			bucket.Count++
+			bucket.Size += item.Size
+			summary.OtherBlocked[reason] = bucket
 		}
-		summary.EligibleCount++
-		summary.EligibleSize += item.Size
 	}
 	return summary
 }
@@ -526,6 +548,25 @@ func printCleanupDiagnostics(summary cleanupDiagnostics, opts types.PruneOptions
 	if summary.FilterCount > 0 && (len(opts.Categories) > 0 || len(opts.Tools) > 0) {
 		fmt.Printf("  filtered    %s outside category/tool filters\n", cleaner.FormatSize(summary.FilterSize))
 	}
+	if summary.AgentStateLiveCount > 0 {
+		fmt.Printf("  agent-state %s %s\n",
+			cleaner.FormatSize(summary.AgentStateLiveSize), cleaner.EligibilityReasonAgentStateLive)
+	}
+	if summary.AgentStateUndeterminedCount > 0 {
+		fmt.Printf("  agent-state %s %s\n",
+			cleaner.FormatSize(summary.AgentStateUndeterminedSize), cleaner.EligibilityReasonAgentStateUndetermined)
+	}
+	if len(summary.OtherBlocked) > 0 {
+		reasons := make([]string, 0, len(summary.OtherBlocked))
+		for reason := range summary.OtherBlocked {
+			reasons = append(reasons, string(reason))
+		}
+		sort.Strings(reasons)
+		for _, reason := range reasons {
+			bucket := summary.OtherBlocked[cleaner.EligibilityReason(reason)]
+			fmt.Printf("  blocked     %s %s\n", cleaner.FormatSize(bucket.Size), reason)
+		}
+	}
 }
 
 func cleanAgeDisplay(age time.Duration) string {
@@ -536,30 +577,6 @@ func cleanAgeDisplay(age time.Duration) string {
 		return fmt.Sprintf("%dh", int(age/time.Hour))
 	}
 	return age.String()
-}
-
-func cmdContainsCategory(categories []types.Category, cat types.Category) bool {
-	if len(categories) == 0 {
-		return true
-	}
-	for _, c := range categories {
-		if c == cat {
-			return true
-		}
-	}
-	return false
-}
-
-func cmdContainsTool(tools []types.Tool, tool types.Tool) bool {
-	if len(tools) == 0 {
-		return true
-	}
-	for _, t := range tools {
-		if t == tool {
-			return true
-		}
-	}
-	return false
 }
 
 func itemName(item types.DebrisInfo) string {

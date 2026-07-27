@@ -19,9 +19,9 @@ const (
 	EligibilityReasonEligible               EligibilityReason = "eligible for cleanup"
 )
 
-// EvaluateEligibility is the single cleanup eligibility policy used by both
-// filtering and audit reporting. observedAt keeps the age cutoff consistent
-// across every item in one evaluation pass.
+// EvaluateEligibility is the single cleanup eligibility policy used by
+// filtering, audit reporting, and scan diagnostics. observedAt keeps the age
+// cutoff consistent across every item in one evaluation pass.
 func EvaluateEligibility(item types.DebrisInfo, opts types.PruneOptions, observedAt time.Time) (bool, EligibilityReason) {
 	matchCategory := len(opts.Categories) == 0 || containsCategory(opts.Categories, item.Category)
 	matchTool := len(opts.Tools) == 0 || containsTool(opts.Tools, item.Tool)
