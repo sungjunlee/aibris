@@ -205,7 +205,7 @@ func classifyClaudeProjectEntry(ctx context.Context, entryPath string) (types.En
 // closest existing directory is in a container whose surrounding tree is
 // expected to be locally available: the user's home or a temp root.
 func recordedCWDAbsenceProven(cwd string) (bool, string, error) {
-	for ancestor := filepath.Dir(cwd); ; ancestor = filepath.Dir(ancestor) {
+	for ancestor := cwd; ; ancestor = filepath.Dir(ancestor) {
 		info, err := os.Lstat(ancestor)
 		switch {
 		case err == nil:

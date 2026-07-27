@@ -351,6 +351,33 @@ func TestClaudeProjectAdapter_BrokenSymlinkAncestorBarrierIsUndetermined(t *test
 	}
 }
 
+func TestClaudeProjectAdapter_BrokenSymlinkRecordedCWDIsUndetermined(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	recordedCWD := filepath.Join(home, "project-link")
+	if err := os.Symlink(filepath.Join(home, "nonexistent-project-target"), recordedCWD); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	entryPath := filepath.Join(home, ".claude", "projects", "broken-project-link")
+	writeClaudeProjectSession(t, filepath.Join(entryPath, "session.jsonl"),
+		claudeSessionLine(t, recordedCWD)+"\n")
+
+	results, err := (&ClaudeProjectAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results = %d; want 1", len(results))
+	}
+	if results[0].Classification != types.EntryClassUndetermined {
+		t.Fatalf("Classification = %q; want undetermined; reason: %s",
+			results[0].Classification, results[0].Reason)
+	}
+	if !strings.Contains(results[0].Reason, "surrounding tree is unavailable") {
+		t.Fatalf("Reason = %q; want unavailable surrounding-tree evidence", results[0].Reason)
+	}
+}
+
 func TestClaudeProjectAdapter_ReachableSymlinkAncestorStillClassifiesOrphaned(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
