@@ -201,6 +201,48 @@ func TestCursorAdapter_WorkspacePathWhitespace(t *testing.T) {
 	})
 }
 
+func TestCursorAdapter_UnterminatedWorkspacePath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	base := filepath.Join(home, ".cursor", "projects")
+	truncatedCWD := filepath.Join(home, "workspace", "partially-written")
+
+	t.Run("only unterminated record is undetermined", func(t *testing.T) {
+		entryPath := filepath.Join(base, "unterminated-only")
+		writeCursorWorkerLog(t, entryPath, "[info] workspacePath="+truncatedCWD)
+
+		classification, reason, _, err := classifyCursorProjectEntry(context.Background(), entryPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if classification != types.EntryClassUndetermined {
+			t.Fatalf("Classification = %q; want undetermined, not orphaned; reason: %s", classification, reason)
+		}
+		if !strings.Contains(reason, "unterminated workspacePath record") {
+			t.Fatalf("Reason = %q; want unterminated record evidence", reason)
+		}
+	})
+
+	t.Run("earlier complete live record wins", func(t *testing.T) {
+		liveCWD := filepath.Join(home, "workspace", "live-project")
+		if err := os.MkdirAll(liveCWD, 0755); err != nil {
+			t.Fatal(err)
+		}
+		entryPath := filepath.Join(base, "live-before-unterminated")
+		writeCursorWorkerLog(t, entryPath,
+			"[info] workspacePath="+liveCWD+"\n"+
+				"[info] workspacePath="+truncatedCWD)
+
+		classification, reason, _, err := classifyCursorProjectEntry(context.Background(), entryPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if classification != types.EntryClassLive {
+			t.Fatalf("Classification = %q; want live; reason: %s", classification, reason)
+		}
+	})
+}
+
 func TestCursorAdapter_AnyLiveWorkspacePathWins(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

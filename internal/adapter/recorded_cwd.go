@@ -137,7 +137,8 @@ func recordedCWDAbsenceProven(cwd string) (bool, string, error) {
 			if info.Mode()&os.ModeSymlink != 0 {
 				info, err = os.Stat(ancestor)
 				if err != nil {
-					return false, ancestor, nil
+					// Deliberately fail closed: an unresolvable symlink makes absence unverifiable.
+					return false, ancestor, nil //nolint:nilerr
 				}
 			}
 			if !info.IsDir() {

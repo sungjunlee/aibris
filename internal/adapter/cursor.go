@@ -108,13 +108,17 @@ func recordedCWDFromCursorProject(ctx context.Context, entryPath string) (record
 		return evidence, err
 	}
 	workerLog := filepath.Join(entryPath, "worker.log")
-	cwds, err := cursorWorkspacePaths(ctx, workerLog, filepath.Join(home, ".cursor"))
+	cwds, unterminatedWorkspacePath, err := cursorWorkspacePaths(ctx, workerLog, filepath.Join(home, ".cursor"))
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return recordedCWDEvidence{}, err
 		}
 		evidence.unverifiableFiles = append(evidence.unverifiableFiles, filepath.Base(workerLog))
 		return evidence, nil
+	}
+	if unterminatedWorkspacePath {
+		evidence.unverifiableRecords++
+		evidence.firstUnverifiableRecord = filepath.Base(workerLog) + ": unterminated workspacePath record"
 	}
 	for _, cwd := range cwds {
 		evidence.cwds = append(evidence.cwds, cwd)
@@ -128,24 +132,37 @@ func recordedCWDFromCursorProject(ctx context.Context, entryPath string) (record
 	return evidence, nil
 }
 
-func cursorWorkspacePaths(ctx context.Context, workerLog, cursorRoot string) ([]string, error) {
+func cursorWorkspacePaths(ctx context.Context, workerLog, cursorRoot string) ([]string, bool, error) {
 	file, err := os.Open(workerLog)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer func() { _ = file.Close() }()
 
 	var paths []string
+	var unterminatedWorkspacePath bool
 	seen := make(map[string]bool)
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 4096), maxCursorWorkerLogLineBytes)
+	var tokenUnterminated bool
+	scanner.Split(func(data []byte, atEOF bool) (int, []byte, error) {
+		advance, token, splitErr := bufio.ScanLines(data, atEOF)
+		if token != nil {
+			tokenUnterminated = atEOF && len(data) > 0 && advance == len(data)
+		}
+		return advance, token, splitErr
+	})
 	for scanner.Scan() {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		line := scanner.Text()
 		index := strings.Index(line, "workspacePath=")
 		if index < 0 {
+			continue
+		}
+		if tokenUnterminated {
+			unterminatedWorkspacePath = true
 			continue
 		}
 		value := strings.TrimSpace(line[index+len("workspacePath="):])
@@ -158,9 +175,9 @@ func cursorWorkspacePaths(ctx context.Context, workerLog, cursorRoot string) ([]
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return paths, nil
+	return paths, unterminatedWorkspacePath, nil
 }
 
 func cursorWorkspaceUnderStore(path, cursorRoot string) bool {
