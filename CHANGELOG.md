@@ -13,6 +13,22 @@
 - Orphaned Cursor agent-state is cleanable by default without an age gate.
   Live and undetermined entries remain protected even with `--risky --force`,
   and cleanup revalidates the recorded workspace immediately before deletion.
+- Cursor `workspacePath=` values preserve interior whitespace by reading the
+  remainder of the assignment and trimming only surrounding whitespace. A
+  missing value with interior whitespace is ambiguous and therefore
+  undetermined, so it is never cleaned by default.
+- Cursor entries consider every distinct workspace path recorded in
+  `worker.log`. Any existing path makes the entry live, while orphaned requires
+  every recorded path to be absent, so a store with a live recorded workspace
+  is not deleted by default.
+- An unterminated final `workspacePath=` line in `worker.log` is unverifiable
+  and makes the entry undetermined rather than eligible for default cleanup. A
+  complete earlier record for an existing path still makes the entry live.
+- Claude and Cursor entries are undetermined when the nearest existing
+  ancestor of a recorded working directory is a filesystem boundary, so an
+  unavailable tree is not deleted as though it were orphaned. An unmounted
+  mountpoint inside `$HOME` is indistinguishable from an ordinary empty
+  directory and is not detected.
 
 ## [0.8.0] - 2026-07-13
 
