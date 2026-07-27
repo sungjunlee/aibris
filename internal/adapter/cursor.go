@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -117,6 +118,10 @@ func recordedCWDFromCursorProject(ctx context.Context, entryPath string) (record
 	}
 	if cwd != "" {
 		evidence.cwds = append(evidence.cwds, cwd)
+		if strings.IndexFunc(cwd, unicode.IsSpace) >= 0 {
+			evidence.unverifiableRecords++
+			evidence.firstUnverifiableRecord = filepath.Base(workerLog) + ": ambiguous workspacePath=" + cwd
+		}
 	}
 	return evidence, nil
 }
@@ -135,23 +140,13 @@ func firstCursorWorkspacePath(ctx context.Context, workerLog, cursorRoot string)
 			return "", err
 		}
 		line := scanner.Text()
-		for {
-			index := strings.Index(line, "workspacePath=")
-			if index < 0 {
-				break
-			}
-			value := line[index+len("workspacePath="):]
-			end := strings.IndexAny(value, " \t\r\n")
-			if end >= 0 {
-				value = value[:end]
-			}
-			if filepath.IsAbs(value) && !cursorWorkspaceUnderStore(value, cursorRoot) {
-				return filepath.Clean(value), nil
-			}
-			if end < 0 {
-				break
-			}
-			line = line[index+len("workspacePath=")+end:]
+		index := strings.Index(line, "workspacePath=")
+		if index < 0 {
+			continue
+		}
+		value := strings.TrimSpace(line[index+len("workspacePath="):])
+		if filepath.IsAbs(value) && !cursorWorkspaceUnderStore(value, cursorRoot) {
+			return filepath.Clean(value), nil
 		}
 	}
 	if err := scanner.Err(); err != nil {

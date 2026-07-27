@@ -144,6 +144,63 @@ func TestCursorAdapter_ClassifiesLiveOrphanedAndUndetermined(t *testing.T) {
 	}
 }
 
+func TestCursorAdapter_WorkspacePathWhitespace(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	base := filepath.Join(home, ".cursor", "projects")
+
+	t.Run("existing path with spaces is live", func(t *testing.T) {
+		recordedCWD := filepath.Join(home, "workspace", "My Project")
+		if err := os.MkdirAll(recordedCWD, 0755); err != nil {
+			t.Fatal(err)
+		}
+		entryPath := filepath.Join(base, "live-space-entry")
+		writeCursorWorkerLog(t, entryPath, "[info] workspacePath=  "+recordedCWD+"  \t\n")
+
+		classification, reason, project, err := classifyCursorProjectEntry(context.Background(), entryPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if classification != types.EntryClassLive {
+			t.Fatalf("Classification = %q; want live; reason: %s", classification, reason)
+		}
+		if project != filepath.Base(recordedCWD) {
+			t.Fatalf("Project = %q; want %q", project, filepath.Base(recordedCWD))
+		}
+	})
+
+	t.Run("absent path with spaces is undetermined", func(t *testing.T) {
+		recordedCWD := filepath.Join(home, "workspace", "Missing Project")
+		entryPath := filepath.Join(base, "absent-space-entry")
+		writeCursorWorkerLog(t, entryPath, "[info] workspacePath="+recordedCWD+"\n")
+
+		classification, reason, _, err := classifyCursorProjectEntry(context.Background(), entryPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if classification != types.EntryClassUndetermined {
+			t.Fatalf("Classification = %q; want undetermined, not orphaned; reason: %s", classification, reason)
+		}
+	})
+
+	t.Run("space-free absent path is orphaned and labelled from cwd", func(t *testing.T) {
+		recordedCWD := filepath.Join(home, "workspace", "missing-project")
+		entryPath := filepath.Join(base, "absent-entry")
+		writeCursorWorkerLog(t, entryPath, "[info] workspacePath="+recordedCWD+"\n")
+
+		classification, reason, project, err := classifyCursorProjectEntry(context.Background(), entryPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if classification != types.EntryClassOrphaned {
+			t.Fatalf("Classification = %q; want orphaned; reason: %s", classification, reason)
+		}
+		if project != filepath.Base(recordedCWD) {
+			t.Fatalf("Project = %q; want recorded cwd basename %q", project, filepath.Base(recordedCWD))
+		}
+	})
+}
+
 func TestCursorAdapter_NoWorkspacePathDoesNotFallBackToToolchainPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
