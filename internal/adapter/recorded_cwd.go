@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -19,6 +20,14 @@ type recordedCWDEvidence struct {
 }
 
 type recordedCWDEvidenceGatherer func(context.Context, string) (recordedCWDEvidence, error)
+
+var recordedCWDDeviceID = func(_ string, info os.FileInfo) (uint64, error) {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return 0, fmt.Errorf("recorded cwd device metadata unavailable")
+	}
+	return uint64(stat.Dev), nil
+}
 
 func classifyRecordedCWDEntry(
 	ctx context.Context,
@@ -134,6 +143,7 @@ func recordedCWDAbsenceProven(cwd string) (bool, string, error) {
 		info, err := os.Lstat(ancestor)
 		switch {
 		case err == nil:
+			lstatInfo := info
 			if info.Mode()&os.ModeSymlink != 0 {
 				info, err = os.Stat(ancestor)
 				if err != nil {
@@ -143,6 +153,26 @@ func recordedCWDAbsenceProven(cwd string) (bool, string, error) {
 			}
 			if !info.IsDir() {
 				return false, ancestor, nil
+			}
+			parent := filepath.Dir(ancestor)
+			if parent != ancestor {
+				parentInfo, err := os.Lstat(parent)
+				if err != nil {
+					return false, ancestor, err
+				}
+				ancestorDevice, err := recordedCWDDeviceID(ancestor, lstatInfo)
+				if err != nil {
+					return false, ancestor, err
+				}
+				parentDevice, err := recordedCWDDeviceID(parent, parentInfo)
+				if err != nil {
+					return false, ancestor, err
+				}
+				if ancestorDevice != parentDevice {
+					// An unmounted mountpoint inside $HOME has its parent's device and
+					// remains indistinguishable from an ordinary empty directory.
+					return false, ancestor, nil
+				}
 			}
 			plausible, err := plausibleRecordedCWDContainer(ancestor)
 			return plausible, ancestor, err
