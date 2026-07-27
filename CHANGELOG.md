@@ -24,7 +24,7 @@
 - An unterminated final `workspacePath=` line in `worker.log` is unverifiable
   and makes the entry undetermined rather than eligible for default cleanup. A
   complete earlier record for an existing path still makes the entry live.
-- Claude and Cursor entries are undetermined when the nearest existing
+- On Unix, Claude and Cursor entries are undetermined when the nearest existing
   ancestor of a recorded working directory is a filesystem boundary, so an
   unavailable tree is not deleted as though it were orphaned. An unmounted
   mountpoint inside `$HOME` is indistinguishable from an ordinary empty
