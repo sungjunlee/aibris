@@ -49,15 +49,17 @@ type cleanAuditCategory struct {
 type cleanAuditReason string
 
 const (
-	cleanReasonFiltered       cleanAuditReason = "outside category/tool filters"
-	cleanReasonRisky          cleanAuditReason = "requires --risky"
-	cleanReasonActiveWorktree cleanAuditReason = "active worktree protected"
-	cleanReasonAge            cleanAuditReason = "younger than configured age"
-	cleanReasonMissingPath    cleanAuditReason = "path no longer exists"
-	cleanReasonDuplicatePath  cleanAuditReason = "duplicate cleanup target path"
-	cleanReasonNestedTarget   cleanAuditReason = "covered by selected parent"
-	cleanReasonOverlapTarget  cleanAuditReason = "overlaps selected cleanup target"
-	cleanReasonEligible       cleanAuditReason = "eligible for cleanup"
+	cleanReasonFiltered               cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonFiltered)
+	cleanReasonRisky                  cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonRisky)
+	cleanReasonActiveWorktree         cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonActiveWorktree)
+	cleanReasonAge                    cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonAge)
+	cleanReasonAgentStateLive         cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonAgentStateLive)
+	cleanReasonAgentStateUndetermined cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonAgentStateUndetermined)
+	cleanReasonMissingPath            cleanAuditReason = "path no longer exists"
+	cleanReasonDuplicatePath          cleanAuditReason = "duplicate cleanup target path"
+	cleanReasonNestedTarget           cleanAuditReason = "covered by selected parent"
+	cleanReasonOverlapTarget          cleanAuditReason = "overlaps selected cleanup target"
+	cleanReasonEligible               cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonEligible)
 )
 
 type cleanAuditReasonStat struct {
@@ -67,6 +69,7 @@ type cleanAuditReasonStat struct {
 
 func buildCleanAudit(items, targets []types.DebrisInfo, opts types.PruneOptions, scannedSources int, source scanSource, protectedTargets map[string]cleanAuditReason) cleanAudit {
 	targetSet := newCleanAuditTargetSet(targets)
+	observedAt := time.Now()
 
 	byCategory := make(map[types.Category]*cleanAuditCategory)
 	reasonsByCategory := make(map[types.Category]map[cleanAuditReason]cleanAuditReasonStat)
@@ -85,7 +88,7 @@ func buildCleanAudit(items, targets []types.DebrisInfo, opts types.PruneOptions,
 		audit.TotalFoundCount++
 		audit.TotalFoundSize += item.Size
 
-		reason := cleanAuditBlockReason(item, opts, targetSet, protectedTargets)
+		reason := cleanAuditBlockReason(item, opts, observedAt, targetSet, protectedTargets)
 		if reason == cleanReasonEligible {
 			row.EligibleCount++
 			row.EligibleSize += item.Size
@@ -176,18 +179,9 @@ func cleanAuditItemKey(item types.DebrisInfo) string {
 	return string(item.Category) + "\x00" + string(item.Tool) + "\x00" + item.ID + "\x00" + item.Path
 }
 
-func cleanAuditBlockReason(item types.DebrisInfo, opts types.PruneOptions, targetSet *cleanAuditTargetSet, protectedTargets map[string]cleanAuditReason) cleanAuditReason {
-	if !cmdContainsCategory(opts.Categories, item.Category) || !cmdContainsTool(opts.Tools, item.Tool) {
-		return cleanReasonFiltered
-	}
-	if !opts.Risky && item.Category.IsRisky() {
-		return cleanReasonRisky
-	}
-	if !opts.IncludeActiveWorktrees && item.Category == types.CategoryWorktree && item.Status == types.WorktreeActive {
-		return cleanReasonActiveWorktree
-	}
-	if !item.ModTime.Before(time.Now().Add(-opts.Age)) {
-		return cleanReasonAge
+func cleanAuditBlockReason(item types.DebrisInfo, opts types.PruneOptions, observedAt time.Time, targetSet *cleanAuditTargetSet, protectedTargets map[string]cleanAuditReason) cleanAuditReason {
+	if eligible, reason := cleaner.EvaluateEligibility(item, opts, observedAt); !eligible {
+		return cleanAuditReason(reason)
 	}
 	if reason := protectedTargets[cleanAuditItemKey(item)]; reason != "" {
 		return reason

@@ -387,6 +387,35 @@ func TestFilter_AgentStateEligibilityUsesClassificationNotAge(t *testing.T) {
 	}
 }
 
+func TestEvaluateEligibility_AgentStateReasons(t *testing.T) {
+	observedAt := time.Now()
+	opts := types.PruneOptions{Age: 100 * 365 * 24 * time.Hour}
+	tests := []struct {
+		name           string
+		classification types.EntryClass
+		wantEligible   bool
+		wantReason     EligibilityReason
+	}{
+		{"orphaned", types.EntryClassOrphaned, true, EligibilityReasonEligible},
+		{"live", types.EntryClassLive, false, EligibilityReasonAgentStateLive},
+		{"undetermined", types.EntryClassUndetermined, false, EligibilityReasonAgentStateUndetermined},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			item := types.DebrisInfo{
+				Category:       types.CategoryAgentState,
+				Classification: tt.classification,
+				ModTime:        observedAt.Add(-200 * 365 * 24 * time.Hour),
+			}
+			eligible, reason := EvaluateEligibility(item, opts, observedAt)
+			if eligible != tt.wantEligible || reason != tt.wantReason {
+				t.Fatalf("EvaluateEligibility() = %t/%q; want %t/%q",
+					eligible, reason, tt.wantEligible, tt.wantReason)
+			}
+		})
+	}
+}
+
 func TestFilter_NoFilter(t *testing.T) {
 	opts := types.PruneOptions{Age: 168 * time.Hour}
 	worktrees := []types.DebrisInfo{

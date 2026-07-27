@@ -115,6 +115,121 @@ func TestClaudeProjectAdapter_LossyEncodedNameUsesRecordedCWD(t *testing.T) {
 	}
 }
 
+func TestClaudeProjectAdapter_DivergentRecordedCWDsClassifyLive(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	entryPath := filepath.Join(home, ".claude", "projects", "divergent")
+	absentCWD := filepath.Join(home, "workspace", "removed")
+	liveCWD := filepath.Join(home, "workspace", "active")
+	if err := os.MkdirAll(liveCWD, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// The absent record sorts first so a first-hit implementation would
+	// incorrectly classify this entry as orphaned.
+	writeClaudeProjectSession(t, filepath.Join(entryPath, "a-absent.jsonl"),
+		claudeSessionLine(t, absentCWD)+"\n")
+	writeClaudeProjectSession(t, filepath.Join(entryPath, "z-live.jsonl"),
+		claudeSessionLine(t, liveCWD)+"\n")
+
+	results, err := (&ClaudeProjectAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results = %d; want 1", len(results))
+	}
+	if results[0].Classification != types.EntryClassLive {
+		t.Fatalf("Classification = %q; want live from divergent recorded cwds", results[0].Classification)
+	}
+	if !strings.Contains(results[0].Reason, liveCWD) {
+		t.Fatalf("Reason = %q; want live cwd %q", results[0].Reason, liveCWD)
+	}
+}
+
+func TestClaudeProjectAdapter_AbsentCWDAndUnreadableSessionAreUndetermined(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	entryPath := filepath.Join(home, ".claude", "projects", "unreadable-after-absence")
+	absentCWD := filepath.Join(home, "workspace", "removed")
+	writeClaudeProjectSession(t, filepath.Join(entryPath, "a-absent.jsonl"),
+		claudeSessionLine(t, absentCWD)+"\n")
+	if err := os.Symlink(
+		filepath.Join(home, "missing-session"),
+		filepath.Join(entryPath, "z-unreadable.jsonl"),
+	); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	results, err := (&ClaudeProjectAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results = %d; want 1", len(results))
+	}
+	if results[0].Classification != types.EntryClassUndetermined {
+		t.Fatalf("Classification = %q; want undetermined", results[0].Classification)
+	}
+	if !strings.Contains(results[0].Reason, "z-unreadable.jsonl") {
+		t.Fatalf("Reason = %q; want unreadable session filename", results[0].Reason)
+	}
+}
+
+func TestClaudeProjectAdapter_AggregatesEveryRecordedCWDInOneSession(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	liveCWD := filepath.Join(home, "workspace", "active")
+	if err := os.MkdirAll(liveCWD, 0755); err != nil {
+		t.Fatal(err)
+	}
+	sessionPath := filepath.Join(home, ".claude", "projects", "multi-record", "session.jsonl")
+	writeClaudeProjectSession(t, sessionPath,
+		claudeSessionLine(t, filepath.Join(home, "workspace", "removed"))+"\n"+
+			claudeSessionLine(t, liveCWD)+"\n")
+
+	results, err := (&ClaudeProjectAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results = %d; want 1", len(results))
+	}
+	if results[0].Classification != types.EntryClassLive {
+		t.Fatalf("Classification = %q; want live from later cwd record", results[0].Classification)
+	}
+}
+
+func TestClaudeProjectAdapter_ProjectFromRecordedCWD(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	recordedCWD := filepath.Join(home, "workspace")
+	if err := os.MkdirAll(filepath.Join(recordedCWD, "visible-project"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeClaudeProjectSession(t,
+		filepath.Join(home, ".claude", "projects", "with-project", "session.jsonl"),
+		claudeSessionLine(t, recordedCWD)+"\n")
+	writeClaudeProjectSession(t,
+		filepath.Join(home, ".claude", "projects", "without-project", "session.jsonl"),
+		claudeSessionLine(t, filepath.Join(home, "missing-workspace"))+"\n")
+
+	results, err := (&ClaudeProjectAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := make(map[string]types.DebrisInfo)
+	for _, item := range results {
+		byID[item.ID] = item
+	}
+	if got := byID["with-project"].Project; got != "visible-project" {
+		t.Fatalf("Project = %q; want visible-project from detectProjectName", got)
+	}
+	if got := byID["without-project"].Project; got != "" {
+		t.Fatalf("Project = %q; want empty when detectProjectName cannot infer one", got)
+	}
+}
+
 func TestClaudeProjectAdapter_CWDlessAndUnreadableEntriesAreUndetermined(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

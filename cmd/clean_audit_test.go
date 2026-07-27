@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -52,6 +53,65 @@ func TestBuildCleanAudit_GroupsEligibleAndBlockedByCategory(t *testing.T) {
 	logs := findAuditCategory(t, audit, types.CategoryAILogs)
 	if logs.MainReason != "requires --risky" {
 		t.Fatalf("logs MainReason = %q, want requires --risky", logs.MainReason)
+	}
+}
+
+func TestBuildCleanAudit_EligibilityMatchesFilterForMixedCategories(t *testing.T) {
+	now := time.Now()
+	old := now.Add(-2 * 365 * 24 * time.Hour)
+	recent := now.Add(-time.Hour)
+	items := []types.DebrisInfo{
+		{ID: "state-orphaned", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassOrphaned, Size: 50, ModTime: recent, Path: "/tmp/home/.claude/projects/orphaned"},
+		{ID: "state-live", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassLive, Size: 400, ModTime: old, Path: "/tmp/home/.claude/projects/live"},
+		{ID: "state-undetermined", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassUndetermined, Size: 200, ModTime: old, Path: "/tmp/home/.claude/projects/undetermined"},
+		{ID: "node-old", Tool: types.ToolNodeModules, Category: types.CategoryNodeModules, Size: 100, ModTime: old, Path: "/tmp/home/app/node_modules"},
+		{ID: "node-recent", Tool: types.ToolNodeModules, Category: types.CategoryNodeModules, Size: 150, ModTime: recent, Path: "/tmp/home/new/node_modules"},
+		{ID: "cache-old", Tool: types.ToolBuildCache, Category: types.CategoryBuildCache, Size: 300, ModTime: old, Path: "/tmp/home/.cache/go-build"},
+	}
+
+	for _, tt := range []struct {
+		name string
+		age  time.Duration
+	}{
+		{"default age", 7 * 24 * time.Hour},
+		{"very long age", 10 * 365 * 24 * time.Hour},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := types.PruneOptions{Age: tt.age}
+			targets := cleaner.Filter(items, opts)
+			audit := buildCleanAudit(items, targets, opts, 3, scanSource{Kind: scanSourceLive}, nil)
+
+			var wantCount int
+			var wantSize int64
+			wantByCategory := make(map[types.Category]cleanAuditCategory)
+			for _, item := range targets {
+				wantCount++
+				wantSize += item.Size
+				row := wantByCategory[item.Category]
+				row.EligibleCount++
+				row.EligibleSize += item.Size
+				wantByCategory[item.Category] = row
+			}
+			if audit.TotalEligibleCount != wantCount || audit.TotalEligibleSize != wantSize {
+				t.Fatalf("audit eligible = %d/%d; Filter = %d/%d",
+					audit.TotalEligibleCount, audit.TotalEligibleSize, wantCount, wantSize)
+			}
+			for _, row := range audit.Categories {
+				want := wantByCategory[row.Category]
+				if row.EligibleCount != want.EligibleCount || row.EligibleSize != want.EligibleSize {
+					t.Errorf("%s audit eligible = %d/%d; Filter = %d/%d",
+						row.Category, row.EligibleCount, row.EligibleSize, want.EligibleCount, want.EligibleSize)
+				}
+			}
+
+			state := findAuditCategory(t, audit, types.CategoryAgentState)
+			if state.MainReason != string(cleanReasonAgentStateLive) {
+				t.Fatalf("agent-state MainReason = %q; want %q", state.MainReason, cleanReasonAgentStateLive)
+			}
+			if strings.Contains(state.MainReason, "younger") {
+				t.Fatalf("agent-state MainReason uses irrelevant age policy: %q", state.MainReason)
+			}
+		})
 	}
 }
 

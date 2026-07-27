@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -66,7 +67,7 @@ func (a *ClaudeProjectAdapter) Scan(ctx context.Context, opts types.ScanOptions)
 			continue
 		}
 		entryPath := filepath.Join(base, entry.Name())
-		classification, reason, err := classifyClaudeProjectEntry(ctx, entryPath)
+		classification, reason, project, err := classifyClaudeProjectEntry(ctx, entryPath)
 		if err != nil {
 			return nil, err
 		}
@@ -78,6 +79,7 @@ func (a *ClaudeProjectAdapter) Scan(ctx context.Context, opts types.ScanOptions)
 			Tool:           types.ToolClaude,
 			Category:       types.CategoryAgentState,
 			ID:             entry.Name(),
+			Project:        project,
 			Path:           entryPath,
 			Size:           size,
 			ModTime:        info.ModTime(),
@@ -88,75 +90,144 @@ func (a *ClaudeProjectAdapter) Scan(ctx context.Context, opts types.ScanOptions)
 	return results, nil
 }
 
-func classifyClaudeProjectEntry(ctx context.Context, entryPath string) (types.EntryClass, string, error) {
-	cwd, err := recordedCWDFromClaudeProject(ctx, entryPath)
-	if err != nil {
-		return "", "", err
-	}
-	if cwd == "" {
-		return types.EntryClassUndetermined, "no recorded cwd could be read from session metadata", nil
-	}
-
-	if _, err := os.Stat(cwd); err == nil {
-		return types.EntryClassLive, "recorded cwd exists: " + cwd, nil
-	} else if errors.Is(err, os.ErrNotExist) {
-		return types.EntryClassOrphaned, "recorded cwd does not exist: " + cwd, nil
-	}
-	return types.EntryClassUndetermined, "recorded cwd existence could not be verified: " + cwd, nil
+type recordedCWDEvidence struct {
+	cwds              []string
+	unverifiableFiles []string
 }
 
-func recordedCWDFromClaudeProject(ctx context.Context, entryPath string) (string, error) {
+func classifyClaudeProjectEntry(ctx context.Context, entryPath string) (types.EntryClass, string, string, error) {
+	evidence, err := recordedCWDsFromClaudeProject(ctx, entryPath)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	var project string
+	var liveCWD string
+	var absentCWD string
+	var unverifiableCWD string
+	absentCount := 0
+	for _, cwd := range evidence.cwds {
+		if err := ctx.Err(); err != nil {
+			return "", "", "", err
+		}
+		if project == "" {
+			project = detectProjectName(cwd)
+		}
+		if _, err := os.Stat(cwd); err == nil {
+			if liveCWD == "" {
+				liveCWD = cwd
+			}
+		} else if errors.Is(err, os.ErrNotExist) {
+			absentCount++
+			if absentCWD == "" {
+				absentCWD = cwd
+			}
+		} else if unverifiableCWD == "" {
+			unverifiableCWD = cwd
+		}
+	}
+
+	if liveCWD != "" {
+		return types.EntryClassLive,
+			fmt.Sprintf("recorded cwd exists: %s (%d distinct recorded cwd(s) checked)", liveCWD, len(evidence.cwds)),
+			project,
+			nil
+	}
+	if unverifiableCWD != "" {
+		return types.EntryClassUndetermined,
+			"recorded cwd existence could not be verified: " + unverifiableCWD,
+			project,
+			nil
+	}
+	if len(evidence.unverifiableFiles) > 0 {
+		if absentCount > 0 {
+			return types.EntryClassUndetermined,
+				fmt.Sprintf("%d recorded cwd(s) do not exist, but session metadata could not be verified: %s",
+					absentCount, evidence.unverifiableFiles[0]),
+				project,
+				nil
+		}
+		return types.EntryClassUndetermined,
+			"session metadata could not be verified: " + evidence.unverifiableFiles[0],
+			project,
+			nil
+	}
+	if len(evidence.cwds) == 0 {
+		return types.EntryClassUndetermined, "no recorded cwd could be read from session metadata", project, nil
+	}
+	return types.EntryClassOrphaned,
+		fmt.Sprintf("all %d distinct recorded cwd(s) do not exist; first: %s", len(evidence.cwds), absentCWD),
+		project,
+		nil
+}
+
+func recordedCWDsFromClaudeProject(ctx context.Context, entryPath string) (recordedCWDEvidence, error) {
+	var evidence recordedCWDEvidence
 	entries, err := os.ReadDir(entryPath)
 	if err != nil {
-		return "", nil
+		evidence.unverifiableFiles = append(evidence.unverifiableFiles, filepath.Base(entryPath))
+		return evidence, nil
 	}
+	seen := make(map[string]bool)
 	for _, entry := range entries {
 		if err := ctx.Err(); err != nil {
-			return "", err
+			return recordedCWDEvidence{}, err
 		}
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".jsonl" {
 			continue
 		}
-		cwd, err := readRecordedCWD(ctx, filepath.Join(entryPath, entry.Name()))
+		cwds, err := readRecordedCWDs(ctx, filepath.Join(entryPath, entry.Name()))
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				return "", err
+				return recordedCWDEvidence{}, err
 			}
-			continue
+			evidence.unverifiableFiles = append(evidence.unverifiableFiles, entry.Name())
 		}
-		if cwd != "" {
-			return cwd, nil
+		if len(cwds) == 0 && err == nil {
+			evidence.unverifiableFiles = append(evidence.unverifiableFiles, entry.Name())
+		}
+		for _, cwd := range cwds {
+			if !seen[cwd] {
+				seen[cwd] = true
+				evidence.cwds = append(evidence.cwds, cwd)
+			}
 		}
 	}
-	return "", nil
+	return evidence, nil
 }
 
-func readRecordedCWD(ctx context.Context, path string) (string, error) {
+func readRecordedCWDs(ctx context.Context, path string) ([]string, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer file.Close()
 
 	reader := bufio.NewReader(file)
 	var extractor cwdMetadataExtractor
+	var cwds []string
+	lineComplete := false
 	for {
 		if err := ctx.Err(); err != nil {
-			return "", err
+			return cwds, err
 		}
 		fragment, readErr := reader.ReadSlice('\n')
-		if cwd := extractor.feed(fragment); cwd != "" {
-			return cwd, nil
+		if !lineComplete {
+			if cwd := extractor.feed(fragment); cwd != "" {
+				cwds = append(cwds, cwd)
+				lineComplete = true
+			}
 		}
 		switch {
 		case readErr == nil:
 			extractor.reset()
+			lineComplete = false
 		case errors.Is(readErr, bufio.ErrBufferFull):
 			continue
 		case errors.Is(readErr, io.EOF):
-			return "", nil
+			return cwds, nil
 		default:
-			return "", readErr
+			return cwds, readErr
 		}
 	}
 }
