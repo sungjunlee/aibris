@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -37,6 +38,9 @@ func TestAgentStateCLIContract(t *testing.T) {
 	if err := os.MkdirAll(cursorUndetermined, 0755); err != nil {
 		t.Fatal(err)
 	}
+
+	assertCLIContractHomeIsolated(t, binary, home,
+		claudeOrphan, claudeLive, cursorOrphan, cursorUndetermined)
 
 	output, err := runCLIContract(binary, home, "clean", "--dry-run", "--category", "agent-state")
 	if err != nil {
@@ -165,9 +169,102 @@ func buildCLIContractBinary(t *testing.T) string {
 
 func runCLIContract(binary, home string, args ...string) (string, error) {
 	command := exec.Command(binary, args...)
-	command.Env = append(os.Environ(), "HOME="+home)
+	command.Env = cliContractEnv(os.Environ(), home)
 	output, err := command.CombinedOutput()
 	return string(output), err
+}
+
+func cliContractEnv(environ []string, home string) []string {
+	homeKeys := map[string]bool{
+		"HOME":        true,
+		"USERPROFILE": true,
+		"HOMEDRIVE":   true,
+		"HOMEPATH":    true,
+	}
+	env := make([]string, 0, len(environ)+len(homeKeys))
+	for _, entry := range environ {
+		key, _, _ := strings.Cut(entry, "=")
+		if homeKeys[strings.ToUpper(key)] {
+			continue
+		}
+		env = append(env, entry)
+	}
+
+	homeDrive := filepath.VolumeName(home)
+	homePath := strings.TrimPrefix(home, homeDrive)
+	return append(env,
+		"HOME="+home,
+		"USERPROFILE="+home,
+		"HOMEDRIVE="+homeDrive,
+		"HOMEPATH="+homePath,
+	)
+}
+
+func assertCLIContractHomeIsolated(t *testing.T, binary, home string, fixturePaths ...string) {
+	t.Helper()
+
+	output, err := runCLIContract(binary, home, "scan", "--json")
+	if err != nil {
+		t.Fatalf("home isolation scan failed: %v\n%s", err, output)
+	}
+	var scan jsonOutput
+	if err := json.Unmarshal([]byte(output), &scan); err != nil {
+		t.Fatalf("decoding home isolation scan: %v\n%s", err, output)
+	}
+
+	found := make(map[string]bool, len(scan.Worktrees))
+	for _, item := range scan.Worktrees {
+		path := filepath.Clean(item.Path)
+		relative, err := filepath.Rel(home, path)
+		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+			t.Fatalf("home isolation failed: scan reported non-fixture path %q for fixture home %q",
+				item.Path, home)
+		}
+		found[path] = true
+	}
+	for _, path := range fixturePaths {
+		if !found[filepath.Clean(path)] {
+			t.Fatalf("home isolation failed: scan did not report fixture path %q\n%s", path, output)
+		}
+	}
+}
+
+func TestCLIContractEnvReplacesHomeVariables(t *testing.T) {
+	home := t.TempDir()
+	environ := []string{
+		"PATH=/fixture/bin",
+		"HOME=/old/home",
+		"home=/duplicate/home",
+		"USERPROFILE=C:\\old\\profile",
+		"HOMEDRIVE=C:",
+		"HOMEPATH=\\old\\path",
+	}
+
+	env := cliContractEnv(environ, home)
+	want := map[string]string{
+		"HOME":        home,
+		"USERPROFILE": home,
+		"HOMEDRIVE":   filepath.VolumeName(home),
+		"HOMEPATH":    strings.TrimPrefix(home, filepath.VolumeName(home)),
+	}
+	counts := make(map[string]int, len(want))
+	for _, entry := range env {
+		key, value, _ := strings.Cut(entry, "=")
+		key = strings.ToUpper(key)
+		expected, ok := want[key]
+		if !ok {
+			continue
+		}
+		counts[key]++
+		if value != expected {
+			t.Errorf("%s = %q, want %q", key, value, expected)
+		}
+	}
+	for key := range want {
+		if counts[key] != 1 {
+			t.Errorf("%s entries = %d, want 1: %q", key, counts[key], env)
+		}
+	}
 }
 
 func writeCLIContractFile(t *testing.T, path, contents string) {
