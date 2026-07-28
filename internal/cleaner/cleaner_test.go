@@ -464,6 +464,36 @@ func captureStdout(fn func()) string {
 	return string(out)
 }
 
+type testDebrisProvider struct {
+	tool     types.Tool
+	category types.Category
+	items    []types.DebrisInfo
+}
+
+func (p *testDebrisProvider) Name() types.Tool {
+	return p.tool
+}
+
+func (p *testDebrisProvider) Category() types.Category {
+	return p.category
+}
+
+func (p *testDebrisProvider) Scan(context.Context, types.ScanOptions) ([]types.DebrisInfo, error) {
+	return p.items, nil
+}
+
+type testRevalidatingProvider struct {
+	*testDebrisProvider
+	revalidate func(context.Context, string) (types.EntryClass, error)
+}
+
+func (p *testRevalidatingProvider) RevalidateAgentState(
+	ctx context.Context,
+	entryPath string,
+) (types.EntryClass, error) {
+	return p.revalidate(ctx, entryPath)
+}
+
 func TestExecute(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -528,6 +558,171 @@ func TestExecute_NonExistent(t *testing.T) {
 	}
 	if total != 100 {
 		t.Errorf("total = %d; want 100 (RemoveAll succeeds on non-existent)", total)
+	}
+}
+
+func TestExecute_RefusesAgentStateWithoutRegisteredRevalidatorAndContinues(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	const syntheticTool types.Tool = "synthetic-agent"
+	protectedPath := filepath.Join(home, ".cursor", "projects", "unregistered")
+	removablePath := filepath.Join(home, "workspace", "app", "node_modules")
+	if err := os.MkdirAll(protectedPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(removablePath, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	provider := &testDebrisProvider{
+		tool:     syntheticTool,
+		category: types.CategoryAgentState,
+	}
+	revalidators := adapter.NewAgentStateRevalidators([]adapter.DebrisProvider{provider})
+	if _, ok := revalidators.Lookup(syntheticTool); ok {
+		t.Fatal("synthetic provider unexpectedly registered an agent-state revalidator")
+	}
+
+	total, err := executeWithContext(context.Background(), []types.DebrisInfo{
+		{
+			ID:             "unregistered",
+			Tool:           syntheticTool,
+			Category:       types.CategoryAgentState,
+			Path:           protectedPath,
+			Size:           7,
+			Classification: types.EntryClassOrphaned,
+		},
+		{
+			ID:       "node_modules",
+			Tool:     types.ToolNodeModules,
+			Category: types.CategoryNodeModules,
+			Path:     removablePath,
+			Size:     11,
+		},
+	}, revalidators.Lookup)
+	if err == nil ||
+		!strings.Contains(err.Error(), string(syntheticTool)) ||
+		!strings.Contains(err.Error(), protectedPath) ||
+		!strings.Contains(err.Error(), "no revalidator registered") {
+		t.Fatalf("executeWithContext() error = %v; want tool-and-path revalidator refusal", err)
+	}
+	if total != 11 {
+		t.Fatalf("total = %d; want 11 from the unrelated item", total)
+	}
+	if _, statErr := os.Stat(protectedPath); statErr != nil {
+		t.Fatalf("agent-state item without a revalidator was changed: %v", statErr)
+	}
+	if _, statErr := os.Stat(removablePath); !os.IsNotExist(statErr) {
+		t.Fatalf("unrelated item was not removed after refusal; stat err = %v", statErr)
+	}
+}
+
+func TestExecute_DeletesRevalidatedOrphanedAgentState(t *testing.T) {
+	tests := []struct {
+		name string
+		tool types.Tool
+	}{
+		{name: "claude", tool: types.ToolClaude},
+		{name: "cursor", tool: types.ToolCursor},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			entryPath := filepath.Join(home, "."+string(tt.tool), "projects", "orphaned")
+			recordedCWD := filepath.Join(home, "workspace", "gone")
+			if err := os.MkdirAll(entryPath, 0755); err != nil {
+				t.Fatal(err)
+			}
+
+			var evidence []byte
+			var classification types.EntryClass
+			var err error
+			switch tt.tool {
+			case types.ToolClaude:
+				record, marshalErr := json.Marshal(struct {
+					CWD string `json:"cwd"`
+				}{CWD: recordedCWD})
+				if marshalErr != nil {
+					t.Fatal(marshalErr)
+				}
+				evidence = append(record, '\n')
+				if writeErr := os.WriteFile(filepath.Join(entryPath, "session.jsonl"), evidence, 0644); writeErr != nil {
+					t.Fatal(writeErr)
+				}
+				classification, err = adapter.ClassifyClaudeProjectEntry(context.Background(), entryPath)
+			case types.ToolCursor:
+				evidence = []byte("[info] workspacePath=" + recordedCWD + "\n")
+				if writeErr := os.WriteFile(filepath.Join(entryPath, "worker.log"), evidence, 0644); writeErr != nil {
+					t.Fatal(writeErr)
+				}
+				classification, err = adapter.ClassifyCursorProjectEntry(context.Background(), entryPath)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if classification != types.EntryClassOrphaned {
+				t.Fatalf("planned Classification = %q; want orphaned", classification)
+			}
+
+			total, err := Execute([]types.DebrisInfo{{
+				ID:             "orphaned",
+				Tool:           tt.tool,
+				Category:       types.CategoryAgentState,
+				Path:           entryPath,
+				Size:           int64(len(evidence)),
+				Classification: classification,
+			}})
+			if err != nil {
+				t.Fatalf("Execute() error = %v; want nil", err)
+			}
+			if total != int64(len(evidence)) {
+				t.Fatalf("total = %d; want %d", total, len(evidence))
+			}
+			if _, statErr := os.Stat(entryPath); !os.IsNotExist(statErr) {
+				t.Fatalf("orphaned %s agent-state was not removed; stat err = %v", tt.tool, statErr)
+			}
+		})
+	}
+}
+
+func TestExecute_RefusesAgentStateRevalidationError(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	entryPath := filepath.Join(home, ".claude", "projects", "revalidation-error")
+	if err := os.MkdirAll(entryPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	revalidationErr := errors.New("re-derivation failed")
+	provider := &testRevalidatingProvider{
+		testDebrisProvider: &testDebrisProvider{
+			tool:     types.ToolClaude,
+			category: types.CategoryAgentState,
+		},
+		revalidate: func(context.Context, string) (types.EntryClass, error) {
+			return "", revalidationErr
+		},
+	}
+	revalidators := adapter.NewAgentStateRevalidators([]adapter.DebrisProvider{provider})
+
+	total, err := executeWithContext(context.Background(), []types.DebrisInfo{{
+		ID:             "revalidation-error",
+		Tool:           types.ToolClaude,
+		Category:       types.CategoryAgentState,
+		Path:           entryPath,
+		Size:           13,
+		Classification: types.EntryClassOrphaned,
+	}}, revalidators.Lookup)
+	if !errors.Is(err, revalidationErr) ||
+		!strings.Contains(err.Error(), "revalidating claude agent-state") ||
+		!strings.Contains(err.Error(), entryPath) {
+		t.Fatalf("executeWithContext() error = %v; want revalidation refusal", err)
+	}
+	if total != 0 {
+		t.Fatalf("total = %d; want 0", total)
+	}
+	if _, statErr := os.Stat(entryPath); statErr != nil {
+		t.Fatalf("agent-state item was removed after revalidation error: %v", statErr)
 	}
 }
 

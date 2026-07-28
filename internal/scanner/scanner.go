@@ -15,16 +15,7 @@ import (
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
-var defaultProviders = []adapter.DebrisProvider{
-	&adapter.NodeModulesAdapter{},
-	&adapter.BuildCacheAdapter{},
-	&adapter.PipCacheAdapter{},
-	&adapter.CursorAdapter{},
-	&adapter.ClaudeProjectAdapter{},
-	&adapter.AILogsAdapter{},
-	&adapter.WindsurfAdapter{},
-	adapter.NewWorktreeAdapter(),
-}
+var defaultProviders = adapter.DefaultProviders()
 
 var DefaultScanner = New(defaultProviders)
 

@@ -99,6 +99,14 @@ func Execute(worktrees []types.DebrisInfo) (int64, error) {
 
 // ExecuteWithContext removes or command-cleans the given debris items from disk.
 func ExecuteWithContext(ctx context.Context, worktrees []types.DebrisInfo) (int64, error) {
+	return executeWithContext(ctx, worktrees, adapter.AgentStateRevalidatorFor)
+}
+
+func executeWithContext(
+	ctx context.Context,
+	worktrees []types.DebrisInfo,
+	lookupRevalidator func(types.Tool) (adapter.AgentStateRevalidator, bool),
+) (int64, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return 0, fmt.Errorf("getting home dir: %w", err)
@@ -121,18 +129,17 @@ func ExecuteWithContext(ctx context.Context, worktrees []types.DebrisInfo) (int6
 			fmt.Fprintf(os.Stderr, "error: unsafe path %q rejected\n", w.Path)
 			continue
 		}
-		if w.Category == types.CategoryAgentState &&
-			(w.Tool == types.ToolClaude || w.Tool == types.ToolCursor) {
-			var classification types.EntryClass
-			var err error
-			switch w.Tool {
-			case types.ToolClaude:
-				classification, err = adapter.ClassifyClaudeProjectEntry(ctx, w.Path)
-			case types.ToolCursor:
-				classification, err = adapter.ClassifyCursorProjectEntry(ctx, w.Path)
+		if w.Category == types.CategoryAgentState {
+			revalidator, ok := lookupRevalidator(w.Tool)
+			if !ok {
+				err := fmt.Errorf("refusing %s agent-state %q: no revalidator registered", w.Tool, w.Path)
+				errs = append(errs, err)
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				continue
 			}
-			if err != nil {
-				err = fmt.Errorf("revalidating %s agent-state %q: %w", w.Tool, w.Path, err)
+			classification, revalidateErr := revalidator.RevalidateAgentState(ctx, w.Path)
+			if revalidateErr != nil {
+				err := fmt.Errorf("revalidating %s agent-state %q: %w", w.Tool, w.Path, revalidateErr)
 				errs = append(errs, err)
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				continue
