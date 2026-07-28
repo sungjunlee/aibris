@@ -27,7 +27,7 @@ content that is surfaced rather than reclaimed.
 
 ### Batch 2 — Freeze cache and measurement contracts
 
-- [ ] #145 Invalidate the cleanup scan cache with a stable provider-membership identity; behavior revisions still bump the cache revision (~1.5h)
+- [~] #145 Invalidate the cleanup scan cache with a stable provider-membership identity; behavior revisions still bump the cache revision (~1.5h) [branch:issue-145-provider-cache-identity]
 - [ ] #146 Replace the absolute scan-time baseline with same-session paired deltas; keep the repeatable harness in #129 (~1h)
 
 ### Batch 3 — Close nested agent-state safety
@@ -293,3 +293,9 @@ measuring, because the real home lacked the triggering condition.
   leaves, and split #139 into retention-contract plus three provider leaves.
   Routed #147 back behind #115 and explicitly deferred #152 until a real Windows
   verification environment exists.
+- 2026-07-28: Started #145 as the frozen `provider-cache-identity` leaf on
+  `issue-145-provider-cache-identity`. The contract separates concrete provider
+  membership from the explicit behavior revision, rejects legacy or mismatched
+  membership to the visible live-scan path, and preserves matching-cache reuse.
+  Because incompatible reuse can silently omit cleanup candidates, the relay run
+  uses hardened pre-publication and post-publication review.
