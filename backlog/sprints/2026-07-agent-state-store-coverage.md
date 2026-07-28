@@ -17,9 +17,9 @@ content that is surfaced rather than reclaimed.
 
 ## Plan
 
-### Batch 1 — Establish the proof-based tier (gating)
+### Batch 1 — Establish the proof-based tier (gating) — complete
 
-- [~] #138 Add provable-orphan cleanup for agent session stores (~3h)
+- [x] #138 Add provable-orphan cleanup for agent session stores (~3h)
   - relay-ready request `req-20260726233000943`, three ordered leaves
   - [x] `L1-claude-store-classification` → PR #144 (merged, 15 review rounds).
         `agent-state` category, additive `Classification` field,
@@ -31,8 +31,10 @@ content that is surfaced rather than reclaimed.
         `~/.cursor/projects` migrated to `agent-state`, recorded cwd read from
         `workspacePath=`. Six defects found after the code first passed clean —
         five of them would have deleted a live workspace's store.
-  - [ ] `L3-orphan-clean-eligibility` — narrowed: `UnifiedCleanupPlan` absorption,
-        audit/dry-run/receipt surfaces, compiled CLI contract test, docs.
+  - [x] `L3-orphan-clean-eligibility` → PR #154 (merged `b30df08`,
+        5 review rounds). Proved `UnifiedCleanupPlan` absorption, added the
+        `agent_state_orphaned` reason code, locked audit/dry-run/receipt
+        surfaces with a compiled CLI contract test, and reconciled docs.
         Eligibility already landed in L1.
 
 ### Batch 2 — Fix discovery shape and cover byproducts
@@ -64,9 +66,12 @@ content that is surfaced rather than reclaimed.
 - Evidence baseline is the 2026-07-26 coverage audit in `docs/DOGFOOD.md`. Every
   child issue carries its own measured numbers; re-measure rather than trusting
   restated totals.
-- #138 is the gate. It is the first category with no age gate and a proof-based
-  safety argument, so it is the real test of whether the #113 plan model absorbs
-  new categories. Land it before #115 finalizes the execution contract.
+- #138 was the gate. It is the first category with no age gate and a proof-based
+  safety argument. L3 proved the #113 plan model absorbs it without structural
+  change: `ClassicCleanupPlanCandidates` consumes `cleaner.Filter` output and
+  does not distinguish proof-based from age-based eligibility. The only plan
+  model change was the 12-line `agent_state_orphaned` reason code. This is the
+  signal #115 was waiting on.
 - Batch 2 items are independent of #138 and of each other, so they may fan out.
   Batch 3 depends on #138's recorded-cwd readers.
 - Orphan detection must read each store's recorded working directory. Directory
@@ -237,3 +242,16 @@ measuring, because the real home lacked the triggering condition.
   obligation and why it exists. **When a change moves a declaration, grep for
   every document that names its old home** — this is now the second leaf in a row
   where that was the only real finding.
+- 2026-07-28: #138 L3 dispatched → PR #154 → 5 review rounds → merged as
+  `b30df08`; #138 closed and Batch 1 completed. The final blocking finding was a
+  false positive against a stale 22-line PR-body snapshot; the live 119-line
+  body contained all four requested items, so the maintainer authorized
+  force-finalization on the evidence rather than a manufactured commit.
+
+  Verification from merged `main`: `go test -race -count=1 ./...`,
+  `go build ./...`, `go vet ./...`, and Linux/Windows/Darwin cross-builds all
+  passed. The merged binary's real-home `clean --dry-run` remained unchanged at
+  **198 planned items / 1.6 GB**; `agent-state` remained **276 found / 195
+  eligible (228.6 MB) / 81 protected**. The plan model absorbed the
+  age-independent category without structural change, resolving #115's open
+  question; only the 12-line `agent_state_orphaned` reason code was needed.
