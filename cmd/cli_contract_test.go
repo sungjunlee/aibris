@@ -1,0 +1,192 @@
+package cmd
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/sungjunlee/aibris/internal/cleaner"
+)
+
+func TestAgentStateCLIContract(t *testing.T) {
+	binary := buildCLIContractBinary(t)
+	home := t.TempDir()
+
+	claudeOrphan := filepath.Join(home, ".claude", "projects", "claude-orphan")
+	claudeOrphanEvidence := fmt.Sprintf(
+		"{\"cwd\":%q}\n",
+		filepath.Join(home, "missing", "claude-project"),
+	)
+	writeCLIContractFile(t, filepath.Join(claudeOrphan, "session.jsonl"),
+		claudeOrphanEvidence)
+	claudeLiveCWD := filepath.Join(home, "workspace", "claude-live")
+	if err := os.MkdirAll(claudeLiveCWD, 0755); err != nil {
+		t.Fatal(err)
+	}
+	claudeLive := filepath.Join(home, ".claude", "projects", "claude-live")
+	writeCLIContractFile(t, filepath.Join(claudeLive, "session.jsonl"),
+		fmt.Sprintf("{\"cwd\":%q}\n", claudeLiveCWD))
+
+	cursorOrphan := filepath.Join(home, ".cursor", "projects", "cursor-orphan")
+	writeCLIContractFile(t, filepath.Join(cursorOrphan, "worker.log"),
+		"[info] workspacePath="+filepath.Join(home, "missing", "cursor-project")+"\n")
+	cursorUndetermined := filepath.Join(home, ".cursor", "projects", "cursor-undetermined")
+	if err := os.MkdirAll(cursorUndetermined, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	output, err := runCLIContract(binary, home, "clean", "--dry-run", "--category", "agent-state")
+	if err != nil {
+		t.Fatalf("agent-state dry-run failed: %v\n%s", err, output)
+	}
+	auditFields := strings.Fields(cliContractLineWithPrefix(t, output, "agent-state"))
+	if len(auditFields) < 10 {
+		t.Fatalf("agent-state audit row has %d fields, want at least 10: %q", len(auditFields), auditFields)
+	}
+	if auditFields[1] != "4" || auditFields[4] != "2" || auditFields[7] != "2" {
+		t.Fatalf("agent-state audit counts = found %s / eligible %s / protected %s, want 4/2/2\n%s",
+			auditFields[1], auditFields[4], auditFields[7], output)
+	}
+	for _, want := range []string{
+		"matched  2 candidates",
+		"targets  2 items",
+		"[DRY-RUN] No files were removed.",
+		claudeOrphan,
+		cursorOrphan,
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("agent-state dry-run missing %q:\n%s", want, output)
+		}
+	}
+	for _, protected := range []string{claudeLive, cursorUndetermined} {
+		if strings.Contains(output, protected) {
+			t.Fatalf("protected path %q leaked into dry-run targets:\n%s", protected, output)
+		}
+	}
+	if count := strings.Count(output, "remove-path"); count != 2 {
+		t.Fatalf("dry-run target rows = %d, want 2:\n%s", count, output)
+	}
+
+	for _, toolCase := range []struct {
+		tool     string
+		selected string
+		excluded string
+	}{
+		{tool: "claude", selected: claudeOrphan, excluded: cursorOrphan},
+		{tool: "cursor", selected: cursorOrphan, excluded: claudeOrphan},
+	} {
+		t.Run(toolCase.tool, func(t *testing.T) {
+			toolOutput, toolErr := runCLIContract(
+				binary,
+				home,
+				"clean",
+				"--dry-run",
+				"--category",
+				"agent-state",
+				"--tool",
+				toolCase.tool,
+			)
+			if toolErr != nil {
+				t.Fatalf("%s selector failed: %v\n%s", toolCase.tool, toolErr, toolOutput)
+			}
+			for _, want := range []string{"matched  1 candidate", "targets  1 item", toolCase.selected} {
+				if !strings.Contains(toolOutput, want) {
+					t.Fatalf("%s selector missing %q:\n%s", toolCase.tool, want, toolOutput)
+				}
+			}
+			if strings.Contains(toolOutput, toolCase.excluded) {
+				t.Fatalf("%s selector included %q:\n%s", toolCase.tool, toolCase.excluded, toolOutput)
+			}
+		})
+	}
+
+	invalidOutput, invalidErr := runCLIContract(
+		binary,
+		home,
+		"clean",
+		"--dry-run",
+		"--category",
+		"not-a-category",
+	)
+	if invalidErr == nil {
+		t.Fatalf("invalid category succeeded:\n%s", invalidOutput)
+	}
+	for _, want := range []string{`invalid --category value "not-a-category"`, "valid values:", "agent-state"} {
+		if !strings.Contains(invalidOutput, want) {
+			t.Fatalf("invalid category output missing %q:\n%s", want, invalidOutput)
+		}
+	}
+
+	receiptOutput, receiptErr := runCLIContract(
+		binary,
+		home,
+		"clean",
+		"--force",
+		"--category",
+		"agent-state",
+		"--tool",
+		"claude",
+	)
+	if receiptErr != nil {
+		t.Fatalf("agent-state cleanup failed: %v\n%s", receiptErr, receiptOutput)
+	}
+	for _, want := range []string{
+		"cleanup receipt",
+		"targets    1 item",
+		"removed    1 item",
+		"failed     0 items",
+		"freed      " + cleaner.FormatSize(int64(len(claudeOrphanEvidence))),
+	} {
+		if !strings.Contains(receiptOutput, want) {
+			t.Fatalf("agent-state receipt missing %q:\n%s", want, receiptOutput)
+		}
+	}
+	if _, statErr := os.Stat(claudeOrphan); !os.IsNotExist(statErr) {
+		t.Fatalf("orphaned Claude state still exists after cleanup: %v", statErr)
+	}
+	if _, statErr := os.Stat(claudeLive); statErr != nil {
+		t.Fatalf("live Claude state changed during cleanup: %v", statErr)
+	}
+}
+
+func buildCLIContractBinary(t *testing.T) string {
+	t.Helper()
+	binary := filepath.Join(t.TempDir(), "aibris")
+	command := exec.Command("go", "build", "-o", binary, ".")
+	command.Dir = ".."
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("building CLI contract binary: %v\n%s", err, output)
+	}
+	return binary
+}
+
+func runCLIContract(binary, home string, args ...string) (string, error) {
+	command := exec.Command(binary, args...)
+	command.Env = append(os.Environ(), "HOME="+home)
+	output, err := command.CombinedOutput()
+	return string(output), err
+}
+
+func writeCLIContractFile(t *testing.T, path, contents string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(contents), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func cliContractLineWithPrefix(t *testing.T, output, prefix string) string {
+	t.Helper()
+	for _, line := range strings.Split(output, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), prefix+" ") {
+			return line
+		}
+	}
+	t.Fatalf("output missing line with prefix %q:\n%s", prefix, output)
+	return ""
+}

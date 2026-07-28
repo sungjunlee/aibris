@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -124,6 +125,146 @@ func TestUnifiedCleanupPlanAdaptersShareOnePolicyNeutralModel(t *testing.T) {
 	}
 	if !hasCleanupPlanReason(worktreeRow.Reasons, CleanupPlanReasonCode(DecisionReasonRepositoryRetention)) {
 		t.Fatalf("worktree reasons = %#v, want policy reason", worktreeRow.Reasons)
+	}
+}
+
+func TestUnifiedCleanupPlanAbsorbsAgeIndependentAgentState(t *testing.T) {
+	root := t.TempDir()
+	now := time.Now()
+	agentState := cleanupPlanTestItem(
+		filepath.Join(root, ".claude", "projects", "orphaned"),
+		types.CategoryAgentState,
+		50,
+	)
+	agentState.Tool = types.ToolClaude
+	agentState.Classification = types.EntryClassOrphaned
+	agentState.ModTime = now
+	cache := cleanupPlanTestItem(filepath.Join(root, ".cache", "pip"), types.CategoryOtherCache, 40)
+	cache.ModTime = now.Add(-60 * 24 * time.Hour)
+
+	classicTargets := cleaner.Filter([]types.DebrisInfo{agentState, cache}, types.PruneOptions{
+		Age: 30 * 24 * time.Hour,
+	})
+	if got, want := len(classicTargets), 2; got != want {
+		t.Fatalf("classic targets = %d, want %d; recent orphaned agent-state must bypass the age gate", got, want)
+	}
+
+	unit := WorktreeCleanupUnit{
+		TargetPath: filepath.Join(root, ".codex", "worktrees", "review"),
+		Size:       70,
+		Source:     ".codex",
+	}
+	worktreePlan := CleanupPlan{Decisions: []WorktreeCleanupDecision{{
+		Unit:  unit,
+		Class: DecisionReviewable,
+	}}}
+	candidates := ClassicCleanupPlanCandidates(classicTargets)
+	candidates = append(candidates, WorktreeCleanupPlanCandidates(worktreePlan, nil)...)
+
+	plan, err := BuildUnifiedCleanupPlan(context.Background(), candidates, CleanupPlanEvidence{})
+	if err != nil {
+		t.Fatalf("BuildUnifiedCleanupPlan() error = %v", err)
+	}
+	if got, want := len(plan.Rows), 3; got != want {
+		t.Fatalf("rows = %d, want %d", got, want)
+	}
+
+	agentStateRow := cleanupPlanRowByKey(t, plan, "classic:"+cleanTargetStableKey(agentState))
+	if agentStateRow.Selection != CleanupPlanSelected {
+		t.Fatalf("agent-state selection = %q, want selected", agentStateRow.Selection)
+	}
+	if !hasCleanupPlanReason(agentStateRow.Reasons, CleanupPlanReasonAgentStateOrphaned) {
+		t.Fatalf("agent-state reasons = %#v, want orphan proof reason", agentStateRow.Reasons)
+	}
+	if hasCleanupPlanReason(agentStateRow.Reasons, CleanupPlanReasonClassicEligible) {
+		t.Fatalf("agent-state reasons = %#v, classic eligibility misstates proof-based selection", agentStateRow.Reasons)
+	}
+
+	cacheRow := cleanupPlanRowByKey(t, plan, "classic:"+cleanTargetStableKey(cache))
+	if !hasCleanupPlanReason(cacheRow.Reasons, CleanupPlanReasonClassicEligible) {
+		t.Fatalf("cache reasons = %#v, want classic eligibility reason", cacheRow.Reasons)
+	}
+	worktreeRow := cleanupPlanRowByKey(t, plan, "worktree:"+cleanupUnitStableKey(unit))
+	if worktreeRow.Item.Category != types.CategoryWorktree || worktreeRow.Selection != CleanupPlanUnselected {
+		t.Fatalf("worktree row = %#v, want reviewable worktree", worktreeRow)
+	}
+}
+
+func TestUnifiedCleanupPlanCountsNestedAgentStateOnce(t *testing.T) {
+	root := t.TempDir()
+	now := time.Now()
+	parent := cleanupPlanTestItem(filepath.Join(root, "project", "node_modules"), types.CategoryNodeModules, 1000)
+	parent.ModTime = now.Add(-60 * 24 * time.Hour)
+	agentState := cleanupPlanTestItem(
+		filepath.Join(parent.Path, ".claude", "projects", "orphaned"),
+		types.CategoryAgentState,
+		300,
+	)
+	agentState.Tool = types.ToolClaude
+	agentState.Classification = types.EntryClassOrphaned
+	agentState.ModTime = now
+
+	targets := cleaner.Filter([]types.DebrisInfo{parent, agentState}, types.PruneOptions{
+		Age: 30 * 24 * time.Hour,
+	})
+	plan, err := BuildUnifiedCleanupPlan(
+		context.Background(),
+		ClassicCleanupPlanCandidates(targets),
+		CleanupPlanEvidence{},
+	)
+	if err != nil {
+		t.Fatalf("BuildUnifiedCleanupPlan() error = %v", err)
+	}
+
+	totals := plan.Totals()
+	if totals.VisibleRows != 2 || totals.PhysicalTargets != 1 ||
+		totals.PhysicalBytes != 1000 || totals.EligibleTargets != 1 ||
+		totals.EligibleBytes != 1000 || totals.SelectedTargets != 1 ||
+		totals.SelectedBytes != 1000 {
+		t.Fatalf("totals = %#v, nested agent-state bytes must be counted once", totals)
+	}
+}
+
+func TestUnifiedCleanupPlanDescendantLockDominatesSelectedAgentState(t *testing.T) {
+	root := t.TempDir()
+	agentState := cleanupPlanTestItem(
+		filepath.Join(root, ".claude", "projects", "orphaned"),
+		types.CategoryAgentState,
+		500,
+	)
+	agentState.Tool = types.ToolClaude
+	agentState.Classification = types.EntryClassOrphaned
+	agentState.ModTime = time.Now()
+	selected := ClassicCleanupPlanCandidates(cleaner.Filter(
+		[]types.DebrisInfo{agentState},
+		types.PruneOptions{Age: 365 * 24 * time.Hour},
+	))
+	if got, want := len(selected), 1; got != want {
+		t.Fatalf("selected candidates = %d, want %d", got, want)
+	}
+
+	lockedChild := cleanupPlanTestItem(filepath.Join(agentState.Path, "protected"), types.CategoryWorktree, 10)
+	candidates := append(selected, CleanupPlanCandidate{
+		RowKey:    "locked-child",
+		Item:      lockedChild,
+		Selection: CleanupPlanLocked,
+	})
+	plan, err := BuildUnifiedCleanupPlan(context.Background(), candidates, CleanupPlanEvidence{})
+	if err != nil {
+		t.Fatalf("BuildUnifiedCleanupPlan() error = %v", err)
+	}
+
+	agentStateRow := cleanupPlanRowByKey(t, plan, selected[0].RowKey)
+	if agentStateRow.Selection != CleanupPlanLocked {
+		t.Fatalf("agent-state selection = %q, want locked", agentStateRow.Selection)
+	}
+	if !hasCleanupPlanReason(agentStateRow.Reasons, CleanupPlanReasonContainsLockedTarget) {
+		t.Fatalf("agent-state reasons = %#v, want locked-descendant reason", agentStateRow.Reasons)
+	}
+	totals := plan.Totals()
+	if totals.SelectedTargets != 0 || totals.SelectedBytes != 0 ||
+		totals.HardLockedTargets != 1 || totals.HardLockedBytes != 500 {
+		t.Fatalf("totals = %#v, descendant lock must dominate selected agent-state parent", totals)
 	}
 }
 

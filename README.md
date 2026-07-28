@@ -31,6 +31,12 @@ confirmation, and path safety checks.
 | Agent state | Claude and Cursor project stores | Orphaned only; no age gate |
 | AI logs | Codex, Claude, Windsurf logs | Only with `--risky` |
 
+Agent-state scan rows expose a `classification` of `live`, `orphaned`, or
+`undetermined`. This classification takes precedence over the classic age
+filter: an absent recorded working directory proves the associated work is gone
+and resume is already impossible, so an `orphaned` entry needs no age gate.
+`live` and `undetermined` entries remain protected.
+
 ### Install
 
 ```bash
@@ -300,9 +306,10 @@ Cancellation remains a hard failure.
 
 ### Safety
 
-- **Independent age policies**: classic cleanup defaults to `--age 7d`; guided
-  Codex cleanup defaults to a 3-day minimum idle age while always keeping its
-  6-hour recent-activity lock and recent-three retention
+- **Independent age policies**: classic cleanup defaults to `--age 7d`, except
+  for proof-classified orphaned agent state; guided Codex cleanup defaults to a
+  3-day minimum idle age while always keeping its 6-hour recent-activity lock
+  and recent-three retention
 - **Human age units** support `h`, `d`, `w`, `mo`, and `y`
 - **`--dry-run`** previews before deleting
 - **`--interactive`** confirms each item

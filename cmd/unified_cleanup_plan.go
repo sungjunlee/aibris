@@ -30,6 +30,7 @@ type CleanupPlanReasonCode string
 
 const (
 	CleanupPlanReasonClassicEligible        CleanupPlanReasonCode = "classic_eligible"
+	CleanupPlanReasonAgentStateOrphaned     CleanupPlanReasonCode = "agent_state_orphaned"
 	CleanupPlanReasonContainsLockedTarget   CleanupPlanReasonCode = "contains_locked_target"
 	CleanupPlanReasonWorktreePolicyDecision CleanupPlanReasonCode = "worktree_policy_decision"
 )
@@ -191,14 +192,21 @@ func BuildUnifiedCleanupPlan(ctx context.Context, candidates []CleanupPlanCandid
 func ClassicCleanupPlanCandidates(targets []types.DebrisInfo) []CleanupPlanCandidate {
 	candidates := make([]CleanupPlanCandidate, 0, len(targets))
 	for _, target := range targets {
+		reason := CleanupPlanReason{
+			Code:        CleanupPlanReasonClassicEligible,
+			Description: "eligible under classic cleanup filters",
+		}
+		if target.Category == types.CategoryAgentState {
+			reason = CleanupPlanReason{
+				Code:        CleanupPlanReasonAgentStateOrphaned,
+				Description: "recorded working directory is absent",
+			}
+		}
 		candidates = append(candidates, CleanupPlanCandidate{
 			RowKey:    "classic:" + cleanTargetStableKey(target),
 			Item:      target,
 			Selection: CleanupPlanSelected,
-			Reasons: []CleanupPlanReason{{
-				Code:        CleanupPlanReasonClassicEligible,
-				Description: "eligible under classic cleanup filters",
-			}},
+			Reasons:   []CleanupPlanReason{reason},
 		})
 	}
 	return candidates
