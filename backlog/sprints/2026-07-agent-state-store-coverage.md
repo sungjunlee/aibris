@@ -27,7 +27,7 @@ content that is surfaced rather than reclaimed.
 
 ### Batch 2 — Freeze cache and measurement contracts
 
-- [~] #145 Invalidate the cleanup scan cache with a stable provider-membership identity; behavior revisions still bump the cache revision (~1.5h) [branch:issue-145-provider-cache-identity]
+- [~] #145 Invalidate the cleanup scan cache with a stable provider-membership identity; behavior revisions still bump the cache revision (~1.5h) [run:issue-145-20260728133746838-2a34cd7b]
 - [ ] #146 Replace the absolute scan-time baseline with same-session paired deltas; keep the repeatable harness in #129 (~1h)
 
 ### Batch 3 — Close nested agent-state safety
