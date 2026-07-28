@@ -28,7 +28,7 @@ cmd/         → cobra commands (root, scan, clean)
 internal/
   adapter/   → DebrisProvider interface + codex, claude, etc.
   scanner/   → Scan(): iterates all adapters, collects results
-  cleaner/   → Filter(): filters by age/category/tool, Execute()
+  cleaner/   → Filter(): applies category-specific eligibility and selectors, Execute()
   types/     → DebrisInfo, ScanResult, PruneOptions
 ```
 

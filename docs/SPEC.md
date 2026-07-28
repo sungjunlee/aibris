@@ -52,7 +52,9 @@ Output contains:
 - `summary.total_size`
 - `summary.by_category`
 - `summary.by_tool`
-- item-level `status`, `risk`, and `reason` fields for agent decisions
+- item-level `status`, `classification`, `risk`, and `reason` fields for agent
+  decisions; `classification` is `live`, `orphaned`, or `undetermined` for
+  `agent-state` and omitted for other categories
 - item-level `source` for path-derived worktree owners
 - item-level `cleanup_kind` and `cleanup_command` fields for cleanup execution
 
@@ -83,10 +85,11 @@ Behavior:
 1. Parse and validate `--age`.
 2. Warn when `--age` is shorter than one hour.
 3. Obtain scan results from a fresh compatible scan cache or by scanning providers.
-4. Choose guided or classic cleanup. Classic cleanup filters by age, category,
-   tool, risky status, and worktree health. Guided cleanup builds physical
-   cleanup units, collects Git and activity evidence, and applies the
-   hierarchical policy below.
+4. Choose guided or classic cleanup. Classic cleanup applies category and tool
+   selectors plus category-specific eligibility: age, risky status, and
+   worktree health for ordinary debris, or classification for `agent-state`.
+   Guided cleanup builds physical cleanup units, collects Git and activity
+   evidence, and applies the hierarchical policy below.
 5. After guided active-worktree review, continue with the classic audit for
    remaining categories. Normalize selected guided parents with classic
    targets so nested paths are not counted or previewed twice.
@@ -99,6 +102,11 @@ Behavior:
     active worktree members through the Git-aware executor.
 12. Print a cleanup receipt with removed, partial, and failed unit counts,
     truthful freed bytes, and protected/skipped totals.
+
+For `agent-state`, `classification` replaces the age gate. An absent recorded
+working directory proves the associated work is gone and resume is already
+impossible, so `orphaned` is eligible regardless of age after category and tool
+selection. `live` and `undetermined` are protected.
 
 Command-backed cleanup:
 

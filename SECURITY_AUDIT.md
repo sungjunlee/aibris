@@ -8,8 +8,9 @@ is a local cleanup tool, its primary risk is unintended local data loss.
 `aibris` scans known AI-development debris locations and can permanently delete
 matching directories or files. It uses conservative defaults:
 
-- classic cleanup targets must be older than `168h` by default; guided
-  worktree recommendations use independent activity and retention gates
+- classic cleanup targets must be older than `168h` by default, except
+  proof-classified orphaned agent state; guided worktree recommendations use
+  independent activity and retention gates
 - destructive operations reject paths outside the user's home directory
 - cleanup is limited to validated home-scoped paths and Git worktree metadata
 - AI logs and similar sensitive artifacts require `--risky`
@@ -70,11 +71,12 @@ is no Trash or undo flow.
 
 ## Risky Categories
 
-The Cursor project store (`~/.cursor/projects`) is `agent-state`, not
-`ai-logs`. Orphaned entries are eligible for cleanup by default with no age
-gate, while `live` and `undetermined` entries are always protected. The
-classification is proved from the workspace path recorded in each entry rather
-than inferred from the entry name or path.
+The Claude and Cursor project stores (`~/.claude/projects` and
+`~/.cursor/projects`) are `agent-state`; Cursor project state is not `ai-logs`.
+Orphaned entries are eligible for cleanup by default with no age gate, while
+`live` and `undetermined` entries are always protected. The classification is
+proved from working-directory metadata recorded in each entry rather than
+inferred from the entry name or path.
 
 `ai-logs` and any unknown future category are risky by default. They are excluded
 from cleanup unless the user passes `--risky`.

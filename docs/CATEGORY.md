@@ -17,6 +17,21 @@ AI-workflow artifact without broad filesystem cleanup.
 Unknown or future categories should stay risky until they have explicit safety
 rules.
 
+## Agent-State Classification
+
+The `classification` field applies to `agent-state` entries and is omitted for
+other categories:
+
+| Classification | Meaning | Cleanup eligibility |
+|----------------|---------|---------------------|
+| `live` | At least one recorded working directory still exists. | Protected |
+| `orphaned` | Every usable recorded working directory is proven absent. | Eligible without an age gate |
+| `undetermined` | Recorded working-directory evidence is missing, unreadable, ambiguous, or otherwise inconclusive. | Protected |
+
+Classification takes precedence over age because an absent recorded working
+directory proves the associated work is gone and resume is already impossible.
+Directory modification time cannot strengthen or weaken that proof.
+
 ## Tool Mapping
 
 | Tool | Category | Notes |
