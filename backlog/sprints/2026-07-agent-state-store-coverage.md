@@ -37,6 +37,9 @@ content that is surfaced rather than reclaimed.
 
 ### Batch 2 — Fix discovery shape and cover byproducts
 
+- [x] #150 Make the agent-state revalidation gate fail closed (~1h) → PR #153
+      (merged `fdfb9b1`, 4 review rounds). Prerequisite for #139 and #142, both
+      of which add `agent-state` providers.
 - [ ] #140 Replace bounded worktree discovery with a container registry (~3h)
 - [ ] #142 Add agent byproduct store providers (~2h)
 
@@ -210,3 +213,27 @@ measuring, because the real home lacked the triggering condition.
   before #139 and #142**, since both add `agent-state` providers and a missing
   allowlist entry means deletion without revalidation rather than a compile
   error.
+- 2026-07-28: #150 dispatched → PR #153 → 4 review rounds → merged as `fdfb9b1`.
+  The agent-state revalidation gate now fails closed: revalidation is selected by
+  a lookup keyed on `types.Tool`, and an item whose tool has no registered
+  revalidator is refused rather than deleted. `adapter.AgentStateRevalidator` is
+  an optional interface on the provider, and the provider list moved to
+  `internal/adapter/providers.go` so scanning and revalidator lookup are built
+  from one slice and cannot diverge. Behavior is unchanged — both binaries plan
+  197 items / 1.6 GB, agent-state 194 eligible / 227.7 MB.
+
+  **The L2 patterns paid for themselves: 17 rounds → 4.** Preloading them into
+  the Done Criteria is what did it — the file-survival assertion, the fail-closed
+  *direction*, cross-compile in verification, reference numbers labelled "not a
+  target", and a round cap set once at the start instead of raised four times.
+
+  The one substantive review finding was the L2 doc shape recurring exactly:
+  the code was clean and single-source, but `AGENTS.md:39` and
+  `CONTRIBUTING.md:41` still told contributors to register providers in
+  `internal/scanner/scanner.go`. The reviewer's stated mechanism (two lists
+  diverging) was wrong on source — there is only one list — but the risk was
+  real, because an agent following those docs would find no list and could add a
+  second one. Fixed in both files, each now also stating the revalidator
+  obligation and why it exists. **When a change moves a declaration, grep for
+  every document that names its old home** — this is now the second leaf in a row
+  where that was the only real finding.
