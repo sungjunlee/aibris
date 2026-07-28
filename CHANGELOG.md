@@ -158,8 +158,7 @@
 - `clean` now shows scan progress before candidate filtering, so running
   cleanup without a prior scan no longer looks stalled.
 - `scan` writes a short-lived last-scan snapshot, and `clean` reuses it for
-  5 minutes when roots, cache revision, provider membership, and freshness
-  match.
+  5 minutes when roots, cache revision, and freshness match.
 - `clean` re-checks cached target paths before presenting or deleting them.
 
 ### Changed
