@@ -19,45 +19,54 @@ content that is surfaced rather than reclaimed.
 
 ### Batch 1 — Establish the proof-based tier (gating) — complete
 
-- [x] #138 Add provable-orphan cleanup for agent session stores (~3h)
-  - relay-ready request `req-20260726233000943`, three ordered leaves
-  - [x] `L1-claude-store-classification` → PR #144 (merged, 15 review rounds).
-        `agent-state` category, additive `Classification` field,
-        `~/.claude/projects` recorded-cwd reader, **and** the eligibility rule,
-        which moved here from L3 after the original contract proved
-        self-contradictory.
-  - [x] `L2-cursor-store-classification` → PR #148 (merged `8b86fe4`,
-        17 review rounds). Shared classifier extracted to `recorded_cwd.go`,
-        `~/.cursor/projects` migrated to `agent-state`, recorded cwd read from
-        `workspacePath=`. Six defects found after the code first passed clean —
-        five of them would have deleted a live workspace's store.
-  - [x] `L3-orphan-clean-eligibility` → PR #154 (merged `b30df08`,
-        5 review rounds). Proved `UnifiedCleanupPlan` absorption, added the
-        `agent_state_orphaned` reason code, locked audit/dry-run/receipt
-        surfaces with a compiled CLI contract test, and reconciled docs.
-        Eligibility already landed in L1.
+- [x] #138 Add provable-orphan cleanup for agent session stores; L1–L3 merged through PRs #144, #148, and #154
 
-### Batch 2 — Fix discovery shape and cover byproducts
+### Prerequisite hardening — complete
 
-- [x] #150 Make the agent-state revalidation gate fail closed (~1h) → PR #153
-      (merged `fdfb9b1`, 4 review rounds). Prerequisite for #139 and #142, both
-      of which add `agent-state` providers.
-- [ ] #140 Replace bounded worktree discovery with a container registry (~3h)
-- [ ] #142 Add agent byproduct store providers (~2h)
+- [x] #150 Make the agent-state revalidation gate fail closed → PR #153 (merged `fdfb9b1`, 4 review rounds)
 
-### Batch 3 — Cover the largest stores
+### Batch 2 — Freeze cache and measurement contracts
 
-- [ ] #139 Add session, transcript, and run-manifest store providers with retention buckets (~4h)
+- [ ] #145 Invalidate the cleanup scan cache with a stable provider-membership identity; behavior revisions still bump the cache revision (~1.5h)
+- [ ] #146 Replace the absolute scan-time baseline with same-session paired deltas; keep the repeatable harness in #129 (~1h)
 
-### Batch 4 — Open guided review to every tool
+### Batch 3 — Close nested agent-state safety
+
+- [ ] #151 L1 overlap safety: protected agent-state shields its subtree and outer targets inherit nested safety/revalidation (~2h)
+- [ ] #151 L2 plan/audit accounting: outermost physical target owns bytes while rows, reasons, and receipts retain nested obligations (~1h)
+
+### Batch 4 — Fix bounded worktree-container coverage
+
+- [ ] #140 Cover the confirmed `~/.config/superpowers/worktrees` depth gap within a documented finite discovery bound (~3h)
+
+### Batch 5 — Classify agent byproducts
+
+- [ ] #142 L1 store classification: freeze installed, regenerable, and user-content decisions before adding providers
+
+### Batch 6 — Introduce protected-content retention semantics
+
+- [ ] #139 L1 retention contract: freeze bucket, selector, aggregation, timestamp, and execution-manifest semantics
+
+### Batch 7 — Add byproduct coverage
+
+- [ ] #142 `L2-regenerable-providers` — add only regenerable residue providers.
+- [ ] #142 L3 protected artifacts: surface user artifacts without implicit cleanup through default clean or `--risky`
+
+### Batch 8 — Cover the largest retention stores
+
+- [ ] #139 L2 Codex sessions: aggregate counts and sizes by time bucket without parsing conversation bodies
+- [ ] #139 L3 Cursor/Gstack/Claude: add coverage without duplicate rows or bytes
+- [ ] #139 L4 relay runs and end-to-end retention CLI contract
+
+### Batch 9 — Open guided review to every tool
 
 - [ ] #141 Generalize guided worktree review beyond codex (~3h)
 
-### Batch 5 — State the boundary
+### Batch 10 — State the boundary
 
 - [ ] #143 Reframe the documented product boundary around agent debris (~2h)
 
-### Batch 6 — Close capability scope
+### Batch 11 — Close capability scope
 
 - [ ] #137 [Epic] Cover the agent state store surface (~30min)
 
@@ -72,8 +81,18 @@ content that is surfaced rather than reclaimed.
   does not distinguish proof-based from age-based eligibility. The only plan
   model change was the 12-line `agent_state_orphaned` reason code. This is the
   signal #115 was waiting on.
-- Batch 2 items are independent of #138 and of each other, so they may fan out.
-  Batch 3 depends on #138's recorded-cwd readers.
+- #145 and #146 are code-path independent, but their sprint/task/issue updates
+  remain orchestrator-owned. Run later provider leaves sequentially because
+  their provider registry, public docs, and real-home measurement surfaces
+  overlap.
+- #151 is a safety gate for #142 and #139. A protected `live` or `undetermined`
+  agent-state entry shields its complete subtree. When a generic outer target
+  contains an orphaned agent-state entry, the outer target owns physical bytes
+  but must inherit the child's deletion-time revalidation obligation.
+- #142 and #139 interleave deliberately: classify byproducts first, freeze the
+  protected-content retention contract, then add regenerable and protected
+  providers. `generated_images` and transcripts require an explicit retention
+  decision; `--risky` alone is insufficient.
 - Orphan detection must read each store's recorded working directory. Directory
   names are a lossy encoding — `/`, `.`, and `_` all collapse to `-` — and
   decoding them produced false positives during the audit.
@@ -86,8 +105,15 @@ content that is surfaced rather than reclaimed.
   every new provider must preserve it.
 - Every existing hard lock, the non-forced `git worktree remove` contract, and
   the preflight/verification behavior stay unchanged.
-- Report full-home scan time against the 19.2s baseline whenever a provider is
-  added.
+- Report provider performance as a same-session paired delta: build base and
+  change together, alternate runs, and record cache condition and observed
+  scale. Keep 19.2s only as a labelled historical observation.
+- #147 returns to the paused 0.9.x execution-contract stream after #151; it
+  should reuse #115's single plan pipeline rather than add another normalization
+  implementation in this milestone.
+- #152 remains an explicit maintainer-approved limitation until an actual
+  Windows host or Windows CI runner can verify `GetVolumePathNameW`. Do not ship
+  unverifiable safety-barrier syscall code merely to close the milestone.
 - The project remains in 0.x. This milestone has no due date and implies no
   v1.0.0 schedule.
 
@@ -255,3 +281,15 @@ measuring, because the real home lacked the triggering condition.
   eligible (228.6 MB) / 81 protected**. The plan model absorbed the
   age-independent category without structural change, resolving #115's open
   question; only the 12-line `agent_state_orphaned` reason code was needed.
+- 2026-07-28: Replanned the remaining milestone after Batch 1. `codexbar`
+  reported Codex weekly usage at 7% and code-review usage at 6%, so Codex is the
+  primary executor and reviewer route; Claude remains a limited independent
+  review fallback. An independent Codex/Sol-high planning audit confirmed that
+  only #145/#146 are plausibly parallel and found that #151 also owns nested
+  deletion-time revalidation, not merely byte accounting.
+
+  Added #145, #146, and #151 as explicit gates. Narrowed #140 to the measured
+  superpowers depth gap, split #142 into classification/regenerable/protected
+  leaves, and split #139 into retention-contract plus three provider leaves.
+  Routed #147 back behind #115 and explicitly deferred #152 until a real Windows
+  verification environment exists.
