@@ -36,7 +36,8 @@ CLI 자체는 dumb executor. Q&A와 판단은 AI 스킬이负责.
 - 발견된 모든 경로의 크기를 `estimateDirSize()`로 계산 (WalkDir 기반)
 - worktree 컨테이너처럼 프로젝트가 하위 디렉토리인 adapter는 `detectProjectName()`으로 추론 (숨김 디렉토리 제외)
 - recorded cwd 자체가 프로젝트를 가리키는 store adapter는 `projectNameFromRecordedCWD()`로 마지막 경로 조각을 사용 (파일시스템 조회 금지)
-- `internal/scanner/scanner.go` 의 `providers` 목록에 등록
+- `internal/adapter/providers.go` 의 `providers` 목록에 등록
+- `Category()`가 `agent-state`인 adapter는 `AgentStateRevalidator`도 구현 (`agent-state`는 age gate 없이 기본 정리되며, 등록된 revalidator가 없으면 삭제 거부)
 
 **1-1. Worktree discovery 변경시 꼭 지킬 것**
 - 특정 도구 이름을 hardcode하기보다 `$HOME` 아래 `worktrees`, `worktree`, `worktree-*`, `worktrees-*` 디렉토리를 찾는다

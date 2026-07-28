@@ -38,8 +38,9 @@ internal/
 2. `Name()` returns kebab-case Tool constant
 3. `Scan()` respects context cancellation
 4. Use `estimateDirSize(ctx, path)` for size calculation
-5. Register in `internal/scanner/scanner.go` `providers` slice
-6. Add tests in `internal/adapter/<name>_test.go`
+5. Register in the `internal/adapter/providers.go` `providers` slice
+6. For an adapter whose `Category()` is `agent-state`, also implement `AgentStateRevalidator`; `agent-state` is cleaned by default with no age gate, and cleanup refuses entries without a registered revalidator
+7. Add tests in `internal/adapter/<name>_test.go`
 
 ## Before Submitting
 
