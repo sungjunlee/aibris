@@ -10,6 +10,9 @@
   provider remain in `ai-logs`.
 
 ### Safety
+- Agent-state cleanup now refuses an individual item when its tool has no
+  registered pre-deletion revalidator, while continuing to process unrelated
+  items in the same run.
 - Orphaned Cursor agent-state is cleanable by default without an age gate.
   Live and undetermined entries remain protected even with `--risky --force`,
   and cleanup revalidates the recorded workspace immediately before deletion.

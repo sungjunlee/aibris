@@ -97,6 +97,10 @@ func ClassifyClaudeProjectEntry(ctx context.Context, entryPath string) (types.En
 	return classification, err
 }
 
+func (a *ClaudeProjectAdapter) RevalidateAgentState(ctx context.Context, entryPath string) (types.EntryClass, error) {
+	return ClassifyClaudeProjectEntry(ctx, entryPath)
+}
+
 func classifyClaudeProjectEntry(ctx context.Context, entryPath string) (types.EntryClass, string, string, error) {
 	return classifyRecordedCWDEntry(ctx, entryPath, recordedCWDsFromClaudeProject)
 }

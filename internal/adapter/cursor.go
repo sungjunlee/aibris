@@ -97,6 +97,10 @@ func ClassifyCursorProjectEntry(ctx context.Context, entryPath string) (types.En
 	return classification, err
 }
 
+func (a *CursorAdapter) RevalidateAgentState(ctx context.Context, entryPath string) (types.EntryClass, error) {
+	return ClassifyCursorProjectEntry(ctx, entryPath)
+}
+
 func classifyCursorProjectEntry(ctx context.Context, entryPath string) (types.EntryClass, string, string, error) {
 	return classifyRecordedCWDEntry(ctx, entryPath, recordedCWDFromCursorProject)
 }
