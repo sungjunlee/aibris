@@ -179,16 +179,18 @@ func runCLIContract(binary, home string, args ...string) (string, error) {
 }
 
 func cliContractEnv(environ []string, home string) []string {
-	homeKeys := map[string]bool{
-		"HOME":        true,
-		"USERPROFILE": true,
-		"HOMEDRIVE":   true,
-		"HOMEPATH":    true,
+	isolatedKeys := map[string]bool{
+		"HOME":           true,
+		"USERPROFILE":    true,
+		"HOMEDRIVE":      true,
+		"HOMEPATH":       true,
+		"XDG_CACHE_HOME": true,
+		"LOCALAPPDATA":   true,
 	}
-	env := make([]string, 0, len(environ)+len(homeKeys))
+	env := make([]string, 0, len(environ)+len(isolatedKeys))
 	for _, entry := range environ {
 		key, _, _ := strings.Cut(entry, "=")
-		if homeKeys[strings.ToUpper(key)] {
+		if isolatedKeys[strings.ToUpper(key)] {
 			continue
 		}
 		env = append(env, entry)
@@ -196,11 +198,14 @@ func cliContractEnv(environ []string, home string) []string {
 
 	homeDrive := filepath.VolumeName(home)
 	homePath := strings.TrimPrefix(home, homeDrive)
+	cacheHome := filepath.Join(home, ".cache")
 	return append(env,
 		"HOME="+home,
 		"USERPROFILE="+home,
 		"HOMEDRIVE="+homeDrive,
 		"HOMEPATH="+homePath,
+		"XDG_CACHE_HOME="+cacheHome,
+		"LOCALAPPDATA="+cacheHome,
 	)
 }
 
@@ -242,14 +247,18 @@ func TestCLIContractEnvReplacesHomeVariables(t *testing.T) {
 		"USERPROFILE=C:\\old\\profile",
 		"HOMEDRIVE=C:",
 		"HOMEPATH=\\old\\path",
+		"XDG_CACHE_HOME=/old/cache",
+		"LOCALAPPDATA=C:\\old\\cache",
 	}
 
 	env := cliContractEnv(environ, home)
 	want := map[string]string{
-		"HOME":        home,
-		"USERPROFILE": home,
-		"HOMEDRIVE":   filepath.VolumeName(home),
-		"HOMEPATH":    strings.TrimPrefix(home, filepath.VolumeName(home)),
+		"HOME":           home,
+		"USERPROFILE":    home,
+		"HOMEDRIVE":      filepath.VolumeName(home),
+		"HOMEPATH":       strings.TrimPrefix(home, filepath.VolumeName(home)),
+		"XDG_CACHE_HOME": filepath.Join(home, ".cache"),
+		"LOCALAPPDATA":   filepath.Join(home, ".cache"),
 	}
 	counts := make(map[string]int, len(want))
 	for _, entry := range env {
