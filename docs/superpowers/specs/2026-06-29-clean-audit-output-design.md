@@ -185,10 +185,13 @@ category are eligible, the main reason can be `eligible for cleanup`.
 - `scan    live`
 - `scan    cached, 8s old`
 
-Fresh scan cache reuse remains valid only when roots, schema, and freshness
-match. Cached items must still pass the existing path existence check before
-presentation and deletion. Items removed by that check should be counted as
-skipped with `path no longer exists` in the audit.
+Fresh scan cache reuse remains valid only when normalized roots, freshness,
+explicit cache revision (`schema_version`), and concrete provider membership
+match. Membership identity does not detect behavior changes inside unchanged
+providers, so those changes require a cache revision bump. Cached items must
+still pass the existing path existence check before presentation and deletion.
+Items removed by that check should be counted as skipped with
+`path no longer exists` in the audit.
 
 ## Error Handling
 

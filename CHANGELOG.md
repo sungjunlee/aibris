@@ -3,6 +3,10 @@
 ## Unreleased
 
 ### Changed
+- Last-scan cache reuse now also requires a deterministic identity of the
+  concrete provider membership. Legacy or mismatched snapshots visibly fall
+  back to a live scan. The explicit cache revision remains the compatibility
+  axis for behavior changes inside unchanged provider implementations.
 - Cursor project-store entries under `~/.cursor/projects` now use the
   `agent-state` category and recorded `workspacePath=` classification instead
   of the risky `ai-logs` category. `--category ai-logs` no longer selects these
@@ -154,7 +158,8 @@
 - `clean` now shows scan progress before candidate filtering, so running
   cleanup without a prior scan no longer looks stalled.
 - `scan` writes a short-lived last-scan snapshot, and `clean` reuses it for
-  5 minutes when roots, cache schema, and freshness match.
+  5 minutes when roots, cache revision, provider membership, and freshness
+  match.
 - `clean` re-checks cached target paths before presenting or deleting them.
 
 ### Changed

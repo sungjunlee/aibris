@@ -7,19 +7,23 @@ import (
 	"slices"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
 const (
+	// Bump this explicit compatibility revision when cache format or provider
+	// behavior changes without a concrete provider-membership change.
 	lastScanCacheSchemaVersion = 3
 	lastScanCacheMaxAge        = 5 * time.Minute
 )
 
 type lastScanCache struct {
-	SchemaVersion int              `json:"schema_version"`
-	CreatedAt     time.Time        `json:"created_at"`
-	Roots         []string         `json:"roots"`
-	Result        types.ScanResult `json:"result"`
+	SchemaVersion    int              `json:"schema_version"`
+	ProviderIdentity string           `json:"provider_identity"`
+	CreatedAt        time.Time        `json:"created_at"`
+	Roots            []string         `json:"roots"`
+	Result           types.ScanResult `json:"result"`
 }
 
 func writeLastScanCache(roots []string, result *types.ScanResult) {
@@ -31,10 +35,11 @@ func writeLastScanCache(roots []string, result *types.ScanResult) {
 		return
 	}
 	_ = saveLastScanCache(lastScanCache{
-		SchemaVersion: lastScanCacheSchemaVersion,
-		CreatedAt:     time.Now(),
-		Roots:         append([]string(nil), roots...),
-		Result:        *result,
+		SchemaVersion:    lastScanCacheSchemaVersion,
+		ProviderIdentity: adapter.DefaultProviderIdentity(),
+		CreatedAt:        time.Now(),
+		Roots:            append([]string(nil), roots...),
+		Result:           *result,
 	})
 }
 
@@ -67,6 +72,9 @@ func readFreshLastScanCache(roots []string) (*types.ScanResult, time.Duration, b
 	}
 	age := time.Since(cache.CreatedAt)
 	if cache.SchemaVersion != lastScanCacheSchemaVersion || age < 0 || age > lastScanCacheMaxAge {
+		return nil, age, false
+	}
+	if cache.ProviderIdentity == "" || cache.ProviderIdentity != adapter.DefaultProviderIdentity() {
 		return nil, age, false
 	}
 	if !slices.Equal(cache.Roots, roots) {

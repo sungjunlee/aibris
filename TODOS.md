@@ -9,9 +9,11 @@ No active TODOs.
 ### Reuse recent scan results for faster clean
 
 Implemented from GitHub issue #35. `scan` now writes a short-lived last-scan
-snapshot, and `clean` reuses it when roots, schema version, and freshness match.
-`clean` still re-checks path existence before presenting or deleting cached
-targets.
+snapshot, and `clean` reuses it when normalized roots, freshness, the explicit
+cache revision (`schema_version`), and concrete provider membership match.
+Provider membership does not detect behavior changes inside an unchanged
+provider, which still require a cache revision bump. `clean` still re-checks
+path existence before presenting or deleting cached targets.
 
 ### Improve `clean` progress and target presentation
 
