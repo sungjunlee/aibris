@@ -17,9 +17,10 @@ func TestAgentStateCLIContract(t *testing.T) {
 	home := t.TempDir()
 
 	claudeOrphan := filepath.Join(home, ".claude", "projects", "claude-orphan")
+	claudeOrphanCWD := filepath.Join(home, "missing", "claude-project")
 	claudeOrphanEvidence := fmt.Sprintf(
 		"{\"cwd\":%q}\n",
-		filepath.Join(home, "missing", "claude-project"),
+		claudeOrphanCWD,
 	)
 	writeCLIContractFile(t, filepath.Join(claudeOrphan, "session.jsonl"),
 		claudeOrphanEvidence)
@@ -32,8 +33,9 @@ func TestAgentStateCLIContract(t *testing.T) {
 		fmt.Sprintf("{\"cwd\":%q}\n", claudeLiveCWD))
 
 	cursorOrphan := filepath.Join(home, ".cursor", "projects", "cursor-orphan")
+	cursorOrphanCWD := filepath.Join(home, "missing", "cursor-project")
 	writeCLIContractFile(t, filepath.Join(cursorOrphan, "worker.log"),
-		"[info] workspacePath="+filepath.Join(home, "missing", "cursor-project")+"\n")
+		"[info] workspacePath="+cursorOrphanCWD+"\n")
 	cursorUndetermined := filepath.Join(home, ".cursor", "projects", "cursor-undetermined")
 	if err := os.MkdirAll(cursorUndetermined, 0755); err != nil {
 		t.Fatal(err)
@@ -58,14 +60,16 @@ func TestAgentStateCLIContract(t *testing.T) {
 		"matched  2 candidates",
 		"targets  2 items",
 		"[DRY-RUN] No files were removed.",
-		claudeOrphan,
-		cursorOrphan,
+		filepath.Base(claudeOrphan),
+		claudeOrphanCWD,
+		filepath.Base(cursorOrphan),
+		cursorOrphanCWD,
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("agent-state dry-run missing %q:\n%s", want, output)
 		}
 	}
-	for _, protected := range []string{claudeLive, cursorUndetermined} {
+	for _, protected := range []string{filepath.Base(claudeLive), filepath.Base(cursorUndetermined)} {
 		if strings.Contains(output, protected) {
 			t.Fatalf("protected path %q leaked into dry-run targets:\n%s", protected, output)
 		}
@@ -79,8 +83,8 @@ func TestAgentStateCLIContract(t *testing.T) {
 		selected string
 		excluded string
 	}{
-		{tool: "claude", selected: claudeOrphan, excluded: cursorOrphan},
-		{tool: "cursor", selected: cursorOrphan, excluded: claudeOrphan},
+		{tool: "claude", selected: filepath.Base(claudeOrphan), excluded: filepath.Base(cursorOrphan)},
+		{tool: "cursor", selected: filepath.Base(cursorOrphan), excluded: filepath.Base(claudeOrphan)},
 	} {
 		t.Run(toolCase.tool, func(t *testing.T) {
 			toolOutput, toolErr := runCLIContract(
