@@ -25,10 +25,10 @@ content that is surfaced rather than reclaimed.
 
 - [x] #150 Make the agent-state revalidation gate fail closed → PR #153 (merged `fdfb9b1`, 4 review rounds)
 
-### Batch 2 — Freeze cache and measurement contracts
+### Batch 2 — Freeze cache and measurement contracts — complete
 
 - [x] #145 Invalidate the cleanup scan cache with a stable provider-membership identity; behavior revisions still bump the cache revision → PR #155 (merged `c49b4e4`)
-- [ ] #146 Replace the absolute scan-time baseline with same-session paired deltas; keep the repeatable harness in #129 (~1h)
+- [x] #146 Replace the absolute scan-time baseline with same-session paired deltas; keep the repeatable harness in #129 → PR #158 (merged `755e233`)
 
 ### Batch 3 — Close nested agent-state safety
 
@@ -322,3 +322,25 @@ measuring, because the real home lacked the triggering condition.
   round-cap retry from consuming reviewer-swap quota; dev-relay #1118 prevents
   executor process success from attesting failed verification and permits
   operator evidence on clean no-op runs.
+- 2026-07-29 19:23: #146 dispatched → PR #158 → review (LGTM, round 5) →
+  squash-merged as `755e233`; #146 closed, Batch 2 completed, and the run
+  worktree plus local/remote branch were cleaned. Canonical #139 and #140
+  acceptance criteria now require the paired method instead of comparing a
+  stored `19.2s` timing.
+
+  `docs/DOGFOOD.md` now builds exact immutable base/change SHAs together,
+  alternates at least four adjacent pairs with both orders represented, records
+  every source/item/byte scale and delta, separates filesystem and aibris
+  application-cache state, rejects failed scans and unverifiable cold eviction,
+  and treats a minimum manual series as `inconclusive` without a predeclared
+  stability rule. #129 remains the owner of the synthetic harness and non-flaky
+  budget.
+
+  Final real-home warm verification ran eight scans with no clean command. All
+  observations matched at **8 sources / 311 items / 23,342,632,843 B** while
+  `codex-activity.json` stayed byte-identical. Paired deltas were **-0.02s,
+  -0.76s, +1.59s, +1.49s**; median **+0.74s**, range **[-0.76s, +1.59s]**, and
+  the result was correctly reported as **inconclusive** rather than promoted to
+  a target. Base and change `-trimpath` binaries were byte-identical. Merged
+  `main` passed race tests, build, vet, Linux/Windows/Darwin builds, diff check,
+  and backlog doctor.
