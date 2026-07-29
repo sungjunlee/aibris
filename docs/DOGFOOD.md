@@ -277,12 +277,13 @@ cross-platform performance harness and a non-flaky regression budget.
    human-readable scan may read or refresh `codex-activity.json`; record its
    path, `created_at`, and checksum (or its absence) before and after every
    invocation. Establish one identical application-cache state for both
-   binaries before a series. For a **warm** series, run one unmeasured warm-up
-   of each binary, then require the recorded cache identity to remain unchanged
-   throughout every measured pair. If either binary refreshes or otherwise
-   changes it, discard that pair and repeat after re-establishing a common
-   state. Perform the measured warm series without filesystem eviction. Never
-   average cold, warm, or uncontrolled observations together.
+   binaries before a series. In every filesystem-cache condition, require the
+   recorded application-cache identity to remain unchanged throughout each
+   measured pair. If either binary refreshes or otherwise changes it, discard
+   that pair and repeat after re-establishing a common state. For a **warm**
+   series, first run one unmeasured warm-up of each binary, then perform the
+   measured series without filesystem eviction. Never average cold, warm, or
+   uncontrolled observations together.
 
 4. Within each cache-condition series, alternate order by adjacent pairs. The
    minimum is four measured runs per condition:
