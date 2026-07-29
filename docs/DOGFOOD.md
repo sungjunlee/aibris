@@ -223,6 +223,8 @@ cross-platform performance harness and a non-flaky regression budget.
    Build separate binaries with the same Go toolchain and build flags:
 
    ```bash
+   set -euo pipefail
+
    RUN_DIR=$(mktemp -d)
    BASE_SHA=$(git rev-parse --verify 'origin/main^{commit}')
    CHANGE_SHA=$(git rev-parse --verify 'HEAD^{commit}')
@@ -237,7 +239,8 @@ cross-platform performance harness and a non-flaky regression budget.
    ```
 
    Record `go version`, machine/OS, both SHAs, both binary checksums, and the
-   build flags. Do not rebuild either binary during the run.
+   build flags. Do not rebuild either binary during the run. Keep fail-fast and
+   pipeline-failure handling enabled for all remaining measurement commands.
 
 2. Freeze one measurement environment: the same machine, login session,
    measured `HOME`, normalized scan roots, command flags, environment variables,
@@ -257,15 +260,29 @@ cross-platform performance harness and a non-flaky regression budget.
    Do not clean or otherwise mutate the measured home between runs. Preserve
    every run log and time log. The non-TTY scan log supplies the scanned source
    count and the summary supplies item and byte scale; record those values for
-   every observation, not just once for the series.
+   every observation, not just once for the series. Admit an observation to a
+   pair only when the timed scan exits zero; preserve failed logs separately,
+   but never compute a delta from them.
 
 3. Measure filesystem-cache conditions as separate series. For a **cold**
    series, apply the same documented, platform-appropriate cache-eviction
-   procedure before every measured binary invocation. Record the exact
-   procedure; a first run with unknown state must be labelled `uncontrolled`,
-   not `cold`. For a **warm** series, run one unmeasured warm-up of each binary,
-   then perform the measured series without eviction. Never average cold, warm,
-   or uncontrolled observations together.
+   procedure before every measured binary invocation. Record the exact command,
+   its zero exit status, and a platform-specific signal that verifies eviction
+   took effect before each invocation. If eviction fails, is a no-op, or cannot
+   be verified, label that observation `uncontrolled` and exclude it from the
+   cold median and range. A first run with unknown state is also
+   `uncontrolled`, not `cold`.
+
+   Track aibris application caches separately from the filesystem cache. A
+   human-readable scan may read or refresh `codex-activity.json`; record its
+   path, `created_at`, and checksum (or its absence) before and after every
+   invocation. Establish one identical application-cache state for both
+   binaries before a series. For a **warm** series, run one unmeasured warm-up
+   of each binary, then require the recorded cache identity to remain unchanged
+   throughout every measured pair. If either binary refreshes or otherwise
+   changes it, discard that pair and repeat after re-establishing a common
+   state. Perform the measured warm series without filesystem eviction. Never
+   average cold, warm, or uncontrolled observations together.
 
 4. Within each cache-condition series, alternate order by adjacent pairs. The
    minimum is four measured runs per condition:
