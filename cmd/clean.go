@@ -91,7 +91,11 @@ classic cleanup audit and executor route.`,
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
-		overlapSafety := newDefaultCleanupOverlapSafetyRuntime(result, roots)
+		overlapSafety, err := newDefaultCleanupOverlapSafetyRuntime(ctx)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: preparing overlap safety: %v\n", err)
+			os.Exit(1)
+		}
 
 		var guidedState guidedCleanState
 		usefulGuidedCodexReview := false

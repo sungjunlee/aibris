@@ -150,13 +150,13 @@ func TestBuildOverlapSafetyPlanCanonicalizesSymlinkAliasesAndFailsClosedOnAmbigu
 func TestBuildOverlapSafetyPlanFailsClosedOnCanonicalizationError(t *testing.T) {
 	root := t.TempDir()
 	target := makeOverlapTestDir(t, filepath.Join(root, "target"))
-	entry := makeOverlapTestSymlinkDepthError(t, filepath.Join(root, "aliases"), target)
+	entry := makeOverlapTestSymlinkCycleError(t, filepath.Join(root, "aliases"))
 
 	if _, err := canonicalExistingPathIdentity(entry); err == nil {
-		t.Fatal("deep symlink agent-state identity unexpectedly resolved")
+		t.Fatal("cyclic symlink agent-state identity unexpectedly resolved")
 	}
 	if _, err := resolvePathWithUnresolvedSuffix(entry, 0); err == nil {
-		t.Fatal("deep symlink agent-state path unexpectedly resolved")
+		t.Fatal("cyclic symlink agent-state path unexpectedly resolved")
 	} else if errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("resolution error = %v; want deterministic non-ENOENT failure", err)
 	}
@@ -388,18 +388,14 @@ func makeOverlapTestDir(t *testing.T, path string) string {
 	return path
 }
 
-func makeOverlapTestSymlinkDepthError(t *testing.T, aliasesRoot, target string) string {
+func makeOverlapTestSymlinkCycleError(t *testing.T, aliasesRoot string) string {
 	t.Helper()
 	if err := os.MkdirAll(aliasesRoot, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	next := target
-	for i := 300; i >= 0; i-- {
-		alias := filepath.Join(aliasesRoot, fmt.Sprintf("alias-%03d", i))
-		if err := os.Symlink(next, alias); err != nil {
-			t.Skipf("symlink unavailable: %v", err)
-		}
-		next = alias
+	alias := filepath.Join(aliasesRoot, "self")
+	if err := os.Symlink(alias, alias); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
 	}
-	return next
+	return alias
 }

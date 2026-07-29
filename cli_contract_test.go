@@ -285,24 +285,24 @@ func TestCLIContractDeclinedPromptDoesNotDelete(t *testing.T) {
 }
 
 func TestCLIContractNestedAgentStateDestructiveSafety(t *testing.T) {
-	t.Run("protected parent refuses without mutation", func(t *testing.T) {
+	t.Run("claude narrow live entry refuses without mutation", func(t *testing.T) {
 		home := t.TempDir()
-		projectsRoot := filepath.Join(home, ".claude", "projects")
-		entry := filepath.Join(projectsRoot, "live-parent")
+		entry := filepath.Join(home, ".claude", "projects", "live-parent")
 		modules := filepath.Join(entry, "node_modules")
 		moduleSentinel := filepath.Join(modules, "package", "sentinel")
+		entrySentinel := filepath.Join(entry, "kept", "sentinel")
 		liveCWD := filepath.Join(home, "workspace", "live")
-		if err := os.MkdirAll(liveCWD, 0755); err != nil {
-			t.Fatal(err)
-		}
+		liveSentinel := filepath.Join(liveCWD, "sentinel")
 		writeCLIContractFixture(t, moduleSentinel, "must survive")
+		writeCLIContractFixture(t, entrySentinel, "must survive")
+		writeCLIContractFixture(t, liveSentinel, "must survive")
 		session := filepath.Join(entry, "session.jsonl")
 		writeCLIContractFixture(t, session, fmt.Sprintf("{\"cwd\":%q}\n", liveCWD))
 		makeCLIContractTargetOld(t, modules)
 
 		result := runCLIContract(t, home, nil,
 			"clean", "--force", "--no-guide", "--age=1h",
-			"--category=node_modules", "--root="+projectsRoot)
+			"--category=node_modules", "--root="+entry)
 		if result.ExitCode != 0 {
 			t.Fatalf("protected cleanup exit = %d\nstdout:\n%s\nstderr:\n%s",
 				result.ExitCode, result.Stdout, result.Stderr)
@@ -321,7 +321,50 @@ func TestCLIContractNestedAgentStateDestructiveSafety(t *testing.T) {
 		if result.Stderr != "" {
 			t.Errorf("protected cleanup stderr = %q", result.Stderr)
 		}
-		for _, path := range []string{moduleSentinel, session, liveCWD} {
+		for _, path := range []string{moduleSentinel, entrySentinel, session, liveSentinel} {
+			if _, err := os.Stat(path); err != nil {
+				t.Fatalf("protected cleanup changed %q: %v", path, err)
+			}
+		}
+	})
+
+	t.Run("cursor narrow live entry refuses without mutation", func(t *testing.T) {
+		home := t.TempDir()
+		entry := filepath.Join(home, ".cursor", "projects", "live-parent")
+		modules := filepath.Join(entry, "node_modules")
+		moduleSentinel := filepath.Join(modules, "package", "sentinel")
+		entrySentinel := filepath.Join(entry, "kept", "sentinel")
+		liveCWD := filepath.Join(home, "workspace", "live")
+		liveSentinel := filepath.Join(liveCWD, "sentinel")
+		writeCLIContractFixture(t, moduleSentinel, "must survive")
+		writeCLIContractFixture(t, entrySentinel, "must survive")
+		writeCLIContractFixture(t, liveSentinel, "must survive")
+		workerLog := filepath.Join(entry, "worker.log")
+		writeCLIContractFixture(t, workerLog, "[info] workspacePath="+liveCWD+"\n")
+		makeCLIContractTargetOld(t, modules)
+
+		result := runCLIContract(t, home, nil,
+			"clean", "--force", "--no-guide", "--age=1h",
+			"--category=node_modules", "--root="+entry)
+		if result.ExitCode != 0 {
+			t.Fatalf("protected cleanup exit = %d\nstdout:\n%s\nstderr:\n%s",
+				result.ExitCode, result.Stdout, result.Stderr)
+		}
+		for _, want := range []string{
+			"safety  refused protected agent-state ancestor",
+			"No items to clean.",
+		} {
+			if !strings.Contains(result.Stdout, want) {
+				t.Errorf("protected cleanup stdout missing %q: %s", want, result.Stdout)
+			}
+		}
+		if strings.Contains(result.Stdout, "cleanup receipt") {
+			t.Errorf("protected cleanup crossed the execution boundary: %s", result.Stdout)
+		}
+		if result.Stderr != "" {
+			t.Errorf("protected cleanup stderr = %q", result.Stderr)
+		}
+		for _, path := range []string{moduleSentinel, entrySentinel, workerLog, liveSentinel} {
 			if _, err := os.Stat(path); err != nil {
 				t.Fatalf("protected cleanup changed %q: %v", path, err)
 			}
@@ -330,8 +373,7 @@ func TestCLIContractNestedAgentStateDestructiveSafety(t *testing.T) {
 
 	t.Run("orphan parent revalidates and removes exactly one target", func(t *testing.T) {
 		home := t.TempDir()
-		projectsRoot := filepath.Join(home, ".claude", "projects")
-		entry := filepath.Join(projectsRoot, "orphan-parent")
+		entry := filepath.Join(home, ".claude", "projects", "orphan-parent")
 		modules := filepath.Join(entry, "node_modules")
 		moduleSentinel := filepath.Join(modules, "package", "sentinel")
 		keptSentinel := filepath.Join(entry, "kept", "sentinel")
@@ -344,7 +386,7 @@ func TestCLIContractNestedAgentStateDestructiveSafety(t *testing.T) {
 
 		result := runCLIContract(t, home, nil,
 			"clean", "--force", "--no-guide", "--age=1h",
-			"--category=node_modules", "--root="+projectsRoot)
+			"--category=node_modules", "--root="+entry)
 		if result.ExitCode != 0 {
 			t.Fatalf("orphan cleanup exit = %d\nstdout:\n%s\nstderr:\n%s",
 				result.ExitCode, result.Stdout, result.Stderr)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,8 +13,186 @@ import (
 
 	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
+
+type overlapSafetyScanProvider struct {
+	tool types.Tool
+	scan func(context.Context, types.ScanOptions) ([]types.DebrisInfo, error)
+}
+
+func (p *overlapSafetyScanProvider) Name() types.Tool {
+	return p.tool
+}
+
+func (p *overlapSafetyScanProvider) Category() types.Category {
+	return types.CategoryAgentState
+}
+
+func (p *overlapSafetyScanProvider) Scan(
+	ctx context.Context,
+	opts types.ScanOptions,
+) ([]types.DebrisInfo, error) {
+	return p.scan(ctx, opts)
+}
+
+func TestDefaultCleanupOverlapSafetyRuntimeScansFullHomeForInitialAndRefresh(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	liveCWD := filepath.Join(home, "workspace", "live")
+	if err := os.MkdirAll(liveCWD, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	claudeEntry := filepath.Join(home, ".claude", "projects", "live-parent")
+	if err := os.MkdirAll(claudeEntry, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(claudeEntry, "session.jsonl"),
+		[]byte(fmt.Sprintf("{\"cwd\":%q}\n", liveCWD)),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	ordinaryScanner := scanner.New(adapter.DefaultAgentStateProviders())
+	ordinaryScanner.ErrorWriter = io.Discard
+	ordinary, err := ordinaryScanner.ScanWithOptions(context.Background(), types.ScanOptions{
+		Roots: []string{claudeEntry},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ordinary.Worktrees) != 0 {
+		t.Fatalf("ordinary narrow-root agent-state rows = %d, want 0", len(ordinary.Worktrees))
+	}
+
+	runtime, err := newDefaultCleanupOverlapSafetyRuntime(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertOverlapSafetyEvidenceContains(t, runtime.Initial, claudeEntry, types.ToolClaude)
+
+	cursorEntry := filepath.Join(home, ".cursor", "projects", "live-parent")
+	if err := os.MkdirAll(cursorEntry, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(cursorEntry, "worker.log"),
+		[]byte("[info] workspacePath="+liveCWD+"\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+	refreshed, err := runtime.Refresh(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertOverlapSafetyEvidenceContains(t, refreshed, claudeEntry, types.ToolClaude)
+	assertOverlapSafetyEvidenceContains(t, refreshed, cursorEntry, types.ToolCursor)
+}
+
+func TestCleanupOverlapSafetyRuntimePreservesProviderErrorsAndFailsClosed(t *testing.T) {
+	t.Run("initial", func(t *testing.T) {
+		provider := &overlapSafetyScanProvider{
+			tool: types.ToolClaude,
+			scan: func(context.Context, types.ScanOptions) ([]types.DebrisInfo, error) {
+				return nil, errors.New("initial safety provider failure")
+			},
+		}
+		safetyScanner := scanner.New([]adapter.DebrisProvider{provider})
+		safetyScanner.ErrorWriter = io.Discard
+		runtime, err := newCleanupOverlapSafetyRuntime(
+			context.Background(),
+			safetyScanner,
+			nil,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if runtime.Initial.Complete || len(runtime.Initial.ProviderErrors) != 1 {
+			t.Fatalf("initial evidence = %+v; want preserved provider error", runtime.Initial)
+		}
+
+		target := filepath.Join(t.TempDir(), "target")
+		if err := os.MkdirAll(target, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		_, err = applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{
+			overlapCmdTarget(target, 1),
+		})
+		if !errors.Is(err, cleaner.ErrIncompleteOverlapSafetyEvidence) {
+			t.Fatalf("initial safety error = %v; want incomplete-evidence refusal", err)
+		}
+	})
+
+	t.Run("refresh", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		calls := 0
+		provider := &overlapSafetyScanProvider{
+			tool: types.ToolCursor,
+			scan: func(context.Context, types.ScanOptions) ([]types.DebrisInfo, error) {
+				calls++
+				if calls > 1 {
+					return nil, errors.New("refresh safety provider failure")
+				}
+				return nil, nil
+			},
+		}
+		safetyScanner := scanner.New([]adapter.DebrisProvider{provider})
+		safetyScanner.ErrorWriter = io.Discard
+		runtime, err := newCleanupOverlapSafetyRuntime(
+			context.Background(),
+			safetyScanner,
+			nil,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		target := filepath.Join(home, ".cache", "target")
+		sentinel := filepath.Join(target, "sentinel")
+		if err := os.MkdirAll(target, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(sentinel, []byte("survive"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{
+			overlapCmdTarget(target, 1),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		receipt, err := executeCleanTargets(context.Background(), selection, runtime)
+		if !errors.Is(err, cleaner.ErrIncompleteOverlapSafetyEvidence) || receipt.FreedBytes != 0 {
+			t.Fatalf("refresh error=%v, freed=%d; want fail-closed provider refusal",
+				err, receipt.FreedBytes)
+		}
+		assertOverlapSentinelsSurvive(t, sentinel)
+	})
+}
+
+func assertOverlapSafetyEvidenceContains(
+	t *testing.T,
+	evidence cleaner.OverlapSafetyEvidence,
+	path string,
+	tool types.Tool,
+) {
+	t.Helper()
+	if !evidence.Complete || len(evidence.ProviderErrors) != 0 {
+		t.Fatalf("evidence incomplete: %+v", evidence)
+	}
+	for _, item := range evidence.Items {
+		if item.Path == path && item.Tool == tool && item.Category == types.CategoryAgentState {
+			return
+		}
+	}
+	t.Fatalf("evidence missing %s agent-state entry %q: %+v", tool, path, evidence.Items)
+}
 
 func TestExecuteCleanTargetsRefusesGenericParentContainingLiveAgentState(t *testing.T) {
 	home := t.TempDir()
@@ -369,10 +548,9 @@ func TestExecuteOverlapSafetyRefusesSymlinkRetargetAndIncompleteRefresh(t *testi
 		if err := os.WriteFile(sentinel, []byte("survive"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		entry := makeOverlapCmdSymlinkDepthError(
+		entry := makeOverlapCmdSymlinkCycleError(
 			t,
 			filepath.Join(home, ".agent-state-aliases"),
-			target,
 		)
 		runtime := staticOverlapSafetyRuntime([]types.DebrisInfo{
 			overlapCmdAgentStateItem(entry, types.EntryClassOrphaned),
@@ -935,18 +1113,14 @@ func staticOverlapSafetyRuntime(
 	}
 }
 
-func makeOverlapCmdSymlinkDepthError(t *testing.T, aliasesRoot, target string) string {
+func makeOverlapCmdSymlinkCycleError(t *testing.T, aliasesRoot string) string {
 	t.Helper()
 	if err := os.MkdirAll(aliasesRoot, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	next := target
-	for i := 300; i >= 0; i-- {
-		alias := filepath.Join(aliasesRoot, fmt.Sprintf("alias-%03d", i))
-		if err := os.Symlink(next, alias); err != nil {
-			t.Skipf("symlink unavailable: %v", err)
-		}
-		next = alias
+	alias := filepath.Join(aliasesRoot, "self")
+	if err := os.Symlink(alias, alias); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
 	}
-	return next
+	return alias
 }

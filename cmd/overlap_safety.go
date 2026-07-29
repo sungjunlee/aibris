@@ -24,39 +24,49 @@ type cleanupOverlapSafetySelection struct {
 }
 
 func newDefaultCleanupOverlapSafetyRuntime(
-	result *types.ScanResult,
-	roots []string,
-) cleanupOverlapSafetyRuntime {
-	initial := cleaner.OverlapSafetyEvidence{}
-	if result != nil {
-		initial = cleaner.OverlapSafetyEvidence{
+	ctx context.Context,
+) (cleanupOverlapSafetyRuntime, error) {
+	agentStateScanner := scanner.New(adapter.DefaultAgentStateProviders())
+	agentStateScanner.ErrorWriter = io.Discard
+	return newCleanupOverlapSafetyRuntime(
+		ctx,
+		agentStateScanner,
+		adapter.AgentStateRevalidatorRegistrationFor,
+	)
+}
+
+func newCleanupOverlapSafetyRuntime(
+	ctx context.Context,
+	agentStateScanner *scanner.Scanner,
+	lookup cleaner.AgentStateRevalidatorLookup,
+) (cleanupOverlapSafetyRuntime, error) {
+	scanEvidence := func(ctx context.Context) (cleaner.OverlapSafetyEvidence, error) {
+		if agentStateScanner == nil {
+			return cleaner.OverlapSafetyEvidence{}, cleaner.ErrIncompleteOverlapSafetyEvidence
+		}
+		result, err := agentStateScanner.Scan(ctx)
+		if err != nil {
+			return cleaner.OverlapSafetyEvidence{}, err
+		}
+		if result == nil {
+			return cleaner.OverlapSafetyEvidence{}, cleaner.ErrIncompleteOverlapSafetyEvidence
+		}
+		return cleaner.OverlapSafetyEvidence{
 			Items:          append([]types.DebrisInfo(nil), result.Worktrees...),
 			ProviderErrors: append([]types.ScanProviderError(nil), result.ProviderErrors...),
 			Complete:       len(result.ProviderErrors) == 0,
-		}
+		}, nil
 	}
-	agentStateScanner := scanner.New(adapter.DefaultAgentStateProviders())
-	agentStateScanner.ErrorWriter = io.Discard
+
+	initial, err := scanEvidence(ctx)
+	if err != nil {
+		return cleanupOverlapSafetyRuntime{}, err
+	}
 	return cleanupOverlapSafetyRuntime{
 		Initial: initial,
-		Refresh: func(ctx context.Context) (cleaner.OverlapSafetyEvidence, error) {
-			refreshed, err := agentStateScanner.ScanWithOptions(ctx, types.ScanOptions{
-				Roots: append([]string(nil), roots...),
-			})
-			if err != nil {
-				return cleaner.OverlapSafetyEvidence{}, err
-			}
-			if refreshed == nil {
-				return cleaner.OverlapSafetyEvidence{}, cleaner.ErrIncompleteOverlapSafetyEvidence
-			}
-			return cleaner.OverlapSafetyEvidence{
-				Items:          refreshed.Worktrees,
-				ProviderErrors: refreshed.ProviderErrors,
-				Complete:       len(refreshed.ProviderErrors) == 0,
-			}, nil
-		},
-		Lookup: adapter.AgentStateRevalidatorRegistrationFor,
-	}
+		Refresh: scanEvidence,
+		Lookup:  lookup,
+	}, nil
 }
 
 func applyCleanupOverlapSafety(
