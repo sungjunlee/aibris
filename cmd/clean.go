@@ -91,6 +91,7 @@ classic cleanup audit and executor route.`,
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
+		overlapSafety := newDefaultCleanupOverlapSafetyRuntime(result, roots)
 
 		var guidedState guidedCleanState
 		usefulGuidedCodexReview := false
@@ -125,12 +126,13 @@ classic cleanup audit and executor route.`,
 		}
 
 		var guidedPreviewTargets []types.DebrisInfo
+		var guidedSafetyProtections map[string]cleanAuditReason
 		guidedHadSelection := false
 		if experience == cleanExperienceGuided {
 			guidedOpts := opts
 			guidedOpts.Age = guidedAge
 			guidedState.Reason = reason
-			guidedResult, err := runGuidedCodexClean(ctx, guidedOpts, guidedState)
+			guidedResult, err := runGuidedCodexClean(ctx, guidedOpts, guidedState, overlapSafety)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
@@ -139,6 +141,7 @@ classic cleanup audit and executor route.`,
 				return
 			}
 			guidedPreviewTargets = guidedResult.PreviewTargets
+			guidedSafetyProtections = guidedResult.SafetyProtections
 			guidedHadSelection = guidedResult.HadSelection
 			opts.IncludeActiveWorktrees = false
 		}
@@ -147,11 +150,24 @@ classic cleanup audit and executor route.`,
 		targets = filterExistingTargets(targets)
 		targets = normalizeCleanTargets(targets)
 		targets, gitSafetyProtections := filterGitUnsafeActiveWorktreeTargets(ctx, targets)
+		overlapSelection, err := applyCleanupOverlapSafety(ctx, overlapSafety, targets)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: preparing overlap safety: %v\n", err)
+			os.Exit(1)
+		}
+		printOverlapSafetyRefusals(overlapSelection.Plan)
+		targets = overlapSelection.Targets
 		auditTargets := targets
 		if len(guidedPreviewTargets) > 0 {
 			targets, auditTargets = mergeGuidedPreviewWithClassicTargets(guidedPreviewTargets, targets)
 		}
-		audit := buildCleanAudit(result.Worktrees, auditTargets, opts, len(scanner.DefaultScanner.Providers), source, gitSafetyProtections)
+		overlapSelection.Targets = targets
+		auditProtections := mergeCleanAuditProtections(
+			gitSafetyProtections,
+			overlapSelection.Protections,
+			guidedSafetyProtections,
+		)
+		audit := buildCleanAudit(result.Worktrees, auditTargets, opts, len(scanner.DefaultScanner.Providers), source, auditProtections)
 		printCleanAudit(audit, opts)
 		printCleanCandidateSummary(targets)
 
@@ -169,7 +185,7 @@ classic cleanup audit and executor route.`,
 			fmt.Println("[DRY-RUN] No files were removed.")
 			return
 		}
-		prepared := prepareCleanExecution(ctx, targets)
+		prepared := prepareCleanExecutionWithSafety(ctx, overlapSelection, overlapSafety)
 
 		if opts.Interactive {
 			receipt, err := interactiveClean(ctx, prepared)
@@ -569,7 +585,7 @@ func candidateNoun(count int) string {
 func filterExistingTargets(targets []types.DebrisInfo) []types.DebrisInfo {
 	filtered := targets[:0]
 	for _, target := range targets {
-		if _, err := os.Stat(target.Path); err == nil {
+		if _, err := os.Lstat(target.Path); err == nil {
 			filtered = append(filtered, target)
 		}
 	}

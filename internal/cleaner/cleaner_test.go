@@ -599,7 +599,7 @@ func TestExecute_RefusesAgentStateWithoutRegisteredRevalidatorAndContinues(t *te
 			Path:     removablePath,
 			Size:     11,
 		},
-	}, revalidators.Lookup)
+	}, revalidators.Lookup, nil)
 	if err == nil ||
 		!strings.Contains(err.Error(), string(syntheticTool)) ||
 		!strings.Contains(err.Error(), protectedPath) ||
@@ -712,7 +712,7 @@ func TestExecute_RefusesAgentStateRevalidationError(t *testing.T) {
 		Path:           entryPath,
 		Size:           13,
 		Classification: types.EntryClassOrphaned,
-	}}, revalidators.Lookup)
+	}}, revalidators.Lookup, nil)
 	if !errors.Is(err, revalidationErr) ||
 		!strings.Contains(err.Error(), "revalidating claude agent-state") ||
 		!strings.Contains(err.Error(), entryPath) {

@@ -30,6 +30,16 @@ func DefaultProviders() []DebrisProvider {
 	return append([]DebrisProvider(nil), defaultProviders...)
 }
 
+func DefaultAgentStateProviders() []DebrisProvider {
+	var providers []DebrisProvider
+	for _, provider := range defaultProviders {
+		if provider.Category() == types.CategoryAgentState {
+			providers = append(providers, provider)
+		}
+	}
+	return providers
+}
+
 // DefaultProviderIdentity identifies the concrete provider membership in the
 // registry. Provider ordering does not affect the identity, while duplicate
 // concrete registrations remain distinct members.
@@ -67,4 +77,8 @@ func concreteProviderType(provider DebrisProvider) string {
 
 func AgentStateRevalidatorFor(tool types.Tool) (AgentStateRevalidator, bool) {
 	return defaultAgentStateRevalidators.Lookup(tool)
+}
+
+func AgentStateRevalidatorRegistrationFor(tool types.Tool) (AgentStateRevalidatorRegistration, error) {
+	return defaultAgentStateRevalidators.Registration(tool)
 }

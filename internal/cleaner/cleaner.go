@@ -99,13 +99,28 @@ func Execute(worktrees []types.DebrisInfo) (int64, error) {
 
 // ExecuteWithContext removes or command-cleans the given debris items from disk.
 func ExecuteWithContext(ctx context.Context, worktrees []types.DebrisInfo) (int64, error) {
-	return executeWithContext(ctx, worktrees, adapter.AgentStateRevalidatorFor)
+	return executeWithContext(ctx, worktrees, adapter.AgentStateRevalidatorFor, nil)
+}
+
+// MutationBarrier runs immediately before a cleanup command or filesystem
+// removal. It must be read-only and return an error to refuse the mutation.
+type MutationBarrier func(context.Context, types.DebrisInfo) error
+
+// ExecuteWithContextAndBarrier executes cleanup only after the supplied
+// component-level safety barrier succeeds at the first mutation boundary.
+func ExecuteWithContextAndBarrier(
+	ctx context.Context,
+	worktrees []types.DebrisInfo,
+	barrier MutationBarrier,
+) (int64, error) {
+	return executeWithContext(ctx, worktrees, adapter.AgentStateRevalidatorFor, barrier)
 }
 
 func executeWithContext(
 	ctx context.Context,
 	worktrees []types.DebrisInfo,
 	lookupRevalidator func(types.Tool) (adapter.AgentStateRevalidator, bool),
+	barrier MutationBarrier,
 ) (int64, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -154,6 +169,11 @@ func executeWithContext(
 		if cleanupKind(w) == types.CleanupCommand && len(w.CleanupCommand) > 0 {
 			fmt.Printf("running %d/%d: %s (%s) via %s ...\n",
 				i+1, len(worktrees), debrisName(w), w.Category, strings.Join(w.CleanupCommand, " "))
+			if err := runMutationBarrier(ctx, barrier, w); err != nil {
+				errs = append(errs, err)
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				continue
+			}
 			if err := runCleanupCommand(ctx, w.CleanupCommand); err == nil {
 				total += w.Size
 				fmt.Printf("cleaned: %s (%s) via %s — %s\n",
@@ -168,6 +188,11 @@ func executeWithContext(
 		}
 		fmt.Printf("removing %d/%d: %s (%s) ...\n",
 			i+1, len(worktrees), debrisName(w), w.Category)
+		if err := runMutationBarrier(ctx, barrier, w); err != nil {
+			errs = append(errs, err)
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			continue
+		}
 		if err := os.RemoveAll(w.Path); err != nil {
 			errs = append(errs, fmt.Errorf("removing %s: %w", w.Path, err))
 			continue
@@ -179,6 +204,19 @@ func executeWithContext(
 		return total, fmt.Errorf("failed to remove %d item(s): %w", len(errs), errors.Join(errs...))
 	}
 	return total, nil
+}
+
+func runMutationBarrier(ctx context.Context, barrier MutationBarrier, item types.DebrisInfo) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if barrier == nil {
+		return nil
+	}
+	if err := barrier(ctx, item); err != nil {
+		return fmt.Errorf("pre-mutation safety barrier for %q: %w", item.Path, err)
+	}
+	return ctx.Err()
 }
 
 func debrisName(w types.DebrisInfo) string {
