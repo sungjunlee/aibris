@@ -286,11 +286,14 @@ cross-platform performance harness and a non-flaky regression budget.
    uncontrolled observations together.
 
 4. Within each cache-condition series, alternate order by adjacent pairs. The
-   minimum is four measured runs per condition:
+   minimum is eight measured runs per condition: four adjacent pairs, with at
+   least two pairs in each order:
 
    ```text
    pair 1: base,   change
    pair 2: change, base
+   pair 3: base,   change
+   pair 4: change, base
    ```
 
    Additional repetitions continue `base/change`, `change/base`. This
@@ -307,14 +310,23 @@ cross-platform performance harness and a non-flaky regression budget.
    | --- | --- | --- | --- | --- | ---: |
    | cold | 1 / base→change | `<sha>` / … | `<sha>` / … | … | … |
    | cold | 2 / change→base | `<sha>` / … | `<sha>` / … | … | … |
+   | cold | 3 / base→change | `<sha>` / … | `<sha>` / … | … | … |
+   | cold | 4 / change→base | `<sha>` / … | `<sha>` / … | … | … |
    | warm | 1 / base→change | `<sha>` / … | `<sha>` / … | … | … |
    | warm | 2 / change→base | `<sha>` / … | `<sha>` / … | … | … |
+   | warm | 3 / base→change | `<sha>` / … | `<sha>` / … | … | … |
+   | warm | 4 / change→base | `<sha>` / … | `<sha>` / … | … | … |
 
    Follow the rows with the median and `[minimum, maximum]` paired delta for
    each condition. The summary describes this session only; it does not turn
-   one timing or delta into a performance budget. Because a documentation-only
-   change should have no scanner delta, investigate a material systematic
-   difference instead of presenting it as an improvement.
+   one timing or delta into a performance budget. Unless a stability or
+   uncertainty rule was declared before the run, even the minimum series is
+   `inconclusive` as a regression decision; preserve it as an observation and
+   collect more pairs. #129 owns the repeatable harness and non-flaky decision
+   threshold rather than letting an operator invent one after seeing results.
+   Because a documentation-only change should have no scanner delta,
+   investigate a material systematic difference instead of presenting it as an
+   improvement.
 
 Relay-driven sessions create and reclaim entries under `~/.relay/worktrees`
 while work is in progress. Provider counts, item counts, byte totals, and
