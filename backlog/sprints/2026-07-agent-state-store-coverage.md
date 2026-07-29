@@ -141,10 +141,12 @@ them in the next Done Criteria up front should cut that sharply.
 - **Revalidate before deleting.** The scan snapshot can be five minutes old.
   Re-derive the classification immediately before removal and fail closed, the
   same discipline the Git-aware worktree executor already uses.
-- **Bump the cache schema when the provider set changes.** Otherwise a snapshot
-  from a previous binary is silently accepted and the new category vanishes from
-  `clean`. Verified A/B: `matched 0 candidates` before the bump, `matched 81` after.
-  #145 replaces the manual constant with a derived key.
+- **Key the cache by concrete provider membership.** Otherwise a snapshot from
+  a previous binary is silently accepted and the new category vanishes from
+  `clean`. Verified A/B: `matched 0 candidates` before invalidation, `matched
+  81` after. #145 derives a sorted membership identity from the registry;
+  behavior changes inside unchanged providers still bump the explicit cache
+  revision.
 - **Carry a real-home invariant as a Done Criterion.** L1 held
   `81 orphaned / 44 live / 11 undetermined` through every safety tightening. That
   is what stops a fail-closed change from quietly zeroing detection.

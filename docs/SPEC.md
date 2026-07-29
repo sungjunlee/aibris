@@ -103,6 +103,22 @@ Behavior:
 12. Print a cleanup receipt with removed, partial, and failed unit counts,
     truthful freed bytes, and protected/skipped totals.
 
+Last-scan cache reuse requires all four compatibility axes:
+
+- exact normalized scan roots
+- freshness no older than 5 minutes, with future timestamps rejected
+- the explicit cache revision stored as `schema_version`
+- a deterministic identity of the concrete provider registry membership
+
+The provider identity is a sorted multiset of concrete registered Go types:
+provider order does not affect it, while adding, removing, or registering a
+concrete provider more than once does. A legacy snapshot without the identity
+and a snapshot with a mismatched identity are incompatible, so `clean` takes
+the same visible live-scan path used for stale, revision-mismatched, or
+root-mismatched snapshots. This identity does not detect behavior changes
+inside an unchanged concrete provider. Maintainers must bump the explicit cache
+revision for those changes.
+
 For `agent-state`, `classification` replaces the age gate. An absent recorded
 working directory proves the associated work is gone and resume is already
 impossible, so `orphaned` is eligible regardless of age after category and tool
@@ -329,6 +345,8 @@ type DebrisProvider interface {
 Adapter rules:
 
 - Use kebab-case lowercase tool names.
+- Register each concrete provider only in `internal/adapter/providers.go`; that
+  registry also derives the last-scan provider-membership identity.
 - Respect `context.Context` cancellation.
 - Use `estimateDirSize(ctx, path)` for reported size.
 - Use `detectProjectName(path)` when project inference applies.

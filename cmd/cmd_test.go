@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -159,6 +160,9 @@ func TestScanCmd_WritesLastScanCache(t *testing.T) {
 	if !reflect.DeepEqual(cache.Roots, []string{resolvedWorkspace}) {
 		t.Errorf("cache roots = %v; want %v", cache.Roots, []string{resolvedWorkspace})
 	}
+	if cache.ProviderIdentity != adapter.DefaultProviderIdentity() {
+		t.Errorf("cache ProviderIdentity = %q; want %q", cache.ProviderIdentity, adapter.DefaultProviderIdentity())
+	}
 	if cache.Result.TotalCount != 1 {
 		t.Errorf("cache TotalCount = %d; want 1", cache.Result.TotalCount)
 	}
@@ -271,9 +275,10 @@ func saveCleanCacheFixture(t *testing.T, home string, items []types.DebrisInfo) 
 		totalSize += item.Size
 	}
 	if err := saveLastScanCache(lastScanCache{
-		SchemaVersion: lastScanCacheSchemaVersion,
-		CreatedAt:     time.Now(),
-		Roots:         []string{resolvedHome},
+		SchemaVersion:    lastScanCacheSchemaVersion,
+		ProviderIdentity: adapter.DefaultProviderIdentity(),
+		CreatedAt:        time.Now(),
+		Roots:            []string{resolvedHome},
 		Result: types.ScanResult{
 			Worktrees:  items,
 			TotalCount: len(items),
@@ -841,6 +846,9 @@ func TestCleanCmd_ReusesFreshCurrentSchemaLastScanCache(t *testing.T) {
 	if cache.SchemaVersion != lastScanCacheSchemaVersion {
 		t.Fatalf("cache SchemaVersion = %d; want current %d", cache.SchemaVersion, lastScanCacheSchemaVersion)
 	}
+	if cache.ProviderIdentity != adapter.DefaultProviderIdentity() {
+		t.Fatalf("cache ProviderIdentity = %q; want %q", cache.ProviderIdentity, adapter.DefaultProviderIdentity())
+	}
 
 	resetCleanFlags()
 	output := captureOutput(func() {
@@ -859,6 +867,55 @@ func TestCleanCmd_ReusesFreshCurrentSchemaLastScanCache(t *testing.T) {
 	}
 	if !strings.Contains(output, filepath.Join("~", "workspace", "app", "node_modules")) {
 		t.Errorf("clean output missing cached target; got: %s", output)
+	}
+}
+
+func TestCleanCmd_RejectsLegacyLastScanCacheWithoutProviderIdentityAndRunsLiveScan(t *testing.T) {
+	testCleanCmdProviderIdentityFallback(t, "")
+}
+
+func TestCleanCmd_RejectsMismatchedProviderIdentityAndRunsLiveScan(t *testing.T) {
+	testCleanCmdProviderIdentityFallback(t, adapter.DefaultProviderIdentity()+"-mismatched")
+}
+
+func testCleanCmdProviderIdentityFallback(t *testing.T, providerIdentity string) {
+	t.Helper()
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	workspace := filepath.Join(home, "workspace")
+	modules := filepath.Join(workspace, "app", "node_modules")
+	os.MkdirAll(filepath.Join(modules, "pkg"), 0755)
+	past := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(modules, past, past)
+	resolvedWorkspace, err := filepath.EvalSymlinks(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := saveLastScanCache(lastScanCache{
+		SchemaVersion:    lastScanCacheSchemaVersion,
+		ProviderIdentity: providerIdentity,
+		CreatedAt:        time.Now(),
+		Roots:            []string{resolvedWorkspace},
+		Result:           types.ScanResult{},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--dry-run", "--age=1h", "--root", workspace, "--category=node_modules"})
+		rootCmd.Execute()
+	})
+
+	if strings.Contains(output, "scan    cached") {
+		t.Errorf("clean should reject incompatible provider identity; got: %s", output)
+	}
+	if !strings.Contains(output, "scanning ") || !strings.Contains(output, "scan    live") {
+		t.Errorf("clean should visibly run a live scan after rejecting provider identity; got: %s", output)
+	}
+	if !strings.Contains(output, filepath.Join("~", "workspace", "app", "node_modules")) {
+		t.Errorf("clean output missing live scan target; got: %s", output)
 	}
 }
 
@@ -882,10 +939,11 @@ func TestCleanCmd_RejectsPreCursorAgentStateSchemaLastScanCacheAndRunsLiveScan(t
 			lastScanCacheSchemaVersion, preCursorAgentStateSchemaVersion)
 	}
 	if err := saveLastScanCache(lastScanCache{
-		SchemaVersion: preCursorAgentStateSchemaVersion,
-		CreatedAt:     time.Now(),
-		Roots:         []string{resolvedWorkspace},
-		Result:        types.ScanResult{},
+		SchemaVersion:    preCursorAgentStateSchemaVersion,
+		ProviderIdentity: adapter.DefaultProviderIdentity(),
+		CreatedAt:        time.Now(),
+		Roots:            []string{resolvedWorkspace},
+		Result:           types.ScanResult{},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -963,10 +1021,11 @@ func TestCleanCmd_IgnoresStaleLastScanCache(t *testing.T) {
 	}
 
 	if err := saveLastScanCache(lastScanCache{
-		SchemaVersion: lastScanCacheSchemaVersion,
-		CreatedAt:     time.Now().Add(-2 * lastScanCacheMaxAge),
-		Roots:         []string{resolvedWorkspace},
-		Result:        types.ScanResult{},
+		SchemaVersion:    lastScanCacheSchemaVersion,
+		ProviderIdentity: adapter.DefaultProviderIdentity(),
+		CreatedAt:        time.Now().Add(-2 * lastScanCacheMaxAge),
+		Roots:            []string{resolvedWorkspace},
+		Result:           types.ScanResult{},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1002,10 +1061,11 @@ func TestCleanCmd_IgnoresFutureLastScanCache(t *testing.T) {
 	}
 
 	if err := saveLastScanCache(lastScanCache{
-		SchemaVersion: lastScanCacheSchemaVersion,
-		CreatedAt:     time.Now().Add(lastScanCacheMaxAge),
-		Roots:         []string{resolvedWorkspace},
-		Result:        types.ScanResult{},
+		SchemaVersion:    lastScanCacheSchemaVersion,
+		ProviderIdentity: adapter.DefaultProviderIdentity(),
+		CreatedAt:        time.Now().Add(lastScanCacheMaxAge),
+		Roots:            []string{resolvedWorkspace},
+		Result:           types.ScanResult{},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1041,10 +1101,11 @@ func TestCleanCmd_IgnoresSchemaMismatchedLastScanCache(t *testing.T) {
 	}
 
 	if err := saveLastScanCache(lastScanCache{
-		SchemaVersion: lastScanCacheSchemaVersion + 1,
-		CreatedAt:     time.Now(),
-		Roots:         []string{resolvedWorkspace},
-		Result:        types.ScanResult{},
+		SchemaVersion:    lastScanCacheSchemaVersion + 1,
+		ProviderIdentity: adapter.DefaultProviderIdentity(),
+		CreatedAt:        time.Now(),
+		Roots:            []string{resolvedWorkspace},
+		Result:           types.ScanResult{},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1082,10 +1143,11 @@ func TestCleanCmd_IgnoresRootMismatchedLastScanCache(t *testing.T) {
 	}
 
 	if err := saveLastScanCache(lastScanCache{
-		SchemaVersion: lastScanCacheSchemaVersion,
-		CreatedAt:     time.Now(),
-		Roots:         []string{resolvedOther},
-		Result:        types.ScanResult{},
+		SchemaVersion:    lastScanCacheSchemaVersion,
+		ProviderIdentity: adapter.DefaultProviderIdentity(),
+		CreatedAt:        time.Now(),
+		Roots:            []string{resolvedOther},
+		Result:           types.ScanResult{},
 	}); err != nil {
 		t.Fatal(err)
 	}

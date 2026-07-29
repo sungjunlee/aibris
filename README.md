@@ -257,9 +257,12 @@ cleanup receipt
 ```
 
 `scan` writes a short-lived snapshot under the user cache directory. A following
-`clean` reuses it for 5 minutes when the scan roots and cache schema match. If
-the cache is stale, missing, or for different roots, `clean` falls back to a
-live scan with progress output.
+`clean` reuses it only when it is at most 5 minutes old and its normalized scan
+roots, explicit cache revision (`schema_version`), and concrete provider
+membership identity all match. A missing legacy identity or any mismatch falls
+back to a live scan with progress output. The membership identity detects
+provider additions, removals, and duplicate registrations, not behavior changes
+inside an unchanged provider; those changes require a cache revision bump.
 
 Live fallback keeps the same audit shape after non-interactive scan progress:
 
@@ -323,7 +326,8 @@ Cancellation remains a hard failure.
   detached commits, and verifies parent worktree metadata. It never falls back
   to recursive deletion after Git removal fails.
 - **Recent scan reuse** skips a repeated scan when `clean` can use a fresh
-  compatible snapshot, while still re-checking target paths
+  snapshot with matching roots, cache revision, and concrete provider
+  membership, while still re-checking target paths
 - **`--risky`** must be explicitly set to delete AI logs
 - **Active worktrees are excluded by default**; use
   `--include-active-worktrees` only when you intentionally want age-based

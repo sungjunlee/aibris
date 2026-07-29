@@ -210,16 +210,19 @@ The implemented UX fix is intentionally small:
    - Preserve all existing safe-path checks and cleanup-command semantics.
 
 The follow-up cache pass writes a 5-minute last-scan snapshot and reuses it only
-when roots, cache schema, and freshness match:
+when normalized roots, freshness, explicit cache revision (`schema_version`),
+and concrete provider membership match. Membership identity does not detect
+behavior changes inside an unchanged provider, so those changes require an
+explicit cache revision bump:
 
 ```text
 aibris scan
   |
-  +-- writes last scan snapshot with roots, version, timestamp
+  +-- writes snapshot with roots, revision, provider identity, timestamp
 
 aibris clean
   |
-  +-- same roots, schema, and fresh snapshot? use it
+  +-- same roots, revision, provider membership, and fresh snapshot? use it
   |
   +-- otherwise run scan with progress
   |
@@ -317,7 +320,7 @@ CODE PATH COVERAGE
     +-- parse --include-active-worktrees
     +-- prints scan progress while finding clean candidates
     +-- reuses a fresh compatible last-scan cache
-    +-- falls back to live scan when cache is stale or roots differ
+    +-- falls back to live scan when freshness, roots, revision, or provider membership differs
     +-- drops stale cached targets whose paths no longer exist
     +-- dry-run reports filtered targets
     +-- confirmation uses the same target renderer as dry-run
@@ -328,8 +331,8 @@ CODE PATH COVERAGE
 [+] cmd/scan_cache.go
     |
     +-- writes cache under the user cache directory
-    +-- stores schema version, created_at, normalized roots, and ScanResult
-    +-- rejects stale, schema-mismatched, and root-mismatched snapshots
+    +-- stores revision, provider identity, created_at, normalized roots, and ScanResult
+    +-- rejects stale, revision-mismatched, provider-mismatched, and root-mismatched snapshots
 ```
 
 ### Unit Tests
@@ -373,7 +376,8 @@ CODE PATH COVERAGE
 - `aibris scan --root <home-subdir>` writes a last-scan cache
 - `aibris clean --root <same-home-subdir> --dry-run` uses a fresh cache without
   live scan progress
-- stale or root-mismatched scan cache falls back to live scan
+- stale, root-mismatched, revision-mismatched, legacy, or provider-mismatched
+  scan cache falls back to live scan
 - invalid `--root /tmp` fails with a clear error
 
 ## Failure Modes
@@ -385,7 +389,8 @@ CODE PATH COVERAGE
 | a large deletion appears hung | print per-item start progress before delete/command work |
 | stale cached scan points at removed paths | reject old cache and re-check target path existence before presentation/deletion |
 | cached scan was for different roots | require exact normalized root match |
-| cache schema changes | require exact schema version match |
+| cache revision changes | require exact `schema_version` match |
+| concrete provider membership changes or is absent | require the registry-derived membership identity; use the revision for unchanged-provider behavior changes |
 | user has projects under `~/Library` | default misses them, user can pass `--root` |
 | active worktree contains valuable work | excluded by default |
 | symlink root escapes `$HOME` | reject after `EvalSymlinks` |
