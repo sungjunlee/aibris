@@ -27,7 +27,7 @@ content that is surfaced rather than reclaimed.
 
 ### Batch 2 — Freeze cache and measurement contracts
 
-- [~] #145 Invalidate the cleanup scan cache with a stable provider-membership identity; behavior revisions still bump the cache revision (~1.5h) [run:issue-145-20260728133746838-2a34cd7b]
+- [x] #145 Invalidate the cleanup scan cache with a stable provider-membership identity; behavior revisions still bump the cache revision → PR #155 (merged `c49b4e4`)
 - [ ] #146 Replace the absolute scan-time baseline with same-session paired deltas; keep the repeatable harness in #129 (~1h)
 
 ### Batch 3 — Close nested agent-state safety
@@ -146,7 +146,10 @@ them in the next Done Criteria up front should cut that sharply.
   `clean`. Verified A/B: `matched 0 candidates` before invalidation, `matched
   81` after. #145 derives a sorted membership identity from the registry;
   behavior changes inside unchanged providers still bump the explicit cache
-  revision.
+  revision. Merged-main real-home verification wrote a legacy cache with
+  `e71be9d`, observed the new binary reject it via `scan live`, then observed
+  the same new cache reuse via `scan cached, 6s old`; both new-binary paths
+  agreed on 276 agent-state rows, 195 eligible, and 81 protected.
 - **Carry a real-home invariant as a Done Criterion.** L1 held
   `81 orphaned / 44 live / 11 undetermined` through every safety tightening. That
   is what stops a fail-closed change from quietly zeroing detection.
@@ -301,3 +304,21 @@ measuring, because the real home lacked the triggering condition.
   membership to the visible live-scan path, and preserves matching-cache reuse.
   Because incompatible reuse can silently omit cleanup candidates, the relay run
   uses hardened pre-publication and post-publication review.
+- 2026-07-29 13:25: #145 dispatched → PR #155 → hardened review (LGTM,
+  final replacement run round 2) → squash-merged as `c49b4e4`; #145 closed and
+  the run worktree plus local/remote branch were cleaned. Merged `main` passed
+  race tests, build, vet, and Linux/Windows/Darwin builds.
+
+  Real-home same-session verification used `e71be9d` to write a legacy
+  identity-free cache, then the merged binary's `clean --no-guide --dry-run`
+  correctly reported `scan live`; a second merged-binary dry-run reported
+  `scan cached, 6s old`. The full live plan remained **198 items / 1.6 GB**.
+  Both paths agreed on agent-state **276 found / 195 eligible (228.7 MB) / 81
+  protected**. No files were removed.
+
+  Review exposed four follow-ups: aibris #156 binds cache identity to the
+  producing scanner and closes the concrete-membership end-to-end test gap;
+  aibris #157 makes last-scan writes atomic; dev-relay #1117 prevents a rejected
+  round-cap retry from consuming reviewer-swap quota; dev-relay #1118 prevents
+  executor process success from attesting failed verification and permits
+  operator evidence on clean no-op runs.
