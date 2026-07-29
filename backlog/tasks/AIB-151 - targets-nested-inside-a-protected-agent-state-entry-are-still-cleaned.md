@@ -1,7 +1,7 @@
 ---
 id: AIB-151
 title: Targets nested inside a protected agent-state entry are still cleaned
-status: To Do
+status: In Progress
 labels:
   - bug
   - cli
@@ -63,3 +63,16 @@ provider.
 
 Found while verifying #148 (leaf L2).
 
+## Relay shaping
+
+Accepted as request `req-20260729103342292` with two ordered leaves:
+
+1. `overlap-safety-kernel` — preserve complete scan safety evidence, hard-lock
+   every overlap with live/undetermined agent-state, and revalidate every
+   nested orphan obligation before the first physical mutation.
+2. `overlap-provenance-accounting` — after L1 is merged, preserve nested rows,
+   reasons, byte ownership, audit, and human receipt lineage without
+   double-counting.
+
+L1 is an intermediate leaf and must not close #151. L2 is dispatched only after
+L1 is merged.

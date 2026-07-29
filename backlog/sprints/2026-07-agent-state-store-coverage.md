@@ -32,7 +32,7 @@ content that is surfaced rather than reclaimed.
 
 ### Batch 3 — Close nested agent-state safety
 
-- [ ] #151 L1 overlap safety: protected agent-state shields its subtree and outer targets inherit nested safety/revalidation (~2h)
+- [~] #151 L1 overlap safety: protected agent-state shields its subtree and outer targets inherit nested safety/revalidation (~2h) [branch:issue-151-overlap-safety-kernel] — relay request `req-20260729103342292`, leaf `overlap-safety-kernel`
 - [ ] #151 L2 plan/audit accounting: outermost physical target owns bytes while rows, reasons, and receipts retain nested obligations (~1h)
 
 ### Batch 4 — Fix bounded worktree-container coverage
@@ -344,3 +344,12 @@ measuring, because the real home lacked the triggering condition.
   a target. Base and change `-trimpath` binaries were byte-identical. Merged
   `main` passed race tests, build, vet, Linux/Windows/Darwin builds, diff check,
   and backlog doctor.
+- 2026-07-29 19:33: Shaped #151 as relay request
+  `req-20260729103342292` with two ordered leaves. L1
+  `overlap-safety-kernel` preserves complete scan safety evidence, locks
+  bidirectional live/undetermined overlaps, and carries every nested orphan
+  revalidation obligation to a pre-mutation barrier. L2
+  `overlap-provenance-accounting` depends on merged L1 and completes physical
+  ownership, visible-row, audit, and human-receipt lineage. Historical real-home
+  overlap counts remain observations; current same-session dry-runs and
+  synthetic deletion fixtures are the verification contract.
