@@ -37,5 +37,7 @@ Also uncovered: `~/.relay/runs` 933 MB, `~/.cursor/chats` 674 MB,
       meaningful here and structurally broken for global caches, whose mtime
       tracks continuous use and can never satisfy `--age 7d`.
 - [ ] Installed content is not misclassified as a store.
-- [ ] Full-home scan time is reported against the 19.2s baseline.
+- [ ] Full-home scan performance follows the same-session paired-delta protocol
+      in `docs/DOGFOOD.md`; report change-minus-base deltas with cache condition
+      and observed scale instead of comparing an absolute stored timing.
 - [ ] Tests cover bucket accounting and the default-protected contract.
