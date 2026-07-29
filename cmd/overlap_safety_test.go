@@ -357,6 +357,43 @@ func TestExecuteOverlapSafetyRefreshCatchesClassificationDriftAndNewEntries(t *t
 }
 
 func TestExecuteOverlapSafetyRefusesSymlinkRetargetAndIncompleteRefresh(t *testing.T) {
+	t.Run("unresolvable path below intermediate symlink", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		target := filepath.Join(home, ".cache", "real")
+		sentinel := filepath.Join(target, "sentinel")
+		if err := os.MkdirAll(target, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(sentinel, []byte("survive"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		alias := filepath.Join(home, ".cache", "alias")
+		if err := os.Symlink(target, alias); err != nil {
+			t.Skipf("symlink unavailable: %v", err)
+		}
+		entry := filepath.Join(alias, "missing")
+		runtime := staticOverlapSafetyRuntime([]types.DebrisInfo{
+			overlapCmdAgentStateItem(entry, types.EntryClassOrphaned),
+		}, nil)
+		selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{
+			overlapCmdTarget(target, 5),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(selection.Targets) != 0 || len(selection.Plan.Components) != 1 ||
+			selection.Plan.Components[0].Refusal == nil ||
+			selection.Plan.Components[0].Refusal.Reason != cleaner.OverlapSafetyAmbiguousIdentity {
+			t.Fatalf("selection = %+v; want ambiguous identity refusal", selection)
+		}
+		receipt, err := executeCleanTargets(context.Background(), selection, runtime)
+		if err != nil || receipt.FreedBytes != 0 {
+			t.Fatalf("error=%v, freed=%d; want refusal with zero bytes", err, receipt.FreedBytes)
+		}
+		assertOverlapSentinelsSurvive(t, sentinel)
+	})
+
 	t.Run("symlink retarget", func(t *testing.T) {
 		home := t.TempDir()
 		t.Setenv("HOME", home)

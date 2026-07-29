@@ -110,6 +110,17 @@ func TestBuildOverlapSafetyPlanCanonicalizesSymlinkAliasesAndFailsClosedOnAmbigu
 		t.Fatalf("symlink alias refusal = %+v; want exact protected overlap", refusal)
 	}
 
+	missingBelowAlias := filepath.Join(alias, "missing")
+	plan = buildOverlapTestPlan(t,
+		[]types.DebrisInfo{overlapAgentStateItem(missingBelowAlias, types.EntryClassOrphaned)},
+		[]types.DebrisInfo{{Path: realEntry}},
+		nil,
+	)
+	if refusal := singleOverlapComponent(t, plan).Refusal; refusal == nil ||
+		refusal.Reason != OverlapSafetyAmbiguousIdentity {
+		t.Fatalf("intermediate symlink ambiguity refusal = %+v; want fail-closed ambiguity", refusal)
+	}
+
 	ambiguousTarget := makeOverlapTestDir(t, filepath.Join(root, "ambiguous-target"))
 	brokenEntry := filepath.Join(ambiguousTarget, "broken-entry")
 	if err := os.Symlink(filepath.Join(root, "missing"), brokenEntry); err != nil {

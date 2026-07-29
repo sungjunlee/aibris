@@ -87,14 +87,17 @@ func newCLIContractCommand(t *testing.T, ctx context.Context, home string, extra
 	}
 
 	env := filteredCLIContractEnv()
-	values := map[string]string{
-		"HOME":           home,
-		"XDG_CACHE_HOME": cache,
-		"TMPDIR":         temp,
-	}
+	values := make(map[string]string, len(extraEnv)+6)
 	for key, value := range extraEnv {
 		values[key] = value
 	}
+	homeDrive := filepath.VolumeName(home)
+	values["HOME"] = home
+	values["USERPROFILE"] = home
+	values["HOMEDRIVE"] = homeDrive
+	values["HOMEPATH"] = strings.TrimPrefix(home, homeDrive)
+	values["XDG_CACHE_HOME"] = cache
+	values["TMPDIR"] = temp
 	for key, value := range values {
 		env = append(env, key+"="+value)
 	}
@@ -108,13 +111,16 @@ func newCLIContractCommand(t *testing.T, ctx context.Context, home string, extra
 func filteredCLIContractEnv() []string {
 	blocked := map[string]bool{
 		"HOME":           true,
+		"USERPROFILE":    true,
+		"HOMEDRIVE":      true,
+		"HOMEPATH":       true,
 		"XDG_CACHE_HOME": true,
 		"TMPDIR":         true,
 	}
 	var env []string
 	for _, entry := range os.Environ() {
 		key, _, _ := strings.Cut(entry, "=")
-		if !blocked[key] {
+		if !blocked[strings.ToUpper(key)] {
 			env = append(env, entry)
 		}
 	}
@@ -213,6 +219,113 @@ func TestCLIContractDeclinedPromptDoesNotDelete(t *testing.T) {
 	}
 	if _, err := os.Stat(modules); err != nil {
 		t.Fatalf("declined prompt removed target: %v", err)
+	}
+}
+
+func TestCLIContractNestedAgentStateDestructiveSafety(t *testing.T) {
+	t.Run("protected parent refuses without mutation", func(t *testing.T) {
+		home := t.TempDir()
+		projectsRoot := filepath.Join(home, ".claude", "projects")
+		entry := filepath.Join(projectsRoot, "live-parent")
+		modules := filepath.Join(entry, "node_modules")
+		moduleSentinel := filepath.Join(modules, "package", "sentinel")
+		liveCWD := filepath.Join(home, "workspace", "live")
+		if err := os.MkdirAll(liveCWD, 0755); err != nil {
+			t.Fatal(err)
+		}
+		writeCLIContractFixture(t, moduleSentinel, "must survive")
+		session := filepath.Join(entry, "session.jsonl")
+		writeCLIContractFixture(t, session, fmt.Sprintf("{\"cwd\":%q}\n", liveCWD))
+		makeCLIContractTargetOld(t, modules)
+
+		result := runCLIContract(t, home, nil,
+			"clean", "--force", "--no-guide", "--age=1h",
+			"--category=node_modules", "--root="+projectsRoot)
+		if result.ExitCode != 0 {
+			t.Fatalf("protected cleanup exit = %d\nstdout:\n%s\nstderr:\n%s",
+				result.ExitCode, result.Stdout, result.Stderr)
+		}
+		for _, want := range []string{
+			"safety  refused protected agent-state ancestor",
+			"No items to clean.",
+		} {
+			if !strings.Contains(result.Stdout, want) {
+				t.Errorf("protected cleanup stdout missing %q: %s", want, result.Stdout)
+			}
+		}
+		if strings.Contains(result.Stdout, "cleanup receipt") {
+			t.Errorf("protected cleanup crossed the execution boundary: %s", result.Stdout)
+		}
+		if result.Stderr != "" {
+			t.Errorf("protected cleanup stderr = %q", result.Stderr)
+		}
+		for _, path := range []string{moduleSentinel, session, liveCWD} {
+			if _, err := os.Stat(path); err != nil {
+				t.Fatalf("protected cleanup changed %q: %v", path, err)
+			}
+		}
+	})
+
+	t.Run("orphan parent revalidates and removes exactly one target", func(t *testing.T) {
+		home := t.TempDir()
+		projectsRoot := filepath.Join(home, ".claude", "projects")
+		entry := filepath.Join(projectsRoot, "orphan-parent")
+		modules := filepath.Join(entry, "node_modules")
+		moduleSentinel := filepath.Join(modules, "package", "sentinel")
+		keptSentinel := filepath.Join(entry, "kept", "sentinel")
+		missingCWD := filepath.Join(home, "missing", "project")
+		writeCLIContractFixture(t, moduleSentinel, "remove once")
+		writeCLIContractFixture(t, keptSentinel, "must remain")
+		session := filepath.Join(entry, "session.jsonl")
+		writeCLIContractFixture(t, session, fmt.Sprintf("{\"cwd\":%q}\n", missingCWD))
+		makeCLIContractTargetOld(t, modules)
+
+		result := runCLIContract(t, home, nil,
+			"clean", "--force", "--no-guide", "--age=1h",
+			"--category=node_modules", "--root="+projectsRoot)
+		if result.ExitCode != 0 {
+			t.Fatalf("orphan cleanup exit = %d\nstdout:\n%s\nstderr:\n%s",
+				result.ExitCode, result.Stdout, result.Stderr)
+		}
+		for _, want := range []string{
+			"cleanup receipt",
+			"targets    1 item",
+			"removed    1 item",
+			"failed     0 items",
+		} {
+			if !strings.Contains(result.Stdout, want) {
+				t.Errorf("orphan cleanup stdout missing %q: %s", want, result.Stdout)
+			}
+		}
+		if result.Stderr != "" {
+			t.Errorf("orphan cleanup stderr = %q", result.Stderr)
+		}
+		if _, err := os.Lstat(modules); !os.IsNotExist(err) {
+			t.Fatalf("orphan nested target removal error = %v; want not exist", err)
+		}
+		for _, path := range []string{entry, session, keptSentinel} {
+			if _, err := os.Stat(path); err != nil {
+				t.Fatalf("orphan cleanup changed non-target %q: %v", path, err)
+			}
+		}
+	})
+}
+
+func writeCLIContractFixture(t *testing.T, path, contents string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(contents), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func makeCLIContractTargetOld(t *testing.T, path string) {
+	t.Helper()
+	old := time.Now().Add(-8 * 24 * time.Hour)
+	if err := os.Chtimes(path, old, old); err != nil {
+		t.Fatal(err)
 	}
 }
 

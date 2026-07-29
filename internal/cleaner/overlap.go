@@ -521,24 +521,68 @@ func pathContains(parent, child string) bool {
 
 func ambiguousAgentStateMayOverlap(target canonicalPathIdentity, agentStatePath string) bool {
 	rawAgentState := filepath.Clean(strings.TrimSpace(agentStatePath))
-	for _, targetPath := range []string{target.raw, target.canonical} {
-		if _, overlaps := canonicalOverlapRelation(targetPath, rawAgentState); overlaps {
-			return true
-		}
-	}
-
-	linkTarget, err := os.Readlink(rawAgentState)
-	if err != nil {
+	if !filepath.IsAbs(rawAgentState) {
 		return false
 	}
-	if !filepath.IsAbs(linkTarget) {
-		linkTarget = filepath.Join(filepath.Dir(rawAgentState), linkTarget)
+
+	agentStatePaths := []string{rawAgentState}
+	if resolved, err := resolvePathWithUnresolvedSuffix(rawAgentState, 0); err == nil &&
+		resolved != rawAgentState {
+		agentStatePaths = append(agentStatePaths, resolved)
 	}
-	linkTarget = filepath.Clean(linkTarget)
-	for _, targetPath := range []string{target.raw, target.canonical} {
-		if _, overlaps := canonicalOverlapRelation(targetPath, linkTarget); overlaps {
-			return true
+
+	for _, agentStatePath := range agentStatePaths {
+		for _, targetPath := range []string{target.raw, target.canonical} {
+			if _, overlaps := canonicalOverlapRelation(targetPath, agentStatePath); overlaps {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+func resolvePathWithUnresolvedSuffix(path string, symlinkDepth int) (string, error) {
+	if symlinkDepth > 255 {
+		return "", fmt.Errorf("too many symlinks resolving %q", path)
+	}
+
+	current := filepath.Clean(path)
+	var suffix []string
+	for {
+		info, err := os.Lstat(current)
+		if err == nil {
+			if info.Mode()&os.ModeSymlink != 0 {
+				linkTarget, err := os.Readlink(current)
+				if err != nil {
+					return "", err
+				}
+				if !filepath.IsAbs(linkTarget) {
+					linkTarget = filepath.Join(filepath.Dir(current), linkTarget)
+				}
+				current, err = resolvePathWithUnresolvedSuffix(linkTarget, symlinkDepth+1)
+				if err != nil {
+					return "", err
+				}
+			} else {
+				current, err = filepath.EvalSymlinks(current)
+				if err != nil {
+					return "", err
+				}
+			}
+			for _, part := range suffix {
+				current = filepath.Join(current, part)
+			}
+			return filepath.Clean(current), nil
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+
+		parent := filepath.Dir(current)
+		if parent == current {
+			return "", err
+		}
+		suffix = append([]string{filepath.Base(current)}, suffix...)
+		current = parent
+	}
 }
