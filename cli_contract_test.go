@@ -87,7 +87,7 @@ func newCLIContractCommand(t *testing.T, ctx context.Context, home string, extra
 	}
 
 	env := filteredCLIContractEnv()
-	values := make(map[string]string, len(extraEnv)+6)
+	values := make(map[string]string, len(extraEnv)+7)
 	for key, value := range extraEnv {
 		values[key] = value
 	}
@@ -97,6 +97,7 @@ func newCLIContractCommand(t *testing.T, ctx context.Context, home string, extra
 	values["HOMEDRIVE"] = homeDrive
 	values["HOMEPATH"] = strings.TrimPrefix(home, homeDrive)
 	values["XDG_CACHE_HOME"] = cache
+	values["LOCALAPPDATA"] = cache
 	values["TMPDIR"] = temp
 	for key, value := range values {
 		env = append(env, key+"="+value)
@@ -115,6 +116,7 @@ func filteredCLIContractEnv() []string {
 		"HOMEDRIVE":      true,
 		"HOMEPATH":       true,
 		"XDG_CACHE_HOME": true,
+		"LOCALAPPDATA":   true,
 		"TMPDIR":         true,
 	}
 	var env []string
@@ -125,6 +127,66 @@ func filteredCLIContractEnv() []string {
 		}
 	}
 	return env
+}
+
+func TestCLIContractDestructiveCommandIsolatesWindowsUserCache(t *testing.T) {
+	externalCache := t.TempDir()
+	t.Setenv("LoCaLaPpDaTa", externalCache)
+
+	home := t.TempDir()
+	modules := filepath.Join(home, "workspace", "app", "node_modules")
+	writeCLIContractFixture(t, filepath.Join(modules, "package", "sentinel"), "remove")
+	makeCLIContractTargetOld(t, modules)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	command := newCLIContractCommand(t, ctx, home, nil,
+		"clean", "--force", "--no-guide", "--age=1h", "--category=node_modules")
+	localAppDataCount := 0
+	for _, entry := range command.Env {
+		key, value, _ := strings.Cut(entry, "=")
+		if !strings.EqualFold(key, "LOCALAPPDATA") {
+			continue
+		}
+		localAppDataCount++
+		if want := filepath.Join(home, ".cache"); value != want {
+			t.Fatalf("LOCALAPPDATA = %q, want isolated cache %q", value, want)
+		}
+	}
+	if localAppDataCount != 1 {
+		t.Fatalf("case-insensitive LOCALAPPDATA entries = %d, want 1: %q",
+			localAppDataCount, command.Env)
+	}
+
+	result := runCLIContract(t, home, nil,
+		"clean", "--force", "--no-guide", "--age=1h", "--category=node_modules")
+	if result.ExitCode != 0 {
+		t.Fatalf("destructive cleanup exit = %d\nstdout:\n%s\nstderr:\n%s",
+			result.ExitCode, result.Stdout, result.Stderr)
+	}
+	if _, err := os.Lstat(modules); !os.IsNotExist(err) {
+		t.Fatalf("destructive fixture target removal error = %v; want not exist", err)
+	}
+	if entries, err := os.ReadDir(externalCache); err != nil {
+		t.Fatal(err)
+	} else if len(entries) != 0 {
+		t.Fatalf("destructive fixture touched external Windows user cache: %v", entries)
+	}
+	isolatedScanCaches := []string{
+		filepath.Join(home, ".cache", "aibris", "last-scan.json"),
+		filepath.Join(home, "Library", "Caches", "aibris", "last-scan.json"),
+	}
+	foundIsolatedCache := false
+	for _, path := range isolatedScanCaches {
+		if _, err := os.Stat(path); err == nil {
+			foundIsolatedCache = true
+			break
+		}
+	}
+	if !foundIsolatedCache {
+		t.Fatalf("destructive fixture did not write a scan cache under temporary home: %q",
+			isolatedScanCaches)
+	}
 }
 
 func TestCLIContractInvalidFlag(t *testing.T) {

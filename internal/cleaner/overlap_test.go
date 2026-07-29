@@ -147,6 +147,38 @@ func TestBuildOverlapSafetyPlanCanonicalizesSymlinkAliasesAndFailsClosedOnAmbigu
 	}
 }
 
+func TestBuildOverlapSafetyPlanFailsClosedOnCanonicalizationError(t *testing.T) {
+	root := t.TempDir()
+	target := makeOverlapTestDir(t, filepath.Join(root, "target"))
+	entry := makeOverlapTestSymlinkDepthError(t, filepath.Join(root, "aliases"), target)
+
+	if _, err := canonicalExistingPathIdentity(entry); err == nil {
+		t.Fatal("deep symlink agent-state identity unexpectedly resolved")
+	}
+	if _, err := resolvePathWithUnresolvedSuffix(entry, 0); err == nil {
+		t.Fatal("deep symlink agent-state path unexpectedly resolved")
+	} else if errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("resolution error = %v; want deterministic non-ENOENT failure", err)
+	}
+
+	plan := buildOverlapTestPlan(t,
+		[]types.DebrisInfo{overlapAgentStateItem(entry, types.EntryClassOrphaned)},
+		[]types.DebrisInfo{{Path: target}},
+		nil,
+	)
+	component := singleOverlapComponent(t, plan)
+	if component.Refusal == nil ||
+		component.Refusal.Reason != OverlapSafetyAmbiguousIdentity ||
+		!strings.Contains(component.Refusal.Detail, "too many symlinks") {
+		t.Fatalf("canonicalization error refusal = %+v; want fail-closed detail", component.Refusal)
+	}
+	if len(component.Matches) != 1 ||
+		component.Matches[0].Relation != OverlapRelationAmbiguous ||
+		len(plan.AllowedTargets()) != 0 {
+		t.Fatalf("component = %+v; want one ambiguous match and no allowed target", component)
+	}
+}
+
 func TestBuildOverlapSafetyPlanPreservesStableDeduplicatedObligations(t *testing.T) {
 	root := t.TempDir()
 	target := makeOverlapTestDir(t, filepath.Join(root, "outer"))
@@ -354,4 +386,20 @@ func makeOverlapTestDir(t *testing.T, path string) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+func makeOverlapTestSymlinkDepthError(t *testing.T, aliasesRoot, target string) string {
+	t.Helper()
+	if err := os.MkdirAll(aliasesRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	next := target
+	for i := 300; i >= 0; i-- {
+		alias := filepath.Join(aliasesRoot, fmt.Sprintf("alias-%03d", i))
+		if err := os.Symlink(next, alias); err != nil {
+			t.Skipf("symlink unavailable: %v", err)
+		}
+		next = alias
+	}
+	return next
 }

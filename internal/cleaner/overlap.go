@@ -195,16 +195,21 @@ func buildOverlapSafetyComponent(
 	component.CanonicalPath = targetIdentity.canonical
 
 	for _, item := range ambiguousEntries {
-		if !ambiguousAgentStateMayOverlap(targetIdentity, item.Path) {
+		mayOverlap, resolutionErr := ambiguousAgentStateMayOverlap(targetIdentity, item.Path)
+		if !mayOverlap && resolutionErr == nil {
 			continue
 		}
 		component.Matches = append(component.Matches, OverlapSafetyMatch{
 			Item:     item,
 			Relation: OverlapRelationAmbiguous,
 		})
+		detail := "agent-state path cannot be canonically resolved"
+		if resolutionErr != nil {
+			detail += ": " + resolutionErr.Error()
+		}
 		component.Refusal = overlapRefusal(
 			OverlapSafetyAmbiguousIdentity, target.Path, item.Path,
-			"agent-state path cannot be canonically resolved")
+			detail)
 		return component
 	}
 
@@ -519,26 +524,34 @@ func pathContains(parent, child string) bool {
 	return !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-func ambiguousAgentStateMayOverlap(target canonicalPathIdentity, agentStatePath string) bool {
+func ambiguousAgentStateMayOverlap(
+	target canonicalPathIdentity,
+	agentStatePath string,
+) (bool, error) {
 	rawAgentState := filepath.Clean(strings.TrimSpace(agentStatePath))
 	if !filepath.IsAbs(rawAgentState) {
-		return false
+		return false, nil
 	}
 
-	agentStatePaths := []string{rawAgentState}
-	if resolved, err := resolvePathWithUnresolvedSuffix(rawAgentState, 0); err == nil &&
-		resolved != rawAgentState {
-		agentStatePaths = append(agentStatePaths, resolved)
-	}
-
-	for _, agentStatePath := range agentStatePaths {
-		for _, targetPath := range []string{target.raw, target.canonical} {
-			if _, overlaps := canonicalOverlapRelation(targetPath, agentStatePath); overlaps {
-				return true
-			}
+	for _, targetPath := range []string{target.raw, target.canonical} {
+		if _, overlaps := canonicalOverlapRelation(targetPath, rawAgentState); overlaps {
+			return true, nil
 		}
 	}
-	return false
+
+	resolved, err := resolvePathWithUnresolvedSuffix(rawAgentState, 0)
+	if err != nil {
+		return false, fmt.Errorf("resolving %q: %w", rawAgentState, err)
+	}
+	if resolved == rawAgentState {
+		return false, nil
+	}
+	for _, targetPath := range []string{target.raw, target.canonical} {
+		if _, overlaps := canonicalOverlapRelation(targetPath, resolved); overlaps {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func resolvePathWithUnresolvedSuffix(path string, symlinkDepth int) (string, error) {

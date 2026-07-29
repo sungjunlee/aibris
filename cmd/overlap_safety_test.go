@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -357,6 +358,47 @@ func TestExecuteOverlapSafetyRefreshCatchesClassificationDriftAndNewEntries(t *t
 }
 
 func TestExecuteOverlapSafetyRefusesSymlinkRetargetAndIncompleteRefresh(t *testing.T) {
+	t.Run("canonicalization error fails closed during preparation", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		target := filepath.Join(home, ".cache", "canonicalization-error")
+		sentinel := filepath.Join(target, "sentinel")
+		if err := os.MkdirAll(target, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(sentinel, []byte("survive"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		entry := makeOverlapCmdSymlinkDepthError(
+			t,
+			filepath.Join(home, ".agent-state-aliases"),
+			target,
+		)
+		runtime := staticOverlapSafetyRuntime([]types.DebrisInfo{
+			overlapCmdAgentStateItem(entry, types.EntryClassOrphaned),
+		}, nil)
+		selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{
+			overlapCmdTarget(target, 5),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		component := selection.Plan.Components[0]
+		if len(selection.Targets) != 0 ||
+			component.Refusal == nil ||
+			component.Refusal.Reason != cleaner.OverlapSafetyAmbiguousIdentity ||
+			!strings.Contains(component.Refusal.Detail, "too many symlinks") {
+			t.Fatalf("selection = %+v; want canonicalization-error refusal", selection)
+		}
+
+		receipt, err := executeCleanTargets(context.Background(), selection, runtime)
+		if err != nil || receipt.FreedBytes != 0 {
+			t.Fatalf("error=%v, freed=%d; want preparation refusal with zero bytes",
+				err, receipt.FreedBytes)
+		}
+		assertOverlapSentinelsSurvive(t, target, sentinel)
+	})
+
 	t.Run("unresolvable path below intermediate symlink", func(t *testing.T) {
 		home := t.TempDir()
 		t.Setenv("HOME", home)
@@ -891,4 +933,20 @@ func staticOverlapSafetyRuntime(
 		},
 		Lookup: lookup,
 	}
+}
+
+func makeOverlapCmdSymlinkDepthError(t *testing.T, aliasesRoot, target string) string {
+	t.Helper()
+	if err := os.MkdirAll(aliasesRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	next := target
+	for i := 300; i >= 0; i-- {
+		alias := filepath.Join(aliasesRoot, fmt.Sprintf("alias-%03d", i))
+		if err := os.Symlink(next, alias); err != nil {
+			t.Skipf("symlink unavailable: %v", err)
+		}
+		next = alias
+	}
+	return next
 }
