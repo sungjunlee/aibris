@@ -196,7 +196,7 @@ figures come from `aibris scan --json`. Project names are omitted.
 
 ```bash
 go build -o <tmp>/aibris-head .
-<tmp>/aibris-head scan                 # 19.2s wall clock, full $HOME
+<tmp>/aibris-head scan                 # historical observation only: 19.2s wall clock, full $HOME
 <tmp>/aibris-head scan --json
 <tmp>/aibris-head scan --root ~/.codex --json
 <tmp>/aibris-head clean --dry-run < /dev/null
@@ -205,6 +205,142 @@ go build -o <tmp>/aibris-head .
 Installed content — `~/.claude/skills`, `~/.claude/plugins`, `~/.cursor/extensions`,
 `~/.codex/plugins` — is excluded from every total below. aibris correctly does
 not classify installed content as debris, and that boundary must be preserved.
+
+The `19.2s` result is a historical observation from this one 2026-07-26 run,
+not a performance baseline. Filesystem-cache state alone later produced an
+approximately 11–35 second spread on an unchanged binary. Neither `19.2s` nor
+any other stored absolute real-home timing may be used as a regression target.
+
+### Same-session paired scan delta protocol
+
+Provider changes must be measured against their base in one session. Use the
+following manual protocol until #129 supplies the synthetic-home,
+cross-platform performance harness and a non-flaky regression budget.
+
+1. Before building, name the full immutable commit IDs in the measurement
+   record as `BASE_SHA` and `CHANGE_SHA`. Resolve both once, verify that each is
+   a commit, and export each snapshot to a separate temporary source directory.
+   Build separate binaries with the same Go toolchain and build flags:
+
+   ```bash
+   set -euo pipefail
+
+   RUN_DIR=$(mktemp -d)
+   BASE_SHA=$(git rev-parse --verify 'origin/main^{commit}')
+   CHANGE_SHA=$(git rev-parse --verify 'HEAD^{commit}')
+
+   test "$(git rev-parse --verify "$BASE_SHA^{commit}")" = "$BASE_SHA"
+   test "$(git rev-parse --verify "$CHANGE_SHA^{commit}")" = "$CHANGE_SHA"
+   mkdir "$RUN_DIR/base-src" "$RUN_DIR/change-src"
+   git archive "$BASE_SHA" | tar -x -C "$RUN_DIR/base-src"
+   git archive "$CHANGE_SHA" | tar -x -C "$RUN_DIR/change-src"
+   (cd "$RUN_DIR/base-src" && go build -trimpath -o "$RUN_DIR/aibris-base" .)
+   (cd "$RUN_DIR/change-src" && go build -trimpath -o "$RUN_DIR/aibris-change" .)
+   ```
+
+   Record `go version`, machine/OS, both SHAs, both binary checksums, and the
+   build flags. Do not rebuild either binary during the run. Keep fail-fast and
+   pipeline-failure handling enabled for all remaining measurement commands.
+
+2. Freeze one measurement environment: the same machine, login session,
+   measured `HOME`, normalized scan roots, command flags, environment variables,
+   and background-work policy for both binaries. Record the exact root list and
+   argv. For example, a one-root full-home run uses the same value for
+   `<measured-home>` and `--root` every time:
+
+   ```bash
+   MEASURE_HOME=/absolute/path/to/measured-home
+   BIN="$RUN_DIR/aibris-base"
+   RUN_LOG="$RUN_DIR/warm-pair1-base.log"
+   TIME_LOG="$RUN_DIR/warm-pair1-base.time"
+   env HOME="$MEASURE_HOME" /usr/bin/time -p \
+     "$BIN" scan --root "$MEASURE_HOME" > "$RUN_LOG" 2> "$TIME_LOG"
+   ```
+
+   Do not clean or otherwise mutate the measured home between runs. Preserve
+   every run log and time log. The non-TTY scan log supplies the scanned source
+   count and the summary supplies item and byte scale; record those values for
+   every observation, not just once for the series. Admit an observation to a
+   pair only when the timed scan exits zero; preserve failed logs separately,
+   but never compute a delta from them.
+
+3. Measure filesystem-cache conditions as separate series. For a **cold**
+   series, apply the same documented, platform-appropriate cache-eviction
+   procedure before every measured binary invocation. Record the exact command,
+   its zero exit status, and a platform-specific signal that verifies eviction
+   took effect before each invocation. If eviction fails, is a no-op, or cannot
+   be verified, label that observation `uncontrolled` and exclude it from the
+   cold median and range. A first run with unknown state is also
+   `uncontrolled`, not `cold`.
+
+   Track aibris application caches separately from the filesystem cache. A
+   human-readable scan may read or refresh `codex-activity.json`; record its
+   path, `created_at`, and checksum (or its absence) before and after every
+   invocation. Establish one identical application-cache state for both
+   binaries before a series. In every filesystem-cache condition, require the
+   recorded application-cache identity to remain unchanged throughout each
+   measured pair. If either binary refreshes or otherwise changes it, discard
+   that pair and repeat after re-establishing a common state. For a **warm**
+   series, first run one unmeasured warm-up of each binary, then perform the
+   measured series without filesystem eviction. Never average cold, warm, or
+   uncontrolled observations together.
+
+4. Within each cache-condition series, alternate order by adjacent pairs. The
+   minimum is eight measured runs per condition: four adjacent pairs, with at
+   least two pairs in each order:
+
+   ```text
+   pair 1: base,   change
+   pair 2: change, base
+   pair 3: base,   change
+   pair 4: change, base
+   ```
+
+   Additional repetitions continue `base/change`, `change/base`. This
+   represents both orders and avoids completing all base runs before all change
+   runs. Record the actual global run sequence; do not reconstruct it later.
+
+5. For every temporally adjacent pair, compute
+   `delta = change elapsed - base elapsed`, regardless of which binary ran
+   first. Preserve every raw elapsed time and every delta. For each cache
+   condition report the median paired delta and the range from minimum to
+   maximum delta. A complete report has this shape:
+
+   | Condition | Pair/order | Base SHA/time | Change SHA/time | Sources/items/bytes per run | Change−base |
+   | --- | --- | --- | --- | --- | ---: |
+   | cold | 1 / base→change | `<sha>` / … | `<sha>` / … | … | … |
+   | cold | 2 / change→base | `<sha>` / … | `<sha>` / … | … | … |
+   | cold | 3 / base→change | `<sha>` / … | `<sha>` / … | … | … |
+   | cold | 4 / change→base | `<sha>` / … | `<sha>` / … | … | … |
+   | warm | 1 / base→change | `<sha>` / … | `<sha>` / … | … | … |
+   | warm | 2 / change→base | `<sha>` / … | `<sha>` / … | … | … |
+   | warm | 3 / base→change | `<sha>` / … | `<sha>` / … | … | … |
+   | warm | 4 / change→base | `<sha>` / … | `<sha>` / … | … | … |
+
+   Follow the rows with the median and `[minimum, maximum]` paired delta for
+   each condition. The summary describes this session only; it does not turn
+   one timing or delta into a performance budget. Unless a stability or
+   uncertainty rule was declared before the run, even the minimum series is
+   `inconclusive` as a regression decision; preserve it as an observation and
+   collect more pairs. #129 owns the repeatable harness and non-flaky decision
+   threshold rather than letting an operator invent one after seeing results.
+   Because a documentation-only change should have no scanner delta,
+   investigate a material systematic difference instead of presenting it as an
+   improvement.
+
+Relay-driven sessions create and reclaim entries under `~/.relay/worktrees`
+while work is in progress. Provider counts, item counts, byte totals, and
+timings therefore drift even on one machine. Capture scale beside every timing
+within the same run and session. If an adjacent pair's scale changes, flag it
+and rerun after the working set stabilizes rather than silently treating it as
+comparable. Stored counts and byte totals, like stored timings, are observations
+and never targets.
+
+No Make target is added by #146. A target that only alternates scans of a mutable
+real home would conceal cache-state and working-set controls while duplicating
+only a small, misleading part of the eventual harness. #129 remains the owner
+of deterministic synthetic-home inputs, platform baselines, cache-control
+automation, and a regression threshold that will not make CI flaky.
 
 ### Discovered vs. actual
 

@@ -39,4 +39,6 @@ rather than being its immediate child, and members use a
       documented.
 - [ ] Container entries without valid Git metadata are reported honestly rather
       than silently dropped.
-- [ ] Full-home scan time is reported against the 19.2s baseline.
+- [ ] Full-home scan performance follows the same-session paired-delta protocol
+      in `docs/DOGFOOD.md`; report change-minus-base deltas with cache condition
+      and observed scale instead of comparing an absolute stored timing.
