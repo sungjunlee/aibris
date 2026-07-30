@@ -35,9 +35,9 @@ content that is surfaced rather than reclaimed.
 - [x] #151 L1 overlap safety: protected agent-state shields its subtree and outer targets inherit nested safety/revalidation → PR #159 (merged `d348ede`, hardened review round 4)
 - [x] #151 L2 plan/audit accounting: outermost physical target owns bytes while rows, reasons, and receipts retain nested obligations → PR #160 (merged `23f7b38`, hardened review round 3)
 
-### Batch 4 — Fix bounded worktree-container coverage
+### Batch 4 — Fix bounded worktree-container coverage — complete
 
-- [~] #140 Cover the confirmed `~/.config/superpowers/worktrees` depth gap within a documented finite discovery bound (~3h) [branch:issue-140-bounded-worktree-containers] — relay run `issue-140-20260730121915000`
+- [x] #140 Cover the confirmed `~/.config/superpowers/worktrees` depth gap within a documented finite discovery bound → PR #163 (merged `8caa554`, hardened primary review round 6)
 
 ### Batch 5 — Classify agent byproducts
 
@@ -108,6 +108,11 @@ content that is surfaced rather than reclaimed.
 - Report provider performance as a same-session paired delta: build base and
   change together, alternate runs, and record cache condition and observed
   scale. Keep 19.2s only as a labelled historical observation.
+- Known worktree containers use a finite exact registry for `.codex`, `.relay`,
+  `.gstack`, and `.config/superpowers/worktrees`; the generic depth-4 fallback
+  remains bounded. Invalid metadata or mixed valid/invalid members protect the
+  whole physical owner, and any active logical member protects a shared
+  active/orphaned owner unless active cleanup is explicitly included.
 - #147 returns to the paused 0.9.x execution-contract stream after #151; it
   should reuse #115's single plan pipeline rather than add another normalization
   implementation in this milestone.
@@ -426,3 +431,21 @@ measuring, because the real home lacked the triggering condition.
   is an observation, not a target: `fe8eb16` full-home scan finds zero
   superpowers rows, but a scoped scan finds two valid L2 members under one
   540,565,504-byte physical owner.
+- 2026-07-31 01:10: #140 dispatched → PR #163 → hardened primary review
+  (semantic PASS, round 6) → squash-merged as `8caa554`; #140 closed, Batch 4
+  completed, and the run worktree plus local/remote branch were cleaned. The
+  maintainer authorized force-finalization after the final Codex review passed
+  all 12 Done Criteria and the hardened OpenCode advisory returned empty stdout
+  twice after reviewer-swap exhaustion. The post-review Ubuntu failure exposed
+  a deterministic audit-only path-alias bug hidden by macOS `/var` canonical
+  aliases; an independent audit confirmed the three-line priority fix, its
+  direct regression test, and no mutation-path effect. Ubuntu/macOS CI,
+  release-build, and CodeRabbit all passed at the final PR head.
+
+  Merged `main` passed race tests, build, vet, and Linux/Windows/Darwin builds.
+  Same-session real-home dry-runs from immutable pre-merge `41cab28` and merged
+  `8caa554` binaries both planned **213 items / 1.6 GB** and reported
+  agent-state **277 found / 210 eligible (246.1 MB) / 67 protected
+  (429.4 MB)**. The new container registry increased protected physical
+  coverage from 319 to 362 owners while leaving planned and agent-state values
+  exactly equal; all aibris real-home clean invocations used `--dry-run`.
