@@ -29,10 +29,11 @@ current categories, agent-state classifications, JSON fields, or CLI selectors.
 - [x] **L1 — store classification (documentation only):** freeze the evidence,
       store nature, and downstream policy before adding a provider.
 - [ ] **L2 — regenerable provider:** consider only direct child units of
-      `~/.codex/tmp`. For the observed layout, the only unit is the literal
-      `~/.codex/tmp/path/`; its `codex-arg*` grandchildren are not independent
-      units. Prove ownership and active-use/TOCTOU safety for the whole unit and
-      never delete the tmp root.
+      `~/.codex/tmp`. The observed `path/` child is evidence, not a stable name
+      or allowlist, and its `codex-arg*` descendants are not independent units.
+      Enumerate every direct child, admit only versioned layouts that pass the
+      ownership and active-use/TOCTOU contract below, surface unsupported
+      children as protected and ineligible, and never delete the tmp root.
 - [ ] **L3 — protected inventory:** start only after #139 L1 merges, then follow
       each protected store's policy below without making `--risky` a deletion
       unlock.
@@ -43,20 +44,67 @@ current categories, agent-state classifications, JSON fields, or CLI selectors.
 | --- | --- | --- |
 | `~/.codex/packages` | Installed content | No provider; excluded from inventory and every cleanup surface. |
 | `~/.codex/computer-use` | Installed content | No provider; excluded from inventory and every cleanup surface. |
-| `~/.codex/tmp` | Regenerable residue | Currently undiscovered, unselectable, and ineligible. It is only a future safety-bounded default-clean candidate; for the observed layout L2 is limited to the direct child `path/`, must treat its descendants as part of that one unit, and must not delete the root. |
+| `~/.codex/tmp` | Regenerable residue | Currently undiscovered, unselectable, and ineligible. Only direct children are future safety-bounded default-clean units. Their basenames do not establish identity; each whole child must pass the versioned contract below, and the root must never be deleted. |
 | `~/.codex/generated_images` | Protected content | Not default-clean and not deletable through `--risky` alone. Explicit retention selection may be considered only after #139 L1 merges. |
-| `~/.codex/sqlite` | Protected content | Inventory-only unless a separate future contract proves process quiescence and supplies one atomic manifest for every complete database/WAL/SHM family defined below. |
-| `~/.cursor/ai-tracking` | Protected content | Inventory-only unless a separate future contract proves process quiescence and supplies one atomic manifest for every complete database/WAL/SHM family defined below. |
+| `~/.codex/sqlite` | Protected content | Inventory-only unless a separate future implementation satisfies the fail-closed quiescence, family-registry, and atomic-manifest contract below. |
+| `~/.cursor/ai-tracking` | Protected content | Inventory-only unless a separate future implementation satisfies the fail-closed quiescence, family-registry, and atomic-manifest contract below. |
 
-A complete database/WAL/SHM family is one primary database plus every
-same-directory `-wal`, `-shm`, `-journal`, `.wal`, `.shm`, `.journal`,
-`.backup`, `.bak`, or other store-specific journal, backup, or sidecar member.
-An atomic manifest is one immutable complete-family record captured under
-continuous process quiescence, listing canonical path, file identity, size, and
-modification time for every member. It is published all-or-nothing by a synced
-temporary write and same-directory rename, with a parent-directory sync where
-supported; any membership or metadata change before publication aborts without
-publishing a manifest.
+### L2 safety prerequisite
+
+Each supported Codex release/channel and tmp layout needs a versioned
+recognizer and fixtures. Ownership requires a canonical, non-symlink direct
+child whose complete contents are accounted for by producer-issued identity
+evidence or a documented upstream layout tied to the detected version. The
+basename, age, shim names, process name, and absence of a current writer are
+insufficient.
+
+Before enumeration, L2 must acquire a producer-cooperative exclusive lock,
+lease, or pause handshake with an observable ownership or fencing token. It
+must be honored by the Codex application/CLI, apply-patch launchers and callers,
+and agent supervisors or background helpers. While it is held, L2 snapshots the
+canonical path, file identities, complete member set, entry types, link targets,
+sizes, and modification times; immediately before mutation it re-enumerates and
+compares the unit and token, then deletes only while exclusion remains held. An
+unknown layout or writer, a writer that does not participate, lock loss, or any
+mismatch leaves the entire child protected with no partial deletion or byte
+credit. Process-name, `lsof`, `/proc`, and open-handle checks alone cannot prove
+exclusion. Fixtures and platform race tests must cover unknown children and
+creation, mutation, rename, and lock loss from every writer class.
+
+### L3 safety prerequisite
+
+Database-family enumeration uses an explicitly open, versioned registry rather
+than a closed suffix list. The registry scans the bounded store directory and
+assigns every entry to one primary family or proves it unrelated. It starts
+with the observed `-wal`, `-shm`, `-journal`, `.wal`, `.shm`, `.journal`,
+`.backup`, and `.bak` conventions; every newly observed store-specific journal,
+backup, or sidecar convention requires a registry and fixture update before
+inventory resumes. An unassigned entry makes the store incomplete, protected,
+and non-inventoriable.
+
+A complete family is the primary plus every registry-assigned member. Process
+quiescence is a producer-cooperative exclusive lock, lease, shutdown, or pause
+protocol with an observable ownership or fencing token. Each supported
+store/version must register every application, database connection, indexing or
+sync worker, and agent or supervisor helper capable of writing the store; all
+must honor the protocol. The token is acquired before the first enumeration,
+revalidated before and after each publication step, and held until publication
+and directory durability are confirmed. An unknown or non-participating writer
+makes quiescence unprovable. Point-in-time process or open-handle enumeration is
+never sufficient.
+
+Under that exclusion, one immutable manifest records every member's canonical
+path, file identity, size, and modification time. L3 syncs a temporary
+manifest, re-enumerates and compares the family and token, atomically replaces
+the same-directory destination, makes the directory entry durable, and verifies
+the token again. It emits or accepts the manifest as inventory only after every
+step succeeds; files from interrupted or previous attempts are never inventory
+evidence. Lock loss or another mid-publish violation, a non-participating
+writer, membership or metadata drift, publication failure, or a platform
+without the required atomic-replace and directory-durability primitives aborts
+the operation, removes attempt files where exclusion still permits it, and
+emits no inventory. Platform and fault-injection tests must cover those paths,
+including lock loss before and after replacement.
 
 Uncertainty resolves to protected content, never broader cleanup eligibility.
 This split does not add a provider or define the protected-content category,
@@ -64,8 +112,9 @@ selector, retention bucket, or execution manifest reserved for #139.
 
 ## Remaining acceptance criteria
 
-- [ ] L2 proves ownership and active-use/TOCTOU behavior for the frozen `path/`
-      unit before registering a tmp provider.
+- [ ] L2 implements the versioned ownership, cooperative exclusion,
+      revalidation, and race-test contract for each admitted direct-child
+      layout before registering a tmp provider.
 - [ ] L3 waits for merged #139 L1 semantics and preserves each store-specific
       consequence above.
 - [ ] Provider changes preserve the existing cache, JSON, CLI, eligibility, and
