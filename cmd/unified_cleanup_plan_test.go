@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -315,9 +316,13 @@ func TestBuildUnifiedCleanupPlanIsDeterministic(t *testing.T) {
 
 func TestUnifiedCleanupPlanBuildsDeterministicContainmentComponent(t *testing.T) {
 	root := t.TempDir()
+	t.Setenv("HOME", root)
 	outer := filepath.Join(root, ".cache", "owner")
 	nested := filepath.Join(outer, "project", "node_modules")
 	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(outer, "payload"), make([]byte, 1000), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	alias := filepath.Join(root, ".cache", "owner-alias")
@@ -343,7 +348,7 @@ func TestUnifiedCleanupPlanBuildsDeterministicContainmentComponent(t *testing.T)
 		{
 			RowKey:    "owner-exact",
 			Item:      exactDuplicate,
-			Selection: CleanupPlanUnselected,
+			Selection: CleanupPlanSelected,
 			Reasons: []CleanupPlanReason{{
 				Code:        CleanupPlanReasonClassicEligible,
 				Description: "exact duplicate evidence",
@@ -381,9 +386,9 @@ func TestUnifiedCleanupPlanBuildsDeterministicContainmentComponent(t *testing.T)
 	}
 	component := forward.Components[0]
 	canonicalOuter, _ := cleanTargetPathKey(outer)
-	if component.CanonicalPath != canonicalOuter || component.Owner.Path != alias ||
+	if component.CanonicalPath != canonicalOuter || component.Owner.Path != outer ||
 		component.Owner.Size != 1000 || component.Selection != CleanupPlanSelected {
-		t.Fatalf("component = %+v; want canonical owner with raw alias mutation and max size", component)
+		t.Fatalf("component = %+v; want canonical raw owner with its own size", component)
 	}
 	totals := forward.Totals()
 	if totals.PhysicalTargets != 1 || totals.PhysicalBytes != 1000 ||
@@ -391,8 +396,8 @@ func TestUnifiedCleanupPlanBuildsDeterministicContainmentComponent(t *testing.T)
 		t.Fatalf("totals = %+v; want owner bytes once", totals)
 	}
 	selected := forward.SelectedPhysicalTargets()
-	if len(selected) != 1 || selected[0].Path != alias {
-		t.Fatalf("selected = %+v; canonical identity must not replace raw mutation path", selected)
+	if len(selected) != 1 || selected[0].Path != outer || selected[0].Size != 1000 {
+		t.Fatalf("selected = %+v; want executable canonical raw owner and matching bytes", selected)
 	}
 
 	relations := make(map[string]CleanupPlanRelation)
@@ -402,8 +407,8 @@ func TestUnifiedCleanupPlanBuildsDeterministicContainmentComponent(t *testing.T)
 			t.Fatalf("row %q owner = %q; want %q", row.Key, row.OwnerKey, canonicalOuter)
 		}
 	}
-	if relations["owner-alias"] != CleanupPlanRelationOwner ||
-		relations["owner-exact"] != CleanupPlanRelationExact ||
+	if relations["owner-alias"] != CleanupPlanRelationExact ||
+		relations["owner-exact"] != CleanupPlanRelationOwner ||
 		relations["nested"] != CleanupPlanRelationNested {
 		t.Fatalf("relations = %+v; exact duplicate and nesting must remain distinct", relations)
 	}
@@ -415,6 +420,129 @@ func TestUnifiedCleanupPlanBuildsDeterministicContainmentComponent(t *testing.T)
 	for _, row := range toggled.Rows {
 		if row.Selection != CleanupPlanUnselected {
 			t.Fatalf("row %q selection = %s; whole component should be unselected", row.Key, row.Selection)
+		}
+	}
+
+	logicalInputs := make([]cleanupOverlapLogicalInput, 0, len(candidates))
+	for _, candidate := range candidates {
+		logicalInputs = append(logicalInputs, cleanupOverlapLogicalInput{
+			Item:         candidate.Item,
+			PolicyReason: candidate.Reasons[0].Description,
+		})
+	}
+	runtime := staticOverlapSafetyRuntime(nil, nil)
+	selection, err := applyCleanupOverlapSafetyWithRows(
+		context.Background(),
+		runtime,
+		[]types.DebrisInfo{aliasOwner, exactDuplicate, child},
+		logicalInputs,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(selection.Targets) != 1 ||
+		selection.Targets[0].Path != outer ||
+		selection.Targets[0].Size != 1000 ||
+		len(selection.Components) != 1 ||
+		selection.Components[0].Owner.Path != outer {
+		t.Fatalf("execution selection = %+v; want canonical raw owner with matching bytes", selection)
+	}
+
+	receipt, err := executeCleanTargets(context.Background(), selection, runtime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unit := singleExecutionUnit(t, receipt)
+	if !unit.PhysicalRemoved || unit.FreedBytes != 1000 || receipt.FreedBytes != 1000 ||
+		unit.Component == nil || unit.Component.Owner.Path != outer {
+		t.Fatalf("receipt = %+v; want one removed canonical raw owner and 1000 freed bytes", receipt)
+	}
+	if _, statErr := os.Lstat(outer); !os.IsNotExist(statErr) {
+		t.Fatalf("canonical raw owner survived cleanup: %v", statErr)
+	}
+	if _, statErr := os.Lstat(alias); statErr != nil {
+		t.Fatalf("non-owner alias was mutated: %v", statErr)
+	}
+	receiptOutput := captureOutput(func() {
+		printWorktreeExecutionReceipts(receipt)
+	})
+	for _, want := range []string{outer, alias, nested, "physical-removed true", "freed 1000 B"} {
+		if !strings.Contains(receiptOutput, want) {
+			t.Fatalf("receipt missing %q:\n%s", want, receiptOutput)
+		}
+	}
+}
+
+func TestSymlinkAliasExecutionDoesNotClaimCanonicalOwnerBytes(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	outer := filepath.Join(home, ".cache", "owner")
+	if err := os.MkdirAll(outer, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(outer, "payload"), make([]byte, 1000), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(home, ".cache", "owner-alias")
+	if err := os.Symlink(outer, alias); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	aliasTarget := cleanupPlanTestItem(alias, types.CategoryBuildCache, 1000)
+	outerEvidence := cleanupPlanTestItem(outer, types.CategoryOtherCache, 1000)
+	canonicalOuter, _ := cleanTargetPathKey(outer)
+	runtime := staticOverlapSafetyRuntime(nil, nil)
+	selection, err := applyCleanupOverlapSafetyWithRows(
+		context.Background(),
+		runtime,
+		[]types.DebrisInfo{aliasTarget},
+		[]cleanupOverlapLogicalInput{
+			{Item: aliasTarget, PolicyReason: "selected alias"},
+			{Item: outerEvidence, PolicyReason: "canonical owner evidence"},
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(selection.Targets) != 1 ||
+		selection.Targets[0].Path != alias ||
+		len(selection.Components) != 1 ||
+		selection.Components[0].CanonicalPath != canonicalOuter {
+		t.Fatalf("selection = %+v; raw alias must remain the authorized mutation target", selection)
+	}
+
+	receipt, err := executeCleanTargets(context.Background(), selection, runtime)
+	if err == nil || !strings.Contains(err.Error(), "physical cleanup owner still exists") {
+		t.Fatalf("error = %v; want canonical owner postcondition failure", err)
+	}
+	unit := singleExecutionUnit(t, receipt)
+	if unit.State != cleanExecutionFailed ||
+		unit.PhysicalRemoved ||
+		unit.FreedBytes != 0 ||
+		receipt.FreedBytes != 0 ||
+		unit.Component == nil ||
+		unit.Component.Owner.Path != alias ||
+		unit.BlockingPath != canonicalOuter {
+		t.Fatalf("receipt = %+v; alias removal must not claim canonical owner bytes", receipt)
+	}
+	if _, statErr := os.Stat(outer); statErr != nil {
+		t.Fatalf("canonical owner changed: %v", statErr)
+	}
+	if _, statErr := os.Lstat(alias); !os.IsNotExist(statErr) {
+		t.Fatalf("authorized raw alias was not removed: %v", statErr)
+	}
+	output := captureOutput(func() {
+		printWorktreeExecutionReceipts(receipt)
+	})
+	for _, want := range []string{
+		outer,
+		alias,
+		"physical-removed false",
+		"freed 0 B",
+		"canonical owner evidence",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("receipt missing %q:\n%s", want, output)
 		}
 	}
 }

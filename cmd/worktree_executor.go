@@ -247,12 +247,23 @@ func executePathCleanupTarget(
 	if validated {
 		applyOverlapValidationReceipt(&receipt, validation)
 	}
-	receipt.PhysicalRemoved = pathDoesNotExist(target.Path)
+	physicalOwnerPath := target.Path
+	if component != nil && component.CanonicalPath != "" {
+		physicalOwnerPath = component.CanonicalPath
+	}
+	receipt.PhysicalRemoved = pathDoesNotExist(physicalOwnerPath)
 	if err != nil {
 		if receipt.BlockingPath == "" {
 			receipt.BlockingPath = target.Path
 			receipt.BlockingReason = err.Error()
 		}
+		receipt.Error = err.Error()
+		return receipt, err
+	}
+	if cleanupKind(target) == types.CleanupRemovePath && !receipt.PhysicalRemoved {
+		err := fmt.Errorf("physical cleanup owner still exists after removal: %q", physicalOwnerPath)
+		receipt.BlockingPath = physicalOwnerPath
+		receipt.BlockingReason = err.Error()
 		receipt.Error = err.Error()
 		return receipt, err
 	}

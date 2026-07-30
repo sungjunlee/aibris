@@ -681,10 +681,11 @@ func filterGitUnsafeActiveWorktreeTargetsWithInspector(ctx context.Context, targ
 }
 
 type normalizedCleanTarget struct {
-	item  types.DebrisInfo
-	path  string
-	depth int
-	index int
+	item     types.DebrisInfo
+	path     string
+	depth    int
+	index    int
+	rawSizes map[string]int64
 }
 
 func normalizeCleanTargets(targets []types.DebrisInfo) []types.DebrisInfo {
@@ -695,24 +696,28 @@ func normalizeCleanTargets(targets []types.DebrisInfo) []types.DebrisInfo {
 			continue
 		}
 		candidate := normalizedCleanTarget{
-			item:  target,
-			path:  path,
-			depth: cleanTargetPathDepth(path),
-			index: i,
+			item:     target,
+			path:     path,
+			depth:    cleanTargetPathDepth(path),
+			index:    i,
+			rawSizes: map[string]int64{cleanTargetRawPathKey(target.Path): target.Size},
 		}
 		existing, exists := byPath[path]
 		if !exists {
 			byPath[path] = candidate
 			continue
 		}
-		maxSize := existing.item.Size
-		if candidate.item.Size > maxSize {
-			maxSize = candidate.item.Size
+		// Canonical aliases share containment identity, but they do not share a
+		// raw mutation target. Keep byte estimates scoped to the selected raw
+		// path so deleting a symlink cannot inherit its referent's accounting.
+		rawPath := cleanTargetRawPathKey(candidate.item.Path)
+		if candidate.item.Size > existing.rawSizes[rawPath] {
+			existing.rawSizes[rawPath] = candidate.item.Size
 		}
-		if preferCleanTarget(candidate.item, existing.item) {
+		if preferCleanTargetForCanonical(candidate.item, existing.item, path) {
 			existing.item = candidate.item
 		}
-		existing.item.Size = maxSize
+		existing.item.Size = existing.rawSizes[cleanTargetRawPathKey(existing.item.Path)]
 		if candidate.index < existing.index {
 			existing.index = candidate.index
 		}
@@ -769,6 +774,29 @@ func cleanTargetPathKey(path string) (string, bool) {
 		clean = filepath.Clean(resolved)
 	}
 	return clean, true
+}
+
+func cleanTargetRawPathKey(path string) string {
+	return filepath.Clean(strings.TrimSpace(path))
+}
+
+func preferCleanTargetForCanonical(left, right types.DebrisInfo, canonicalPath string) bool {
+	leftIsSymlink := cleanTargetPathIsSymlink(left.Path)
+	rightIsSymlink := cleanTargetPathIsSymlink(right.Path)
+	if leftIsSymlink != rightIsSymlink {
+		return !leftIsSymlink
+	}
+	leftIsCanonical := cleanTargetRawPathKey(left.Path) == canonicalPath
+	rightIsCanonical := cleanTargetRawPathKey(right.Path) == canonicalPath
+	if leftIsCanonical != rightIsCanonical {
+		return leftIsCanonical
+	}
+	return preferCleanTarget(left, right)
+}
+
+func cleanTargetPathIsSymlink(path string) bool {
+	info, err := os.Lstat(cleanTargetRawPathKey(path))
+	return err == nil && info.Mode()&os.ModeSymlink != 0
 }
 
 func preferCleanTarget(left, right types.DebrisInfo) bool {

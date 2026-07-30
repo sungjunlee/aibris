@@ -197,7 +197,7 @@ func BuildUnifiedCleanupPlan(ctx context.Context, candidates []CleanupPlanCandid
 			return cleanupPlanCandidateStableKey(group.candidates[i]) < cleanupPlanCandidateStableKey(group.candidates[j])
 		})
 		selection := aggregateCleanupPlanSelection(group.candidates)
-		item := cleanupPlanRepresentative(group.candidates)
+		item := cleanupPlanRepresentative(key, group.candidates)
 		target := CleanupPhysicalTarget{
 			Key:             key,
 			Item:            item,
@@ -370,18 +370,22 @@ func aggregateCleanupPlanSelection(candidates []CleanupPlanCandidate) CleanupPla
 	return selection
 }
 
-func cleanupPlanRepresentative(candidates []CleanupPlanCandidate) types.DebrisInfo {
+func cleanupPlanRepresentative(canonicalPath string, candidates []CleanupPlanCandidate) types.DebrisInfo {
 	item := candidates[0].Item
-	maxSize := item.Size
+	// Exact canonical aliases remain distinct raw mutation paths. A direct
+	// physical candidate owns the component when available, and only duplicate
+	// rows for that raw path may refine its byte estimate.
+	rawSizes := map[string]int64{cleanTargetRawPathKey(item.Path): item.Size}
 	for _, candidate := range candidates[1:] {
-		if preferCleanTarget(candidate.Item, item) {
+		rawPath := cleanTargetRawPathKey(candidate.Item.Path)
+		if candidate.Item.Size > rawSizes[rawPath] {
+			rawSizes[rawPath] = candidate.Item.Size
+		}
+		if preferCleanTargetForCanonical(candidate.Item, item, canonicalPath) {
 			item = candidate.Item
 		}
-		if candidate.Item.Size > maxSize {
-			maxSize = candidate.Item.Size
-		}
 	}
-	item.Size = maxSize
+	item.Size = rawSizes[cleanTargetRawPathKey(item.Path)]
 	return item
 }
 
@@ -471,10 +475,7 @@ func buildCleanupPhysicalComponents(
 			rows[i].OwnerKey = component.Key
 			rows[i].Selection = component.Selection
 			ownerTarget := cleanupPhysicalTargetByKey(targets, component.OwnerTargetKey)
-			ownerRowKey := ""
-			if ownerTarget != nil && len(ownerTarget.RowKeys) > 0 {
-				ownerRowKey = ownerTarget.RowKeys[0]
-			}
+			ownerRowKey := cleanupPlanOwnerRowKey(rows, ownerTarget)
 			switch {
 			case rows[i].Key == ownerRowKey:
 				rows[i].Relation = CleanupPlanRelationOwner
@@ -533,6 +534,25 @@ func cleanupPhysicalTargetByKey(
 		}
 	}
 	return nil
+}
+
+func cleanupPlanOwnerRowKey(
+	rows []CleanupPlanRow,
+	target *CleanupPhysicalTarget,
+) string {
+	if target == nil {
+		return ""
+	}
+	for _, row := range rows {
+		if row.TargetKey == target.Key &&
+			cleanTargetStableKey(row.Item) == cleanTargetStableKey(target.Item) {
+			return row.Key
+		}
+	}
+	if len(target.RowKeys) > 0 {
+		return target.RowKeys[0]
+	}
+	return ""
 }
 
 func cleanupPlanRowContainsLockedTarget(
