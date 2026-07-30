@@ -864,7 +864,7 @@ func interactiveClean(ctx context.Context, targets []preparedCleanTarget) (clean
 		if !cleaner.IsSafeTarget(home, w) {
 			err := fmt.Errorf("unsafe path %q rejected", w.Path)
 			fmt.Fprintf(os.Stderr, "  error: %v\n", err)
-			result.Units = append(result.Units, failedCleanUnitReceipt(w, nil, err))
+			result.Units = append(result.Units, failedPreparedCleanUnitReceipt(target, err))
 			errs = append(errs, err)
 			continue
 		}

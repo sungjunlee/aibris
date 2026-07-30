@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
+	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -1532,6 +1533,15 @@ func TestInteractiveCleanReturnsRejectedTargetError(t *testing.T) {
 		Category: types.CategoryNodeModules,
 		Path:     filepath.Join(outside, "node_modules"),
 	}}
+	unsafeTarget.Component = &cleanupOverlapComponent{
+		CanonicalPath: unsafeTarget.Item.Path,
+		Owner:         unsafeTarget.Item,
+		Obligations: []cleaner.AgentStateObligation{{
+			Tool:       types.ToolClaude,
+			EntryPath:  filepath.Join(unsafeTarget.Item.Path, "agent-state"),
+			ProviderID: "claude",
+		}},
+	}
 	safePath := filepath.Join(home, "workspace", "app", "node_modules")
 	if err := os.MkdirAll(safePath, 0755); err != nil {
 		t.Fatal(err)
@@ -1557,6 +1567,15 @@ func TestInteractiveCleanReturnsRejectedTargetError(t *testing.T) {
 	removed, partial, failed := receipt.counts()
 	if len(receipt.Units) != 2 || receipt.FreedBytes != 42 || removed != 1 || partial != 0 || failed != 1 {
 		t.Fatalf("receipt = %+v, want one successful and one failed target", receipt)
+	}
+	rejected := receipt.Units[0]
+	if rejected.Component != unsafeTarget.Component ||
+		rejected.BlockingPath != unsafeTarget.Item.Path ||
+		!strings.Contains(rejected.BlockingReason, "unsafe path") ||
+		len(rejected.Obligations) != 1 ||
+		rejected.Obligations[0].EntryPath != unsafeTarget.Component.Obligations[0].EntryPath ||
+		rejected.Obligations[0].State != cleaner.AgentStateRevalidationNotAttempted {
+		t.Fatalf("rejected receipt = %+v, want prepared component lineage and blocker", rejected)
 	}
 	if !pathDoesNotExist(safePath) {
 		t.Fatalf("safe target %q was not removed", safePath)

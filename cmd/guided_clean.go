@@ -290,6 +290,9 @@ func applyGuidedPolicyReasons(
 		}
 	}
 	for i := range inputs {
+		if !isActiveCodexWorktree(inputs[i].Item) {
+			continue
+		}
 		path, ok := cleanTargetPathKey(inputs[i].Item.Path)
 		if !ok {
 			continue

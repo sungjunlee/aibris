@@ -288,6 +288,8 @@ func executeActiveWorktreeUnit(
 	refreshed, memberErrors, err := preflightActiveWorktreeUnit(ctx, target, selected, opts)
 	if err != nil {
 		applyMemberExecutionErrors(&receipt, memberErrors)
+		receipt.BlockingPath = target.Path
+		receipt.BlockingReason = err.Error()
 		receipt.Error = err.Error()
 		return receipt, err
 	}
