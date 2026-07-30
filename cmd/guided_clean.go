@@ -45,6 +45,7 @@ type guidedCleanRow struct {
 type guidedCleanState struct {
 	ScanSource scanSource
 	Reason     string
+	Inventory  []types.DebrisInfo
 	Activity   codexActivityIndex
 	Policy     CleanupPolicy
 	Rows       []guidedCleanRow
@@ -54,6 +55,7 @@ type guidedCleanState struct {
 
 type guidedCleanRunResult struct {
 	PreviewTargets    []types.DebrisInfo
+	Components        []cleanupOverlapComponent
 	SafetyProtections map[string]cleanAuditReason
 	Aborted           bool
 	HadSelection      bool
@@ -75,7 +77,9 @@ func buildGuidedCleanState(ctx context.Context, result *types.ScanResult, source
 	policy.MinIdleAge = minIdleAge
 	policy = fillCleanupPolicy(policy)
 	plan := PlanWorktreeCleanup(units, policy)
-	return newGuidedCleanStateFromCleanupPlan(source, reason, activity, policy, units, items, plan), nil
+	state := newGuidedCleanStateFromCleanupPlan(source, reason, activity, policy, units, items, plan)
+	state.Inventory = append([]types.DebrisInfo(nil), result.Worktrees...)
+	return state, nil
 }
 
 func newGuidedCleanStateFromCleanupPlan(source scanSource, reason string, activity codexActivityIndex, policy CleanupPolicy, units []WorktreeCleanupUnit, items []types.DebrisInfo, plan CleanupPlan) guidedCleanState {
@@ -202,26 +206,35 @@ func runGuidedCodexClean(
 		fmt.Fprintln(os.Stdout, "No items selected.")
 		return guidedCleanRunResult{}, nil
 	}
-	overlapSelection, err := applyCleanupOverlapSafety(ctx, overlapSafety, targets)
+	logicalInputs := cleanupOverlapLogicalInputsForAudit(state.Inventory, opts, nil)
+	logicalInputs = applyGuidedPolicyReasons(logicalInputs, state)
+	overlapSelection, err := applyCleanupOverlapSafetyWithRows(
+		ctx,
+		overlapSafety,
+		targets,
+		logicalInputs,
+	)
 	if err != nil {
 		return guidedCleanRunResult{}, fmt.Errorf("preparing guided overlap safety: %w", err)
 	}
-	printOverlapSafetyRefusals(overlapSelection.Plan)
+	printOverlapSafetyRefusals(overlapSelection)
 	targets = overlapSelection.Targets
 	if len(targets) == 0 {
 		fmt.Fprintln(os.Stdout, "No selected items passed overlap safety.")
 		return guidedCleanRunResult{
+			Components:        overlapSelection.Components,
 			SafetyProtections: overlapSelection.Protections,
 			HadSelection:      true,
 		}, nil
 	}
 
-	printCleanPlan(targets, cleanPlanModeDryRun)
+	printCleanPlanWithComponents(targets, overlapSelection.Components, cleanPlanModeDryRun)
 	fmt.Fprintln(os.Stdout, "[DRY-RUN] Preview complete.")
 	if opts.DryRun {
 		fmt.Fprintln(os.Stdout, "[DRY-RUN] No files were removed.")
 		return guidedCleanRunResult{
 			PreviewTargets:    targets,
+			Components:        overlapSelection.Components,
 			SafetyProtections: overlapSelection.Protections,
 			HadSelection:      true,
 		}, nil
@@ -233,6 +246,7 @@ func runGuidedCodexClean(
 		printWorktreeExecutionReceipts(receipt)
 		printGuidedCleanupReceipt(len(targets), receipt)
 		return guidedCleanRunResult{
+			Components:        overlapSelection.Components,
 			SafetyProtections: overlapSelection.Protections,
 			HadSelection:      true,
 		}, err
@@ -240,6 +254,7 @@ func runGuidedCodexClean(
 	if !opts.Force {
 		if !confirmCleanExecution() {
 			return guidedCleanRunResult{
+				Components:        overlapSelection.Components,
 				SafetyProtections: overlapSelection.Protections,
 				Aborted:           true,
 				HadSelection:      true,
@@ -251,14 +266,42 @@ func runGuidedCodexClean(
 	printGuidedCleanupReceipt(len(targets), receipt)
 	if err != nil {
 		return guidedCleanRunResult{
+			Components:        overlapSelection.Components,
 			SafetyProtections: overlapSelection.Protections,
 			HadSelection:      true,
 		}, err
 	}
 	return guidedCleanRunResult{
+		Components:        overlapSelection.Components,
 		SafetyProtections: overlapSelection.Protections,
 		HadSelection:      true,
 	}, nil
+}
+
+func applyGuidedPolicyReasons(
+	inputs []cleanupOverlapLogicalInput,
+	state guidedCleanState,
+) []cleanupOverlapLogicalInput {
+	reasonsByPath := make(map[string]string, len(state.Rows))
+	for _, row := range state.Rows {
+		path, ok := cleanTargetPathKey(row.Row.Item.Path)
+		if ok {
+			reasonsByPath[path] = row.Row.Reason
+		}
+	}
+	for i := range inputs {
+		if !isActiveCodexWorktree(inputs[i].Item) {
+			continue
+		}
+		path, ok := cleanTargetPathKey(inputs[i].Item.Path)
+		if !ok {
+			continue
+		}
+		if reason := reasonsByPath[path]; reason != "" {
+			inputs[i].PolicyReason = reason
+		}
+	}
+	return inputs
 }
 
 func promptGuidedCleanForFiles(input *os.File, output *os.File, state guidedCleanState) ([]types.DebrisInfo, bool, error) {

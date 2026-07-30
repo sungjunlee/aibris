@@ -63,6 +63,58 @@ func TestPromptGuidedCleanTTYModeRendersChecklistLabel(t *testing.T) {
 	}
 }
 
+func TestApplyGuidedPolicyReasonsPreservesHeterogeneousExactPathRows(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".codex", "worktrees", "shared")
+	worktree := types.DebrisInfo{
+		Tool:     types.ToolCodex,
+		Category: types.CategoryWorktree,
+		ID:       "shared",
+		Path:     path,
+		Status:   types.WorktreeActive,
+	}
+	orphanedWorktree := worktree
+	orphanedWorktree.ID = "orphaned"
+	orphanedWorktree.Status = types.WorktreeOrphaned
+	agentState := types.DebrisInfo{
+		Tool:           types.ToolClaude,
+		Category:       types.CategoryAgentState,
+		ID:             "agent-state",
+		Path:           path,
+		Classification: types.EntryClassLive,
+	}
+	cache := types.DebrisInfo{
+		Tool:     types.ToolBuildCache,
+		Category: types.CategoryBuildCache,
+		ID:       "cache",
+		Path:     path,
+	}
+	inputs := []cleanupOverlapLogicalInput{
+		{Item: worktree, PolicyReason: "original worktree reason"},
+		{Item: agentState, PolicyReason: "live agent-state protected"},
+		{Item: cache, PolicyReason: "cache policy reason"},
+		{Item: orphanedWorktree, PolicyReason: "orphaned worktree policy reason"},
+	}
+	state := guidedCleanState{Rows: []guidedCleanRow{{
+		Row: guidedCodexWorktreeRow{
+			Item:   worktree,
+			Reason: "guided worktree decision",
+		},
+	}}}
+
+	got := applyGuidedPolicyReasons(inputs, state)
+	want := []string{
+		"guided worktree decision",
+		"live agent-state protected",
+		"cache policy reason",
+		"orphaned worktree policy reason",
+	}
+	for i := range want {
+		if got[i].PolicyReason != want[i] {
+			t.Errorf("row %d policy reason = %q; want %q", i, got[i].PolicyReason, want[i])
+		}
+	}
+}
+
 func TestPromptGuidedCleanEnterReturnsDefaultSelectionForPreview(t *testing.T) {
 	state := guidedCleanState{
 		Rows: []guidedCleanRow{

@@ -56,6 +56,33 @@ type AgentStateObligation struct {
 	pathIdentity canonicalPathIdentity
 }
 
+type AgentStateRevalidationState string
+
+const (
+	AgentStateRevalidationPassed       AgentStateRevalidationState = "passed"
+	AgentStateRevalidationBlocked      AgentStateRevalidationState = "blocked"
+	AgentStateRevalidationNotAttempted AgentStateRevalidationState = "not-attempted"
+)
+
+// AgentStateRevalidationOutcome records the result of one canonical nested
+// obligation. It is an internal execution receipt, not a public wire schema.
+type AgentStateRevalidationOutcome struct {
+	Tool           types.Tool
+	EntryPath      string
+	ProviderID     string
+	State          AgentStateRevalidationState
+	Classification types.EntryClass
+	Reason         string
+}
+
+// OverlapSafetyValidation records component-level and per-obligation lineage
+// from the final pre-mutation barrier.
+type OverlapSafetyValidation struct {
+	Obligations    []AgentStateRevalidationOutcome
+	BlockingPath   string
+	BlockingReason string
+}
+
 type OverlapSafetyMatch struct {
 	Item     types.DebrisInfo
 	Relation OverlapSafetyRelation
@@ -64,6 +91,7 @@ type OverlapSafetyMatch struct {
 type OverlapSafetyRefusal struct {
 	Reason         OverlapSafetyReason
 	TargetPath     string
+	AgentStateTool types.Tool
 	AgentStatePath string
 	Detail         string
 }
@@ -188,7 +216,7 @@ func buildOverlapSafetyComponent(
 	targetIdentity, err := canonicalExistingPathIdentity(target.Path)
 	if err != nil {
 		component.Refusal = overlapRefusal(
-			OverlapSafetyAmbiguousIdentity, target.Path, "", err.Error())
+			OverlapSafetyAmbiguousIdentity, target.Path, "", "", err.Error())
 		return component
 	}
 	component.targetIdentity = targetIdentity
@@ -208,7 +236,7 @@ func buildOverlapSafetyComponent(
 			detail += ": " + resolutionErr.Error()
 		}
 		component.Refusal = overlapRefusal(
-			OverlapSafetyAmbiguousIdentity, target.Path, item.Path,
+			OverlapSafetyAmbiguousIdentity, target.Path, item.Tool, item.Path,
 			detail)
 		return component
 	}
@@ -226,7 +254,8 @@ func buildOverlapSafetyComponent(
 
 	if cleanupKind(target) == types.CleanupCommand && len(component.Matches) > 0 {
 		component.Refusal = overlapRefusal(
-			OverlapSafetyCommandOverlap, target.Path, component.Matches[0].Item.Path,
+			OverlapSafetyCommandOverlap, target.Path, component.Matches[0].Item.Tool,
+			component.Matches[0].Item.Path,
 			"declared command path does not prove subtree-removal semantics")
 		return component
 	}
@@ -236,7 +265,8 @@ func buildOverlapSafetyComponent(
 			continue
 		}
 		component.Refusal = overlapRefusal(
-			protectedOverlapReason(match.Relation), target.Path, match.Item.Path,
+			protectedOverlapReason(match.Relation), target.Path, match.Item.Tool,
+			match.Item.Path,
 			fmt.Sprintf("classified %s", protectedEntryClass(match.Item.Classification)))
 		return component
 	}
@@ -250,7 +280,8 @@ func buildOverlapSafetyComponent(
 		registration, registrationErr := lookupAgentStateRevalidator(lookup, match.Item.Tool)
 		if registrationErr != nil {
 			component.Refusal = overlapRefusal(
-				OverlapSafetyNestedRevalidation, target.Path, match.Item.Path,
+				OverlapSafetyNestedRevalidation, target.Path, match.Item.Tool,
+				match.Item.Path,
 				registrationErr.Error())
 			return component
 		}
@@ -277,86 +308,298 @@ func (c OverlapSafetyComponent) ValidateBeforeMutation(
 	refreshed OverlapSafetyEvidence,
 	lookup AgentStateRevalidatorLookup,
 ) error {
+	_, err := c.ValidateBeforeMutationWithReport(ctx, refreshed, lookup)
+	return err
+}
+
+// ValidateBeforeMutationWithReport applies the same fail-closed L1 barrier as
+// ValidateBeforeMutation while retaining deterministic obligation outcomes for
+// the execution receipt.
+func (c OverlapSafetyComponent) ValidateBeforeMutationWithReport(
+	ctx context.Context,
+	refreshed OverlapSafetyEvidence,
+	lookup AgentStateRevalidatorLookup,
+) (OverlapSafetyValidation, error) {
+	report := overlapValidationForObligations(c.Obligations)
 	if err := ctx.Err(); err != nil {
-		return err
+		report.BlockingPath = c.Target.Path
+		report.BlockingReason = err.Error()
+		return report, err
 	}
 	if c.Refusal != nil {
-		return fmt.Errorf("%w: %s", ErrOverlapSafetyRefusal, c.Refusal)
+		err := fmt.Errorf("%w: %s", ErrOverlapSafetyRefusal, c.Refusal)
+		report.BlockingPath = overlapRefusalBlockingPath(c.Refusal)
+		report.BlockingReason = err.Error()
+		return report, err
 	}
 
 	plan, err := BuildOverlapSafetyPlan(ctx, refreshed, []types.DebrisInfo{c.Target}, lookup)
 	if err != nil {
-		return err
+		report.BlockingPath = c.Target.Path
+		report.BlockingReason = err.Error()
+		return report, err
 	}
 	if len(plan.Components) != 1 {
-		return fmt.Errorf("%w: refreshed overlap component unavailable for %q",
+		err := fmt.Errorf("%w: refreshed overlap component unavailable for %q",
 			ErrOverlapSafetyRefusal, c.Target.Path)
+		report.BlockingPath = c.Target.Path
+		report.BlockingReason = err.Error()
+		return report, err
 	}
 	current := plan.Components[0]
 	if current.Refusal != nil {
-		return fmt.Errorf("%w: %s", ErrOverlapSafetyRefusal, current.Refusal)
+		err := fmt.Errorf("%w: %s", ErrOverlapSafetyRefusal, current.Refusal)
+		report.BlockingPath = overlapRefusalBlockingPath(current.Refusal)
+		report.BlockingReason = err.Error()
+		report.blockOutcomeAtPath(
+			current.Refusal.AgentStateTool,
+			current.Refusal.AgentStatePath,
+			overlapMatchClassification(
+				current.Matches,
+				current.Refusal.AgentStateTool,
+				current.Refusal.AgentStatePath,
+			),
+			err,
+		)
+		if current.Refusal.Reason == OverlapSafetyNestedRevalidation {
+			report.ensureBlockedOutcome(
+				overlapMatchForPath(
+					current.Matches,
+					current.Refusal.AgentStateTool,
+					current.Refusal.AgentStatePath,
+				),
+				err,
+			)
+		}
+		return report, err
 	}
 	if err := c.targetIdentity.matches(current.targetIdentity); err != nil {
-		return fmt.Errorf("%w: %s for %q: %v",
+		err = fmt.Errorf("%w: %s for %q: %v",
 			ErrOverlapSafetyRefusal, OverlapSafetyAmbiguousIdentity, c.Target.Path, err)
+		report.BlockingPath = c.Target.Path
+		report.BlockingReason = err.Error()
+		return report, err
 	}
 
 	obligations, err := mergedAgentStateObligations(c.Obligations, current.Obligations)
 	if err != nil {
-		return fmt.Errorf("%w: %s for %q: %v",
+		err = fmt.Errorf("%w: %s for %q: %v",
 			ErrOverlapSafetyRefusal, OverlapSafetyNestedRevalidation, c.Target.Path, err)
+		report.BlockingPath = c.Target.Path
+		report.BlockingReason = err.Error()
+		return report, err
 	}
+	report = overlapValidationForObligations(obligations)
 	registrations := make(map[string]adapter.AgentStateRevalidatorRegistration, len(obligations))
 	for _, obligation := range obligations {
 		if err := obligation.pathIdentity.unchanged(); err != nil {
-			return fmt.Errorf("%w: %s for %q at %q: %v",
+			err = fmt.Errorf("%w: %s for %q at %q: %v",
 				ErrOverlapSafetyRefusal, OverlapSafetyAmbiguousIdentity,
 				c.Target.Path, obligation.EntryPath, err)
+			report.blockObligation(obligation, "", err)
+			return report, err
 		}
 		registration, registrationErr := lookupAgentStateRevalidator(lookup, obligation.Tool)
 		if registrationErr != nil {
-			return fmt.Errorf("%w: %s for %q at %q: %v",
+			err = fmt.Errorf("%w: %s for %q at %q: %v",
 				ErrOverlapSafetyRefusal, OverlapSafetyNestedRevalidation,
 				c.Target.Path, obligation.EntryPath, registrationErr)
+			report.blockObligation(obligation, "", err)
+			return report, err
 		}
 		if registration.ProviderID != obligation.ProviderID {
-			return fmt.Errorf("%w: %s for %q at %q: provider changed from %q to %q",
+			err = fmt.Errorf("%w: %s for %q at %q: provider changed from %q to %q",
 				ErrOverlapSafetyRefusal, OverlapSafetyNestedRevalidation,
 				c.Target.Path, obligation.EntryPath, obligation.ProviderID, registration.ProviderID)
+			report.blockObligation(obligation, "", err)
+			return report, err
 		}
 		registrations[agentStateObligationKey(obligation)] = registration
 	}
 
 	for _, obligation := range obligations {
 		if err := ctx.Err(); err != nil {
-			return err
+			report.BlockingPath = c.Target.Path
+			report.BlockingReason = err.Error()
+			return report, err
 		}
 		registration := registrations[agentStateObligationKey(obligation)]
 		classification, revalidateErr := registration.Revalidator.RevalidateAgentState(ctx, obligation.EntryPath)
 		if revalidateErr != nil {
-			return fmt.Errorf("%w: %s for %q at %q: %w",
+			err = fmt.Errorf("%w: %s for %q at %q: %w",
 				ErrOverlapSafetyRefusal, OverlapSafetyNestedRevalidation,
 				c.Target.Path, obligation.EntryPath, revalidateErr)
+			report.blockObligation(obligation, classification, err)
+			return report, err
 		}
 		if classification != types.EntryClassOrphaned {
-			return fmt.Errorf("%w: %s for %q at %q: classified %s",
+			err = fmt.Errorf("%w: %s for %q at %q: classified %s",
 				ErrOverlapSafetyRefusal, OverlapSafetyNestedRevalidation,
 				c.Target.Path, obligation.EntryPath, protectedEntryClass(classification))
+			report.blockObligation(obligation, classification, err)
+			return report, err
 		}
+		report.passObligation(obligation, classification)
 	}
 
 	if err := c.targetIdentity.unchanged(); err != nil {
-		return fmt.Errorf("%w: %s for %q: %v",
+		err = fmt.Errorf("%w: %s for %q: %v",
 			ErrOverlapSafetyRefusal, OverlapSafetyAmbiguousIdentity, c.Target.Path, err)
+		report.BlockingPath = c.Target.Path
+		report.BlockingReason = err.Error()
+		return report, err
 	}
 	for _, obligation := range obligations {
 		if err := obligation.pathIdentity.unchanged(); err != nil {
-			return fmt.Errorf("%w: %s for %q at %q: %v",
+			err = fmt.Errorf("%w: %s for %q at %q: %v",
 				ErrOverlapSafetyRefusal, OverlapSafetyAmbiguousIdentity,
 				c.Target.Path, obligation.EntryPath, err)
+			report.blockObligation(obligation, types.EntryClassOrphaned, err)
+			return report, err
 		}
 	}
-	return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		report.BlockingPath = c.Target.Path
+		report.BlockingReason = err.Error()
+		return report, err
+	}
+	return report, nil
+}
+
+func overlapValidationForObligations(obligations []AgentStateObligation) OverlapSafetyValidation {
+	report := OverlapSafetyValidation{
+		Obligations: make([]AgentStateRevalidationOutcome, 0, len(obligations)),
+	}
+	for _, obligation := range obligations {
+		report.Obligations = append(report.Obligations, AgentStateRevalidationOutcome{
+			Tool:       obligation.Tool,
+			EntryPath:  obligation.EntryPath,
+			ProviderID: obligation.ProviderID,
+			State:      AgentStateRevalidationNotAttempted,
+		})
+	}
+	return report
+}
+
+func (r *OverlapSafetyValidation) passObligation(
+	obligation AgentStateObligation,
+	classification types.EntryClass,
+) {
+	for i := range r.Obligations {
+		if revalidationOutcomeKey(r.Obligations[i]) == agentStateObligationKey(obligation) {
+			r.Obligations[i].State = AgentStateRevalidationPassed
+			r.Obligations[i].Classification = classification
+			r.Obligations[i].Reason = ""
+			return
+		}
+	}
+}
+
+func (r *OverlapSafetyValidation) blockObligation(
+	obligation AgentStateObligation,
+	classification types.EntryClass,
+	err error,
+) {
+	r.BlockingPath = obligation.EntryPath
+	r.BlockingReason = err.Error()
+	for i := range r.Obligations {
+		if revalidationOutcomeKey(r.Obligations[i]) == agentStateObligationKey(obligation) {
+			r.Obligations[i].State = AgentStateRevalidationBlocked
+			r.Obligations[i].Classification = classification
+			r.Obligations[i].Reason = err.Error()
+			return
+		}
+	}
+}
+
+func (r *OverlapSafetyValidation) blockOutcomeAtPath(
+	tool types.Tool,
+	path string,
+	classification types.EntryClass,
+	err error,
+) {
+	if path == "" {
+		return
+	}
+	canonicalPath := path
+	if identity, identityErr := canonicalExistingPathIdentity(path); identityErr == nil {
+		canonicalPath = identity.canonical
+	}
+	for i := range r.Obligations {
+		if (tool != "" && r.Obligations[i].Tool != tool) ||
+			(r.Obligations[i].EntryPath != path &&
+				r.Obligations[i].EntryPath != canonicalPath) {
+			continue
+		}
+		r.Obligations[i].State = AgentStateRevalidationBlocked
+		r.Obligations[i].Classification = classification
+		r.Obligations[i].Reason = err.Error()
+		return
+	}
+}
+
+func (r *OverlapSafetyValidation) ensureBlockedOutcome(
+	match OverlapSafetyMatch,
+	err error,
+) {
+	if match.Item.Path == "" {
+		return
+	}
+	entryPath := match.Item.Path
+	if identity, identityErr := canonicalExistingPathIdentity(match.Item.Path); identityErr == nil {
+		entryPath = identity.canonical
+	}
+	for _, outcome := range r.Obligations {
+		if outcome.Tool == match.Item.Tool && outcome.EntryPath == entryPath {
+			return
+		}
+	}
+	r.Obligations = append(r.Obligations, AgentStateRevalidationOutcome{
+		Tool:           match.Item.Tool,
+		EntryPath:      entryPath,
+		State:          AgentStateRevalidationBlocked,
+		Classification: match.Item.Classification,
+		Reason:         err.Error(),
+	})
+	sort.Slice(r.Obligations, func(i, j int) bool {
+		return revalidationOutcomeKey(r.Obligations[i]) <
+			revalidationOutcomeKey(r.Obligations[j])
+	})
+}
+
+func revalidationOutcomeKey(outcome AgentStateRevalidationOutcome) string {
+	return string(outcome.Tool) + "\x00" + outcome.EntryPath
+}
+
+func overlapRefusalBlockingPath(refusal *OverlapSafetyRefusal) string {
+	if refusal == nil {
+		return ""
+	}
+	if refusal.AgentStatePath != "" {
+		return refusal.AgentStatePath
+	}
+	return refusal.TargetPath
+}
+
+func overlapMatchClassification(
+	matches []OverlapSafetyMatch,
+	tool types.Tool,
+	path string,
+) types.EntryClass {
+	return overlapMatchForPath(matches, tool, path).Item.Classification
+}
+
+func overlapMatchForPath(
+	matches []OverlapSafetyMatch,
+	tool types.Tool,
+	path string,
+) OverlapSafetyMatch {
+	for _, match := range matches {
+		if match.Item.Path == path && (tool == "" || match.Item.Tool == tool) {
+			return match
+		}
+	}
+	return OverlapSafetyMatch{}
 }
 
 func lookupAgentStateRevalidator(
@@ -415,12 +658,14 @@ func entryForMatch(entries []agentStateSafetyEntry, match OverlapSafetyMatch) *a
 func overlapRefusal(
 	reason OverlapSafetyReason,
 	targetPath string,
+	agentStateTool types.Tool,
 	agentStatePath string,
 	detail string,
 ) *OverlapSafetyRefusal {
 	return &OverlapSafetyRefusal{
 		Reason:         reason,
 		TargetPath:     targetPath,
+		AgentStateTool: agentStateTool,
 		AgentStatePath: agentStatePath,
 		Detail:         detail,
 	}

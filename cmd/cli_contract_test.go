@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
 )
@@ -158,6 +159,122 @@ func TestAgentStateCLIContract(t *testing.T) {
 	if _, statErr := os.Stat(claudeLive); statErr != nil {
 		t.Fatalf("live Claude state changed during cleanup: %v", statErr)
 	}
+}
+
+func TestNestedOverlapBuiltCLIUsesOnePhysicalOwnerAndFailsClosed(t *testing.T) {
+	binary := buildCLIContractBinary(t)
+
+	t.Run("orphan obligation success removes outer owner once", func(t *testing.T) {
+		home := t.TempDir()
+		outer, entry := writeNestedOverlapCLIContractFixture(t, home, false)
+		info, err := os.Stat(filepath.Join(entry, "session.jsonl"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantFreed := cleaner.FormatSize(info.Size())
+
+		output, err := runCLIContract(
+			binary,
+			home,
+			"clean",
+			"--no-guide",
+			"--force",
+			"--age=1h",
+			"--category=build-cache",
+		)
+		if err != nil {
+			t.Fatalf("nested orphan cleanup failed: %v\n%s", err, output)
+		}
+		for _, want := range []string{
+			"matched  1 candidate",
+			"targets    1 item",
+			"removed    1 item",
+			"failed     0 items",
+			"cleanup component receipt",
+			"physical-removed true",
+			"obligation passed",
+			"freed      " + wantFreed,
+			filepath.Base(entry),
+		} {
+			if !strings.Contains(output, want) {
+				t.Fatalf("successful nested cleanup missing %q:\n%s", want, output)
+			}
+		}
+		if _, statErr := os.Lstat(outer); !os.IsNotExist(statErr) {
+			t.Fatalf("outer physical owner survived successful cleanup: %v", statErr)
+		}
+		if strings.Count(output, "physical-removed true") != 1 {
+			t.Fatalf("physical owner was not receipted exactly once:\n%s", output)
+		}
+	})
+
+	t.Run("live obligation refuses whole outer owner", func(t *testing.T) {
+		home := t.TempDir()
+		outer, entry := writeNestedOverlapCLIContractFixture(t, home, true)
+		output, err := runCLIContract(
+			binary,
+			home,
+			"clean",
+			"--no-guide",
+			"--force",
+			"--age=1h",
+			"--category=build-cache",
+		)
+		if err != nil {
+			t.Fatalf("protected nested cleanup command failed unexpectedly: %v\n%s", err, output)
+		}
+		for _, want := range []string{
+			"protected agent-state descendant",
+			"matched  0 candidates",
+			"protected/skipped 1 item",
+			filepath.Base(entry),
+		} {
+			if !strings.Contains(output, want) {
+				t.Fatalf("protected nested cleanup missing %q:\n%s", want, output)
+			}
+		}
+		if strings.Contains(output, "cleanup component receipt") {
+			t.Fatalf("planning refusal fabricated an execution receipt:\n%s", output)
+		}
+		if _, statErr := os.Stat(outer); statErr != nil {
+			t.Fatalf("protected outer owner changed: %v", statErr)
+		}
+	})
+}
+
+func writeNestedOverlapCLIContractFixture(
+	t *testing.T,
+	home string,
+	live bool,
+) (outer string, entry string) {
+	t.Helper()
+	outer = filepath.Join(home, ".gradle", "caches")
+	agentRoot := filepath.Join(outer, "agent-state")
+	entry = filepath.Join(agentRoot, "nested-claude")
+	cwd := filepath.Join(home, "missing", "nested-project")
+	if live {
+		cwd = filepath.Join(home, "workspace", "nested-project")
+		if err := os.MkdirAll(cwd, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeCLIContractFile(
+		t,
+		filepath.Join(entry, "session.jsonl"),
+		fmt.Sprintf("{\"cwd\":%q}\n", cwd),
+	)
+	claudeDir := filepath.Join(home, ".claude")
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(agentRoot, filepath.Join(claudeDir, "projects")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	old := time.Now().Add(-48 * time.Hour)
+	if err := os.Chtimes(outer, old, old); err != nil {
+		t.Fatal(err)
+	}
+	return outer, filepath.Join(home, ".claude", "projects", "nested-claude")
 }
 
 func buildCLIContractBinary(t *testing.T) string {

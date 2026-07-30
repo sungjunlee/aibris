@@ -32,6 +32,15 @@ Classification takes precedence over age because an absent recorded working
 directory proves the associated work is gone and resume is already impossible.
 Directory modification time cannot strengthen or weaken that proof.
 
+Classification also applies across category boundaries. A `live` or
+`undetermined` agent-state row that contains, is contained by, or exactly
+aliases another cleanup target shields that target's complete physical
+component. Conversely, a generic outer owner containing one or more orphaned
+agent-state rows inherits every child revalidation obligation. The outer owner
+is counted once; nested agent-state rows remain zero-byte evidence with their
+canonical path, tool, classification, policy reason, overlap reason, and final
+revalidation outcome.
+
 ## Tool Mapping
 
 | Tool | Category | Notes |

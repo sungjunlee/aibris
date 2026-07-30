@@ -132,10 +132,18 @@ func renderCleanupReviewSection(output io.Writer, title string, rows []numberedC
 			number = "-"
 		}
 		reason := cleanupPlanReasonText(numbered.Row.Reasons)
+		if numbered.Row.Relation != CleanupPlanRelationOwner {
+			evidenceReason := string(numbered.Row.Relation) + " evidence"
+			if reason == "" {
+				reason = evidenceReason
+			} else {
+				reason = evidenceReason + "; " + reason
+			}
+		}
 		line := fmt.Sprintf("  %s %2s  %8s  %-12s  %s",
 			checkbox,
 			number,
-			cleaner.FormatSize(numbered.Row.Item.Size),
+			cleaner.FormatSize(numbered.Row.PhysicalBytes),
 			numbered.Row.Item.Category,
 			itemName(numbered.Row.Item))
 		if reason != "" {
@@ -148,14 +156,14 @@ func renderCleanupReviewSection(output io.Writer, title string, rows []numberedC
 func numberedCleanupPlanRows(plan UnifiedCleanupPlan) []numberedCleanupPlanRow {
 	rows := make([]numberedCleanupPlanRow, 0, len(plan.Rows))
 	number := 0
-	numbersByTarget := make(map[string]int)
+	numbersByOwner := make(map[string]int)
 	for _, row := range plan.Rows {
 		if row.Selection != CleanupPlanLocked {
-			existing := numbersByTarget[row.TargetKey]
+			existing := numbersByOwner[row.OwnerKey]
 			if existing == 0 {
 				number++
 				existing = number
-				numbersByTarget[row.TargetKey] = existing
+				numbersByOwner[row.OwnerKey] = existing
 			}
 			rows = append(rows, numberedCleanupPlanRow{Number: existing, Row: row})
 			continue
@@ -170,35 +178,41 @@ func toggleUnifiedCleanupPlanRow(plan UnifiedCleanupPlan, number int) (UnifiedCl
 		return plan, false
 	}
 	rows := numberedCleanupPlanRows(plan)
-	var targetKey string
+	var ownerKey string
 	for _, row := range rows {
 		if row.Number == number && row.Row.Selection != CleanupPlanLocked {
-			targetKey = row.Row.TargetKey
+			ownerKey = row.Row.OwnerKey
 			break
 		}
 	}
-	if targetKey == "" {
+	if ownerKey == "" {
 		return plan, false
 	}
 
 	next := cloneUnifiedCleanupPlan(plan)
 	var selection CleanupPlanSelection
-	for i := range next.Targets {
-		if next.Targets[i].Key != targetKey || next.Targets[i].Selection == CleanupPlanLocked {
+	for i := range next.Components {
+		if next.Components[i].Key != ownerKey ||
+			next.Components[i].Selection == CleanupPlanLocked {
 			continue
 		}
-		if next.Targets[i].Selection == CleanupPlanSelected {
+		if next.Components[i].Selection == CleanupPlanSelected {
 			selection = CleanupPlanUnselected
 		} else {
 			selection = CleanupPlanSelected
 		}
-		next.Targets[i].Selection = selection
+		next.Components[i].Selection = selection
 	}
 	if selection == "" {
 		return plan, false
 	}
+	for i := range next.Targets {
+		if next.Targets[i].OwnerKey == ownerKey {
+			next.Targets[i].Selection = selection
+		}
+	}
 	for i := range next.Rows {
-		if next.Rows[i].TargetKey == targetKey {
+		if next.Rows[i].OwnerKey == ownerKey {
 			next.Rows[i].Selection = selection
 		}
 	}
@@ -214,6 +228,11 @@ func cloneUnifiedCleanupPlan(plan UnifiedCleanupPlan) UnifiedCleanupPlan {
 	next.Targets = append([]CleanupPhysicalTarget(nil), plan.Targets...)
 	for i := range next.Targets {
 		next.Targets[i].RowKeys = append([]string(nil), plan.Targets[i].RowKeys...)
+	}
+	next.Components = append([]CleanupPhysicalComponent(nil), plan.Components...)
+	for i := range next.Components {
+		next.Components[i].TargetKeys = append([]string(nil), plan.Components[i].TargetKeys...)
+		next.Components[i].RowKeys = append([]string(nil), plan.Components[i].RowKeys...)
 	}
 	next.Evidence.ProviderErrors = append([]types.ScanProviderError(nil), plan.Evidence.ProviderErrors...)
 	return next

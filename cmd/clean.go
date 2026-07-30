@@ -130,6 +130,7 @@ classic cleanup audit and executor route.`,
 		}
 
 		var guidedPreviewTargets []types.DebrisInfo
+		var guidedComponents []cleanupOverlapComponent
 		var guidedSafetyProtections map[string]cleanAuditReason
 		guidedHadSelection := false
 		if experience == cleanExperienceGuided {
@@ -145,6 +146,7 @@ classic cleanup audit and executor route.`,
 				return
 			}
 			guidedPreviewTargets = guidedResult.PreviewTargets
+			guidedComponents = guidedResult.Components
 			guidedSafetyProtections = guidedResult.SafetyProtections
 			guidedHadSelection = guidedResult.HadSelection
 			opts.IncludeActiveWorktrees = false
@@ -154,12 +156,22 @@ classic cleanup audit and executor route.`,
 		targets = filterExistingTargets(targets)
 		targets = normalizeCleanTargets(targets)
 		targets, gitSafetyProtections := filterGitUnsafeActiveWorktreeTargets(ctx, targets)
-		overlapSelection, err := applyCleanupOverlapSafety(ctx, overlapSafety, targets)
+		logicalInputs := cleanupOverlapLogicalInputsForAudit(
+			result.Worktrees,
+			opts,
+			gitSafetyProtections,
+		)
+		overlapSelection, err := applyCleanupOverlapSafetyWithRows(
+			ctx,
+			overlapSafety,
+			targets,
+			logicalInputs,
+		)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: preparing overlap safety: %v\n", err)
 			os.Exit(1)
 		}
-		printOverlapSafetyRefusals(overlapSelection.Plan)
+		printOverlapSafetyRefusals(overlapSelection)
 		targets = overlapSelection.Targets
 		auditTargets := targets
 		if len(guidedPreviewTargets) > 0 {
@@ -171,7 +183,19 @@ classic cleanup audit and executor route.`,
 			overlapSelection.Protections,
 			guidedSafetyProtections,
 		)
-		audit := buildCleanAudit(result.Worktrees, auditTargets, opts, len(scanner.DefaultScanner.Providers), source, auditProtections)
+		auditComponents := mergeCleanupOverlapComponents(
+			guidedComponents,
+			overlapSelection.Components,
+		)
+		audit := buildPhysicalCleanAudit(
+			result.Worktrees,
+			auditComponents,
+			auditTargets,
+			opts,
+			len(scanner.DefaultScanner.Providers),
+			source,
+			auditProtections,
+		)
 		printCleanAudit(audit, opts)
 		printCleanCandidateSummary(targets)
 
@@ -185,7 +209,7 @@ classic cleanup audit and executor route.`,
 		}
 
 		if opts.DryRun {
-			printCleanPlan(targets, cleanPlanModeDryRun)
+			printCleanPlanWithComponents(targets, overlapSelection.Components, cleanPlanModeDryRun)
 			fmt.Println("[DRY-RUN] No files were removed.")
 			return
 		}
@@ -203,7 +227,7 @@ classic cleanup audit and executor route.`,
 		}
 
 		if !opts.Force {
-			printCleanPlan(targets, cleanPlanModeDelete)
+			printCleanPlanWithComponents(targets, overlapSelection.Components, cleanPlanModeDelete)
 			if !confirmCleanExecution() {
 				return
 			}
@@ -251,6 +275,36 @@ func mergeGuidedPreviewWithClassicTargets(guided, classic []types.DebrisInfo) ([
 	auditTargets = append(auditTargets, guidedTargets...)
 	auditTargets = append(auditTargets, classicTargets...)
 	return classicTargets, auditTargets
+}
+
+func mergeCleanupOverlapComponents(
+	preferred []cleanupOverlapComponent,
+	remaining []cleanupOverlapComponent,
+) []cleanupOverlapComponent {
+	merged := append([]cleanupOverlapComponent(nil), preferred...)
+	for _, component := range remaining {
+		overlapsPreferred := false
+		for _, existing := range preferred {
+			if _, overlaps := cleanupLogicalRelation(
+				existing.CanonicalPath,
+				component.CanonicalPath,
+			); overlaps {
+				overlapsPreferred = true
+				break
+			}
+		}
+		if !overlapsPreferred {
+			merged = append(merged, component)
+		}
+	}
+	sort.Slice(merged, func(i, j int) bool {
+		if merged[i].CanonicalPath == merged[j].CanonicalPath {
+			return cleanTargetStableKey(merged[i].Owner) <
+				cleanTargetStableKey(merged[j].Owner)
+		}
+		return merged[i].CanonicalPath < merged[j].CanonicalPath
+	})
+	return merged
 }
 
 var validCleanCategories = []types.Category{
@@ -627,10 +681,11 @@ func filterGitUnsafeActiveWorktreeTargetsWithInspector(ctx context.Context, targ
 }
 
 type normalizedCleanTarget struct {
-	item  types.DebrisInfo
-	path  string
-	depth int
-	index int
+	item     types.DebrisInfo
+	path     string
+	depth    int
+	index    int
+	rawSizes map[string]int64
 }
 
 func normalizeCleanTargets(targets []types.DebrisInfo) []types.DebrisInfo {
@@ -641,19 +696,28 @@ func normalizeCleanTargets(targets []types.DebrisInfo) []types.DebrisInfo {
 			continue
 		}
 		candidate := normalizedCleanTarget{
-			item:  target,
-			path:  path,
-			depth: cleanTargetPathDepth(path),
-			index: i,
+			item:     target,
+			path:     path,
+			depth:    cleanTargetPathDepth(path),
+			index:    i,
+			rawSizes: map[string]int64{cleanTargetRawPathKey(target.Path): target.Size},
 		}
 		existing, exists := byPath[path]
 		if !exists {
 			byPath[path] = candidate
 			continue
 		}
-		if preferCleanTarget(candidate.item, existing.item) {
+		// Canonical aliases share containment identity, but they do not share a
+		// raw mutation target. Keep byte estimates scoped to the selected raw
+		// path so deleting a symlink cannot inherit its referent's accounting.
+		rawPath := cleanTargetRawPathKey(candidate.item.Path)
+		if candidate.item.Size > existing.rawSizes[rawPath] {
+			existing.rawSizes[rawPath] = candidate.item.Size
+		}
+		if preferCleanTargetForCanonical(candidate.item, existing.item, path) {
 			existing.item = candidate.item
 		}
+		existing.item.Size = existing.rawSizes[cleanTargetRawPathKey(existing.item.Path)]
 		if candidate.index < existing.index {
 			existing.index = candidate.index
 		}
@@ -710,6 +774,29 @@ func cleanTargetPathKey(path string) (string, bool) {
 		clean = filepath.Clean(resolved)
 	}
 	return clean, true
+}
+
+func cleanTargetRawPathKey(path string) string {
+	return filepath.Clean(strings.TrimSpace(path))
+}
+
+func preferCleanTargetForCanonical(left, right types.DebrisInfo, canonicalPath string) bool {
+	leftIsSymlink := cleanTargetPathIsSymlink(left.Path)
+	rightIsSymlink := cleanTargetPathIsSymlink(right.Path)
+	if leftIsSymlink != rightIsSymlink {
+		return !leftIsSymlink
+	}
+	leftIsCanonical := cleanTargetRawPathKey(left.Path) == canonicalPath
+	rightIsCanonical := cleanTargetRawPathKey(right.Path) == canonicalPath
+	if leftIsCanonical != rightIsCanonical {
+		return leftIsCanonical
+	}
+	return preferCleanTarget(left, right)
+}
+
+func cleanTargetPathIsSymlink(path string) bool {
+	info, err := os.Lstat(cleanTargetRawPathKey(path))
+	return err == nil && info.Mode()&os.ModeSymlink != 0
 }
 
 func preferCleanTarget(left, right types.DebrisInfo) bool {
@@ -777,7 +864,7 @@ func interactiveClean(ctx context.Context, targets []preparedCleanTarget) (clean
 		if !cleaner.IsSafeTarget(home, w) {
 			err := fmt.Errorf("unsafe path %q rejected", w.Path)
 			fmt.Fprintf(os.Stderr, "  error: %v\n", err)
-			result.Units = append(result.Units, failedCleanUnitReceipt(w, nil, err))
+			result.Units = append(result.Units, failedPreparedCleanUnitReceipt(target, err))
 			errs = append(errs, err)
 			continue
 		}
@@ -827,6 +914,95 @@ func printCleanPlan(targets []types.DebrisInfo, mode cleanPlanMode) {
 		printCleanTarget(w, home)
 	}
 	fmt.Println()
+}
+
+func printCleanPlanWithComponents(
+	targets []types.DebrisInfo,
+	components []cleanupOverlapComponent,
+	mode cleanPlanMode,
+) {
+	printCleanPlan(targets, mode)
+	targetKeys := make(map[string]bool, len(targets))
+	for _, target := range targets {
+		targetKeys[cleanTargetStableKey(target)] = true
+	}
+	printedHeader := false
+	for _, component := range components {
+		if !targetKeys[cleanTargetStableKey(component.Owner)] ||
+			!cleanupComponentHasLineage(component) {
+			continue
+		}
+		if !printedHeader {
+			fmt.Println("overlap lineage")
+			printedHeader = true
+		}
+		printCleanupComponentLineage(component, "  ")
+	}
+	if printedHeader {
+		fmt.Println()
+	}
+}
+
+func cleanupComponentHasLineage(component cleanupOverlapComponent) bool {
+	if len(component.LogicalRows) > 1 || len(component.Obligations) > 0 {
+		return true
+	}
+	for _, row := range component.LogicalRows {
+		if row.L1Reason != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func printCleanupComponentLineage(
+	component cleanupOverlapComponent,
+	indent string,
+) {
+	fmt.Printf("%sowner     %s   %s\n",
+		indent,
+		itemName(component.Owner),
+		cleaner.FormatSize(component.Owner.Size))
+	for _, row := range component.LogicalRows {
+		classification := ""
+		if row.Item.Classification != "" {
+			classification = " classification=" + string(row.Item.Classification)
+		}
+		displayPath := cleanupLogicalDisplayPath(component, row)
+		fmt.Printf("%sevidence  %-19s %-13s %-12s%s %s\n",
+			indent+"  ",
+			row.Relation,
+			row.Item.Category,
+			row.Item.Tool,
+			classification,
+			displayPath)
+		if row.PolicyReason != "" {
+			fmt.Printf("%s  policy   %s\n", indent+"  ", row.PolicyReason)
+		}
+		if row.L1Reason != "" {
+			fmt.Printf("%s  overlap  %s\n", indent+"  ", row.L1Reason)
+		}
+	}
+}
+
+func cleanupLogicalDisplayPath(
+	component cleanupOverlapComponent,
+	row cleanupOverlapLogicalRow,
+) string {
+	switch row.Relation {
+	case cleanupOverlapOwner:
+		return "[owner target]"
+	case cleanupOverlapExact:
+		return fmt.Sprintf("[exact discovery %d]", row.DiscoveryOrdinal)
+	case cleanupOverlapDescendant:
+		rel, err := filepath.Rel(component.CanonicalPath, row.CanonicalPath)
+		if err == nil {
+			return "." + string(filepath.Separator) + rel
+		}
+	case cleanupOverlapAncestor:
+		return "[containing protected discovery]"
+	}
+	return row.Item.Path
 }
 
 func printCleanTarget(w types.DebrisInfo, home string) {
