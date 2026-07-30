@@ -23,6 +23,23 @@ older than 30 days — and it is user content.
 Also uncovered: `~/.relay/runs` 933 MB, `~/.cursor/chats` 674 MB,
 `~/.claude/projects` 502 MB, `~/.gstack/projects` 91 MB.
 
+## Frozen L1 contract
+
+L1 is complete as a Markdown-only contract:
+[Protected-Content Retention Contract](../../docs/PROTECTED_RETENTION.md).
+It freezes the bounded store registry, UTC-month projection, explicit selector,
+exact-member manifest, non-recursive execution, mutation-time revalidation,
+and #138/#151 precedence. The named providers, JSON projection,
+`--retention-bucket` flag, planner, and executor remain unshipped and belong to
+later leaves.
+
+No retention-only row authorizes default cleanup. Aggregate rows are
+non-additive inventory projections and never executable `DebrisInfo` rows.
+Installed content remains absent from every provider, inventory, manifest,
+selector, and cleanup surface. Codex SQLite and Cursor AI tracking remain
+inventory-only in planning until their separate producer-cooperation and
+atomic-family obligations are met.
+
 ## Acceptance criteria
 
 - [ ] Providers discover codex sessions, cursor chats, claude projects, relay

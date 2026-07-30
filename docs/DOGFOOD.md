@@ -204,9 +204,14 @@ go build -o <tmp>/aibris-head .
 <tmp>/aibris-head clean --dry-run < /dev/null
 ```
 
-Installed content — `~/.claude/skills`, `~/.claude/plugins`, `~/.cursor/extensions`,
-`~/.codex/plugins` — is excluded from every total below. aibris correctly does
-not classify installed content as debris, and that boundary must be preserved.
+Installed content includes `~/.codex/packages`, `~/.codex/computer-use`,
+`~/.codex/plugins`, `~/.claude/skills`, `~/.claude/plugins`, and
+`~/.cursor/extensions`. The audit tables below preserve some shallow
+filesystem observations from before the store-nature split, but those entries
+are not aibris inventory. Installed content is absent from current provider
+totals, and the canonical retention contract keeps it absent from every future
+provider, ordinary and retention inventory, manifest, selector, and cleanup
+surface.
 
 The `19.2s` result is a historical observation from this one 2026-07-26 run,
 not a performance baseline. Filesystem-cache state alone later produced an
@@ -337,6 +342,14 @@ within the same run and session. If an adjacent pair's scale changes, flag it
 and rerun after the working set stabilizes rather than silently treating it as
 comparable. Stored counts and byte totals, like stored timings, are observations
 and never targets.
+
+Future issue #139 L2-L4 provider, planner, and executor work is governed by the
+[protected-content retention contract](PROTECTED_RETENTION.md). Every provider
+performance claim in those leaves must run this complete same-session
+paired-delta protocol, including immutable binaries, controlled cache state,
+alternating adjacent pairs, per-run scale, drift rejection, and
+change-minus-base reporting. A stored absolute timing, count, or byte value is
+never a substitute for the protocol or a regression target.
 
 No Make target is added by #146. A target that only alternates scans of a mutable
 real home would conceal cache-state and working-set controls while duplicating

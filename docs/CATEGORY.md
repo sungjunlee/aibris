@@ -17,6 +17,17 @@ AI-workflow artifact without broad filesystem cleanup.
 Unknown or future categories should stay risky until they have explicit safety
 rules.
 
+## Protected Retention Is Not a Category
+
+The canonical [protected-content retention contract](PROTECTED_RETENTION.md)
+defines a separate, future authorization axis for session, transcript,
+run-manifest, and generated-image stores. Its UTC-month aggregates are
+non-additive inventory projections, never executable `DebrisInfo` rows.
+Nothing in that planned contract changes current category risk,
+`agent-state` classification, #138 proof-based orphan eligibility, or #151
+overlap hard locks. The planned retention selector and execution manifest are
+not shipped CLI or provider surfaces.
+
 ## Store-Nature Planning Taxonomy (Issue #142)
 
 installed/regenerable/protected are planning taxonomy only, not `types.Category`, agent-state `classification`, a JSON field, or a current CLI selector.
@@ -33,8 +44,9 @@ cannot settle a store's nature, the decision fails closed to protected content.
 | `~/.codex/sqlite` | Database filenames and schema names cover goals, threads, jobs, history snapshots, memories, logs, and state; live databases also have sidecar family members. | Protected content | Must not be default-clean or become deletable through `--risky` alone. A future provider is inventory-only unless it satisfies the fail-closed quiescence, family-registry, and atomic-manifest contract below. |
 | `~/.cursor/ai-tracking` | `ai-code-tracking.db` schema names cover tracked-file content, conversation summaries, scored commits, deleted files, and tracking state. | Protected content | Must not be default-clean or become deletable through `--risky` alone. A future provider is inventory-only unless it satisfies the fail-closed quiescence, family-registry, and atomic-manifest contract below. |
 
-This freezes the downstream split without defining the protected-content
-runtime model reserved for #139:
+This freezes the downstream split. The separate protected-content runtime
+model is now fixed in [PROTECTED_RETENTION.md](PROTECTED_RETENTION.md), but its
+providers, JSON projection, selector, planner, and executor remain unshipped:
 
 - L2 may add only direct child units of `~/.codex/tmp`. The observed `path/`
   child is one example, not a stable selector. Its `codex-arg*` descendants and
@@ -43,10 +55,10 @@ runtime model reserved for #139:
   versioned safety contract below, and surface an unsupported child as
   protected and ineligible rather than silently skipping it. L2 must never
   delete `~/.codex/tmp` itself.
-- L3 starts only after #139 L1 has merged. Generated images then follow that
+- L3 starts only after #139 L1 has merged. Generated images must follow that
   explicit retention-selection contract; Codex SQLite and Cursor AI tracking
   remain inventory-only absent the separate quiescence and atomic-family
-  contract below.
+  contract below. The L1 document alone does not unblock #142 L2 or L3.
 - Installed content receives no provider. Uncertainty never widens cleanup
   eligibility.
 
