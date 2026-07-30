@@ -11,6 +11,11 @@ taxonomy are not JSON fields or values. They do not extend `category` or
 currently emit no inventory rows. This document describes only the shipped
 schema.
 
+The future protected-content retention surface is frozen in
+[PROTECTED_RETENTION.md](PROTECTED_RETENTION.md), but it is not present in
+current output. When implemented, it must be an additive top-level projection,
+never aggregate rows disguised inside the historical `worktrees` array.
+
 A complete scan keeps the established successful JSON shape below. If one or
 more providers fail while other results remain usable, the command adds
 `"partial": true` and a `provider_errors` array, prints the JSON document, and
@@ -133,3 +138,31 @@ Orphaned Cursor entries are eligible for default cleanup without an age gate;
 |-------|------|-------------|
 | `count` | integer | Number of items |
 | `size` | integer | Total size in bytes |
+
+## Future retention projection (contract only; unshipped)
+
+No released `scan --json` output currently contains retention rows or the
+fields below. A future schema revision may add a top-level retention projection
+without changing the meaning of `worktrees` or existing `summary` values. That
+projection is non-additive physical accounting: one aggregate row exists per
+`(store_id, bucket_id)`, aggregate and manifest-member values are never summed,
+and each existing physical owner remains counted once.
+
+The minimum future aggregate fields are:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `store_id` | string | Exact registered retention store ID. |
+| `bucket_id` | string | UTC month `YYYY-MM`, or visible protected `unknown`. |
+| `unit_count` | integer | Bounded retention units in the bucket. |
+| `member_count` | integer | Owned physical regular-file leaves in those units. |
+| `apparent_bytes` | integer | Deduplicated owned `Lstat.Size` bytes; not allocated or guaranteed freed bytes. |
+| `orphaned_count` | integer | Codex orphan-statistics subset; zero for stores without that contract. |
+| `orphaned_bytes` | integer | Apparent bytes in the Codex orphan subset; never added to `apparent_bytes`. |
+| `selectable` | boolean | Whether the exact closed bucket may enter future manifest preparation. |
+| `blocked_reason` | string | Fail-closed reason when the bucket cannot be selected. |
+
+These aggregate rows will never be executable `DebrisInfo` rows. Only the
+future exact-member manifest and revalidation path defined by the canonical
+contract can prepare an explicitly selected closed bucket. The planned
+`--retention-bucket` spelling is likewise unshipped.

@@ -60,6 +60,11 @@ Output contains:
 
 The schema is documented in `docs/JSON_SCHEMA.md`.
 
+The future retention projection is specified separately in
+`docs/PROTECTED_RETENTION.md`. It is an additive, non-`worktrees` JSON surface
+that is not shipped by this specification revision. Its aggregate rows are not
+`DebrisInfo` values and do not change current physical summary accounting.
+
 ### FR3 - `aibris clean`
 
 `clean` scans, filters, and then previews or deletes matching targets.
@@ -79,6 +84,11 @@ Flags:
 | `--force`, `-f` | `false` | Skip the final confirmation prompt. It does not bypass hard locks or force Git worktree removal. |
 | `--guide` | `false` | Force the guided Codex worktree cleanup flow. When category/tool filters are omitted, it implies `--category worktree --tool codex`. When age is omitted, guided cleanup uses a 3-day minimum idle age; explicit `--age` changes only that value. |
 | `--no-guide` | `false` | Keep the classic cleanup audit/executor route even when active Codex pressure would open guided review. |
+
+The planned repeatable `--retention-bucket <store_id>@<YYYY-MM>` spelling is
+reserved by `docs/PROTECTED_RETENTION.md` but is not a shipped flag and is
+therefore intentionally absent from this table. Current selectors do not
+authorize protected-content retention.
 
 Behavior:
 
@@ -278,8 +288,11 @@ surface. Installed stores receive no provider; Codex tmp remains a future
 default-clean child-unit candidate subject to ownership and
 active-use/TOCTOU proof; and generated images, Codex SQLite, and Cursor AI
 tracking remain protected from default clean and `--risky` alone.
-Protected-provider runtime and retention semantics belong to #139, not this
-specification revision.
+Protected-provider retention semantics are frozen in
+`docs/PROTECTED_RETENTION.md`, but every provider, projection, selector,
+manifest, planner, and executor described there remains unshipped. In
+particular, no retention-only row changes #138 proof-based orphan eligibility
+or outranks #151 overlap hard locks.
 
 ## Worktree Health
 
