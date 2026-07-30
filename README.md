@@ -37,6 +37,15 @@ filter: an absent recorded working directory proves the associated work is gone
 and resume is already impossible, so an `orphaned` entry needs no age gate.
 `live` and `undetermined` entries remain protected.
 
+Issue #142 also uses **installed**, **regenerable**, and **protected** as a
+planning taxonomy for six currently uncovered stores. Those terms are not
+shipped categories, agent-state classifications, JSON fields, or CLI selectors.
+Codex packages and Computer Use stay outside providers as installed content;
+Codex tmp is only a future safety-bounded default-clean child-unit candidate;
+generated images, Codex SQLite, and Cursor AI tracking remain protected and
+cannot be unlocked by `--risky` alone. See
+[docs/CATEGORY.md](docs/CATEGORY.md) for the store-specific future constraints.
+
 ### Install
 
 ```bash

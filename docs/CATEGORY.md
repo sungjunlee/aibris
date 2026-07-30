@@ -17,6 +17,36 @@ AI-workflow artifact without broad filesystem cleanup.
 Unknown or future categories should stay risky until they have explicit safety
 rules.
 
+## Store-Nature Planning Taxonomy (Issue #142)
+
+installed/regenerable/protected are planning taxonomy only, not `types.Category`, agent-state `classification`, a JSON field, or a current CLI selector.
+The taxonomy records what a future provider may do; it does not make any of
+these stores discoverable, selectable, or eligible today. When shallow metadata
+cannot settle a store's nature, the decision fails closed to protected content.
+
+| Store | Bounded evidence | Store-nature decision | Current and future consequence |
+| --- | --- | --- | --- |
+| `~/.codex/packages` | `standalone` has an installer lock, versioned architecture releases, and a `current` symlink to the active release. | Installed content | Excluded from providers, inventory, and every cleanup surface. No provider is planned. |
+| `~/.codex/computer-use` | The directory contains the Codex Computer Use application bundle with bundle identity `com.openai.sky.CUAService`. | Installed content | Excluded from providers, inventory, and every cleanup surface. No provider is planned. |
+| `~/.codex/tmp` | The observed `path/codex-arg*` directories contain paired `applypatch` and `apply_patch` shims. | Regenerable residue | Currently undiscovered, unselectable, and ineligible. It is only a future safety-bounded default-clean candidate: L2 must prove child-unit ownership and active-use/TOCTOU safety and must never delete the whole tmp root. |
+| `~/.codex/generated_images` | ID directories contain generated PNG artifacts, which are user artifacts rather than a cache reconstruction input. | Protected content | Must not be default-clean or become deletable through `--risky` alone. It may be considered for explicit retention selection only after the #139 L1 semantics merge. |
+| `~/.codex/sqlite` | Database filenames and schema names cover goals, threads, jobs, history snapshots, memories, logs, and state; live databases also have WAL/SHM family members. | Protected content | Must not be default-clean or become deletable through `--risky` alone. A future provider is inventory-only unless a separate contract proves process quiescence and one atomic manifest for every database/WAL/SHM family. |
+| `~/.cursor/ai-tracking` | `ai-code-tracking.db` schema names cover tracked-file content, conversation summaries, scored commits, deleted files, and tracking state. | Protected content | Must not be default-clean or become deletable through `--risky` alone. A future provider is inventory-only unless a separate contract proves process quiescence and one atomic manifest for every database/WAL/SHM family. |
+
+This freezes the downstream split without defining the protected-content
+runtime model reserved for #139:
+
+- L2 may add only direct child units of `~/.codex/tmp`, after it defines the
+  unit boundary and proves ownership plus active-use/TOCTOU safety. The observed
+  nested shim layout is evidence, not a pre-approved unit definition, and L2
+  must never delete `~/.codex/tmp` itself.
+- L3 starts only after #139 L1 has merged. Generated images then follow that
+  explicit retention-selection contract; Codex SQLite and Cursor AI tracking
+  remain inventory-only absent the separate quiescence and atomic-family
+  contract above.
+- Installed content receives no provider. Uncertainty never widens cleanup
+  eligibility.
+
 ## Agent-State Classification
 
 The `classification` field applies to `agent-state` entries and is omitted for
