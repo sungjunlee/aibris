@@ -342,6 +342,224 @@ only a small, misleading part of the eventual harness. #129 remains the owner
 of deterministic synthetic-home inputs, platform baselines, cache-control
 automation, and a regression threshold that will not make CI flaky.
 
+### 2026-07-30 Registered Superpowers Coverage Observation
+
+Issue #140 remeasured `~/.config/superpowers/worktrees` in one read-only
+session. This is evidence for the finite exact registry, not a fixture target.
+Only `scan` was run against the real home; no real-home `clean` command was run.
+
+| Evidence | Observation |
+| --- | --- |
+| Filesystem outer owners | 1 directory |
+| Direct / one-level linked members | 0 direct / 2 one-level; both metadata references active |
+| Unique physical owner bytes | 540,565,504 B (`du -sk`: 527,896 KiB) |
+| Base full-HOME scan | 320 items / 33,556,803,863 B overall; 0 superpowers rows |
+| Pre-safety-fix full-HOME scan | 362 items / 34,641,563,927 B overall; 2 superpowers rows |
+| Pre-safety-fix scoped scan | 4 items / 1,412,632,576 B overall; the same 2 superpowers rows |
+| Superpowers attribution | `source=superpowers`, `tool=unknown`, 2 active logical member rows |
+| Raw superpowers row-size sum | 1,081,131,008 B because both logical rows carry the shared owner size |
+
+The historical pre-safety-fix full and scoped superpowers keys matched exactly by source,
+tool, owner path, project, status, and size. Physical accounting remains one owner /
+540,565,504 B; summing the two compatibility rows double-counts that owner and
+must be labelled raw row-size aggregation.
+
+#### Immutable inputs and fixed run contract
+
+Both source trees were exported with `git archive` and built once with the
+identical command `go build -trimpath -o <binary> .`; neither binary was rebuilt
+during the run:
+
+| Input | Exact value |
+| --- | --- |
+| `BASE_SHA` | `41cab283fbc1147d59b3af53bec48fa6163f9f20` |
+| Base binary SHA-256 | `5546a85e12e326f2b4993243b3233f2632df22954c62eafa8c0b0a416695058b` |
+| `PRE_SAFETY_FIX_SHA` | `ee056aeff371fc80ba4e5d1922b9e5539ff1bab3` |
+| Pre-safety-fix binary SHA-256 | `2e90cadd6f90c7d15f8d19d28bf4d74308e0d1ac2214f4af336fa2083e84f77b` |
+| Toolchain | `go version go1.26.3 darwin/arm64`; GOROOT Go 1.26.3 |
+| Machine / OS | Apple arm64; macOS 26.5.2 (25F84) |
+| Exact argv | `<immutable-binary> scan --root /Users/sjlee --json` |
+| Exact environment | `env -i HOME=/Users/sjlee PATH=/usr/bin:/bin:/usr/sbin:/sbin TMPDIR=/tmp LANG=C LC_ALL=C` |
+| Application cache | `/Users/sjlee/Library/Caches/aibris/codex-activity.json`; SHA-256 `bf48b6d973392f6e42f3dc0e5bff9b42f031b3f957b04ab748d290a38485b63c`; 3,029,853 B; `created_at=2026-07-30T21:24:45.354487+09:00` |
+
+This series was the final binary series for the initial registry pass, but
+internal safety review subsequently found the mixed active/orphaned physical
+owner defect. It is retained as historical evidence and is superseded by the
+immutable repair series below. The application-cache identity above was
+captured before and after every measured invocation and remained
+byte-identical. The login session and background-work policy were unchanged,
+and the measured home was not deliberately mutated between invocations.
+
+This is a warm series. There was no cache eviction and no cold claim. One
+unmeasured exact-argv warm-up of each immutable binary completed first: base
+13.98 s at 8 sources / 318 items / 32,650,865,738 B, then change 18.90 s at
+8 / 359 / 33,735,625,802 B. A following base-only 57.76 s reporting-harness
+attempt (8 / 318 / 32,650,864,942 B) was excluded before pairing because a
+reserved shell variable aborted the recorder after the scan; the adjacent
+sequence was restarted from pair 1.
+
+#### Alternating adjacent warm pairs
+
+Times are `/usr/bin/time -p` wall-clock `real` seconds. Each scale cell is
+`sources/items/bytes`. `change-base` is computed regardless of invocation
+order. Every invocation exited zero with `partial=false` and zero provider
+errors. Expected final-only worktree inventory rows are not drift; a shared
+row size change or a non-worktree row present in only one adjacent invocation
+is drift and discards that pair.
+
+| Pair / order | Base time; scale | Change time; scale | change-base | Decision |
+| --- | --- | --- | ---: | --- |
+| 1 / base→change | 126.62 s; 8/318/32,650,864,942 | 143.59 s; 8/360/33,735,653,678 | +16.97 s | discarded: `~/workspace/active/home-stack/ridi-to-md/node_modules` appeared; `~/.relay/worktrees/0e6abc57` changed +28,672 B |
+| 2 / change→base | 91.46 s; 8/319/32,650,893,614 | 115.85 s; 8/360/33,735,653,678 | +24.39 s | accepted |
+| 3 / base→change | 78.57 s; 8/319/32,660,265,190 | 128.19 s; 8/360/33,747,360,199 | +49.62 s | discarded: `~/.npm/_cacache` changed +2,334,945 B |
+| 4 / change→base | 62.81 s; 8/320/33,075,556,631 | 64.36 s; 8/360/33,753,514,263 | +1.55 s | discarded: `~/workspace/active/writer-stack/blog/node_modules` appeared at 406,802,432 B |
+| 5 / base→change | 79.86 s; 8/320/33,262,752,023 | 109.82 s; 8/361/34,347,516,183 | +29.96 s | discarded: `~/.relay/worktrees/0e6abc57` changed +4,096 B |
+| 6 / change→base | 92.65 s; 8/319/33,255,391,511 | 71.00 s; 8/361/34,340,151,575 | -21.65 s | accepted |
+| 7 / base→change | 80.13 s; 8/320/33,262,760,215 | 66.28 s; 8/362/34,347,602,199 | -13.85 s | discarded: `~/.relay/worktrees/b9bf64e7` changed +81,920 B |
+| 8 / change→base | 56.53 s; 8/320/33,262,866,711 | 81.15 s; 8/362/34,347,622,679 | +24.62 s | discarded: `~/.relay/worktrees/b9bf64e7` changed -4,096 B |
+| 9 / base→change | 60.01 s; 8/320/33,262,874,903 | 61.30 s; 8/362/34,347,639,063 | +1.29 s | discarded: `~/.relay/worktrees/37b00ead` changed +4,096 B |
+| 10 / change→base | 82.71 s; 8/320/33,512,370,455 | 68.51 s; 8/362/34,347,639,063 | -14.20 s | discarded: `~/workspace/active/writer-stack/blog/node_modules` changed -249,491,456 B |
+| 11 / base→change | 76.94 s; 8/320/33,529,483,543 | 68.80 s; 8/362/34,641,563,927 | -8.14 s | discarded: two `node_modules` rows changed +12,288 B and +27,308,032 B |
+| 12 / change→base | 63.24 s; 8/320/33,556,803,863 | 62.04 s; 8/362/34,641,563,927 | -1.20 s | accepted |
+| 13 / base→change | 73.75 s; 8/320/33,556,803,863 | 80.77 s; 8/362/34,641,563,927 | +7.02 s | accepted |
+| 14 / change→base | 67.47 s; 8/320/33,556,803,863 | 96.32 s; 8/362/34,641,563,927 | +28.85 s | accepted |
+| 15 / base→change | 67.10 s; 8/320/33,556,803,863 | 61.81 s; 8/362/34,641,563,927 | -5.29 s | accepted |
+
+The six drift-free adjacent pairs contain two `base→change` and four
+`change→base` orders. Their retained deltas are -21.65, -5.29, -1.20, +7.02,
++24.39, and +28.85 seconds: median **+2.91 s**, range
+**[-21.65 s, +28.85 s]**. The final four-pair stabilized block (pairs 12–15)
+alone has two of each order and identical per-binary scale on every invocation.
+No regression threshold or stability rule was predeclared, so this observation
+is **inconclusive**, not a performance pass or improvement claim.
+
+#### 2026-07-31 immutable final mixed-owner safety correction
+
+The binary-affecting correction was committed before measurement. The final
+repair source was exported with `git archive` and built once with the same
+flags as the preserved base: `go build -trimpath -o <binary> .`. The preserved
+base binary was reused only after its documented SHA-256 verified successfully;
+neither immutable binary was rebuilt during this series.
+
+| Input | Exact value |
+| --- | --- |
+| `BASE_SHA` | `41cab283fbc1147d59b3af53bec48fa6163f9f20` |
+| Base binary SHA-256 | `5546a85e12e326f2b4993243b3233f2632df22954c62eafa8c0b0a416695058b` |
+| `FINAL_REPAIR_SHA` | `e65ab5220ec17b30e9c21f181ef9146f098f5ffc` |
+| Final repair binary SHA-256 | `47f0e7f0de1818576851c621769a880b617d3762443e54a463dc6b999aea60e6` |
+| Binary sizes | base 5,579,826 B; final repair 5,613,970 B |
+| Toolchain | `go version go1.26.3 darwin/arm64`; GOROOT Go 1.26.3 |
+| Machine / OS | Apple arm64; macOS 26.5.2 (25F84) |
+| Exact argv | `<immutable-binary> scan --root /Users/sjlee --json` |
+| Exact environment | `env -i HOME=/Users/sjlee PATH=/usr/bin:/bin:/usr/sbin:/sbin TMPDIR=/tmp LANG=C LC_ALL=C` |
+| Cache identity `K1` | `/Users/sjlee/Library/Caches/aibris/codex-activity.json`; SHA-256 `bf48b6d973392f6e42f3dc0e5bff9b42f031b3f957b04ab748d290a38485b63c`; 3,029,853 B; `created_at=2026-07-30T21:24:45.354487+09:00` |
+
+The cache SHA-256 in `K1` is
+`bf48b6d973392f6e42f3dc0e5bff9b42f031b3f957b04ab748d290a38485b63c`.
+It was captured before and after every warm-up and every measured invocation;
+all 20 captures were exactly `K1`. Every scan exited zero with
+`partial=false` and zero provider errors. Only real-home `scan` was run; no
+real-home `clean` command was used.
+
+This is a warm-only series: there was no cache eviction and no cold claim.
+Both immutable binaries were warmed with the exact measured argv before the
+paired sequence:
+
+| Invocation | Time; scale (`sources/items/bytes`) | Cache before→after |
+| --- | --- | --- |
+| warm-up base | 54.26 s; 8/320/33,651,012,698 | `K1`→`K1` |
+| warm-up final repair | 50.38 s; 8/362/34,735,772,762 | `K1`→`K1` |
+
+The exact global measured order was base, repair, repair, base, base, repair,
+repair, base. Times are `/usr/bin/time -p` wall-clock `real` seconds and
+`repair-base` is computed regardless of invocation order.
+
+| Pair / order | Base time; scale | Final repair time; scale | Cache identities | repair-base | Drift decision |
+| --- | --- | --- | --- | ---: | --- |
+| 1 / base→repair | 54.49 s; 8/320/33,651,012,698 | 56.96 s; 8/362/34,735,772,762 | base `K1`→`K1`; repair `K1`→`K1` | +2.47 s | accepted |
+| 2 / repair→base | 63.93 s; 8/320/33,651,012,698 | 61.06 s; 8/362/34,735,772,762 | base `K1`→`K1`; repair `K1`→`K1` | -2.87 s | accepted |
+| 3 / base→repair | 50.93 s; 8/320/33,651,012,698 | 48.04 s; 8/362/34,735,772,762 | base `K1`→`K1`; repair `K1`→`K1` | -2.89 s | accepted |
+| 4 / repair→base | 49.41 s; 8/320/33,651,012,698 | 74.47 s; 8/362/34,735,772,762 | base `K1`→`K1`; repair `K1`→`K1` | +25.06 s | accepted |
+
+The drift rule was unchanged from the historical series: the 42 repair-only
+worktree rows are the expected registry effect; any base-only row, non-worktree
+repair-only row, or shared-row size change rejects a pair. Every pair had
+exactly 0 base-only rows, 42 repair-only worktree rows, 0 one-sided
+non-worktree rows, and 0 shared-row size changes. The per-binary canonical
+inventory signatures were also identical across all four appearances: base
+`34bd8daff4a1d00a4d60a664d2f3a680fa23f5202ade02900f90b3fbab655d87`,
+repair
+`c541691420e7d16c6e522a4d03f37960cfb61c00d3ec5224b07b66b1ade1a2c0`.
+
+The four retained deltas are -2.89, -2.87, +2.47, and +25.06 seconds:
+median **-0.20 s**, range **[-2.89 s, +25.06 s]**. There was no predeclared
+regression threshold or stability rule, and the absolute timing spread remains
+large. The final correction series is therefore **inconclusive**, not a
+performance pass, regression, or improvement claim.
+
+##### Final repair full/scoped correctness observation
+
+A following read-only correctness session reused
+`/private/tmp/aibris-140-safety-final.r3PYkh/aibris-change` unchanged. Its
+SHA-256 still matched
+`47f0e7f0de1818576851c621769a880b617d3762443e54a463dc6b999aea60e6`.
+The preserved `change-src` tree was byte-for-byte equal to
+`git archive e65ab5220ec17b30e9c21f181ef9146f098f5ffc`, and an independent
+`go build -trimpath` reproducibility check produced the same binary SHA-256.
+The accepted four-pair performance series above was not rerun or replaced.
+
+Both correctness invocations used the same fixed environment documented above.
+The full scan ran from `2026-07-30T15:38:39Z` through
+`2026-07-30T15:39:22Z` (`2026-07-31T00:38:39+09:00` through
+`2026-07-31T00:39:22+09:00`). The scoped scan immediately followed from
+`2026-07-30T15:39:22Z` through `2026-07-30T15:39:23Z`
+(`2026-07-31T00:39:22+09:00` through `2026-07-31T00:39:23+09:00`).
+
+| Invocation | Exact argv suffix | Overall scale (`sources/items/bytes`) | Completeness |
+| --- | --- | --- | --- |
+| Full HOME | `scan --root /Users/sjlee --json` | 8 / 362 / 34,735,772,762 B | exit 0; `partial=false`; 0 provider errors |
+| Scoped superpowers | `scan --root /Users/sjlee/.config/superpowers/worktrees --json` | 8 / 4 / 1,412,632,576 B | exit 0; `partial=false`; 0 provider errors |
+
+Cache identity was `K1` before the full scan and after the scoped scan: SHA-256
+`bf48b6d973392f6e42f3dc0e5bff9b42f031b3f957b04ab748d290a38485b63c`,
+3,029,853 B, `created_at=2026-07-30T21:24:45.354487+09:00`. Its hash, size,
+and filesystem mtime remained unchanged across the session.
+
+The final repair full-HOME and scoped superpowers rows match exactly by
+`source`, `tool`, physical owner `path`, `project`, `status`, and `size`.
+Their sorted key documents have the same SHA-256,
+`c23d07c115c6a5c1255f07d7fb316de5f8c68bb20081b02d4028a2fa6f723075`:
+
+| Project | Source / tool | Physical owner | Status | Per-row size |
+| --- | --- | --- | --- | ---: |
+| `ds121-question-repair` | `superpowers` / `unknown` | `~/.config/superpowers/worktrees/dear-scene` | `active` | 540,565,504 B |
+| `m61-feedback-loop` | `superpowers` / `unknown` | `~/.config/superpowers/worktrees/dear-scene` | `active` | 540,565,504 B |
+
+The accounting dimensions are deliberately separate:
+
+| Dimension | Full HOME | Scoped |
+| --- | ---: | ---: |
+| Logical superpowers rows | 2 | 2 |
+| Unique physical owners | 1 | 1 |
+| Unique physical owner bytes | 540,565,504 B | 540,565,504 B |
+| Raw row-size sum | 1,081,131,008 B | 1,081,131,008 B |
+
+The read-only filesystem oracle ran from `2026-07-30T15:39:48Z` through
+`2026-07-30T15:39:49Z` (`2026-07-31T00:39:48+09:00` through
+`2026-07-31T00:39:49+09:00`). The registered container had one outer owner,
+`dear-scene`, at 527,896 KiB / 540,565,504 B. It contained the two one-level
+`.git` marker files named by the logical rows, and both referenced gitdirs
+existed. This independently confirms the one-owner/two-member active
+inventory without mutating the container.
+
+The terminal correction commit containing this test and documentation update
+is test/docs-only. `e65ab5220ec17b30e9c21f181ef9146f098f5ffc` remains the
+final binary-affecting source and the immutable final repair binary identity
+remains unchanged.
+
+The prior audit's preserved `516 MB` label came from the 2026-07-26 observation;
+it was never an implementation or performance target.
+
 ### Discovered vs. actual
 
 Agent state stores aibris does **not** discover:
@@ -353,7 +571,6 @@ Agent state stores aibris does **not** discover:
 | `~/.relay/runs` | 933 MB | Executor run manifests |
 | `~/.cursor/chats` | 674 MB | Conversation transcripts |
 | `~/.codex/generated_images` | 548 MB | Agent-produced byproducts |
-| `~/.config/superpowers/worktrees` | 516 MB | Two valid linked worktrees, never discovered |
 | `~/.claude/projects` | 502 MB | Session store keyed by working directory |
 | `~/.codex/sqlite` | 412 MB | Agent state database |
 | `~/.codex/tmp` | 130 MB | Scratch |
@@ -361,7 +578,7 @@ Agent state stores aibris does **not** discover:
 | `~/.codex/computer-use` | 61 MB | Byproducts |
 | `~/.cursor/ai-tracking` | 35 MB | Telemetry residue |
 | Remainder (`~/.relay/reviews`, `~/.claude/session-env`, shell snapshots, …) | ~80 MB | |
-| **Subtotal** | **≈ 16.0 GB** | **aibris discovers 0 B** |
+| **Preserved 2026-07-26 subtotal after moving superpowers below** | **≈ 15.5 GB** | **aibris discovers 0 B** |
 
 Agent state stores aibris does discover:
 
@@ -373,11 +590,14 @@ Agent state stores aibris does discover:
 | `~/.codex/archived_sessions` | 85 MB | 89 MB |
 | `~/.claude/command-audit.log` | 58 MB | 57 MB |
 | `~/.claude/file-history` | 41 MB | 35 MB |
-| **Subtotal** | **≈ 2.7 GB** | |
+| `~/.config/superpowers/worktrees` | 540,565,504 B current physical observation | 2 logical rows / 1,081,131,008 B raw row sum; 540,565,504 B unique owner |
+| **Preserved 2026-07-26 subtotal, excluding the current row** | **≈ 2.7 GB** | |
 
-Coverage of the agent-produced surface is therefore **2.7 GB of ≈ 18.7 GB, or
-about 15%**. Scoped to one tool, `aibris scan --root ~/.codex` reports 2.81 GB
-against an actual 16 GB, missing 82%.
+The stored 2.7 GB, 18.7 GB, 15%, 2.81 GB, and 16 GB figures are preserved
+2026-07-26 observations, not current coverage targets. The current superpowers
+row above is deliberately reported with both logical/raw and unique physical
+accounting instead of silently adding its duplicated row bytes to those
+historical totals.
 
 Meanwhile the same scan fully covers 16.6 GB of generic build debris —
 `node_modules` 7.1 GB, Gradle cache 5.0 GB, uv cache 4.5 GB — which

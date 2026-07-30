@@ -55,7 +55,7 @@ Output contains:
 - item-level `status`, `classification`, `risk`, and `reason` fields for agent
   decisions; `classification` is `live`, `orphaned`, or `undetermined` for
   `agent-state` and omitted for other categories
-- item-level `source` for path-derived worktree owners
+- item-level `source` for path-derived or exact-registered worktree owners
 - item-level `cleanup_kind` and `cleanup_command` fields for cleanup execution
 
 The schema is documented in `docs/JSON_SCHEMA.md`.
@@ -264,7 +264,7 @@ Cross-category containment uses the same physical-component contract:
 
 | Category | Default clean | Tools | Default locations |
 |----------|---------------|-------|-------------------|
-| `worktree` | orphaned only | `codex`, `claude`, `unknown` | Bounded shallow discovery of `$HOME` directories named `worktrees`, `worktree`, `worktree-*`, or `worktrees-*`, validated by direct or nested `.git` files |
+| `worktree` | orphaned only | `codex`, `claude`, `unknown` | Finite exact registry plus depth-4 convention fallback for directories named `worktrees`, `worktree`, `worktree-*`, or `worktrees-*`; units are validated only at direct or one-level nested `.git` markers |
 | `node_modules` | yes | `node_modules` | `$HOME/**/node_modules`, with noisy system/media/cache directories pruned |
 | `build-cache` | yes | `build-cache` | `~/.cache/go-build`, `~/.gradle/caches`, `~/.npm/_cacache`, `~/.cargo/registry`, `~/Library/Caches/Xcode` |
 | `other-cache` | yes | `pip-cache` | `~/.cache/pip`, `~/.cache/uv` |
@@ -279,25 +279,43 @@ Cross-category containment uses the same physical-component contract:
 |--------|---------|
 | `active` | `.git` exists and parent repository metadata still exists. This means linked, not recently used. |
 | `orphaned` | `.git` exists but parent repository metadata is gone. |
-| `plain-dir` | No valid worktree metadata was found. |
+| `plain-dir` | No valid worktree metadata was found, or one physical unit contained any missing/empty/malformed/directory marker. Review-only and never cleanable. |
 
 Cleanup excludes `active` worktrees by default. `orphaned` worktrees remain
 eligible when age/category/tool filters match. Use `--include-active-worktrees`
-to intentionally include active worktrees in classic cleanup. The default
-guided Codex route may recommend linked active units only after the cleanup-unit
-policy passes.
+to intentionally include active worktrees in classic cleanup. `plain-dir`,
+empty, and unknown statuses remain review-only regardless of age, `--risky`,
+or active-worktree opt-in. The default guided Codex route may recommend linked
+active units only after the cleanup-unit policy passes.
 
-Worktree discovery is convention-based rather than a fixed tool list. Hidden
-owner directories are intentionally allowed when they contain worktree roots,
-for example `$HOME/.codex/worktrees`, `$HOME/.some-tool/worktrees`, or
+Worktree discovery combines two bounded mechanisms. A finite exact registry
+looks up `$HOME/.codex/worktrees`, `$HOME/.relay/worktrees`,
+`$HOME/.gstack/worktrees`, and `$HOME/.config/superpowers/worktrees` when each
+container is within a requested normalized root. Registered paths are not
+discovered by recursively opening hidden owners, and symlink escapes do not
+produce cleanable rows. Superpowers rows are attributed as
+`source=superpowers`, `tool=unknown`.
+
+The convention fallback still allows hidden owners containing worktree roots,
+for example `$HOME/.some-tool/worktrees` or
 `$HOME/project/.some-tool/worktrees`. The path-derived `source` field records
-that owner as `.codex`, `.some-tool`, or `project-local` for plain
-project-local `worktrees` directories.
+that owner as `.some-tool`, or `project-local` for plain project-local
+`worktrees` directories.
 
 Full-home discovery is bounded: aibris checks immediate hidden owners and
-project-local containers within a shallow depth from each scan root. It does not
-recursively traverse every descendant looking for arbitrarily deep worktree
-owners.
+project-local containers to `maxWorktreeContainerDepth=4` from each scan root.
+Hidden owners are terminal except for immediate convention children. It does
+not recursively traverse every descendant looking for arbitrarily deep
+worktree owners.
+
+Within every discovered container, one outer entry is one physical mutation
+owner. Only `<entry>/.git` and `<entry>/<project>/.git` are inspected; member
+traversal never goes deeper than one nested level. Multiple valid nested
+members produce logical rows sharing the outer owner path. If any candidate
+marker is missing, a directory, empty, or malformed, the owner produces one
+explicit `plain-dir` row and no valid sibling can be executed. Metadata I/O
+failures instead make the provider scan partial. A syntactically valid marker
+whose referenced gitdir is missing remains `orphaned`.
 
 ## Scan Roots
 
@@ -319,6 +337,8 @@ deduplicated, and collapsed when one root is nested inside another.
 - Worktree deletion may also pass scanner-validated worktree safety: the target
   must resolve under `$HOME`, avoid symlink escape, and carry active/orphaned
   Git worktree metadata from scanning.
+- `plain-dir`, empty, and unknown worktree statuses must fail closed in classic
+  filtering, guided recommendations, audit reasons, and cleanup path safety.
 - `node_modules` discovered under valid home-scoped scan roots must remain
   eligible for cleanup safety checks.
 - Risky categories must be excluded unless `--risky` is set.

@@ -105,6 +105,15 @@ func TestIsSafeTarget_RejectsPlainWorktreeAndSymlinkEscape(t *testing.T) {
 	}) {
 		t.Fatal("plain worktree status should not use generic worktree safety")
 	}
+	for _, status := range []types.WorktreeStatus{"", "future-status"} {
+		if IsSafeTarget(home, types.DebrisInfo{
+			Category: types.CategoryWorktree,
+			Status:   status,
+			Path:     filepath.Join(home, ".codex", "worktrees", "review-only"),
+		}) {
+			t.Fatalf("worktree status %q should fail closed even under a known safe prefix", status)
+		}
+	}
 
 	linkPath := filepath.Join(home, ".somename", "worktrees", "evil")
 	os.MkdirAll(filepath.Dir(linkPath), 0755)
@@ -199,6 +208,32 @@ func TestExecute_GenericWorktreeUnderHome(t *testing.T) {
 	}
 }
 
+func TestExecute_RejectsReviewOnlyWorktreeStatuses(t *testing.T) {
+	for _, status := range []types.WorktreeStatus{types.WorktreePlain, "", "future-status"} {
+		t.Run(string(status), func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			target := filepath.Join(home, ".codex", "worktrees", "review-only")
+			if err := os.MkdirAll(target, 0755); err != nil {
+				t.Fatal(err)
+			}
+
+			_, err := Execute([]types.DebrisInfo{{
+				ID:       "review-only",
+				Category: types.CategoryWorktree,
+				Status:   status,
+				Path:     target,
+			}})
+			if err == nil || !strings.Contains(err.Error(), "unsafe path") {
+				t.Fatalf("Execute(%q) error = %v; want unsafe-path refusal", status, err)
+			}
+			if _, statErr := os.Stat(target); statErr != nil {
+				t.Fatalf("review-only target was removed: %v", statErr)
+			}
+		})
+	}
+}
+
 func TestExecute_RejectsRawActiveWorktreeRemoval(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -253,9 +288,9 @@ func TestFilter(t *testing.T) {
 	recent := now.Add(-1 * time.Hour)
 
 	worktrees := []types.DebrisInfo{
-		{ID: "old-codex", Tool: types.ToolCodex, Category: types.CategoryWorktree, ModTime: old},
-		{ID: "recent-codex", Tool: types.ToolCodex, Category: types.CategoryWorktree, ModTime: recent},
-		{ID: "old-claude", Tool: types.ToolClaude, Category: types.CategoryWorktree, ModTime: old},
+		{ID: "old-codex", Tool: types.ToolCodex, Category: types.CategoryWorktree, Status: types.WorktreeOrphaned, ModTime: old},
+		{ID: "recent-codex", Tool: types.ToolCodex, Category: types.CategoryWorktree, Status: types.WorktreeOrphaned, ModTime: recent},
+		{ID: "old-claude", Tool: types.ToolClaude, Category: types.CategoryWorktree, Status: types.WorktreeOrphaned, ModTime: old},
 	}
 
 	t.Run("all categories", func(t *testing.T) {
@@ -280,7 +315,7 @@ func TestFilter(t *testing.T) {
 	t.Run("no match", func(t *testing.T) {
 		young := now.Add(-30 * time.Minute)
 		youngWorktrees := []types.DebrisInfo{
-			{ID: "young", Tool: types.ToolCodex, Category: types.CategoryWorktree, ModTime: young},
+			{ID: "young", Tool: types.ToolCodex, Category: types.CategoryWorktree, Status: types.WorktreeOrphaned, ModTime: young},
 		}
 		opts := types.PruneOptions{Age: 1 * time.Hour}
 		filtered := Filter(youngWorktrees, opts)
@@ -296,7 +331,7 @@ func TestFilter_RiskyExcludedByDefault(t *testing.T) {
 	opts := types.PruneOptions{Age: 168 * time.Hour}
 
 	worktrees := []types.DebrisInfo{
-		{ID: "safe", Category: types.CategoryWorktree, ModTime: old},
+		{ID: "safe", Category: types.CategoryWorktree, Status: types.WorktreeOrphaned, ModTime: old},
 		{ID: "risky", Category: types.CategoryAILogs, ModTime: old},
 	}
 
@@ -315,7 +350,7 @@ func TestFilter_RiskyIncludedWithFlag(t *testing.T) {
 	opts := types.PruneOptions{Age: 168 * time.Hour, Risky: true}
 
 	worktrees := []types.DebrisInfo{
-		{ID: "safe", Category: types.CategoryWorktree, ModTime: old},
+		{ID: "safe", Category: types.CategoryWorktree, Status: types.WorktreeOrphaned, ModTime: old},
 		{ID: "risky", Category: types.CategoryAILogs, ModTime: old},
 	}
 
@@ -342,8 +377,8 @@ func TestFilter_WorktreeStatusPolicy(t *testing.T) {
 	if ids["active"] {
 		t.Fatal("active worktree should be excluded by default")
 	}
-	if !ids["orphaned"] || !ids["legacy"] || !ids["node_modules"] {
-		t.Fatalf("filtered ids = %v; want orphaned, legacy, and node_modules", ids)
+	if !ids["orphaned"] || ids["legacy"] || !ids["node_modules"] {
+		t.Fatalf("filtered ids = %v; want orphaned and node_modules only", ids)
 	}
 
 	filtered = Filter(worktrees, types.PruneOptions{Age: 168 * time.Hour, IncludeActiveWorktrees: true})
@@ -353,6 +388,36 @@ func TestFilter_WorktreeStatusPolicy(t *testing.T) {
 	}
 	if !ids["active"] {
 		t.Fatal("active worktree should be included with IncludeActiveWorktrees")
+	}
+	if ids["legacy"] {
+		t.Fatal("unknown worktree status should remain review-only with IncludeActiveWorktrees")
+	}
+}
+
+func TestEvaluateEligibility_WorktreeReviewStatusesFailClosed(t *testing.T) {
+	observedAt := time.Now()
+	opts := types.PruneOptions{
+		Age:                    0,
+		Risky:                  true,
+		Force:                  true,
+		IncludeActiveWorktrees: true,
+	}
+	for _, status := range []types.WorktreeStatus{types.WorktreePlain, "", "future-status"} {
+		t.Run(string(status), func(t *testing.T) {
+			item := types.DebrisInfo{
+				Category: types.CategoryWorktree,
+				Status:   status,
+				ModTime:  observedAt.Add(-time.Hour),
+			}
+			eligible, reason := EvaluateEligibility(item, opts, observedAt)
+			if eligible || reason != EligibilityReasonWorktreeReview {
+				t.Fatalf("EvaluateEligibility(%q) = %t/%q; want false/%q",
+					status, eligible, reason, EligibilityReasonWorktreeReview)
+			}
+			if got := Filter([]types.DebrisInfo{item}, opts); len(got) != 0 {
+				t.Fatalf("Filter(%q) = %+v; want no cleanup candidate", status, got)
+			}
+		})
 	}
 }
 

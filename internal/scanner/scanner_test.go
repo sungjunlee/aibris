@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -71,6 +72,54 @@ func TestScan_NoResults(t *testing.T) {
 	}
 	if result.TotalSize != 0 {
 		t.Errorf("TotalSize = %d; want 0", result.TotalSize)
+	}
+}
+
+func TestScan_WorktreeMetadataIOFailureProducesPartialEvidence(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX file mode fixture")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	marker := filepath.Join(home, ".config", "superpowers", "worktrees", "owner", ".git")
+	if err := os.MkdirAll(filepath.Dir(marker), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(marker, []byte("gitdir: /missing\n"), 0000); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(marker, 0644)
+	if f, err := os.Open(marker); err == nil {
+		f.Close()
+		t.Skip("current user can read mode-000 files")
+	}
+
+	var stderr bytes.Buffer
+	s := New([]adapter.DebrisProvider{
+		adapter.NewWorktreeAdapter(),
+		&mockProvider{
+			name: types.ToolNodeModules,
+			worktrees: []types.DebrisInfo{{
+				ID:       "retained",
+				Tool:     types.ToolNodeModules,
+				Category: types.CategoryNodeModules,
+				Size:     7,
+			}},
+		},
+	})
+	s.ErrorWriter = &stderr
+	result, err := s.ScanWithOptions(context.Background(), types.ScanOptions{Roots: []string{home}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Partial() || len(result.ProviderErrors) != 1 {
+		t.Fatalf("partial/provider errors = %t/%+v; want one worktree provider error", result.Partial(), result.ProviderErrors)
+	}
+	if len(result.Worktrees) != 1 || result.Worktrees[0].ID != "retained" {
+		t.Fatalf("unrelated provider result was not retained: %+v", result.Worktrees)
+	}
+	if !strings.Contains(result.ProviderErrors[0].Message, "reading worktree marker") {
+		t.Errorf("provider error = %q; want marker read context", result.ProviderErrors[0].Message)
 	}
 }
 

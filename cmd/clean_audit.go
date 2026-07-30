@@ -385,11 +385,11 @@ func cleanAuditComponentReason(
 	if component.Refusal != nil {
 		return cleanAuditReasonForOverlapSafety(component.Refusal.Reason)
 	}
-	if reason := protectedTargets[cleanAuditItemKey(component.Owner)]; reason != "" {
-		return reason
-	}
 	if targetSet.consume(component.Owner) {
 		return cleanReasonEligible
+	}
+	if reason := protectedTargets[cleanAuditItemKey(component.Owner)]; reason != "" {
+		return reason
 	}
 	if eligible, reason := cleaner.EvaluateEligibility(component.Owner, opts, observedAt); !eligible {
 		return cleanAuditReason(reason)
