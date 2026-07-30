@@ -32,7 +32,7 @@ content that is surfaced rather than reclaimed.
 
 ### Batch 3 — Close nested agent-state safety
 
-- [~] #151 L1 overlap safety: protected agent-state shields its subtree and outer targets inherit nested safety/revalidation (~2h) [branch:issue-151-overlap-safety-kernel] — relay request `req-20260729103342292`, leaf `overlap-safety-kernel`
+- [x] #151 L1 overlap safety: protected agent-state shields its subtree and outer targets inherit nested safety/revalidation → PR #159 (merged `d348ede`, hardened review round 4)
 - [ ] #151 L2 plan/audit accounting: outermost physical target owns bytes while rows, reasons, and receipts retain nested obligations (~1h)
 
 ### Batch 4 — Fix bounded worktree-container coverage
@@ -353,3 +353,27 @@ measuring, because the real home lacked the triggering condition.
   ownership, visible-row, audit, and human-receipt lineage. Historical real-home
   overlap counts remain observations; current same-session dry-runs and
   synthetic deletion fixtures are the verification contract.
+- 2026-07-30 19:08: #151 L1 dispatched → PR #159 → hardened review (semantic
+  PASS, round 4) → squash-merged as `d348ede`; #151 remains open for L2, and
+  the run worktree plus local/remote branch were cleaned. All 15 Done Criteria,
+  SHA-bound execution evidence, an independent Codex audit, and all four CI
+  checks passed. The maintainer authorized force-finalization because the
+  optional OpenCode advisory returned semantically valid low-confidence output
+  without the newly required `severity` field, demoting an otherwise clean run
+  to `escalated`; dev-relay #1122 tracks that transport failure.
+
+  Merged `main` passed `git diff --check`, race tests, build, vet, and
+  Linux/Windows/Darwin builds. Immutable binaries built from the final reviewed
+  head `ef9b7fe` and merged `main` were byte-identical. Concurrent real-home
+  `clean --dry-run --no-guide` scans both reported **212 planned items /
+  1.6 GB** and agent-state **276 found / 209 eligible (232.4 MB) / 67
+  protected**. Their sorted 212-target path sets were identical
+  (`32482ec29a588cbfabae636bfdeccaa2ee6dca429c2c31268f0f1dbebc4842fe`);
+  no safety refusal occurred. These current absolute counts have drifted with
+  the live stores, so only the same-session equality is evidence that the merge
+  changed no behavior.
+
+  Two recovery-path follow-ups were also recorded: dev-relay #1119 now carries
+  the live gate-placeholder reproduction, and #1123 tracks
+  `recover-commit --dry-run` incorrectly returning `nothing_to_recover` when an
+  existing PR is the recovery anchor.
