@@ -30,10 +30,10 @@ content that is surfaced rather than reclaimed.
 - [x] #145 Invalidate the cleanup scan cache with a stable provider-membership identity; behavior revisions still bump the cache revision → PR #155 (merged `c49b4e4`)
 - [x] #146 Replace the absolute scan-time baseline with same-session paired deltas; keep the repeatable harness in #129 → PR #158 (merged `755e233`)
 
-### Batch 3 — Close nested agent-state safety
+### Batch 3 — Close nested agent-state safety — complete
 
 - [x] #151 L1 overlap safety: protected agent-state shields its subtree and outer targets inherit nested safety/revalidation → PR #159 (merged `d348ede`, hardened review round 4)
-- [~] #151 L2 plan/audit accounting: outermost physical target owns bytes while rows, reasons, and receipts retain nested obligations [branch:issue-151-overlap-provenance-accounting] — relay run `issue-151-20260730102000000`, request `req-20260729103342292`, leaf `overlap-provenance-accounting`
+- [x] #151 L2 plan/audit accounting: outermost physical target owns bytes while rows, reasons, and receipts retain nested obligations → PR #160 (merged `23f7b38`, hardened review round 3)
 
 ### Batch 4 — Fix bounded worktree-container coverage
 
@@ -393,3 +393,20 @@ measuring, because the real home lacked the triggering condition.
   canonical aliases never change the raw mutation target; plan-time refusals
   remain audit/preview evidence; and cancellation records completed obligations
   plus remaining `not-attempted` obligations while freeing zero bytes.
+- 2026-07-30 21:05: #151 L2 dispatched → PR #160 → hardened review (primary
+  semantic PASS, round 3) → squash-merged as `23f7b38`; #151 closed, Batch 3
+  completed, and the run worktree plus local/remote branch were cleaned. The
+  maintainer authorized force-finalization because the non-gating OpenCode
+  advisory emitted invalid JSON after the final Codex review had passed all ten
+  Done Criteria and both quality factors. Four subsequent public review threads
+  were fixed and resolved at the final reviewed head `938fdae`; all four CI
+  checks passed.
+
+  Merged `main` passed race tests, build, vet, and Linux/Windows/Darwin builds.
+  Its immutable binary ran only `clean --dry-run --no-guide` against the real
+  home and planned the same **213 items / 1.6 GB** as the pre-merge binary.
+  Agent-state remained byte-identical at **277 found / 210 eligible
+  (246.1 MB) / 67 protected (429.4 MB)**. The overall scan moved from 318 to
+  317 physical items, and protected/skipped from 105 to 104, solely because
+  Relay reclaimed the completed run's protected worktree during merge cleanup;
+  no files were removed by aibris.
