@@ -24,7 +24,7 @@ confirmation, and path safety checks.
 
 | Category | Examples | Default clean |
 |----------|----------|---------------|
-| AI worktrees | `$HOME` worktree conventions such as `.tool/worktrees` and project-local `worktrees` | Classic: orphaned; guided Codex: evidence-based |
+| AI worktrees | Finite known containers plus `$HOME` conventions such as `.tool/worktrees` and project-local `worktrees` | Classic: orphaned; guided Codex: evidence-based |
 | Dependencies | project `node_modules` directories | Yes |
 | Build caches | Go, npm, Gradle, Cargo, Xcode | Yes |
 | Python caches | pip and uv cache directories | Yes |
@@ -354,9 +354,12 @@ Cancellation remains a hard failure.
   scope to one or more existing directories under `$HOME`
 - **Convention-based worktree discovery**: worktrees are discovered by finding
   `worktrees`, `worktree`, `worktree-*`, and `worktrees-*` directories under
-  scan roots, then validating direct or nested `.git` files. To keep full-home
-  scans practical, aibris searches hidden owners and project-local containers
-  within a bounded shallow depth instead of recursively walking every child.
+  scan roots, then validating direct or one-level nested `.git` files. The
+  generic fallback keeps a container depth limit of 4. A separate finite exact
+  registry covers `~/.codex/worktrees`, `~/.relay/worktrees`,
+  `~/.gstack/worktrees`, and `~/.config/superpowers/worktrees` without opening
+  unrelated hidden-owner fanout. Superpowers rows use `source=superpowers` and
+  `tool=unknown`.
 - **Pruned scan directories** for project-style discovery include `.Trash`,
   `Library`, `Applications`, `Pictures`, `Movies`, `Music`, `.git`, `vendor`,
   and nested `node_modules`; `Desktop` and `Downloads` are scanned
@@ -368,7 +371,11 @@ Cancellation remains a hard failure.
   prompt; hard locks and non-forced Git removal remain unchanged)
 - **Safety validation** rejects deletions outside `$HOME`, symlink escapes, and
   unvalidated arbitrary paths. Generic worktrees are only cleanable after scan
-  metadata proves they are active or orphaned Git worktrees.
+  metadata proves they are active or orphaned Git worktrees. A readable unit
+  with missing or invalid direct/one-level metadata remains visible as one
+  `plain-dir` owner row for review; mixed valid/invalid members protect the
+  whole owner. `plain-dir`, empty, and unknown worktree statuses are never
+  cleanup candidates.
 - **Negative age rejection** prevents accidental full-scope deletion
 
 ### How It Works

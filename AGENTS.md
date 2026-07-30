@@ -25,7 +25,8 @@ CLI 자체는 dumb executor. Q&A와 판단은 AI 스킬이负责.
 ```
 
 각 `adapter`는 `DebrisProvider` 인터페이스를 구현한다. Worktree는 특정 도구별 adapter를
-계속 늘리기보다 `$HOME` 아래 worktree convention을 발견하고 `.git` metadata로 검증한다.
+계속 늘리기보다 bounded `$HOME` convention fallback과 finite exact container
+registry를 함께 사용하고 `.git` metadata로 검증한다.
 
 ## 개발 규칙
 
@@ -40,12 +41,17 @@ CLI 자체는 dumb executor. Q&A와 판단은 AI 스킬이负责.
 - `Category()`가 `agent-state`인 adapter는 `AgentStateRevalidator`도 구현 (`agent-state`는 age gate 없이 기본 정리되며, 등록된 revalidator가 없으면 삭제 거부)
 
 **1-1. Worktree discovery 변경시 꼭 지킬 것**
-- 특정 도구 이름을 hardcode하기보다 `$HOME` 아래 `worktrees`, `worktree`, `worktree-*`, `worktrees-*` 디렉토리를 찾는다
+- known deep container는 finite exact registry로만 추가한다. 현재 registry는 `~/.codex/worktrees`, `~/.relay/worktrees`, `~/.gstack/worktrees`, `~/.config/superpowers/worktrees`
+- generic fallback은 `$HOME` 아래 `worktrees`, `worktree`, `worktree-*`, `worktrees-*` 디렉토리를 찾고 `maxWorktreeContainerDepth=4`를 유지한다
 - hidden owner 디렉토리(`.codex`, `.somename` 등)는 worktree source일 수 있으므로 일반적으로 숨김이라는 이유만으로 prune하지 않는다
-- 전체 `$HOME`을 무제한 재귀 탐색하지 않는다. scan root에서 얕은 컨테이너 depth 안의 hidden owner/project-local convention만 찾는다
+- 전체 `$HOME`이나 hidden owner를 무제한 재귀 탐색하지 않는다. hidden owner는 immediate convention child까지만 확인한다
 - 후보는 direct `<entry>/.git` 또는 nested `<entry>/<project>/.git` 파일이 있어야 한다
-- `.git` 파일의 `gitdir:`를 읽어 `active`/`orphaned`를 판정하고, 유효하지 않은 plain dir은 보고하지 않는다
-- `Source`는 path-derived owner(`.codex`, `.somename`, `project-local`)로 채운다
+- member 탐색은 direct 또는 one-level nested까지만 허용한다
+- outer `<entry>` 하나가 물리 mutation owner 하나다. valid/invalid marker가 섞이면 valid sibling을 내보내지 않고 owner 하나를 `plain-dir`로 보고한다
+- readable missing/empty/malformed/directory marker는 explicit `Reason`이 있는 review-only `plain-dir`; I/O 실패는 provider error/partial scan이다
+- `.git` 파일의 `gitdir:`를 읽어 `active`/`orphaned`를 판정한다. referenced gitdir가 없으면 `orphaned`
+- `Source`는 path-derived owner(`.codex`, `.somename`, `project-local`) 또는 registered `superpowers`로 채운다
+- `plain-dir`, empty, unknown worktree status는 age/`--risky`/`--include-active-worktrees`와 무관하게 절대 정리 후보가 아니다
 
 **2. Prune 안전장치**
 - 기본 `--age`는 `7d`
@@ -85,7 +91,7 @@ skills/
 
 | Tool | Category | clean 기본 | 기본 경로 |
 |------|----------|-----------|---------|
-| worktree (convention) | worktree | orphaned만 ✅ | bounded shallow `$HOME` discovery of `{worktrees,worktree,worktree-*,worktrees-*}/<entry>/` with direct or nested `.git` file |
+| worktree (registry + convention) | worktree | orphaned만 ✅ | finite exact registry + depth-4 `{worktrees,worktree,worktree-*,worktrees-*}/<entry>/` fallback; direct/one-level nested `.git` only |
 | claude | agent-state | orphaned만 ✅ (age gate 없음; live/undetermined 보호) | `~/.claude/projects/<name>/` |
 | cursor | agent-state | orphaned만 ✅ (age gate 없음; live/undetermined 보호) | `~/.cursor/projects/<name>/` |
 | windsurf | ai-logs | 🚫 `--risky` | `~/.codeium/windsurf/` |
@@ -97,13 +103,14 @@ skills/
 ### Worktree health
 
 `WorktreeAdapter`는 각 worktree의 `.git` 파일을 읽어 상위 repo 생존 여부를 확인합니다.
-`source`는 `.codex`, `.claude`, `.somename`, `project-local`처럼 경로에서 추론합니다:
+`source`는 `.codex`, `.claude`, `.somename`, `project-local`처럼 경로에서 추론하며
+registered superpowers container는 `superpowers`를 사용합니다:
 
 | Status | 의미 |
 |--------|------|
 | `active` | `.git` 존재, 상위 repo 살아있음 |
 | `orphaned` | `.git` 존재, 상위 repo 사라짐 (정리 대상) |
-| `plain-dir` | `.git` 없음 (일반 디렉토리, 무시) |
+| `plain-dir` | valid metadata 없음 또는 한 owner 안의 invalid/mixed marker (review-only, 정리 금지) |
 
 ## 빌드
 

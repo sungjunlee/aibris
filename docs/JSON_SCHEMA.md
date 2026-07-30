@@ -79,11 +79,11 @@ as an item list, not as a worktree-only list.
 | `category` | string | Debris category (`worktree`, `node_modules`, `build-cache`, `other-cache`, `agent-state`, `ai-logs`). Cursor entries under `~/.cursor/projects` use `agent-state`, not `ai-logs`. |
 | `id` | string | Unique identifier (hash, directory name, or cache key) |
 | `project` | string | Project name if detectable, empty otherwise |
-| `source` | string | Path-derived worktree source such as `.codex`, `.somename`, or `project-local`; empty for non-worktree items |
+| `source` | string | Worktree source such as `.codex`, `.somename`, `project-local`, or the registered `superpowers`; empty for non-worktree items. Superpowers rows use `tool=unknown`. |
 | `path` | string | Absolute filesystem path |
 | `size` | integer | Size in bytes |
 | `mod_time` | string | Last modification time in RFC 3339 format |
-| `status` | string | Worktree health (`active`, `orphaned`, `plain-dir`) or empty for non-worktree items |
+| `status` | string | Worktree health (`active`, `orphaned`, `plain-dir`) or empty for non-worktree items. Only scanner-validated `active` and `orphaned` worktree rows can enter cleanup safety; `plain-dir`, empty, and unknown values are review-only. |
 | `classification` | string | Agent-state health (`live`, `orphaned`, `undetermined`), omitted for items outside `agent-state`. Cursor project-store entries derive this from all distinct absolute `workspacePath=` values in `worker.log` that are outside `~/.cursor`; any live path wins and `orphaned` requires every usable path to be proven absent. |
 | `risk` | string | Derived cleanup risk (`low`, `medium`, `high`) |
 | `reason` | string | Short derived explanation for cleanup review |
@@ -93,6 +93,13 @@ as an item list, not as a worktree-only list.
 `risk` and `reason` are presentation fields derived from `category`, `status`,
 and `classification`; they are intended for human and AI-assisted cleanup
 decisions.
+
+Worktree units support only a direct `.git` marker or markers in immediate
+project children. A readable unit without valid metadata is emitted once as
+`plain-dir` with an explicit `reason`. If valid and invalid immediate members
+are mixed, that same one-row owner representation prevents the valid sibling
+from becoming executable. An I/O failure while inspecting a container or
+marker is not `plain-dir`; it is a top-level partial provider error.
 
 For Cursor `agent-state`, `project` is the final path segment of the recorded
 workspace, not a decoded form of the project-store directory name. Missing,

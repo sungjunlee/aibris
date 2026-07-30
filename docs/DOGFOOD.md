@@ -342,6 +342,31 @@ only a small, misleading part of the eventual harness. #129 remains the owner
 of deterministic synthetic-home inputs, platform baselines, cache-control
 automation, and a regression threshold that will not make CI flaky.
 
+### 2026-07-30 Registered Superpowers Coverage Observation
+
+Issue #140 remeasured `~/.config/superpowers/worktrees` in one read-only
+session. This is evidence for the finite exact registry, not a fixture target:
+
+| Evidence | Observation |
+| --- | --- |
+| Filesystem outer owners | 1 directory |
+| Direct / one-level linked members | 0 direct / 2 one-level; both metadata references active |
+| Unique physical owner bytes | 540,565,504 B (`du -sk`: 527,896 KiB) |
+| Base `fe8eb165...` full-HOME scan | 318 items / 32,650,909,998 B overall; 0 superpowers rows |
+| Candidate full-HOME scan | 358 items / 33,735,670,062 B overall; 2 superpowers rows |
+| Candidate scoped scan | 4 items / 1,412,632,576 B overall; the same 2 superpowers rows |
+| Superpowers attribution | `source=superpowers`, `tool=unknown`, 2 active logical member rows |
+| Raw superpowers row-size sum | 1,081,131,008 B because both logical rows carry the shared owner size |
+
+The candidate full and scoped superpowers keys matched exactly by source, tool,
+owner path, project, status, and size. Physical accounting remains one owner /
+540,565,504 B; summing the two compatibility rows double-counts that owner and
+must be labelled raw row-size aggregation. The candidate binary was built with
+`-trimpath` using Go 1.26.3 on Darwin/arm64 and had SHA-256
+`2e90cadd6f90c7d15f8d19d28bf4d74308e0d1ac2214f4af336fa2083e84f77b`.
+The prior audit's preserved `516 MB` label came from the 2026-07-26 observation;
+it was never an implementation or performance target.
+
 ### Discovered vs. actual
 
 Agent state stores aibris does **not** discover:
@@ -353,7 +378,6 @@ Agent state stores aibris does **not** discover:
 | `~/.relay/runs` | 933 MB | Executor run manifests |
 | `~/.cursor/chats` | 674 MB | Conversation transcripts |
 | `~/.codex/generated_images` | 548 MB | Agent-produced byproducts |
-| `~/.config/superpowers/worktrees` | 516 MB | Two valid linked worktrees, never discovered |
 | `~/.claude/projects` | 502 MB | Session store keyed by working directory |
 | `~/.codex/sqlite` | 412 MB | Agent state database |
 | `~/.codex/tmp` | 130 MB | Scratch |
@@ -361,7 +385,7 @@ Agent state stores aibris does **not** discover:
 | `~/.codex/computer-use` | 61 MB | Byproducts |
 | `~/.cursor/ai-tracking` | 35 MB | Telemetry residue |
 | Remainder (`~/.relay/reviews`, `~/.claude/session-env`, shell snapshots, …) | ~80 MB | |
-| **Subtotal** | **≈ 16.0 GB** | **aibris discovers 0 B** |
+| **Preserved 2026-07-26 subtotal after moving superpowers below** | **≈ 15.5 GB** | **aibris discovers 0 B** |
 
 Agent state stores aibris does discover:
 
@@ -373,11 +397,14 @@ Agent state stores aibris does discover:
 | `~/.codex/archived_sessions` | 85 MB | 89 MB |
 | `~/.claude/command-audit.log` | 58 MB | 57 MB |
 | `~/.claude/file-history` | 41 MB | 35 MB |
-| **Subtotal** | **≈ 2.7 GB** | |
+| `~/.config/superpowers/worktrees` | 540,565,504 B current physical observation | 2 logical rows / 1,081,131,008 B raw row sum; 540,565,504 B unique owner |
+| **Preserved 2026-07-26 subtotal, excluding the current row** | **≈ 2.7 GB** | |
 
-Coverage of the agent-produced surface is therefore **2.7 GB of ≈ 18.7 GB, or
-about 15%**. Scoped to one tool, `aibris scan --root ~/.codex` reports 2.81 GB
-against an actual 16 GB, missing 82%.
+The stored 2.7 GB, 18.7 GB, 15%, 2.81 GB, and 16 GB figures are preserved
+2026-07-26 observations, not current coverage targets. The current superpowers
+row above is deliberately reported with both logical/raw and unique physical
+accounting instead of silently adding its duplicated row bytes to those
+historical totals.
 
 Meanwhile the same scan fully covers 16.6 GB of generic build debris —
 `node_modules` 7.1 GB, Gradle cache 5.0 GB, uv cache 4.5 GB — which
