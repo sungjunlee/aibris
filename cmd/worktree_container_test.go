@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -191,5 +192,145 @@ func TestBuiltCLI_RegisteredLayoutsAndReviewOnlyOwners(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestBuiltCLI_MixedActiveOrphanedOwnerFailsClosed(t *testing.T) {
+	binary := buildCLIContractBinary(t)
+	home := t.TempDir()
+	owner := filepath.Join(home, ".relay", "worktrees", "mixed-owner")
+	activeMember := filepath.Join(owner, "active-member")
+	orphanedMember := filepath.Join(owner, "orphaned-member")
+	activeGitDir := filepath.Join(home, "_active-repository", ".git", "worktrees", "active")
+	if err := os.MkdirAll(activeGitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeCLIContractFile(
+		t,
+		filepath.Join(activeMember, ".git"),
+		"gitdir: "+activeGitDir+"\n",
+	)
+	writeCLIContractFile(
+		t,
+		filepath.Join(orphanedMember, ".git"),
+		"gitdir: "+filepath.Join(home, "_missing-repository", ".git", "worktrees", "orphaned")+"\n",
+	)
+	old := time.Now().Add(-30 * 24 * time.Hour)
+	if err := os.Chtimes(owner, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	scanOutput, err := runCLIContract(binary, home, "scan", "--json")
+	if err != nil {
+		t.Fatalf("built-CLI mixed-owner scan failed: %v\n%s", err, scanOutput)
+	}
+	var inventory jsonOutput
+	if err := json.Unmarshal([]byte(scanOutput), &inventory); err != nil {
+		t.Fatalf("decoding mixed-owner scan JSON: %v\n%s", err, scanOutput)
+	}
+	canonicalOwner, ok := cleanTargetPathKey(owner)
+	if !ok {
+		t.Fatalf("canonicalizing fixture owner %q", owner)
+	}
+	var statuses []string
+	for _, row := range inventory.Worktrees {
+		if row.Path == canonicalOwner {
+			statuses = append(statuses, row.Status)
+		}
+	}
+	if len(statuses) != 2 ||
+		!slices.Contains(statuses, string(types.WorktreeActive)) ||
+		!slices.Contains(statuses, string(types.WorktreeOrphaned)) {
+		t.Fatalf("mixed-owner statuses = %v; want active and orphaned\n%s",
+			statuses, scanOutput)
+	}
+
+	defaultOutput, err := runCLIContract(
+		binary,
+		home,
+		"clean",
+		"--dry-run",
+		"--no-guide",
+		"--age=1ns",
+		"--category=worktree",
+	)
+	if err != nil {
+		t.Fatalf("built-CLI default mixed-owner dry-run failed: %v\n%s", err, defaultOutput)
+	}
+	for _, want := range []string{
+		"active worktree protected",
+		"matched  0 candidates",
+		"No items to clean.",
+	} {
+		if !strings.Contains(defaultOutput, want) {
+			t.Fatalf("default mixed-owner dry-run missing %q:\n%s", want, defaultOutput)
+		}
+	}
+	if strings.Contains(defaultOutput, "remove-path") {
+		t.Fatalf("default mixed-owner dry-run planned path removal:\n%s", defaultOutput)
+	}
+	if _, statErr := os.Stat(owner); statErr != nil {
+		t.Fatalf("default mixed-owner dry-run changed owner: %v", statErr)
+	}
+
+	includeArgs := []string{
+		"clean",
+		"--dry-run",
+		"--no-guide",
+		"--age=1ns",
+		"--category=worktree",
+		"--include-active-worktrees",
+	}
+	includeOutput, err := runCLIContract(binary, home, includeArgs...)
+	if err != nil {
+		t.Fatalf("built-CLI include-active dry-run failed: %v\n%s", err, includeOutput)
+	}
+	for _, want := range []string{
+		"git status unavailable",
+		"matched  0 candidates",
+		"No items to clean.",
+	} {
+		if !strings.Contains(includeOutput, want) {
+			t.Fatalf("include-active mixed-owner dry-run missing %q:\n%s", want, includeOutput)
+		}
+	}
+	if strings.Contains(includeOutput, "remove-path") {
+		t.Fatalf("include-active mixed owner reached generic removal planning:\n%s", includeOutput)
+	}
+	if _, statErr := os.Stat(owner); statErr != nil {
+		t.Fatalf("include-active mixed-owner dry-run changed owner: %v", statErr)
+	}
+
+	// This built-binary mutation proof is confined to the temporary HOME. The
+	// incomplete orphaned member evidence must fail closed before any mutation.
+	failClosedArgs := []string{
+		"clean",
+		"--force",
+		"--no-guide",
+		"--age=1ns",
+		"--category=worktree",
+		"--include-active-worktrees",
+	}
+	failClosedOutput, err := runCLIContract(binary, home, failClosedArgs...)
+	if err != nil {
+		t.Fatalf("built-CLI fail-closed cleanup returned an error: %v\n%s",
+			err, failClosedOutput)
+	}
+	for _, want := range []string{
+		"git status unavailable",
+		"matched  0 candidates",
+		"No items to clean.",
+	} {
+		if !strings.Contains(failClosedOutput, want) {
+			t.Fatalf("fail-closed mixed-owner cleanup missing %q:\n%s",
+				want, failClosedOutput)
+		}
+	}
+	if strings.Contains(failClosedOutput, "removing ") {
+		t.Fatalf("fail-closed mixed-owner cleanup attempted mutation:\n%s",
+			failClosedOutput)
+	}
+	if _, statErr := os.Stat(owner); statErr != nil {
+		t.Fatalf("fail-closed mixed-owner cleanup changed owner: %v", statErr)
 	}
 }

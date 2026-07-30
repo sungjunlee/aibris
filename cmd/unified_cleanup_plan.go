@@ -372,11 +372,14 @@ func aggregateCleanupPlanSelection(candidates []CleanupPlanCandidate) CleanupPla
 
 func cleanupPlanRepresentative(canonicalPath string, candidates []CleanupPlanCandidate) types.DebrisInfo {
 	item := candidates[0].Item
+	hasActiveWorktree := isActiveWorktreeTarget(item)
 	// Exact canonical aliases remain distinct raw mutation paths. A direct
 	// physical candidate owns the component when available, and only duplicate
 	// rows for that raw path may refine its byte estimate.
 	rawSizes := map[string]int64{cleanTargetRawPathKey(item.Path): item.Size}
 	for _, candidate := range candidates[1:] {
+		hasActiveWorktree = hasActiveWorktree ||
+			isActiveWorktreeTarget(candidate.Item)
 		rawPath := cleanTargetRawPathKey(candidate.Item.Path)
 		if candidate.Item.Size > rawSizes[rawPath] {
 			rawSizes[rawPath] = candidate.Item.Size
@@ -384,6 +387,9 @@ func cleanupPlanRepresentative(canonicalPath string, candidates []CleanupPlanCan
 		if preferCleanTargetForCanonical(candidate.Item, item, canonicalPath) {
 			item = candidate.Item
 		}
+	}
+	if hasActiveWorktree && item.Category == types.CategoryWorktree {
+		item.Status = types.WorktreeActive
 	}
 	item.Size = rawSizes[cleanTargetRawPathKey(item.Path)]
 	return item

@@ -153,13 +153,22 @@ classic cleanup audit and executor route.`,
 		}
 
 		targets := cleaner.Filter(result.Worktrees, opts)
+		targets, physicalOwnerProtections := applyPhysicalWorktreeOwnerSafety(
+			result.Worktrees,
+			targets,
+			opts.IncludeActiveWorktrees,
+		)
 		targets = filterExistingTargets(targets)
 		targets = normalizeCleanTargets(targets)
 		targets, gitSafetyProtections := filterGitUnsafeActiveWorktreeTargets(ctx, targets)
+		classicProtections := mergeCleanAuditProtections(
+			physicalOwnerProtections,
+			gitSafetyProtections,
+		)
 		logicalInputs := cleanupOverlapLogicalInputsForAudit(
 			result.Worktrees,
 			opts,
-			gitSafetyProtections,
+			classicProtections,
 		)
 		overlapSelection, err := applyCleanupOverlapSafetyWithRows(
 			ctx,
@@ -179,7 +188,7 @@ classic cleanup audit and executor route.`,
 		}
 		overlapSelection.Targets = targets
 		auditProtections := mergeCleanAuditProtections(
-			gitSafetyProtections,
+			classicProtections,
 			overlapSelection.Protections,
 			guidedSafetyProtections,
 		)
@@ -650,6 +659,61 @@ func filterExistingTargets(targets []types.DebrisInfo) []types.DebrisInfo {
 	return filtered
 }
 
+// applyPhysicalWorktreeOwnerSafety evaluates worktree eligibility at the
+// physical owner boundary. Scanner compatibility rows may disagree on status
+// while sharing one mutation path, so no orphaned row may independently
+// authorize removal of an owner that also has an active row.
+func applyPhysicalWorktreeOwnerSafety(
+	inventory []types.DebrisInfo,
+	targets []types.DebrisInfo,
+	includeActive bool,
+) ([]types.DebrisInfo, map[string]cleanAuditReason) {
+	activeOwners := make(map[string]bool)
+	for _, item := range inventory {
+		if item.Category != types.CategoryWorktree ||
+			item.Status != types.WorktreeActive {
+			continue
+		}
+		if path, ok := cleanTargetPathKey(item.Path); ok {
+			activeOwners[path] = true
+		}
+	}
+
+	protections := make(map[string]cleanAuditReason)
+	if !includeActive {
+		for _, item := range inventory {
+			if item.Category != types.CategoryWorktree {
+				continue
+			}
+			path, ok := cleanTargetPathKey(item.Path)
+			if ok && activeOwners[path] {
+				protections[cleanAuditItemKey(item)] = cleanReasonActiveWorktree
+			}
+		}
+	}
+
+	filtered := make([]types.DebrisInfo, 0, len(targets))
+	for _, target := range targets {
+		if target.Category != types.CategoryWorktree {
+			filtered = append(filtered, target)
+			continue
+		}
+		path, ok := cleanTargetPathKey(target.Path)
+		if !ok || !activeOwners[path] {
+			filtered = append(filtered, target)
+			continue
+		}
+		if !includeActive {
+			continue
+		}
+		// Preserve the selected raw mutation path and its physical byte
+		// estimate, but force the owner through the active/Git-aware route.
+		target.Status = types.WorktreeActive
+		filtered = append(filtered, target)
+	}
+	return filtered, protections
+}
+
 type worktreeGitInspector func(context.Context, string) worktreeGitSafety
 
 func filterGitUnsafeActiveWorktreeTargets(ctx context.Context, targets []types.DebrisInfo) ([]types.DebrisInfo, map[string]cleanAuditReason) {
@@ -714,8 +778,16 @@ func normalizeCleanTargets(targets []types.DebrisInfo) []types.DebrisInfo {
 		if candidate.item.Size > existing.rawSizes[rawPath] {
 			existing.rawSizes[rawPath] = candidate.item.Size
 		}
+		hasActiveWorktree := isActiveWorktreeTarget(existing.item) ||
+			isActiveWorktreeTarget(candidate.item)
 		if preferCleanTargetForCanonical(candidate.item, existing.item, path) {
 			existing.item = candidate.item
+		}
+		if hasActiveWorktree && existing.item.Category == types.CategoryWorktree {
+			// Canonical aliases still prefer the direct raw mutation owner, but
+			// a mixed active/orphaned owner must retain active execution
+			// semantics regardless of which raw row supplied that owner.
+			existing.item.Status = types.WorktreeActive
 		}
 		existing.item.Size = existing.rawSizes[cleanTargetRawPathKey(existing.item.Path)]
 		if candidate.index < existing.index {
