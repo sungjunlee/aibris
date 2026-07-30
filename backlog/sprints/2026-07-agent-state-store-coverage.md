@@ -527,3 +527,13 @@ measuring, because the real home lacked the triggering condition.
   blocked Batch 7 would change the recorded sprint order, so dispatch awaits an
   explicit maintainer-approved reorder rather than silently weakening or
   bypassing the plan.
+- 2026-07-31 04:29: Prepared but did not plan or dispatch #139 L2 as Relay
+  request `req-20260730192929540`. The single frozen leaf,
+  `l2-codex-sessions-retention-inventory`, has 22 Done Criteria covering a
+  separate non-additive retention projection, bounded first-record metadata,
+  UTC-month and orphan-subset aggregation, cache/JSON compatibility, cleanup
+  non-interference, same-session accuracy, paired performance, and the full Go
+  gate. Its escalation contract stops before `relay-plan` or dispatch until the
+  maintainer explicitly approves advancing Batch 8 ahead of blocked Batch 7;
+  selector, manifest, cleanup eligibility, executor, and mutation remain out
+  of scope.
