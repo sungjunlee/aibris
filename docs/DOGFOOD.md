@@ -566,19 +566,19 @@ it was never an implementation or performance target.
 
 Agent state stores aibris does **not** discover:
 
-| Store | Preserved 2026-07-26 size observation | Nature |
+| Store | Preserved 2026-07-26 size observation | Contents |
 | --- | ---: | --- |
 | `~/.codex/sessions` | 11 GB | Conversation transcripts; 6,711 files, 85% older than 30d |
-| `~/.codex/packages` | 1.0 GB | Installed content; confirmed by the bounded 2026-07-31 observation below |
+| `~/.codex/packages` | 1.0 GB | Standalone versioned release installation |
 | `~/.relay/runs` | 933 MB | Executor run manifests |
 | `~/.cursor/chats` | 674 MB | Conversation transcripts |
-| `~/.codex/generated_images` | 548 MB | Protected generated-image artifacts |
+| `~/.codex/generated_images` | 548 MB | Generated PNG artifacts |
 | `~/.claude/projects` | 502 MB | Session store keyed by working directory |
-| `~/.codex/sqlite` | 412 MB | Protected live database families |
-| `~/.codex/tmp` | 130 MB | Regenerable residue; only a future safety-bounded child-unit candidate |
+| `~/.codex/sqlite` | 412 MB | Codex application SQLite databases and sidecars |
+| `~/.codex/tmp` | 130 MB | Temporary apply-patch shim store |
 | `~/.gstack/projects` | 91 MB | Per-project agent state |
-| `~/.codex/computer-use` | 61 MB | Installed application content |
-| `~/.cursor/ai-tracking` | 35 MB | Protected tracking database, not disposable telemetry |
+| `~/.codex/computer-use` | 61 MB | Codex Computer Use application bundle |
+| `~/.cursor/ai-tracking` | 35 MB | Tracked-file and conversation-summary database |
 | Remainder (`~/.relay/reviews`, `~/.claude/session-env`, shell snapshots, …) | ~80 MB | |
 | **Preserved 2026-07-26 subtotal after moving superpowers below** | **≈ 15.5 GB** | **aibris discovers 0 B** |
 
@@ -593,10 +593,10 @@ store shape, never cleanup, coverage, performance, or retention targets.
 | --- | --- | --- |
 | `~/.codex/packages` | 1,027,964 KiB observed. `standalone` contained `install.lock`, four versioned architecture release directories, and a `current` symlink to the active version. | Installed content. Exclude it from providers, inventory, and cleanup. |
 | `~/.codex/computer-use` | 62,168 KiB observed. `Codex Computer Use.app` reported bundle identity `com.openai.sky.CUAService`. | Installed content. Exclude it from providers, inventory, and cleanup. |
-| `~/.codex/tmp` | 132,692 KiB observed. `path` had 4,345 direct `codex-arg*` directories, each with paired `applypatch` and `apply_patch` symlink entries. | Regenerable residue, but only a future safety-bounded default-clean candidate. The shape does not prove an executable unit boundary: L2 must prove child ownership and active-use/TOCTOU safety and must never delete the tmp root. |
+| `~/.codex/tmp` | 132,692 KiB observed. The literal `~/.codex/tmp/path/` directory had 4,345 direct `codex-arg*` directories, each with paired `applypatch` and `apply_patch` symlink entries. | Regenerable residue, but only a future safety-bounded default-clean candidate. For the observed layout, L2's only unit is the direct child `path/`; its `codex-arg*` grandchildren are not independently selectable or deletable. L2 must prove ownership and active-use/TOCTOU safety for the whole unit and must never delete the tmp root. |
 | `~/.codex/generated_images` | 561,636 KiB observed across 16 ID directories and 414 `.png` files. | Protected user artifacts. Only explicit retention selection after merged #139 L1 may be considered; default clean and `--risky` alone are insufficient. |
-| `~/.codex/sqlite` | 422,320 KiB observed. Filenames identified goals, memories, logs, history snapshots, and state databases; readable schema names included `thread_goals`, `threads`, `agent_jobs`, `app_server_history_snapshots`, and `logs`. WAL/SHM siblings were present for live database families. | Protected live state. A future provider is inventory-only unless a separate contract proves process quiescence and supplies one atomic manifest for every database/WAL/SHM family. |
-| `~/.cursor/ai-tracking` | 36,004 KiB observed. `ai-code-tracking.db` schema names included `tracked_file_content`, `conversation_summaries`, `scored_commits`, `ai_deleted_files`, and `tracking_state`. | Protected content and provenance, not disposable telemetry. It has the same inventory-only, quiescence, and atomic database-family boundary as Codex SQLite. |
+| `~/.codex/sqlite` | 422,320 KiB observed. Filenames identified goals, memories, logs, history snapshots, and state databases; readable schema names included `thread_goals`, `threads`, `agent_jobs`, `app_server_history_snapshots`, and `logs`. WAL/SHM siblings were present for live database families. | Protected live state. A future provider is inventory-only unless the separate contract proves process quiescence and supplies the complete, atomically published database-family manifest defined in `CATEGORY.md`. |
+| `~/.cursor/ai-tracking` | 36,004 KiB observed. `ai-code-tracking.db` schema names included `tracked_file_content`, `conversation_summaries`, `scored_commits`, `ai_deleted_files`, and `tracking_state`. | Protected content and provenance, not disposable telemetry. It has the same inventory-only, quiescence, complete-family, and atomic-manifest boundary as Codex SQLite. |
 
 No conversation body, SQLite row value, generated image pixel, tracked file
 content, or other content body was inspected. Metadata and schema-name evidence

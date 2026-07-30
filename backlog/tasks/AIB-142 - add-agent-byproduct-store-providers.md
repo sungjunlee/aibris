@@ -29,8 +29,10 @@ current categories, agent-state classifications, JSON fields, or CLI selectors.
 - [x] **L1 — store classification (documentation only):** freeze the evidence,
       store nature, and downstream policy before adding a provider.
 - [ ] **L2 — regenerable provider:** consider only direct child units of
-      `~/.codex/tmp` after proving ownership and active-use/TOCTOU safety. Never
-      delete the whole tmp root.
+      `~/.codex/tmp`. For the observed layout, the only unit is the literal
+      `~/.codex/tmp/path/`; its `codex-arg*` grandchildren are not independent
+      units. Prove ownership and active-use/TOCTOU safety for the whole unit and
+      never delete the tmp root.
 - [ ] **L3 — protected inventory:** start only after #139 L1 merges, then follow
       each protected store's policy below without making `--risky` a deletion
       unlock.
@@ -41,10 +43,20 @@ current categories, agent-state classifications, JSON fields, or CLI selectors.
 | --- | --- | --- |
 | `~/.codex/packages` | Installed content | No provider; excluded from inventory and every cleanup surface. |
 | `~/.codex/computer-use` | Installed content | No provider; excluded from inventory and every cleanup surface. |
-| `~/.codex/tmp` | Regenerable residue | Currently undiscovered, unselectable, and ineligible. It is only a future safety-bounded default-clean candidate; L2 is limited to safety-proven direct child units and must not delete the root. |
+| `~/.codex/tmp` | Regenerable residue | Currently undiscovered, unselectable, and ineligible. It is only a future safety-bounded default-clean candidate; for the observed layout L2 is limited to the direct child `path/`, must treat its descendants as part of that one unit, and must not delete the root. |
 | `~/.codex/generated_images` | Protected content | Not default-clean and not deletable through `--risky` alone. Explicit retention selection may be considered only after #139 L1 merges. |
-| `~/.codex/sqlite` | Protected content | Inventory-only unless a separate future contract proves process quiescence and one atomic manifest for every database/WAL/SHM family. |
-| `~/.cursor/ai-tracking` | Protected content | Inventory-only unless a separate future contract proves process quiescence and one atomic manifest for every database/WAL/SHM family. |
+| `~/.codex/sqlite` | Protected content | Inventory-only unless a separate future contract proves process quiescence and supplies one atomic manifest for every complete database/WAL/SHM family defined below. |
+| `~/.cursor/ai-tracking` | Protected content | Inventory-only unless a separate future contract proves process quiescence and supplies one atomic manifest for every complete database/WAL/SHM family defined below. |
+
+A complete database/WAL/SHM family is one primary database plus every
+same-directory `-wal`, `-shm`, `-journal`, `.wal`, `.shm`, `.journal`,
+`.backup`, `.bak`, or other store-specific journal, backup, or sidecar member.
+An atomic manifest is one immutable complete-family record captured under
+continuous process quiescence, listing canonical path, file identity, size, and
+modification time for every member. It is published all-or-nothing by a synced
+temporary write and same-directory rename, with a parent-directory sync where
+supported; any membership or metadata change before publication aborts without
+publishing a manifest.
 
 Uncertainty resolves to protected content, never broader cleanup eligibility.
 This split does not add a provider or define the protected-content category,
@@ -52,8 +64,8 @@ selector, retention bucket, or execution manifest reserved for #139.
 
 ## Remaining acceptance criteria
 
-- [ ] L2 proves its unit boundary, ownership, and active-use/TOCTOU behavior
-      before registering a tmp provider.
+- [ ] L2 proves ownership and active-use/TOCTOU behavior for the frozen `path/`
+      unit before registering a tmp provider.
 - [ ] L3 waits for merged #139 L1 semantics and preserves each store-specific
       consequence above.
 - [ ] Provider changes preserve the existing cache, JSON, CLI, eligibility, and

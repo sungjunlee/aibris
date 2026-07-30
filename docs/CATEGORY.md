@@ -28,24 +28,40 @@ cannot settle a store's nature, the decision fails closed to protected content.
 | --- | --- | --- | --- |
 | `~/.codex/packages` | `standalone` has an installer lock, versioned architecture releases, and a `current` symlink to the active release. | Installed content | Excluded from providers, inventory, and every cleanup surface. No provider is planned. |
 | `~/.codex/computer-use` | The directory contains the Codex Computer Use application bundle with bundle identity `com.openai.sky.CUAService`. | Installed content | Excluded from providers, inventory, and every cleanup surface. No provider is planned. |
-| `~/.codex/tmp` | The observed `path/codex-arg*` directories contain paired `applypatch` and `apply_patch` shims. | Regenerable residue | Currently undiscovered, unselectable, and ineligible. It is only a future safety-bounded default-clean candidate: L2 must prove child-unit ownership and active-use/TOCTOU safety and must never delete the whole tmp root. |
+| `~/.codex/tmp` | The literal `~/.codex/tmp/path/` directory contains direct `codex-arg*` directories with paired `applypatch` and `apply_patch` shims. | Regenerable residue | Currently undiscovered, unselectable, and ineligible. It is only a future safety-bounded default-clean candidate: for the observed layout, L2's only cleanup unit is the direct child `~/.codex/tmp/path/`; L2 must prove ownership and active-use/TOCTOU safety and must never delete the whole tmp root. |
 | `~/.codex/generated_images` | ID directories contain generated PNG artifacts, which are user artifacts rather than a cache reconstruction input. | Protected content | Must not be default-clean or become deletable through `--risky` alone. It may be considered for explicit retention selection only after the #139 L1 semantics merge. |
-| `~/.codex/sqlite` | Database filenames and schema names cover goals, threads, jobs, history snapshots, memories, logs, and state; live databases also have WAL/SHM family members. | Protected content | Must not be default-clean or become deletable through `--risky` alone. A future provider is inventory-only unless a separate contract proves process quiescence and one atomic manifest for every database/WAL/SHM family. |
-| `~/.cursor/ai-tracking` | `ai-code-tracking.db` schema names cover tracked-file content, conversation summaries, scored commits, deleted files, and tracking state. | Protected content | Must not be default-clean or become deletable through `--risky` alone. A future provider is inventory-only unless a separate contract proves process quiescence and one atomic manifest for every database/WAL/SHM family. |
+| `~/.codex/sqlite` | Database filenames and schema names cover goals, threads, jobs, history snapshots, memories, logs, and state; live databases also have sidecar family members. | Protected content | Must not be default-clean or become deletable through `--risky` alone. A future provider is inventory-only unless a separate contract proves process quiescence and supplies one atomic manifest for every database/WAL/SHM family, using the complete family and manifest definitions below. |
+| `~/.cursor/ai-tracking` | `ai-code-tracking.db` schema names cover tracked-file content, conversation summaries, scored commits, deleted files, and tracking state. | Protected content | Must not be default-clean or become deletable through `--risky` alone. A future provider is inventory-only unless a separate contract proves process quiescence and supplies one atomic manifest for every database/WAL/SHM family, using the complete family and manifest definitions below. |
 
 This freezes the downstream split without defining the protected-content
 runtime model reserved for #139:
 
-- L2 may add only direct child units of `~/.codex/tmp`, after it defines the
-  unit boundary and proves ownership plus active-use/TOCTOU safety. The observed
-  nested shim layout is evidence, not a pre-approved unit definition, and L2
-  must never delete `~/.codex/tmp` itself.
+- L2 may add only direct child units of `~/.codex/tmp`. For the observed layout,
+  that means exactly the literal `~/.codex/tmp/path/` directory. Its
+  `codex-arg*` grandchildren and their shim entries are evidence inside that
+  unit, not independently selectable or deletable units. L2 must prove
+  ownership plus active-use/TOCTOU safety for the entire `path/` unit and must
+  never delete `~/.codex/tmp` itself. Any other root-level entry requires a new
+  classification decision before L2 may select it.
 - L3 starts only after #139 L1 has merged. Generated images then follow that
   explicit retention-selection contract; Codex SQLite and Cursor AI tracking
   remain inventory-only absent the separate quiescence and atomic-family
-  contract above.
+  contract below.
 - Installed content receives no provider. Uncertainty never widens cleanup
   eligibility.
+
+For that L3 contract, a database/WAL/SHM family means one primary database plus
+every same-directory member derived from it, including `-wal`, `-shm`,
+`-journal`, `.wal`, `.shm`, `.journal`, `.backup`, and `.bak` siblings. L3 must
+enumerate any additional store-specific journal, backup, or sidecar convention
+before inventory; an unassociated candidate makes the family incomplete and
+protected. One atomic manifest means one immutable record for the complete
+family, captured while process quiescence is continuously held. It lists each
+member's canonical path, file identity, size, and modification time; it is
+published all-or-nothing by a synced temporary write and same-directory rename,
+with a parent-directory sync where the platform supports it. If membership or
+recorded metadata changes before publication, L3 must abort and publish no
+manifest.
 
 ## Agent-State Classification
 
