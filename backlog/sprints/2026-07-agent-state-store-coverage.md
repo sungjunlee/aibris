@@ -33,7 +33,7 @@ content that is surfaced rather than reclaimed.
 ### Batch 3 — Close nested agent-state safety
 
 - [x] #151 L1 overlap safety: protected agent-state shields its subtree and outer targets inherit nested safety/revalidation → PR #159 (merged `d348ede`, hardened review round 4)
-- [ ] #151 L2 plan/audit accounting: outermost physical target owns bytes while rows, reasons, and receipts retain nested obligations (~1h)
+- [~] #151 L2 plan/audit accounting: outermost physical target owns bytes while rows, reasons, and receipts retain nested obligations [branch:issue-151-overlap-provenance-accounting] — relay run `issue-151-20260730102000000`, request `req-20260729103342292`, leaf `overlap-provenance-accounting`
 
 ### Batch 4 — Fix bounded worktree-container coverage
 
@@ -377,3 +377,19 @@ measuring, because the real home lacked the triggering condition.
   the live gate-placeholder reproduction, and #1123 tracks
   `recover-commit --dry-run` incorrectly returning `nothing_to_recover` when an
   existing PR is the recovery anchor.
+- 2026-07-30 19:20: Started #151 L2 as relay run
+  `issue-151-20260730102000000` on
+  `issue-151-overlap-provenance-accounting`. `codexbar usage --json` reported
+  Codex weekly usage at 36% (dashboard and code-review views 31%) versus Claude
+  weekly usage at 88%, so Codex/Sol is the xhigh executor and primary reviewer;
+  hardened advisory remains policy-driven.
+
+  An independent read-only Codex/Sol-high planning audit confirmed the ten
+  criteria are implementable without activating #115, #125, or #147, and the
+  current race/build/vet/three-OS baseline passes. A persisted planner addendum
+  chooses the conservative existing-contract interpretation: selectors never
+  enlarge deletion scope; component state is
+  `locked > selected > reviewable`; physical bytes belong only to the owner;
+  canonical aliases never change the raw mutation target; plan-time refusals
+  remain audit/preview evidence; and cancellation records completed obligations
+  plus remaining `not-attempted` obligations while freeing zero bytes.
