@@ -190,6 +190,58 @@ func TestPhysicalWorktreeOwnerSafetyPreservesPhysicalAuditAccounting(t *testing.
 	}
 }
 
+func TestPhysicalWorktreeOwnerSafetyAuditPrefersGuidedSelection(t *testing.T) {
+	owner := filepath.Join(t.TempDir(), "guided")
+	nested := filepath.Join(owner, "node_modules")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	active := types.DebrisInfo{
+		Tool:     types.ToolCodex,
+		Category: types.CategoryWorktree,
+		ID:       "guided",
+		Path:     owner,
+		Size:     4096,
+		Status:   types.WorktreeActive,
+	}
+	child := types.DebrisInfo{
+		Tool:     types.ToolNodeModules,
+		Category: types.CategoryNodeModules,
+		ID:       "nested",
+		Path:     nested,
+		Size:     1024,
+		ModTime:  time.Now().Add(-8 * 24 * time.Hour),
+	}
+	opts := types.PruneOptions{Age: 7 * 24 * time.Hour}
+	_, protections := applyPhysicalWorktreeOwnerSafety(
+		[]types.DebrisInfo{active, child},
+		nil,
+		false,
+	)
+
+	// Guided cleanup deliberately selected the active owner. The classic
+	// protection remains useful for unselected inventory rows, but must not
+	// make the audit contradict the selected physical target.
+	audit := buildCleanAudit(
+		[]types.DebrisInfo{active, child},
+		[]types.DebrisInfo{active},
+		opts,
+		1,
+		scanSource{Kind: scanSourceCached},
+		protections,
+	)
+	if audit.TotalEligibleCount != 1 || audit.TotalBlockedCount != 0 {
+		t.Fatalf("guided physical audit = %+v; want selected owner eligible", audit)
+	}
+	for _, row := range audit.Categories {
+		if row.Category == types.CategoryNodeModules &&
+			row.MainReason != string(cleanReasonNestedTarget) {
+			t.Fatalf("nested row main reason = %q; want %q",
+				row.MainReason, cleanReasonNestedTarget)
+		}
+	}
+}
+
 func TestMergeGuidedAndClassicMixedOwnerKeepsActiveRepresentative(t *testing.T) {
 	owner := filepath.Join(t.TempDir(), "mixed")
 	if err := os.MkdirAll(owner, 0o755); err != nil {
