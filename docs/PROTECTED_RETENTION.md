@@ -198,11 +198,15 @@ Before the first mutation, execution revalidates the whole manifest:
 - every proof-based hard lock and deletion-time obligation.
 
 Any preflight drift refuses the whole plan before mutation. Immediately before
-each unit mutation, execution checks that unit's containment, exact identity,
-type, size, `Lstat.ModTime`, and effective timestamp again. Drift discovered
-after earlier units were removed stops the affected unit and every remaining
-unit, preserves all unmanifested content, returns non-zero, and emits a
-truthful partial receipt. Receipts count bytes once per physical owner and
+each unit mutation, execution must bind the validated directory entry and
+physical identity to the mutation with a platform-safe, non-following operation
+while every required producer exclusion, permission, hard lock, and fence
+remains held through mutation completion. A path-only `Lstat` followed by a
+path-based unlink is insufficient. A platform or store that cannot provide this
+identity-bound guarantee leaves the unit protected and non-executable. Drift
+discovered after earlier units were removed stops the affected unit and every
+remaining unit, preserves all unmanifested content, returns non-zero, and emits
+a truthful partial receipt. Receipts count bytes once per physical owner and
 credit only owners actually removed; incomplete ownership or a partially
 removed unit receives zero freed-byte credit.
 
@@ -215,10 +219,16 @@ alias. An orphaned outer owner retains every existing deletion-time child
 revalidation obligation. Explicit retention selection cannot weaken #138,
 #151, or any other hard lock.
 
-If existing #138 cleanup owns the same physical content, it continues through
-its existing proof-based plan and executor rather than through a retention
-aggregate. This preserves current eligibility while still forbidding
-retention execution from recursively deleting a bucket or store root.
+If existing #138 cleanup owns the same physical content, an ordinary cleanup
+plan may continue through its existing proof-based plan and executor. A
+retention-selected plan, however, must not delegate an overlapping outer owner
+to a broader or recursive #138 deletion. It must either suppress or constrain
+that outer cleanup owner to the exact immutable manifest without weakening
+#138's proofs, or reject the mixed plan before mutation. In particular, a
+month-selected member can never authorize removal of siblings from another
+month. This preserves current ordinary-cleanup eligibility while still
+forbidding retention execution from recursively deleting a bucket or store
+root.
 
 ## Absolute exclusions and blocked stores
 
