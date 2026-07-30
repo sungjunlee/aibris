@@ -354,12 +354,12 @@ Only `scan` was run against the real home; no real-home `clean` command was run.
 | Direct / one-level linked members | 0 direct / 2 one-level; both metadata references active |
 | Unique physical owner bytes | 540,565,504 B (`du -sk`: 527,896 KiB) |
 | Base full-HOME scan | 320 items / 33,556,803,863 B overall; 0 superpowers rows |
-| Final-change full-HOME scan | 362 items / 34,641,563,927 B overall; 2 superpowers rows |
-| Final-change scoped scan | 4 items / 1,412,632,576 B overall; the same 2 superpowers rows |
+| Pre-safety-fix full-HOME scan | 362 items / 34,641,563,927 B overall; 2 superpowers rows |
+| Pre-safety-fix scoped scan | 4 items / 1,412,632,576 B overall; the same 2 superpowers rows |
 | Superpowers attribution | `source=superpowers`, `tool=unknown`, 2 active logical member rows |
 | Raw superpowers row-size sum | 1,081,131,008 B because both logical rows carry the shared owner size |
 
-The final-change full and scoped superpowers keys matched exactly by source,
+The historical pre-safety-fix full and scoped superpowers keys matched exactly by source,
 tool, owner path, project, status, and size. Physical accounting remains one owner /
 540,565,504 B; summing the two compatibility rows double-counts that owner and
 must be labelled raw row-size aggregation.
@@ -374,22 +374,21 @@ during the run:
 | --- | --- |
 | `BASE_SHA` | `41cab283fbc1147d59b3af53bec48fa6163f9f20` |
 | Base binary SHA-256 | `5546a85e12e326f2b4993243b3233f2632df22954c62eafa8c0b0a416695058b` |
-| `FINAL_CHANGE_SHA` | `ee056aeff371fc80ba4e5d1922b9e5539ff1bab3` |
-| Final-change binary SHA-256 | `2e90cadd6f90c7d15f8d19d28bf4d74308e0d1ac2214f4af336fa2083e84f77b` |
+| `PRE_SAFETY_FIX_SHA` | `ee056aeff371fc80ba4e5d1922b9e5539ff1bab3` |
+| Pre-safety-fix binary SHA-256 | `2e90cadd6f90c7d15f8d19d28bf4d74308e0d1ac2214f4af336fa2083e84f77b` |
 | Toolchain | `go version go1.26.3 darwin/arm64`; GOROOT Go 1.26.3 |
 | Machine / OS | Apple arm64; macOS 26.5.2 (25F84) |
 | Exact argv | `<immutable-binary> scan --root /Users/sjlee --json` |
 | Exact environment | `env -i HOME=/Users/sjlee PATH=/usr/bin:/bin:/usr/sbin:/sbin TMPDIR=/tmp LANG=C LC_ALL=C` |
 | Application cache | `/Users/sjlee/Library/Caches/aibris/codex-activity.json`; SHA-256 `bf48b6d973392f6e42f3dc0e5bff9b42f031b3f957b04ab748d290a38485b63c`; 3,029,853 B; `created_at=2026-07-30T21:24:45.354487+09:00` |
 
-`FINAL_CHANGE_SHA` is the final binary-affecting committed source for this
-round: it contains the implementation and built-CLI contract test. The
-subsequent evidence commit changes only this transcript, so its executable Go
-source is exactly the archived `FINAL_CHANGE_SHA` tree. The application-cache
-identity above was captured before and after every measured invocation and
-remained byte-identical. The login session and background-work policy were
-unchanged, and the measured home was not deliberately mutated between
-invocations.
+This series was the final binary series for the initial registry pass, but
+internal safety review subsequently found the mixed active/orphaned physical
+owner defect. It is retained as historical evidence and is superseded by the
+immutable repair series below. The application-cache identity above was
+captured before and after every measured invocation and remained
+byte-identical. The login session and background-work policy were unchanged,
+and the measured home was not deliberately mutated between invocations.
 
 This is a warm series. There was no cache eviction and no cold claim. One
 unmeasured exact-argv warm-up of each immutable binary completed first: base
@@ -433,6 +432,70 @@ The six drift-free adjacent pairs contain two `base→change` and four
 alone has two of each order and identical per-binary scale on every invocation.
 No regression threshold or stability rule was predeclared, so this observation
 is **inconclusive**, not a performance pass or improvement claim.
+
+#### 2026-07-31 immutable final mixed-owner safety correction
+
+The binary-affecting correction was committed before measurement. The final
+repair source was exported with `git archive` and built once with the same
+flags as the preserved base: `go build -trimpath -o <binary> .`. The preserved
+base binary was reused only after its documented SHA-256 verified successfully;
+neither immutable binary was rebuilt during this series.
+
+| Input | Exact value |
+| --- | --- |
+| `BASE_SHA` | `41cab283fbc1147d59b3af53bec48fa6163f9f20` |
+| Base binary SHA-256 | `5546a85e12e326f2b4993243b3233f2632df22954c62eafa8c0b0a416695058b` |
+| `FINAL_REPAIR_SHA` | `e65ab5220ec17b30e9c21f181ef9146f098f5ffc` |
+| Final repair binary SHA-256 | `47f0e7f0de1818576851c621769a880b617d3762443e54a463dc6b999aea60e6` |
+| Binary sizes | base 5,579,826 B; final repair 5,613,970 B |
+| Toolchain | `go version go1.26.3 darwin/arm64`; GOROOT Go 1.26.3 |
+| Machine / OS | Apple arm64; macOS 26.5.2 (25F84) |
+| Exact argv | `<immutable-binary> scan --root /Users/sjlee --json` |
+| Exact environment | `env -i HOME=/Users/sjlee PATH=/usr/bin:/bin:/usr/sbin:/sbin TMPDIR=/tmp LANG=C LC_ALL=C` |
+| Cache identity `K1` | `/Users/sjlee/Library/Caches/aibris/codex-activity.json`; SHA-256 `bf48b6d973392f6e42f3dc0e5bff9b42f031b3f957b04ab748d290a38485b63c`; 3,029,853 B; `created_at=2026-07-30T21:24:45.354487+09:00` |
+
+The cache SHA-256 in `K1` is
+`bf48b6d973392f6e42f3dc0e5bff9b42f031b3f957b04ab748d290a38485b63c`.
+It was captured before and after every warm-up and every measured invocation;
+all 20 captures were exactly `K1`. Every scan exited zero with
+`partial=false` and zero provider errors. Only real-home `scan` was run; no
+real-home `clean` command was used.
+
+This is a warm-only series: there was no cache eviction and no cold claim.
+Both immutable binaries were warmed with the exact measured argv before the
+paired sequence:
+
+| Invocation | Time; scale (`sources/items/bytes`) | Cache before→after |
+| --- | --- | --- |
+| warm-up base | 54.26 s; 8/320/33,651,012,698 | `K1`→`K1` |
+| warm-up final repair | 50.38 s; 8/362/34,735,772,762 | `K1`→`K1` |
+
+The exact global measured order was base, repair, repair, base, base, repair,
+repair, base. Times are `/usr/bin/time -p` wall-clock `real` seconds and
+`repair-base` is computed regardless of invocation order.
+
+| Pair / order | Base time; scale | Final repair time; scale | Cache identities | repair-base | Drift decision |
+| --- | --- | --- | --- | ---: | --- |
+| 1 / base→repair | 54.49 s; 8/320/33,651,012,698 | 56.96 s; 8/362/34,735,772,762 | base `K1`→`K1`; repair `K1`→`K1` | +2.47 s | accepted |
+| 2 / repair→base | 63.93 s; 8/320/33,651,012,698 | 61.06 s; 8/362/34,735,772,762 | base `K1`→`K1`; repair `K1`→`K1` | -2.87 s | accepted |
+| 3 / base→repair | 50.93 s; 8/320/33,651,012,698 | 48.04 s; 8/362/34,735,772,762 | base `K1`→`K1`; repair `K1`→`K1` | -2.89 s | accepted |
+| 4 / repair→base | 49.41 s; 8/320/33,651,012,698 | 74.47 s; 8/362/34,735,772,762 | base `K1`→`K1`; repair `K1`→`K1` | +25.06 s | accepted |
+
+The drift rule was unchanged from the historical series: the 42 repair-only
+worktree rows are the expected registry effect; any base-only row, non-worktree
+repair-only row, or shared-row size change rejects a pair. Every pair had
+exactly 0 base-only rows, 42 repair-only worktree rows, 0 one-sided
+non-worktree rows, and 0 shared-row size changes. The per-binary canonical
+inventory signatures were also identical across all four appearances: base
+`34bd8daff4a1d00a4d60a664d2f3a680fa23f5202ade02900f90b3fbab655d87`,
+repair
+`c541691420e7d16c6e522a4d03f37960cfb61c00d3ec5224b07b66b1ade1a2c0`.
+
+The four retained deltas are -2.89, -2.87, +2.47, and +25.06 seconds:
+median **-0.20 s**, range **[-2.89 s, +25.06 s]**. There was no predeclared
+regression threshold or stability rule, and the absolute timing spread remains
+large. The final correction series is therefore **inconclusive**, not a
+performance pass, regression, or improvement claim.
 
 The prior audit's preserved `516 MB` label came from the 2026-07-26 observation;
 it was never an implementation or performance target.
