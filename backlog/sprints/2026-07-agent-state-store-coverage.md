@@ -45,7 +45,7 @@ content that is surfaced rather than reclaimed.
 
 ### Batch 6 — Introduce protected-content retention semantics
 
-- [ ] #139 L1 retention contract: freeze bucket, selector, aggregation, timestamp, and execution-manifest semantics
+- [~] #139 L1 retention contract: freeze bucket, selector, aggregation, timestamp, and execution-manifest semantics
 
 ### Batch 7 — Add byproduct coverage
 
@@ -482,3 +482,10 @@ measuring, because the real home lacked the triggering condition.
   fail-closed rules, and recursive-unit versus non-traversing symlink deletion
   distinction. Exact-head race tests, build, vet, Linux/Windows/Darwin builds,
   and all four public checks passed.
+- 2026-07-31: Froze #139 L1 as relay-ready request
+  `req-20260730181100894` after two independent architecture stress-tests.
+  L1 is Markdown-only: retention buckets are a non-additive projection, never
+  executable `DebrisInfo` rows; exact closed UTC-month selection must resolve
+  to an immutable member manifest; and #138 proof-based eligibility plus #151
+  overlap hard locks remain authoritative. The contract also keeps #142
+  SQLite/ai-tracking inventory-only until producer cooperation exists.
