@@ -59,6 +59,7 @@ func (r cleanExecutionReceipt) counts() (removed, partial, failed int) {
 type preparedCleanTarget struct {
 	Item             types.DebrisInfo
 	ActiveUnit       *WorktreeCleanupUnit
+	MutationSafety   *cleanupMutationSafety
 	PreparationError error
 }
 
@@ -80,20 +81,32 @@ func defaultActiveWorktreeExecutionOptions() activeWorktreeExecutionOptions {
 	}
 }
 
-// prepareCleanExecution captures the selected active worktree identity before
-// confirmation. Execution refreshes and compares this evidence immediately
-// before making any change.
-func prepareCleanExecution(ctx context.Context, targets []types.DebrisInfo) []preparedCleanTarget {
+// prepareCleanExecutionWithSafety captures both the selected active worktree
+// identity and complete overlap evidence before confirmation. Execution
+// refreshes both immediately before making any change.
+func prepareCleanExecutionWithSafety(
+	ctx context.Context,
+	selection cleanupOverlapSafetySelection,
+	runtime cleanupOverlapSafetyRuntime,
+) []preparedCleanTarget {
+	targets := selection.Targets
 	prepared := make([]preparedCleanTarget, 0, len(targets))
 	for _, target := range targets {
 		entry := preparedCleanTarget{Item: target}
+		safety, safetyErr := mutationSafetyForTarget(selection, runtime, target)
+		if safetyErr != nil {
+			entry.PreparationError = safetyErr
+		} else {
+			entry.MutationSafety = safety
+		}
 		if isActiveWorktreeTarget(target) {
 			units, err := buildWorktreeCleanupUnits(ctx, []types.DebrisInfo{target})
 			switch {
 			case err != nil:
-				entry.PreparationError = err
+				entry.PreparationError = errors.Join(entry.PreparationError, err)
 			case len(units) != 1:
-				entry.PreparationError = fmt.Errorf("expected one active cleanup unit, found %d", len(units))
+				entry.PreparationError = errors.Join(entry.PreparationError,
+					fmt.Errorf("expected one active cleanup unit, found %d", len(units)))
 			default:
 				entry.ActiveUnit = &units[0]
 			}
@@ -103,8 +116,16 @@ func prepareCleanExecution(ctx context.Context, targets []types.DebrisInfo) []pr
 	return prepared
 }
 
-func executeCleanTargets(ctx context.Context, targets []types.DebrisInfo) (cleanExecutionReceipt, error) {
-	return executePreparedCleanTargets(ctx, prepareCleanExecution(ctx, targets), defaultActiveWorktreeExecutionOptions())
+func executeCleanTargets(
+	ctx context.Context,
+	selection cleanupOverlapSafetySelection,
+	runtime cleanupOverlapSafetyRuntime,
+) (cleanExecutionReceipt, error) {
+	return executePreparedCleanTargets(
+		ctx,
+		prepareCleanExecutionWithSafety(ctx, selection, runtime),
+		defaultActiveWorktreeExecutionOptions(),
+	)
 }
 
 func executePreparedCleanTargets(ctx context.Context, targets []preparedCleanTarget, opts activeWorktreeExecutionOptions) (cleanExecutionReceipt, error) {
@@ -131,16 +152,19 @@ func executePreparedCleanTargets(ctx context.Context, targets []preparedCleanTar
 		var receipt cleanUnitExecutionReceipt
 		var err error
 		switch {
-		case !isActiveWorktreeTarget(target.Item):
-			receipt, err = executePathCleanupTarget(ctx, target.Item)
 		case target.PreparationError != nil:
-			receipt = failedCleanUnitReceipt(target.Item, nil, fmt.Errorf("preparing active worktree: %w", target.PreparationError))
+			receipt = failedCleanUnitReceipt(target.Item, nil, fmt.Errorf("preparing cleanup target: %w", target.PreparationError))
 			err = errors.New(receipt.Error)
+		case target.MutationSafety == nil:
+			receipt = failedCleanUnitReceipt(target.Item, nil, errors.New("overlap safety evidence unavailable"))
+			err = errors.New(receipt.Error)
+		case !isActiveWorktreeTarget(target.Item):
+			receipt, err = executePathCleanupTarget(ctx, target.Item, target.MutationSafety)
 		case target.ActiveUnit == nil:
 			receipt = failedCleanUnitReceipt(target.Item, nil, errors.New("active worktree evidence unavailable"))
 			err = errors.New(receipt.Error)
 		default:
-			receipt, err = executeActiveWorktreeUnit(ctx, target.Item, *target.ActiveUnit, opts)
+			receipt, err = executeActiveWorktreeUnit(ctx, target.Item, *target.ActiveUnit, target.MutationSafety, opts)
 		}
 
 		result.Units = append(result.Units, receipt)
@@ -155,9 +179,19 @@ func executePreparedCleanTargets(ctx context.Context, targets []preparedCleanTar
 	return result, nil
 }
 
-func executePathCleanupTarget(ctx context.Context, target types.DebrisInfo) (cleanUnitExecutionReceipt, error) {
+func executePathCleanupTarget(
+	ctx context.Context,
+	target types.DebrisInfo,
+	safety *cleanupMutationSafety,
+) (cleanUnitExecutionReceipt, error) {
 	receipt := cleanUnitExecutionReceipt{Target: target, State: cleanExecutionFailed}
-	freed, err := cleaner.ExecuteWithContext(ctx, []types.DebrisInfo{target})
+	freed, err := cleaner.ExecuteWithContextAndBarrier(
+		ctx,
+		[]types.DebrisInfo{target},
+		func(ctx context.Context, _ types.DebrisInfo) error {
+			return safety.validate(ctx)
+		},
+	)
 	receipt.PhysicalRemoved = pathDoesNotExist(target.Path)
 	if err != nil {
 		receipt.Error = err.Error()
@@ -168,7 +202,13 @@ func executePathCleanupTarget(ctx context.Context, target types.DebrisInfo) (cle
 	return receipt, nil
 }
 
-func executeActiveWorktreeUnit(ctx context.Context, target types.DebrisInfo, selected WorktreeCleanupUnit, opts activeWorktreeExecutionOptions) (cleanUnitExecutionReceipt, error) {
+func executeActiveWorktreeUnit(
+	ctx context.Context,
+	target types.DebrisInfo,
+	selected WorktreeCleanupUnit,
+	safety *cleanupMutationSafety,
+	opts activeWorktreeExecutionOptions,
+) (cleanUnitExecutionReceipt, error) {
 	receipt := cleanUnitExecutionReceipt{Target: target, State: cleanExecutionFailed}
 	for _, member := range selected.Members {
 		receipt.Members = append(receipt.Members, cleanMemberExecutionReceipt{WorktreePath: member.WorktreePath})
@@ -183,6 +223,10 @@ func executeActiveWorktreeUnit(ctx context.Context, target types.DebrisInfo, sel
 	receipt.Members = make([]cleanMemberExecutionReceipt, len(refreshed.Members))
 	for i, member := range refreshed.Members {
 		receipt.Members[i].WorktreePath = member.WorktreePath
+	}
+	if err := safety.validate(ctx); err != nil {
+		receipt.Error = fmt.Sprintf("pre-mutation safety barrier: %v", err)
+		return receipt, fmt.Errorf("pre-mutation safety barrier: %w", err)
 	}
 
 	for i, member := range refreshed.Members {

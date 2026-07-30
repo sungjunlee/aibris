@@ -53,9 +53,10 @@ type guidedCleanState struct {
 }
 
 type guidedCleanRunResult struct {
-	PreviewTargets []types.DebrisInfo
-	Aborted        bool
-	HadSelection   bool
+	PreviewTargets    []types.DebrisInfo
+	SafetyProtections map[string]cleanAuditReason
+	Aborted           bool
+	HadSelection      bool
 }
 
 func buildGuidedCleanState(ctx context.Context, result *types.ScanResult, source scanSource, minIdleAge time.Duration, reason string) (guidedCleanState, error) {
@@ -187,7 +188,12 @@ func guidedMemberReason(unit WorktreeCleanupUnit, member GitWorktreeMember, reas
 	return reason
 }
 
-func runGuidedCodexClean(ctx context.Context, opts types.PruneOptions, state guidedCleanState) (guidedCleanRunResult, error) {
+func runGuidedCodexClean(
+	ctx context.Context,
+	opts types.PruneOptions,
+	state guidedCleanState,
+	overlapSafety cleanupOverlapSafetyRuntime,
+) (guidedCleanRunResult, error) {
 	targets, aborted, err := promptGuidedCleanForFiles(os.Stdin, os.Stdout, state)
 	if err != nil || aborted {
 		return guidedCleanRunResult{Aborted: aborted}, err
@@ -196,33 +202,63 @@ func runGuidedCodexClean(ctx context.Context, opts types.PruneOptions, state gui
 		fmt.Fprintln(os.Stdout, "No items selected.")
 		return guidedCleanRunResult{}, nil
 	}
+	overlapSelection, err := applyCleanupOverlapSafety(ctx, overlapSafety, targets)
+	if err != nil {
+		return guidedCleanRunResult{}, fmt.Errorf("preparing guided overlap safety: %w", err)
+	}
+	printOverlapSafetyRefusals(overlapSelection.Plan)
+	targets = overlapSelection.Targets
+	if len(targets) == 0 {
+		fmt.Fprintln(os.Stdout, "No selected items passed overlap safety.")
+		return guidedCleanRunResult{
+			SafetyProtections: overlapSelection.Protections,
+			HadSelection:      true,
+		}, nil
+	}
 
 	printCleanPlan(targets, cleanPlanModeDryRun)
 	fmt.Fprintln(os.Stdout, "[DRY-RUN] Preview complete.")
 	if opts.DryRun {
 		fmt.Fprintln(os.Stdout, "[DRY-RUN] No files were removed.")
-		return guidedCleanRunResult{PreviewTargets: targets, HadSelection: true}, nil
+		return guidedCleanRunResult{
+			PreviewTargets:    targets,
+			SafetyProtections: overlapSelection.Protections,
+			HadSelection:      true,
+		}, nil
 	}
-	prepared := prepareCleanExecution(ctx, targets)
+	prepared := prepareCleanExecutionWithSafety(ctx, overlapSelection, overlapSafety)
 
 	if opts.Interactive {
 		receipt, err := interactiveClean(ctx, prepared)
 		printWorktreeExecutionReceipts(receipt)
 		printGuidedCleanupReceipt(len(targets), receipt)
-		return guidedCleanRunResult{HadSelection: true}, err
+		return guidedCleanRunResult{
+			SafetyProtections: overlapSelection.Protections,
+			HadSelection:      true,
+		}, err
 	}
 	if !opts.Force {
 		if !confirmCleanExecution() {
-			return guidedCleanRunResult{Aborted: true, HadSelection: true}, nil
+			return guidedCleanRunResult{
+				SafetyProtections: overlapSelection.Protections,
+				Aborted:           true,
+				HadSelection:      true,
+			}, nil
 		}
 	}
 	receipt, err := executePreparedCleanTargets(ctx, prepared, defaultActiveWorktreeExecutionOptions())
 	printWorktreeExecutionReceipts(receipt)
 	printGuidedCleanupReceipt(len(targets), receipt)
 	if err != nil {
-		return guidedCleanRunResult{HadSelection: true}, err
+		return guidedCleanRunResult{
+			SafetyProtections: overlapSelection.Protections,
+			HadSelection:      true,
+		}, err
 	}
-	return guidedCleanRunResult{HadSelection: true}, nil
+	return guidedCleanRunResult{
+		SafetyProtections: overlapSelection.Protections,
+		HadSelection:      true,
+	}, nil
 }
 
 func promptGuidedCleanForFiles(input *os.File, output *os.File, state guidedCleanState) ([]types.DebrisInfo, bool, error) {

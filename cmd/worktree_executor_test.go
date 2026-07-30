@@ -12,6 +12,28 @@ import (
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
+func preparedExecutorTarget(
+	t *testing.T,
+	item types.DebrisInfo,
+	selected WorktreeCleanupUnit,
+) preparedCleanTarget {
+	t.Helper()
+	runtime := staticOverlapSafetyRuntime(nil, nil)
+	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{item})
+	if err != nil {
+		t.Fatal(err)
+	}
+	safety, err := mutationSafetyForTarget(selection, runtime, item)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return preparedCleanTarget{
+		Item:           item,
+		ActiveUnit:     &selected,
+		MutationSafety: safety,
+	}
+}
+
 func TestExecuteActiveWorktreePreservesAttachedLocalOnlyBranch(t *testing.T) {
 	home, repository, worktree := newExecutorWorktree(t, "local-only")
 	t.Setenv("HOME", home)
@@ -23,7 +45,7 @@ func TestExecuteActiveWorktreePreservesAttachedLocalOnlyBranch(t *testing.T) {
 	branchRef := selected.Members[0].BranchRef
 	headOID := selected.Members[0].HeadOID
 
-	receipt, err := executePreparedCleanTargets(context.Background(), []preparedCleanTarget{{Item: item, ActiveUnit: &selected}}, defaultActiveWorktreeExecutionOptions())
+	receipt, err := executePreparedCleanTargets(context.Background(), []preparedCleanTarget{preparedExecutorTarget(t, item, selected)}, defaultActiveWorktreeExecutionOptions())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +68,7 @@ func TestExecuteActiveWorktreeKeepsReferencedDetachedCommitReachable(t *testing.
 	selected := buildExecutorUnit(t, item)
 	headOID := selected.Members[0].HeadOID
 
-	receipt, err := executePreparedCleanTargets(context.Background(), []preparedCleanTarget{{Item: item, ActiveUnit: &selected}}, defaultActiveWorktreeExecutionOptions())
+	receipt, err := executePreparedCleanTargets(context.Background(), []preparedCleanTarget{preparedExecutorTarget(t, item, selected)}, defaultActiveWorktreeExecutionOptions())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +90,7 @@ func TestExecuteActiveWorktreePreflightsEveryMemberBeforeRemovingAny(t *testing.
 	selected := buildExecutorUnit(t, item)
 	writeGitFixtureFile(t, second, "became-dirty.txt", "changed after selection\n")
 
-	receipt, err := executePreparedCleanTargets(context.Background(), []preparedCleanTarget{{Item: item, ActiveUnit: &selected}}, defaultActiveWorktreeExecutionOptions())
+	receipt, err := executePreparedCleanTargets(context.Background(), []preparedCleanTarget{preparedExecutorTarget(t, item, selected)}, defaultActiveWorktreeExecutionOptions())
 	if err == nil {
 		t.Fatal("executePreparedCleanTargets() error = nil; want preflight failure")
 	}
@@ -97,7 +119,7 @@ func TestExecuteActiveWorktreePreflightRejectsChangedHeadAtomically(t *testing.T
 	runGitFixture(t, second, "add", "new-head.txt")
 	runGitFixture(t, second, "commit", "-m", "change selected HEAD")
 
-	receipt, err := executePreparedCleanTargets(context.Background(), []preparedCleanTarget{{Item: item, ActiveUnit: &selected}}, defaultActiveWorktreeExecutionOptions())
+	receipt, err := executePreparedCleanTargets(context.Background(), []preparedCleanTarget{preparedExecutorTarget(t, item, selected)}, defaultActiveWorktreeExecutionOptions())
 	if err == nil || !strings.Contains(err.Error(), "HEAD changed") {
 		t.Fatalf("executePreparedCleanTargets() error = %v; want changed-HEAD preflight failure", err)
 	}
@@ -123,7 +145,7 @@ func TestExecuteActiveWorktreeCommandFailureNeverFallsBackToPathRemoval(t *testi
 		return errors.New("injected git worktree remove failure")
 	}
 
-	receipt, err := executePreparedCleanTargets(context.Background(), []preparedCleanTarget{{Item: item, ActiveUnit: &selected}}, opts)
+	receipt, err := executePreparedCleanTargets(context.Background(), []preparedCleanTarget{preparedExecutorTarget(t, item, selected)}, opts)
 	if err == nil {
 		t.Fatal("executePreparedCleanTargets() error = nil; want command failure")
 	}
@@ -152,7 +174,7 @@ func TestExecuteActiveWorktreeReportsPartialMultiMemberResultWithoutFreedBytes(t
 		return realRemove(ctx, repositoryID, worktreePath)
 	}
 
-	receipt, err := executePreparedCleanTargets(context.Background(), []preparedCleanTarget{{Item: item, ActiveUnit: &selected}}, opts)
+	receipt, err := executePreparedCleanTargets(context.Background(), []preparedCleanTarget{preparedExecutorTarget(t, item, selected)}, opts)
 	if err == nil {
 		t.Fatal("executePreparedCleanTargets() error = nil; want partial failure")
 	}
@@ -211,7 +233,12 @@ func TestExecuteOrphanedWorktreeKeepsRawPathCleanup(t *testing.T) {
 		Status:   types.WorktreeOrphaned,
 	}
 
-	receipt, err := executeCleanTargets(context.Background(), []types.DebrisInfo{item})
+	runtime := staticOverlapSafetyRuntime(nil, nil)
+	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{item})
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := executeCleanTargets(context.Background(), selection, runtime)
 	if err != nil {
 		t.Fatal(err)
 	}

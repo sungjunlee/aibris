@@ -1536,12 +1536,18 @@ func TestInteractiveCleanReturnsRejectedTargetError(t *testing.T) {
 	if err := os.MkdirAll(safePath, 0755); err != nil {
 		t.Fatal(err)
 	}
-	safeTarget := preparedCleanTarget{Item: types.DebrisInfo{
+	safeItem := types.DebrisInfo{
 		Tool:     types.ToolNodeModules,
 		Category: types.CategoryNodeModules,
 		Path:     safePath,
 		Size:     42,
-	}}
+	}
+	runtime := staticOverlapSafetyRuntime(nil, nil)
+	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{safeItem})
+	if err != nil {
+		t.Fatal(err)
+	}
+	safeTarget := prepareCleanExecutionWithSafety(context.Background(), selection, runtime)[0]
 	defer withStdin(t, "y\n")()
 
 	receipt, err := interactiveClean(context.Background(), []preparedCleanTarget{unsafeTarget, safeTarget})

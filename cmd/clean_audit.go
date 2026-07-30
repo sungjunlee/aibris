@@ -49,17 +49,22 @@ type cleanAuditCategory struct {
 type cleanAuditReason string
 
 const (
-	cleanReasonFiltered               cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonFiltered)
-	cleanReasonRisky                  cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonRisky)
-	cleanReasonActiveWorktree         cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonActiveWorktree)
-	cleanReasonAge                    cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonAge)
-	cleanReasonAgentStateLive         cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonAgentStateLive)
-	cleanReasonAgentStateUndetermined cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonAgentStateUndetermined)
-	cleanReasonMissingPath            cleanAuditReason = "path no longer exists"
-	cleanReasonDuplicatePath          cleanAuditReason = "duplicate cleanup target path"
-	cleanReasonNestedTarget           cleanAuditReason = "covered by selected parent"
-	cleanReasonOverlapTarget          cleanAuditReason = "overlaps selected cleanup target"
-	cleanReasonEligible               cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonEligible)
+	cleanReasonFiltered                      cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonFiltered)
+	cleanReasonRisky                         cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonRisky)
+	cleanReasonActiveWorktree                cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonActiveWorktree)
+	cleanReasonAge                           cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonAge)
+	cleanReasonAgentStateLive                cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonAgentStateLive)
+	cleanReasonAgentStateUndetermined        cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonAgentStateUndetermined)
+	cleanReasonMissingPath                   cleanAuditReason = "path no longer exists"
+	cleanReasonDuplicatePath                 cleanAuditReason = "duplicate cleanup target path"
+	cleanReasonNestedTarget                  cleanAuditReason = "covered by selected parent"
+	cleanReasonOverlapTarget                 cleanAuditReason = "overlaps selected cleanup target"
+	cleanReasonProtectedAgentStateAncestor   cleanAuditReason = "protected agent-state ancestor"
+	cleanReasonProtectedAgentStateDescendant cleanAuditReason = "protected agent-state descendant or exact overlap"
+	cleanReasonAmbiguousOverlapIdentity      cleanAuditReason = "ambiguous overlap path identity"
+	cleanReasonCommandOverlap                cleanAuditReason = "cleanup command overlaps agent-state"
+	cleanReasonNestedRevalidation            cleanAuditReason = "nested agent-state revalidation refused"
+	cleanReasonEligible                      cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonEligible)
 )
 
 type cleanAuditReasonStat struct {
@@ -225,6 +230,16 @@ func cleanAuditReasonText(reason cleanAuditReason, opts types.PruneOptions) stri
 		return "covered by selected parent"
 	case cleanReasonOverlapTarget:
 		return "overlaps selected cleanup target"
+	case cleanReasonProtectedAgentStateAncestor:
+		return "protected agent-state ancestor"
+	case cleanReasonProtectedAgentStateDescendant:
+		return "protected agent-state descendant/exact overlap"
+	case cleanReasonAmbiguousOverlapIdentity:
+		return "ambiguous overlap path identity"
+	case cleanReasonCommandOverlap:
+		return "cleanup command overlap refused"
+	case cleanReasonNestedRevalidation:
+		return "nested agent-state revalidation refused"
 	default:
 		return string(reason)
 	}
