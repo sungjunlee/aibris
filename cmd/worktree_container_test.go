@@ -67,69 +67,129 @@ func TestActiveCodexWorktreesRejectsReviewOnlyStatuses(t *testing.T) {
 	}
 }
 
-func TestCLI_MixedSuperpowersUnitIsVisibleAndNeverPlanned(t *testing.T) {
-	resetScanFlags()
-	resetCleanFlags()
+func TestBuiltCLI_RegisteredLayoutsAndReviewOnlyOwners(t *testing.T) {
+	binary := buildCLIContractBinary(t)
 	home := t.TempDir()
-	t.Setenv("HOME", home)
 
-	container := filepath.Join(home, ".config", "superpowers", "worktrees")
-	unit := filepath.Join(container, "owner")
-	valid := filepath.Join(unit, "valid")
-	invalid := filepath.Join(unit, "invalid")
-	if err := os.MkdirAll(valid, 0755); err != nil {
+	writeValidMarker := func(path, name string) {
+		t.Helper()
+		gitdir := filepath.Join(home, "_missing-gitdirs", name)
+		writeCLIContractFile(t, filepath.Join(path, ".git"), "gitdir: "+gitdir+"\n")
+	}
+
+	direct := filepath.Join(home, ".codex", "worktrees", "direct")
+	writeValidMarker(direct, "direct")
+
+	nestedOwner := filepath.Join(home, ".relay", "worktrees", "nested")
+	writeValidMarker(filepath.Join(nestedOwner, "repo"), "nested")
+
+	invalidOwner := filepath.Join(home, ".gstack", "worktrees", "invalid")
+	writeCLIContractFile(t, filepath.Join(invalidOwner, ".git"), "not git metadata\n")
+
+	mixedOwner := filepath.Join(home, ".config", "superpowers", "worktrees", "mixed")
+	writeValidMarker(filepath.Join(mixedOwner, "valid"), "mixed-valid")
+	if err := os.MkdirAll(filepath.Join(mixedOwner, "invalid"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(invalid, 0755); err != nil {
-		t.Fatal(err)
-	}
-	createWorktreeGit(t, valid, home, "valid")
 	old := time.Now().Add(-30 * 24 * time.Hour)
-	if err := os.Chtimes(unit, old, old); err != nil {
-		t.Fatal(err)
-	}
-
-	scanOutput := captureOutput(func() {
-		rootCmd.SetArgs([]string{"scan", "--root", container, "--json"})
-		if err := rootCmd.Execute(); err != nil {
+	for _, owner := range []string{direct, nestedOwner, invalidOwner, mixedOwner} {
+		if err := os.Chtimes(owner, old, old); err != nil {
 			t.Fatal(err)
 		}
-	})
+	}
+
+	scanOutput, err := runCLIContract(binary, home, "scan", "--json")
+	if err != nil {
+		t.Fatalf("built-CLI scan failed: %v\n%s", err, scanOutput)
+	}
 	var inventory jsonOutput
 	if err := json.Unmarshal([]byte(scanOutput), &inventory); err != nil {
 		t.Fatalf("decoding scan JSON: %v\n%s", err, scanOutput)
 	}
-	if len(inventory.Worktrees) != 1 {
-		t.Fatalf("scan rows = %d; want one physical owner: %+v", len(inventory.Worktrees), inventory.Worktrees)
+	if len(inventory.Worktrees) != 4 {
+		t.Fatalf("scan rows = %d; want four registered physical owners: %+v",
+			len(inventory.Worktrees), inventory.Worktrees)
 	}
-	row := inventory.Worktrees[0]
-	if row.Status != string(types.WorktreePlain) || row.Source != "superpowers" ||
-		!strings.Contains(row.Reason, "invalid: missing .git marker") {
-		t.Fatalf("scan row = %+v; want explicit superpowers plain-dir inventory", row)
+	rows := make(map[string]jsonWorktree, len(inventory.Worktrees))
+	for _, row := range inventory.Worktrees {
+		rows[row.ID] = row
+	}
+	for _, want := range []struct {
+		id      string
+		source  string
+		status  types.WorktreeStatus
+		project string
+		reason  string
+	}{
+		{id: "direct", source: ".codex", status: types.WorktreeOrphaned, project: "direct"},
+		{id: "nested", source: ".relay", status: types.WorktreeOrphaned, project: "repo"},
+		{id: "invalid", source: ".gstack", status: types.WorktreePlain, reason: ".git marker is malformed"},
+		{id: "mixed", source: "superpowers", status: types.WorktreePlain, reason: "invalid: missing .git marker"},
+	} {
+		row, ok := rows[want.id]
+		if !ok {
+			t.Errorf("built-CLI scan missing registered row %q: %+v", want.id, inventory.Worktrees)
+			continue
+		}
+		if row.Source != want.source || row.Status != string(want.status) ||
+			(want.project != "" && row.Project != want.project) ||
+			(want.reason != "" && !strings.Contains(row.Reason, want.reason)) {
+			t.Errorf("scan row %q = %+v; want source=%q status=%q project=%q reason containing %q",
+				want.id, row, want.source, want.status, want.project, want.reason)
+		}
+	}
+	if row := rows["mixed"]; row.Tool != string(types.ToolUnknown) {
+		t.Errorf("mixed superpowers tool = %q; want unknown", row.Tool)
 	}
 
-	resetCleanFlags()
-	cleanOutput := captureOutput(func() {
-		rootCmd.SetArgs([]string{
-			"clean",
-			"--root", container,
-			"--dry-run",
-			"--no-guide",
-			"--age=1ns",
-			"--risky",
-			"--include-active-worktrees",
-			"--category=worktree",
+	for _, tc := range []struct {
+		name  string
+		flags []string
+	}{
+		{name: "minimum age"},
+		{name: "risky", flags: []string{"--risky"}},
+		{name: "include active", flags: []string{"--include-active-worktrees"}},
+		{name: "all overrides", flags: []string{"--risky", "--include-active-worktrees"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			args := []string{
+				"clean",
+				"--dry-run",
+				"--no-guide",
+				"--age=1ns",
+				"--category=worktree",
+			}
+			args = append(args, tc.flags...)
+			cleanOutput, err := runCLIContract(binary, home, args...)
+			if err != nil {
+				t.Fatalf("built-CLI dry-run failed: %v\n%s", err, cleanOutput)
+			}
+			if !strings.Contains(cleanOutput, "matched  2 candidates") {
+				t.Errorf("clean output did not plan the two valid orphaned controls:\n%s", cleanOutput)
+			}
+
+			var removalRows []string
+			for _, line := range strings.Split(cleanOutput, "\n") {
+				if strings.Contains(line, "remove-path") {
+					removalRows = append(removalRows, line)
+				}
+			}
+			if len(removalRows) != 2 {
+				t.Errorf("remove-path rows = %d; want %d:\n%s",
+					len(removalRows), 2, cleanOutput)
+			}
+			for _, line := range removalRows {
+				for _, protected := range []string{filepath.Base(invalidOwner), filepath.Base(mixedOwner)} {
+					if strings.Contains(line, protected) {
+						t.Errorf("review-only owner %q was planned:\n%s", protected, line)
+					}
+				}
+			}
+			for _, owner := range []string{direct, nestedOwner, invalidOwner, mixedOwner} {
+				if _, err := os.Stat(owner); err != nil {
+					t.Errorf("dry-run changed registered owner %q: %v", owner, err)
+				}
+			}
 		})
-		if err := rootCmd.Execute(); err != nil {
-			t.Fatal(err)
-		}
-	})
-	for _, want := range []string{"worktree status requires review", "No items to clean."} {
-		if !strings.Contains(cleanOutput, want) {
-			t.Errorf("clean output missing %q:\n%s", want, cleanOutput)
-		}
-	}
-	if _, err := os.Stat(unit); err != nil {
-		t.Fatalf("dry-run refusal changed physical owner: %v", err)
 	}
 }
