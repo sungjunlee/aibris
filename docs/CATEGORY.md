@@ -86,8 +86,11 @@ proofs:
   identities, complete member set, entry types, link targets, sizes, and
   modification times. It re-enumerates and compares that snapshot, including
   canonical-path and link-target revalidation, immediately before mutation.
-  Deletion removes only a symlink entry and must never traverse or mutate its
-  target. L2 deletes only while exclusion remains held and aborts the whole
+  An eligible direct-child unit may be removed recursively, including its
+  contained ordinary files and directories. For each symlink encountered
+  inside the unit, deletion unlinks only the symlink directory entry and never
+  follows, traverses, removes, or mutates the symlink target. L2 deletes only
+  while exclusion remains held and aborts the whole
   unit on lock loss or any mismatch. No partial deletion or byte credit is
   allowed.
 - **Tests:** fixtures must cover every supported version/layout plus unknown

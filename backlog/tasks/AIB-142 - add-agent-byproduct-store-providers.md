@@ -76,13 +76,15 @@ protected. While exclusion is held, L2 snapshots the canonical path, file
 identities, complete member set, entry types, link targets, sizes, and
 modification times. Immediately before mutation it re-enumerates and compares
 the unit and token, including canonical-path and link-target revalidation.
-Deletion removes only a symlink entry and must never traverse or mutate its
-target. An unknown layout or writer, a writer that does not participate, lock
-loss, or any mismatch leaves the entire child protected with no partial
-deletion or byte credit. Process-name, `lsof`, `/proc`, and open-handle checks
-alone cannot prove exclusion. Fixtures and platform race tests must cover
-unknown children and creation, mutation, rename, and lock loss from every
-writer class.
+An eligible direct-child unit may be removed recursively, including its
+contained ordinary files and directories. For each symlink encountered inside
+the unit, deletion unlinks only the symlink directory entry and never follows,
+traverses, removes, or mutates the symlink target. An unknown layout or writer,
+a writer that does not participate, lock loss, or any mismatch leaves the
+entire child protected with no partial deletion or byte credit. Process-name,
+`lsof`, `/proc`, and open-handle checks alone cannot prove exclusion. Fixtures
+and platform race tests must cover unknown children and creation, mutation,
+rename, and lock loss from every writer class.
 
 ### L3 safety prerequisite
 
