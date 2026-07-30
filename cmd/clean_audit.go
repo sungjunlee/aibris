@@ -590,7 +590,7 @@ func printCleanAudit(audit cleanAudit, opts types.PruneOptions) {
 	fmt.Printf("  %-13s %12s %12s %18s %8s  %s\n",
 		"category", "found", "eligible", "protected/skipped", "evidence", "main reason")
 	for _, row := range audit.Categories {
-		fmt.Printf("  %-13s %3d %8s %3d %8s %3d %8s %8d  %s\n",
+		fmt.Printf("  %-13s %3d %8s %3d %8s %9d %8s %8d  %s\n",
 			row.Category,
 			row.FoundCount, cleaner.FormatSize(row.FoundSize),
 			row.EligibleCount, cleaner.FormatSize(row.EligibleSize),

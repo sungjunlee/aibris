@@ -9,6 +9,39 @@ import (
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
+func TestPrintCleanAuditAlignsCategoryColumns(t *testing.T) {
+	audit := cleanAudit{
+		Categories: []cleanAuditCategory{{
+			Category:      types.CategoryAgentState,
+			FoundCount:    1,
+			EligibleCount: 2,
+			BlockedCount:  3,
+			EvidenceCount: 98765432,
+			MainReason:    "reason",
+		}},
+	}
+
+	output := captureOutput(func() {
+		printCleanAudit(audit, types.PruneOptions{})
+	})
+	lines := strings.Split(output, "\n")
+	var header, row string
+	for _, line := range lines {
+		switch {
+		case strings.Contains(line, "protected/skipped") && strings.Contains(line, "evidence"):
+			header = line
+		case strings.Contains(line, string(types.CategoryAgentState)):
+			row = line
+		}
+	}
+	if header == "" || row == "" {
+		t.Fatalf("category table missing header or row:\n%s", output)
+	}
+	if got, want := strings.Index(row, "98765432"), strings.Index(header, "evidence"); got != want {
+		t.Fatalf("evidence column starts at %d, want header column %d:\n%s", got, want, output)
+	}
+}
+
 func TestBuildCleanAudit_GroupsEligibleAndBlockedByCategory(t *testing.T) {
 	now := time.Now()
 	old := now.Add(-48 * time.Hour)

@@ -190,7 +190,10 @@ func executePreparedCleanTargets(ctx context.Context, targets []preparedCleanTar
 				target.MutationSafety,
 			)
 		case target.ActiveUnit == nil:
-			receipt = failedCleanUnitReceipt(target.Item, nil, errors.New("active worktree evidence unavailable"))
+			receipt = failedPreparedCleanUnitReceipt(
+				target,
+				errors.New("active worktree evidence unavailable"),
+			)
 			err = errors.New(receipt.Error)
 		default:
 			receipt, err = executeActiveWorktreeUnit(

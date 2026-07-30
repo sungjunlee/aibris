@@ -194,7 +194,7 @@ func TestNestedOverlapBuiltCLIUsesOnePhysicalOwnerAndFailsClosed(t *testing.T) {
 			"physical-removed true",
 			"obligation passed",
 			"freed      " + wantFreed,
-			entry,
+			filepath.Base(entry),
 		} {
 			if !strings.Contains(output, want) {
 				t.Fatalf("successful nested cleanup missing %q:\n%s", want, output)
@@ -227,7 +227,7 @@ func TestNestedOverlapBuiltCLIUsesOnePhysicalOwnerAndFailsClosed(t *testing.T) {
 			"protected agent-state descendant",
 			"matched  0 candidates",
 			"protected/skipped 1 item",
-			entry,
+			filepath.Base(entry),
 		} {
 			if !strings.Contains(output, want) {
 				t.Fatalf("protected nested cleanup missing %q:\n%s", want, output)

@@ -177,6 +177,47 @@ func TestExecuteActiveWorktreePreflightCancellationRecordsComponentBlocker(t *te
 	assertPathExists(t, worktree)
 }
 
+func TestExecuteActiveWorktreeMissingUnitPreservesComponentLineage(t *testing.T) {
+	home, _, worktree := newExecutorWorktree(t, "missing-unit")
+	t.Setenv("HOME", home)
+	item := executorWorktreeItem(worktree, 903)
+	selected := buildExecutorUnit(t, item)
+	target := preparedExecutorTarget(t, item, selected)
+	target.ActiveUnit = nil
+	obligationPath := filepath.Join(worktree, "agent-state")
+	target.Component = &cleanupOverlapComponent{
+		CanonicalPath: selected.TargetPath,
+		Owner:         item,
+		Obligations: []cleaner.AgentStateObligation{{
+			Tool:       types.ToolClaude,
+			EntryPath:  obligationPath,
+			ProviderID: "claude",
+		}},
+	}
+
+	receipt, err := executePreparedCleanTargets(
+		context.Background(),
+		[]preparedCleanTarget{target},
+		defaultActiveWorktreeExecutionOptions(),
+	)
+	if err == nil || !strings.Contains(err.Error(), "active worktree evidence unavailable") {
+		t.Fatalf("executePreparedCleanTargets() error = %v; want missing evidence failure", err)
+	}
+	unit := singleExecutionUnit(t, receipt)
+	if unit.Component != target.Component ||
+		unit.State != cleanExecutionFailed ||
+		unit.PhysicalRemoved ||
+		unit.FreedBytes != 0 ||
+		unit.BlockingPath != item.Path ||
+		!strings.Contains(unit.BlockingReason, "active worktree evidence unavailable") ||
+		len(unit.Obligations) != 1 ||
+		unit.Obligations[0].EntryPath != obligationPath ||
+		unit.Obligations[0].State != cleaner.AgentStateRevalidationNotAttempted {
+		t.Fatalf("missing-unit receipt = %+v; want component blocker and pending obligation", unit)
+	}
+	assertPathExists(t, worktree)
+}
+
 func TestExecuteActiveWorktreeCommandFailureNeverFallsBackToPathRemoval(t *testing.T) {
 	home, repository, worktree := newExecutorWorktree(t, "command-failure")
 	t.Setenv("HOME", home)
