@@ -41,7 +41,7 @@ content that is surfaced rather than reclaimed.
 
 ### Batch 5 — Classify agent byproducts
 
-- [~] #142 L1 store classification: freeze installed, regenerable, and user-content decisions before adding providers [branch:issue-142-store-classification] — relay run `issue-142-20260730162810830-b1fe8cda`
+- [x] #142 L1 store classification: freeze installed, regenerable, and user-content decisions before adding providers → PR #164 (merged `228e0f9`, hardened primary review round 5)
 
 ### Batch 6 — Introduce protected-content retention semantics
 
@@ -99,6 +99,9 @@ content that is surfaced rather than reclaimed.
   candidate; `generated_images` is a retention-selected user artifact; and
   Codex `sqlite` plus Cursor `ai-tracking` are inventory-only protected stores
   absent a separate quiescence and atomic database-family manifest contract.
+  L2 and L3 are blocked until the relevant upstream producer documents a
+  versioned layout/identity contract and exposes a cooperative exclusion
+  protocol honored by every writer; aibris cannot manufacture that evidence.
 - Orphan detection must read each store's recorded working directory. Directory
   names are a lossy encoding — `/`, `.`, and `_` all collapse to `-` — and
   decoding them produced false positives during the audit.
@@ -467,3 +470,15 @@ measuring, because the real home lacked the triggering condition.
   after #139 L1, and leaves live sqlite/ai-tracking databases inventory-only.
   No content bodies, SQLite row values, tracked file values, or image pixels
   were inspected.
+- 2026-07-31 02:56: #142 L1 dispatched → PR #164 → hardened primary review
+  (all ten Done Criteria and 10/10 evidence-to-policy traceability passed in
+  round 5) → squash-merged as `228e0f9`; #142 remains open for L2/L3, and the
+  run worktree plus local/remote branch were cleaned. The maintainer authorized
+  force-finalization after the OpenCode adversarial lane exhausted its
+  two-demotion budget and continued proposing future L2/L3 implementation
+  details beyond this Markdown-only classification leaf. Genuine findings were
+  incorporated through final head `28c3beb`, including the literal tmp
+  direct-child boundary, upstream cooperation gate, database-family
+  fail-closed rules, and recursive-unit versus non-traversing symlink deletion
+  distinction. Exact-head race tests, build, vet, Linux/Windows/Darwin builds,
+  and all four public checks passed.
