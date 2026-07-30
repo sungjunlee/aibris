@@ -26,6 +26,7 @@ type scanSource struct {
 type cleanAudit struct {
 	Source             scanSource
 	ScannedSources     int
+	TotalEvidenceCount int
 	TotalFoundCount    int
 	TotalFoundSize     int64
 	TotalEligibleCount int
@@ -37,6 +38,7 @@ type cleanAudit struct {
 
 type cleanAuditCategory struct {
 	Category      types.Category
+	EvidenceCount int
 	FoundCount    int
 	FoundSize     int64
 	EligibleCount int
@@ -64,6 +66,7 @@ const (
 	cleanReasonAmbiguousOverlapIdentity      cleanAuditReason = "ambiguous overlap path identity"
 	cleanReasonCommandOverlap                cleanAuditReason = "cleanup command overlaps agent-state"
 	cleanReasonNestedRevalidation            cleanAuditReason = "nested agent-state revalidation refused"
+	cleanReasonNestedRevalidationRequired    cleanAuditReason = "nested agent-state revalidation required"
 	cleanReasonEligible                      cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonEligible)
 )
 
@@ -72,47 +75,155 @@ type cleanAuditReasonStat struct {
 	Size  int64
 }
 
-func buildCleanAudit(items, targets []types.DebrisInfo, opts types.PruneOptions, scannedSources int, source scanSource, protectedTargets map[string]cleanAuditReason) cleanAudit {
-	targetSet := newCleanAuditTargetSet(targets)
+func cleanupOverlapLogicalInputsForAudit(
+	items []types.DebrisInfo,
+	opts types.PruneOptions,
+	protectedTargets map[string]cleanAuditReason,
+) []cleanupOverlapLogicalInput {
 	observedAt := time.Now()
+	inputs := make([]cleanupOverlapLogicalInput, 0, len(items))
+	for _, item := range items {
+		reason := item.Reason
+		if protected := protectedTargets[cleanAuditItemKey(item)]; protected != "" {
+			reason = cleanAuditReasonText(protected, opts)
+		} else if eligible, eligibilityReason := cleaner.EvaluateEligibility(item, opts, observedAt); !eligible {
+			reason = cleanAuditReasonText(cleanAuditReason(eligibilityReason), opts)
+		} else if item.Category == types.CategoryAgentState &&
+			item.Classification == types.EntryClassOrphaned {
+			reason = "recorded working directory is absent"
+		} else if reason == "" {
+			reason = string(cleaner.EligibilityReasonEligible)
+		}
+		inputs = append(inputs, cleanupOverlapLogicalInput{
+			Item:         item,
+			PolicyReason: reason,
+		})
+	}
+	return inputs
+}
 
+func buildCleanAudit(items, targets []types.DebrisInfo, opts types.PruneOptions, scannedSources int, source scanSource, protectedTargets map[string]cleanAuditReason) cleanAudit {
+	return buildPhysicalCleanAudit(
+		items,
+		cleanAuditComponentsForTargets(items, targets, opts, protectedTargets),
+		targets,
+		opts,
+		scannedSources,
+		source,
+		protectedTargets,
+	)
+}
+
+func cleanAuditComponentsForTargets(
+	items []types.DebrisInfo,
+	targets []types.DebrisInfo,
+	opts types.PruneOptions,
+	protectedTargets map[string]cleanAuditReason,
+) []cleanupOverlapComponent {
+	inputs := cleanupOverlapLogicalInputsForAudit(items, opts, protectedTargets)
+	owners := normalizeCleanTargets(targets)
+	components := make([]cleanupOverlapComponent, 0, len(owners))
+	for _, owner := range owners {
+		path, ok := cleanTargetPathKey(owner.Path)
+		if !ok {
+			continue
+		}
+		component := cleanupOverlapComponent{
+			Key:           path,
+			CanonicalPath: path,
+			Owner:         owner,
+		}
+		for _, input := range inputs {
+			rowPath, rowOK := cleanTargetPathKey(input.Item.Path)
+			relation, overlaps := cleanupLogicalRelation(path, rowPath)
+			if !rowOK || !overlaps {
+				continue
+			}
+			component.LogicalRows = append(component.LogicalRows, cleanupOverlapLogicalRow{
+				Item:          input.Item,
+				CanonicalPath: rowPath,
+				Relation:      relation,
+				PolicyReason:  input.PolicyReason,
+			})
+		}
+		component.LogicalRows = ensureCleanupOwnerLogicalRow(component.LogicalRows, owner, path)
+		sortCleanupOverlapLogicalRows(component.LogicalRows, owner)
+		if len(component.LogicalRows) > 0 {
+			component.LogicalRows[0].PhysicalBytes = owner.Size
+		}
+		components = append(components, component)
+	}
+	return components
+}
+
+// buildPhysicalCleanAudit attributes bytes to one physical owner per
+// containment component. Logical discoveries remain available as zero-byte
+// evidence rows and never inflate eligible or protected totals.
+func buildPhysicalCleanAudit(
+	items []types.DebrisInfo,
+	components []cleanupOverlapComponent,
+	targets []types.DebrisInfo,
+	opts types.PruneOptions,
+	scannedSources int,
+	source scanSource,
+	protectedTargets map[string]cleanAuditReason,
+) cleanAudit {
+	observedAt := time.Now()
+	targetSet := newCleanAuditTargetSet(targets)
 	byCategory := make(map[types.Category]*cleanAuditCategory)
 	reasonsByCategory := make(map[types.Category]map[cleanAuditReason]cleanAuditReasonStat)
 	audit := cleanAudit{Source: source, ScannedSources: scannedSources}
 
-	for _, item := range items {
-		category := item.Category
-		row := byCategory[category]
-		if row == nil {
-			row = &cleanAuditCategory{Category: category}
-			byCategory[category] = row
-		}
-
+	physicalComponents, attached := cleanAuditPhysicalComponents(items, components)
+	for _, component := range physicalComponents {
+		owner := component.Owner
+		row := cleanAuditCategoryFor(byCategory, owner.Category)
 		row.FoundCount++
-		row.FoundSize += item.Size
+		row.FoundSize += owner.Size
 		audit.TotalFoundCount++
-		audit.TotalFoundSize += item.Size
+		audit.TotalFoundSize += owner.Size
 
-		reason := cleanAuditBlockReason(item, opts, observedAt, targetSet, protectedTargets)
+		reason := cleanAuditComponentReason(
+			component,
+			opts,
+			observedAt,
+			targetSet,
+			protectedTargets,
+		)
 		if reason == cleanReasonEligible {
 			row.EligibleCount++
-			row.EligibleSize += item.Size
+			row.EligibleSize += owner.Size
 			audit.TotalEligibleCount++
-			audit.TotalEligibleSize += item.Size
-			continue
+			audit.TotalEligibleSize += owner.Size
+		} else {
+			row.BlockedCount++
+			row.BlockedSize += owner.Size
+			audit.TotalBlockedCount++
+			audit.TotalBlockedSize += owner.Size
+			addCleanAuditReasonStat(reasonsByCategory, owner.Category, reason, owner.Size)
 		}
 
-		row.BlockedCount++
-		row.BlockedSize += item.Size
-		audit.TotalBlockedCount++
-		audit.TotalBlockedSize += item.Size
-		if reasonsByCategory[category] == nil {
-			reasonsByCategory[category] = make(map[cleanAuditReason]cleanAuditReasonStat)
+		for _, logical := range component.LogicalRows {
+			logicalRow := cleanAuditCategoryFor(byCategory, logical.Item.Category)
+			logicalRow.EvidenceCount++
+			audit.TotalEvidenceCount++
+			logicalReason := cleanAuditLogicalReason(logical, reason, opts, observedAt)
+			addCleanAuditReasonStat(reasonsByCategory, logical.Item.Category, logicalReason, 0)
 		}
-		stat := reasonsByCategory[category][reason]
-		stat.Count++
-		stat.Size += item.Size
-		reasonsByCategory[category][reason] = stat
+	}
+
+	for i, item := range items {
+		if attached[i] {
+			continue
+		}
+		row := cleanAuditCategoryFor(byCategory, item.Category)
+		row.EvidenceCount++
+		audit.TotalEvidenceCount++
+		reason := cleanAuditReason(cleaner.EligibilityReasonEligible)
+		if eligible, eligibilityReason := cleaner.EvaluateEligibility(item, opts, observedAt); !eligible {
+			reason = cleanAuditReason(eligibilityReason)
+		}
+		addCleanAuditReasonStat(reasonsByCategory, item.Category, reason, 0)
 	}
 
 	for category, row := range byCategory {
@@ -123,12 +234,202 @@ func buildCleanAudit(items, targets []types.DebrisInfo, opts types.PruneOptions,
 		left := audit.Categories[i]
 		right := audit.Categories[j]
 		if left.FoundSize == right.FoundSize {
-			return left.Category < right.Category
+			if left.EvidenceCount == right.EvidenceCount {
+				return left.Category < right.Category
+			}
+			return left.EvidenceCount > right.EvidenceCount
 		}
 		return left.FoundSize > right.FoundSize
 	})
-
 	return audit
+}
+
+func cleanAuditCategoryFor(
+	byCategory map[types.Category]*cleanAuditCategory,
+	category types.Category,
+) *cleanAuditCategory {
+	row := byCategory[category]
+	if row == nil {
+		row = &cleanAuditCategory{Category: category}
+		byCategory[category] = row
+	}
+	return row
+}
+
+func addCleanAuditReasonStat(
+	stats map[types.Category]map[cleanAuditReason]cleanAuditReasonStat,
+	category types.Category,
+	reason cleanAuditReason,
+	size int64,
+) {
+	if reason == "" {
+		return
+	}
+	if stats[category] == nil {
+		stats[category] = make(map[cleanAuditReason]cleanAuditReasonStat)
+	}
+	stat := stats[category][reason]
+	stat.Count++
+	stat.Size += size
+	stats[category][reason] = stat
+}
+
+func cleanAuditPhysicalComponents(
+	items []types.DebrisInfo,
+	planned []cleanupOverlapComponent,
+) ([]cleanupOverlapComponent, map[int]bool) {
+	components := append([]cleanupOverlapComponent(nil), planned...)
+	attached := make(map[int]bool, len(items))
+	for i, item := range items {
+		for _, component := range planned {
+			for _, logical := range component.LogicalRows {
+				if cleanAuditItemKey(logical.Item) == cleanAuditItemKey(item) {
+					attached[i] = true
+					break
+				}
+			}
+			if attached[i] {
+				break
+			}
+		}
+		if attached[i] {
+			continue
+		}
+		path, ok := cleanTargetPathKey(item.Path)
+		if !ok {
+			continue
+		}
+		for _, component := range planned {
+			if _, overlaps := cleanupLogicalRelation(component.CanonicalPath, path); overlaps {
+				attached[i] = true
+				break
+			}
+		}
+	}
+
+	var remaining []cleanupOverlapLogicalInput
+	for i, item := range items {
+		if attached[i] {
+			continue
+		}
+		remaining = append(remaining, cleanupOverlapLogicalInput{
+			Item:         item,
+			PolicyReason: item.Reason,
+		})
+	}
+	standaloneOwners := normalizeCleanTargets(cleanupLogicalItems(remaining))
+	for _, owner := range standaloneOwners {
+		path, ok := cleanTargetPathKey(owner.Path)
+		if !ok {
+			continue
+		}
+		component := cleanupOverlapComponent{
+			Key:           path,
+			CanonicalPath: path,
+			Owner:         owner,
+		}
+		for i, input := range remaining {
+			rowPath, rowOK := cleanTargetPathKey(input.Item.Path)
+			relation, overlaps := cleanupLogicalRelation(path, rowPath)
+			if !rowOK || !overlaps {
+				continue
+			}
+			component.LogicalRows = append(component.LogicalRows, cleanupOverlapLogicalRow{
+				Item:          input.Item,
+				CanonicalPath: rowPath,
+				Relation:      relation,
+				PolicyReason:  cleanupLogicalPolicyReason(input),
+			})
+			for itemIndex, item := range items {
+				if attached[itemIndex] {
+					continue
+				}
+				if cleanAuditItemKey(item) == cleanAuditItemKey(input.Item) {
+					attached[itemIndex] = true
+					break
+				}
+			}
+			_ = i
+		}
+		component.LogicalRows = ensureCleanupOwnerLogicalRow(component.LogicalRows, owner, path)
+		sortCleanupOverlapLogicalRows(component.LogicalRows, owner)
+		if len(component.LogicalRows) > 0 {
+			component.LogicalRows[0].PhysicalBytes = owner.Size
+		}
+		components = append(components, component)
+	}
+	sort.Slice(components, func(i, j int) bool {
+		if components[i].CanonicalPath == components[j].CanonicalPath {
+			return cleanTargetStableKey(components[i].Owner) < cleanTargetStableKey(components[j].Owner)
+		}
+		return components[i].CanonicalPath < components[j].CanonicalPath
+	})
+	return components, attached
+}
+
+func cleanupLogicalItems(inputs []cleanupOverlapLogicalInput) []types.DebrisInfo {
+	items := make([]types.DebrisInfo, 0, len(inputs))
+	for _, input := range inputs {
+		items = append(items, input.Item)
+	}
+	return items
+}
+
+func cleanAuditComponentReason(
+	component cleanupOverlapComponent,
+	opts types.PruneOptions,
+	observedAt time.Time,
+	targetSet *cleanAuditTargetSet,
+	protectedTargets map[string]cleanAuditReason,
+) cleanAuditReason {
+	if component.Refusal != nil {
+		return cleanAuditReasonForOverlapSafety(component.Refusal.Reason)
+	}
+	if reason := protectedTargets[cleanAuditItemKey(component.Owner)]; reason != "" {
+		return reason
+	}
+	if targetSet.consume(component.Owner) {
+		return cleanReasonEligible
+	}
+	if eligible, reason := cleaner.EvaluateEligibility(component.Owner, opts, observedAt); !eligible {
+		return cleanAuditReason(reason)
+	}
+	return targetSet.exclusionReason(component.Owner)
+}
+
+func cleanAuditLogicalReason(
+	row cleanupOverlapLogicalRow,
+	componentReason cleanAuditReason,
+	opts types.PruneOptions,
+	observedAt time.Time,
+) cleanAuditReason {
+	if row.L1Reason != "" {
+		switch row.L1Reason {
+		case string(cleaner.OverlapSafetyProtectedAncestor):
+			return cleanReasonProtectedAgentStateAncestor
+		case string(cleaner.OverlapSafetyProtectedDescendant),
+			string(cleaner.OverlapSafetyProtectedExact):
+			return cleanReasonProtectedAgentStateDescendant
+		case string(cleaner.OverlapSafetyCommandOverlap):
+			return cleanReasonCommandOverlap
+		case string(cleaner.OverlapSafetyAmbiguousIdentity):
+			return cleanReasonAmbiguousOverlapIdentity
+		case string(cleanReasonNestedRevalidationRequired):
+			return cleanReasonNestedRevalidationRequired
+		default:
+			return cleanReasonNestedRevalidation
+		}
+	}
+	if componentReason != cleanReasonEligible {
+		return componentReason
+	}
+	if eligible, reason := cleaner.EvaluateEligibility(row.Item, opts, observedAt); !eligible {
+		return cleanAuditReason(reason)
+	}
+	if row.Relation != cleanupOverlapOwner {
+		return cleanReasonNestedTarget
+	}
+	return cleanReasonEligible
 }
 
 type cleanAuditTargetSet struct {
@@ -146,6 +447,7 @@ func newCleanAuditTargetSet(targets []types.DebrisInfo) *cleanAuditTargetSet {
 			set.paths = append(set.paths, path)
 		}
 	}
+	sort.Strings(set.paths)
 	return set
 }
 
@@ -198,13 +500,16 @@ func cleanAuditBlockReason(item types.DebrisInfo, opts types.PruneOptions, obser
 }
 
 func cleanAuditMainReason(row cleanAuditCategory, stats map[cleanAuditReason]cleanAuditReasonStat, opts types.PruneOptions) string {
-	if row.BlockedCount == 0 {
+	if row.BlockedCount == 0 && len(stats) == 0 {
 		return string(cleanReasonEligible)
 	}
 	var best cleanAuditReason
 	var bestStat cleanAuditReasonStat
 	for reason, stat := range stats {
-		if best == "" || stat.Size > bestStat.Size || (stat.Size == bestStat.Size && stat.Count > bestStat.Count) {
+		if best == "" ||
+			stat.Size > bestStat.Size ||
+			(stat.Size == bestStat.Size && stat.Count > bestStat.Count) ||
+			(stat.Size == bestStat.Size && stat.Count == bestStat.Count && reason < best) {
 			best = reason
 			bestStat = stat
 		}
@@ -240,6 +545,8 @@ func cleanAuditReasonText(reason cleanAuditReason, opts types.PruneOptions) stri
 		return "cleanup command overlap refused"
 	case cleanReasonNestedRevalidation:
 		return "nested agent-state revalidation refused"
+	case cleanReasonNestedRevalidationRequired:
+		return "nested agent-state revalidation required"
 	default:
 		return string(reason)
 	}
@@ -265,8 +572,12 @@ func printCleanAudit(audit cleanAudit, opts types.PruneOptions) {
 	fmt.Printf("  scan    %s\n\n", cleanAuditScanSourceLine(audit.Source))
 
 	fmt.Println("scan summary")
-	fmt.Printf("  scanned    %d sources   %d %s   %s\n",
-		audit.ScannedSources, audit.TotalFoundCount, itemNoun(audit.TotalFoundCount), cleaner.FormatSize(audit.TotalFoundSize))
+	fmt.Printf("  scanned    %d sources   %d physical %s   %s   %d evidence rows\n",
+		audit.ScannedSources,
+		audit.TotalFoundCount,
+		itemNoun(audit.TotalFoundCount),
+		cleaner.FormatSize(audit.TotalFoundSize),
+		audit.TotalEvidenceCount)
 	fmt.Printf("  eligible   %d %s   %s\n",
 		audit.TotalEligibleCount, itemNoun(audit.TotalEligibleCount), cleaner.FormatSize(audit.TotalEligibleSize))
 	fmt.Printf("  protected/skipped %d %s   %s\n\n",
@@ -276,13 +587,15 @@ func printCleanAudit(audit cleanAudit, opts types.PruneOptions) {
 		return
 	}
 	fmt.Println("by category")
-	fmt.Printf("  %-13s %12s %12s %18s  %s\n", "category", "found", "eligible", "protected/skipped", "main reason")
+	fmt.Printf("  %-13s %12s %12s %18s %8s  %s\n",
+		"category", "found", "eligible", "protected/skipped", "evidence", "main reason")
 	for _, row := range audit.Categories {
-		fmt.Printf("  %-13s %3d %8s %3d %8s %3d %8s  %s\n",
+		fmt.Printf("  %-13s %3d %8s %3d %8s %3d %8s %8d  %s\n",
 			row.Category,
 			row.FoundCount, cleaner.FormatSize(row.FoundSize),
 			row.EligibleCount, cleaner.FormatSize(row.EligibleSize),
 			row.BlockedCount, cleaner.FormatSize(row.BlockedSize),
+			row.EvidenceCount,
 			row.MainReason)
 	}
 	fmt.Println()
@@ -334,6 +647,61 @@ func printWorktreeExecutionReceipts(receipt cleanExecutionReceipt) {
 		fmt.Printf("    physical-removed %t   freed %s\n", unit.PhysicalRemoved, cleaner.FormatSize(unit.FreedBytes))
 		if unit.Error != "" {
 			fmt.Printf("    error    %s\n", unit.Error)
+		}
+	}
+	printCleanupComponentReceipts(receipt)
+}
+
+func printCleanupComponentReceipts(receipt cleanExecutionReceipt) {
+	printedHeader := false
+	for _, unit := range receipt.Units {
+		if unit.Component == nil ||
+			(!cleanupComponentHasLineage(*unit.Component) &&
+				unit.BlockingPath == "" &&
+				len(unit.Obligations) == 0) {
+			continue
+		}
+		if !printedHeader {
+			fmt.Println()
+			fmt.Println("cleanup component receipt")
+			printedHeader = true
+		}
+		fmt.Printf("  owner     %-7s %s\n", unit.State, unit.Target.Path)
+		fmt.Printf("    physical-removed %t   freed %s\n",
+			unit.PhysicalRemoved,
+			cleaner.FormatSize(unit.FreedBytes))
+		for _, row := range unit.Component.LogicalRows {
+			fmt.Printf("    evidence  %-19s %-12s %-13s %s\n",
+				row.Relation,
+				row.Item.Tool,
+				row.Item.Category,
+				row.Item.Path)
+			if row.PolicyReason != "" {
+				fmt.Printf("      policy   %s\n", row.PolicyReason)
+			}
+			if row.L1Reason != "" {
+				fmt.Printf("      overlap  %s\n", row.L1Reason)
+			}
+		}
+		for _, obligation := range unit.Obligations {
+			classification := ""
+			if obligation.Classification != "" {
+				classification = " classification=" + string(obligation.Classification)
+			}
+			fmt.Printf("    obligation %-13s %-12s%s %s\n",
+				obligation.State,
+				obligation.Tool,
+				classification,
+				obligation.EntryPath)
+			if obligation.Reason != "" {
+				fmt.Printf("      reason   %s\n", obligation.Reason)
+			}
+		}
+		if unit.BlockingPath != "" {
+			fmt.Printf("    blocker   %s\n", unit.BlockingPath)
+		}
+		if unit.BlockingReason != "" {
+			fmt.Printf("      reason   %s\n", unit.BlockingReason)
 		}
 	}
 }

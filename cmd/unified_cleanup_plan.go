@@ -32,6 +32,7 @@ const (
 	CleanupPlanReasonClassicEligible        CleanupPlanReasonCode = "classic_eligible"
 	CleanupPlanReasonAgentStateOrphaned     CleanupPlanReasonCode = "agent_state_orphaned"
 	CleanupPlanReasonContainsLockedTarget   CleanupPlanReasonCode = "contains_locked_target"
+	CleanupPlanReasonOverlapsLockedTarget   CleanupPlanReasonCode = "overlaps_locked_target"
 	CleanupPlanReasonWorktreePolicyDecision CleanupPlanReasonCode = "worktree_policy_decision"
 )
 
@@ -61,20 +62,48 @@ type CleanupPlanEvidence struct {
 // CleanupPlanRow is one visible policy decision. More than one row may refer
 // to the same physical target.
 type CleanupPlanRow struct {
-	Key       string
-	TargetKey string
-	Item      types.DebrisInfo
-	Selection CleanupPlanSelection
-	Reasons   []CleanupPlanReason
+	Key             string
+	TargetKey       string
+	OwnerKey        string
+	CanonicalPath   string
+	Relation        CleanupPlanRelation
+	Item            types.DebrisInfo
+	PolicySelection CleanupPlanSelection
+	Selection       CleanupPlanSelection
+	Reasons         []CleanupPlanReason
+	PhysicalBytes   int64
 }
 
-// CleanupPhysicalTarget is one exact canonical path. Nested physical targets
-// remain distinct here; selection accounting normalizes their path coverage.
+type CleanupPlanRelation string
+
+const (
+	CleanupPlanRelationOwner  CleanupPlanRelation = "owner"
+	CleanupPlanRelationExact  CleanupPlanRelation = "exact"
+	CleanupPlanRelationNested CleanupPlanRelation = "nested"
+)
+
+// CleanupPhysicalTarget is one exact canonical path and retains every
+// discovery row at that path. Component ownership is recorded separately so
+// exact duplicates remain distinguishable without adding physical bytes.
 type CleanupPhysicalTarget struct {
-	Key       string
-	Item      types.DebrisInfo
-	RowKeys   []string
-	Selection CleanupPlanSelection
+	Key             string
+	OwnerKey        string
+	Item            types.DebrisInfo
+	RowKeys         []string
+	PolicySelection CleanupPlanSelection
+	Selection       CleanupPlanSelection
+}
+
+// CleanupPhysicalComponent is one containment-connected on-disk unit. Owner is
+// the outermost canonical target and is the only source of physical bytes.
+type CleanupPhysicalComponent struct {
+	Key            string
+	CanonicalPath  string
+	OwnerTargetKey string
+	Owner          types.DebrisInfo
+	TargetKeys     []string
+	RowKeys        []string
+	Selection      CleanupPlanSelection
 }
 
 type CleanupPlanTotals struct {
@@ -96,9 +125,10 @@ type CleanupPlanTotals struct {
 // UnifiedCleanupPlan is the shared, renderer-independent state for mixed
 // cleanup review and execution.
 type UnifiedCleanupPlan struct {
-	Rows     []CleanupPlanRow
-	Targets  []CleanupPhysicalTarget
-	Evidence CleanupPlanEvidence
+	Rows       []CleanupPlanRow
+	Targets    []CleanupPhysicalTarget
+	Components []CleanupPhysicalComponent
+	Evidence   CleanupPlanEvidence
 }
 
 type cleanupPlanTargetGroup struct {
@@ -107,8 +137,8 @@ type cleanupPlanTargetGroup struct {
 }
 
 // BuildUnifiedCleanupPlan normalizes visible policy decisions into exact
-// physical targets. A hard lock on a target or any descendant dominates
-// selections that could remove it.
+// physical targets. A hard lock in either containment direction dominates the
+// complete component.
 func BuildUnifiedCleanupPlan(ctx context.Context, candidates []CleanupPlanCandidate, evidence CleanupPlanEvidence) (UnifiedCleanupPlan, error) {
 	if err := ctx.Err(); err != nil {
 		return UnifiedCleanupPlan{}, err
@@ -120,6 +150,7 @@ func BuildUnifiedCleanupPlan(ctx context.Context, candidates []CleanupPlanCandid
 	})
 
 	rowKeys := make(map[string]bool, len(ordered))
+	generatedRowKeys := make(map[string]int, len(ordered))
 	groupsByPath := make(map[string]*cleanupPlanTargetGroup, len(ordered))
 	for _, candidate := range ordered {
 		if err := ctx.Err(); err != nil {
@@ -132,9 +163,10 @@ func BuildUnifiedCleanupPlan(ctx context.Context, candidates []CleanupPlanCandid
 		if !ok {
 			return UnifiedCleanupPlan{}, fmt.Errorf("cleanup plan row %q has no target path", candidate.RowKey)
 		}
-		candidate.Item.Path = path
 		if candidate.RowKey == "" {
-			candidate.RowKey = cleanupPlanCandidateStableKey(candidate)
+			baseKey := cleanupPlanCandidateStableKey(candidate)
+			generatedRowKeys[baseKey]++
+			candidate.RowKey = fmt.Sprintf("%s#%d", baseKey, generatedRowKeys[baseKey])
 		}
 		if rowKeys[candidate.RowKey] {
 			return UnifiedCleanupPlan{}, fmt.Errorf("duplicate cleanup plan row key %q", candidate.RowKey)
@@ -166,26 +198,38 @@ func BuildUnifiedCleanupPlan(ctx context.Context, candidates []CleanupPlanCandid
 		})
 		selection := aggregateCleanupPlanSelection(group.candidates)
 		item := cleanupPlanRepresentative(group.candidates)
-		target := CleanupPhysicalTarget{Key: key, Item: item, Selection: selection}
+		target := CleanupPhysicalTarget{
+			Key:             key,
+			Item:            item,
+			PolicySelection: selection,
+			Selection:       selection,
+		}
 		for _, candidate := range group.candidates {
 			target.RowKeys = append(target.RowKeys, candidate.RowKey)
 			rows = append(rows, CleanupPlanRow{
-				Key:       candidate.RowKey,
-				TargetKey: key,
-				Item:      candidate.Item,
-				Selection: selection,
-				Reasons:   append([]CleanupPlanReason(nil), candidate.Reasons...),
+				Key:             candidate.RowKey,
+				TargetKey:       key,
+				CanonicalPath:   key,
+				Item:            candidate.Item,
+				PolicySelection: candidate.Selection,
+				Selection:       selection,
+				Reasons:         append([]CleanupPlanReason(nil), candidate.Reasons...),
 			})
 		}
 		targets = append(targets, target)
 	}
 
-	propagateCleanupPlanLocks(rows, targets)
+	components := buildCleanupPhysicalComponents(rows, targets)
 	sort.Slice(rows, func(i, j int) bool {
-		return rows[i].Key < rows[j].Key
+		return cleanupPlanRowStableKey(rows[i]) < cleanupPlanRowStableKey(rows[j])
 	})
 	evidence.ProviderErrors = sortedProviderErrors(evidence.ProviderErrors)
-	return UnifiedCleanupPlan{Rows: rows, Targets: targets, Evidence: evidence}, nil
+	return UnifiedCleanupPlan{
+		Rows:       rows,
+		Targets:    targets,
+		Components: components,
+		Evidence:   evidence,
+	}, nil
 }
 
 // ClassicCleanupPlanCandidates adapts already-filtered classic targets.
@@ -263,13 +307,13 @@ func (p UnifiedCleanupPlan) ValidateForExecution(ctx context.Context, now time.T
 // SelectedPhysicalTargets returns deterministic, overlap-normalized execution
 // targets. It never returns locked or unselected targets.
 func (p UnifiedCleanupPlan) SelectedPhysicalTargets() []types.DebrisInfo {
-	selected := make([]types.DebrisInfo, 0, len(p.Targets))
-	for _, target := range p.Targets {
-		if target.Selection == CleanupPlanSelected {
-			selected = append(selected, target.Item)
+	selected := make([]types.DebrisInfo, 0, len(p.Components))
+	for _, component := range p.Components {
+		if component.Selection == CleanupPlanSelected {
+			selected = append(selected, component.Owner)
 		}
 	}
-	return normalizeCleanTargets(selected)
+	return selected
 }
 
 func (p UnifiedCleanupPlan) Totals() CleanupPlanTotals {
@@ -282,30 +326,24 @@ func (p UnifiedCleanupPlan) Totals() CleanupPlanTotals {
 			totals.HardLockedRows++
 		}
 	}
-	physical := normalizeCleanupPlanPhysicalTargets(p.Targets)
-	totals.PhysicalTargets = len(physical)
-	for _, target := range physical {
-		totals.PhysicalBytes += target.Size
-	}
-	selected := p.SelectedPhysicalTargets()
-	totals.SelectedTargets = len(selected)
-	for _, target := range selected {
-		totals.SelectedBytes += target.Size
-	}
-	eligible := normalizedCleanupPlanTargetsBySelection(p.Targets, CleanupPlanSelected, CleanupPlanUnselected)
-	totals.EligibleTargets = len(eligible)
-	for _, target := range eligible {
-		totals.EligibleBytes += target.Size
-	}
-	reviewable := normalizedCleanupPlanTargetsBySelection(p.Targets, CleanupPlanUnselected)
-	totals.ReviewableTargets = len(reviewable)
-	for _, target := range reviewable {
-		totals.ReviewableBytes += target.Size
-	}
-	locked := normalizedCleanupPlanTargetsBySelection(p.Targets, CleanupPlanLocked)
-	totals.HardLockedTargets = len(locked)
-	for _, target := range locked {
-		totals.HardLockedBytes += target.Size
+	totals.PhysicalTargets = len(p.Components)
+	for _, component := range p.Components {
+		totals.PhysicalBytes += component.Owner.Size
+		switch component.Selection {
+		case CleanupPlanSelected:
+			totals.EligibleTargets++
+			totals.EligibleBytes += component.Owner.Size
+			totals.SelectedTargets++
+			totals.SelectedBytes += component.Owner.Size
+		case CleanupPlanUnselected:
+			totals.EligibleTargets++
+			totals.EligibleBytes += component.Owner.Size
+			totals.ReviewableTargets++
+			totals.ReviewableBytes += component.Owner.Size
+		case CleanupPlanLocked:
+			totals.HardLockedTargets++
+			totals.HardLockedBytes += component.Owner.Size
+		}
 	}
 	return totals
 }
@@ -366,56 +404,171 @@ func cleanupPlanSelectionForDecision(class DecisionClass) CleanupPlanSelection {
 	}
 }
 
-func propagateCleanupPlanLocks(rows []CleanupPlanRow, targets []CleanupPhysicalTarget) {
-	lockedPaths := make([]string, 0, len(targets))
-	for _, target := range targets {
-		if target.Selection == CleanupPlanLocked {
-			lockedPaths = append(lockedPaths, target.Key)
-		}
-	}
+func buildCleanupPhysicalComponents(
+	rows []CleanupPlanRow,
+	targets []CleanupPhysicalTarget,
+) []CleanupPhysicalComponent {
+	ordered := make([]int, len(targets))
 	for i := range targets {
-		if targets[i].Selection == CleanupPlanLocked {
-			continue
+		ordered[i] = i
+	}
+	sort.Slice(ordered, func(i, j int) bool {
+		left := targets[ordered[i]].Key
+		right := targets[ordered[j]].Key
+		leftDepth := cleanTargetPathDepth(left)
+		rightDepth := cleanTargetPathDepth(right)
+		if leftDepth == rightDepth {
+			return left < right
 		}
-		for _, lockedPath := range lockedPaths {
-			if cleanTargetContains(targets[i].Key, lockedPath) {
-				targets[i].Selection = CleanupPlanLocked
-				for j := range rows {
-					if rows[j].TargetKey != targets[i].Key {
-						continue
-					}
-					rows[j].Selection = CleanupPlanLocked
-					rows[j].Reasons = append(rows[j].Reasons, CleanupPlanReason{
-						Code:        CleanupPlanReasonContainsLockedTarget,
-						Description: "contains a hard-locked cleanup target",
-					})
-				}
+		return leftDepth < rightDepth
+	})
+
+	componentByOwner := make(map[string]*CleanupPhysicalComponent)
+	for _, targetIndex := range ordered {
+		target := &targets[targetIndex]
+		ownerKey := target.Key
+		for _, previousIndex := range ordered {
+			previous := targets[previousIndex]
+			if previous.Key == target.Key {
+				break
+			}
+			if cleanTargetContains(previous.Key, target.Key) {
+				ownerKey = previous.OwnerKey
 				break
 			}
 		}
+		target.OwnerKey = ownerKey
+		component := componentByOwner[ownerKey]
+		if component == nil {
+			component = &CleanupPhysicalComponent{
+				Key:            ownerKey,
+				CanonicalPath:  ownerKey,
+				OwnerTargetKey: target.Key,
+				Owner:          target.Item,
+				Selection:      CleanupPlanUnselected,
+			}
+			componentByOwner[ownerKey] = component
+		}
+		component.TargetKeys = append(component.TargetKeys, target.Key)
+		component.RowKeys = append(component.RowKeys, target.RowKeys...)
+		component.Selection = aggregateCleanupPlanComponentSelection(component.Selection, target.PolicySelection)
 	}
+
+	components := make([]CleanupPhysicalComponent, 0, len(componentByOwner))
+	for _, component := range componentByOwner {
+		sort.Strings(component.TargetKeys)
+		sort.Strings(component.RowKeys)
+		for i := range targets {
+			if targets[i].OwnerKey == component.Key {
+				targets[i].Selection = component.Selection
+			}
+		}
+		for i := range rows {
+			target := cleanupPhysicalTargetByKey(targets, rows[i].TargetKey)
+			if target == nil || target.OwnerKey != component.Key {
+				continue
+			}
+			rows[i].OwnerKey = component.Key
+			rows[i].Selection = component.Selection
+			ownerTarget := cleanupPhysicalTargetByKey(targets, component.OwnerTargetKey)
+			ownerRowKey := ""
+			if ownerTarget != nil && len(ownerTarget.RowKeys) > 0 {
+				ownerRowKey = ownerTarget.RowKeys[0]
+			}
+			switch {
+			case rows[i].Key == ownerRowKey:
+				rows[i].Relation = CleanupPlanRelationOwner
+				rows[i].PhysicalBytes = component.Owner.Size
+			case rows[i].CanonicalPath == component.CanonicalPath:
+				rows[i].Relation = CleanupPlanRelationExact
+			default:
+				rows[i].Relation = CleanupPlanRelationNested
+			}
+			if component.Selection == CleanupPlanLocked &&
+				rows[i].PolicySelection != CleanupPlanLocked {
+				code := CleanupPlanReasonOverlapsLockedTarget
+				description := "overlaps a hard-locked cleanup target"
+				if cleanupPlanRowContainsLockedTarget(
+					rows[i].CanonicalPath,
+					targets,
+					component.Key,
+				) {
+					code = CleanupPlanReasonContainsLockedTarget
+					description = "contains a hard-locked cleanup target"
+				}
+				rows[i].Reasons = appendUniqueCleanupPlanReason(rows[i].Reasons, CleanupPlanReason{
+					Code:        code,
+					Description: description,
+				})
+			}
+		}
+		components = append(components, *component)
+	}
+	sort.Slice(components, func(i, j int) bool {
+		return components[i].Key < components[j].Key
+	})
+	return components
 }
 
-func normalizeCleanupPlanPhysicalTargets(targets []CleanupPhysicalTarget) []types.DebrisInfo {
-	items := make([]types.DebrisInfo, 0, len(targets))
-	for _, target := range targets {
-		items = append(items, target.Item)
+func aggregateCleanupPlanComponentSelection(
+	current CleanupPlanSelection,
+	next CleanupPlanSelection,
+) CleanupPlanSelection {
+	if current == CleanupPlanLocked || next == CleanupPlanLocked {
+		return CleanupPlanLocked
 	}
-	return normalizeCleanTargets(items)
+	if current == CleanupPlanSelected || next == CleanupPlanSelected {
+		return CleanupPlanSelected
+	}
+	return CleanupPlanUnselected
 }
 
-func normalizedCleanupPlanTargetsBySelection(targets []CleanupPhysicalTarget, selections ...CleanupPlanSelection) []types.DebrisInfo {
-	allowed := make(map[CleanupPlanSelection]bool, len(selections))
-	for _, selection := range selections {
-		allowed[selection] = true
-	}
-	items := make([]types.DebrisInfo, 0, len(targets))
-	for _, target := range targets {
-		if allowed[target.Selection] {
-			items = append(items, target.Item)
+func cleanupPhysicalTargetByKey(
+	targets []CleanupPhysicalTarget,
+	key string,
+) *CleanupPhysicalTarget {
+	for i := range targets {
+		if targets[i].Key == key {
+			return &targets[i]
 		}
 	}
-	return normalizeCleanTargets(items)
+	return nil
+}
+
+func cleanupPlanRowContainsLockedTarget(
+	rowPath string,
+	targets []CleanupPhysicalTarget,
+	ownerKey string,
+) bool {
+	for _, target := range targets {
+		if target.OwnerKey == ownerKey &&
+			target.PolicySelection == CleanupPlanLocked &&
+			cleanTargetContains(rowPath, target.Key) {
+			return true
+		}
+	}
+	return false
+}
+
+func appendUniqueCleanupPlanReason(
+	reasons []CleanupPlanReason,
+	reason CleanupPlanReason,
+) []CleanupPlanReason {
+	for _, existing := range reasons {
+		if existing.Code == reason.Code && existing.Description == reason.Description {
+			return reasons
+		}
+	}
+	return append(reasons, reason)
+}
+
+func cleanupPlanRowStableKey(row CleanupPlanRow) string {
+	return strings.Join([]string{
+		row.OwnerKey,
+		row.CanonicalPath,
+		row.Key,
+		cleanTargetStableKey(row.Item),
+	}, "\x00")
 }
 
 func sortedProviderErrors(providerErrors []types.ScanProviderError) []types.ScanProviderError {

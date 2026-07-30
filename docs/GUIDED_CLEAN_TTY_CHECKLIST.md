@@ -32,8 +32,10 @@ explicit. `--root` and `--age` do not disable automatic guided routing.
 
 ## Cleanup Unit Model
 
-One row represents one canonical physical target. Its size and projected freed
-bytes are counted once. The target may contain a direct Git worktree or several
+One guided checklist row represents one canonical physical worktree target. At
+the all-category handoff, exact-path and nested discoveries remain attached as
+logical evidence, while the outermost executable owner alone supplies size and
+projected freed bytes. The target may contain a direct Git worktree or several
 one-level nested Git members.
 
 Every member records:
@@ -145,7 +147,8 @@ The checklist never deletes. Acceptance follows this path:
    paths, and parent metadata.
 8. Continue to the classic all-category audit. During dry-run, normalize
    classic targets together with selected guided parents so nested paths are
-   not previewed twice.
+   shown as zero-byte evidence rather than previewed as additional physical
+   targets.
 
 `--force` skips only final confirmation. It does not select locked rows and is
 never translated into `git worktree remove --force`.

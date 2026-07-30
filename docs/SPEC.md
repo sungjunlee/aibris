@@ -92,8 +92,9 @@ Behavior:
    evidence, and applies the hierarchical policy below.
 5. After guided active-worktree review, continue with the classic audit for
    remaining categories. Normalize selected guided parents with classic
-   targets so nested paths are not counted or previewed twice.
-6. Print a cleanup audit with policy, scan source, eligible totals, and skipped reasons.
+   targets so nested paths are evidence rather than additional deletion targets.
+6. Print a cleanup audit with policy, scan source, physical-owner totals,
+   logical evidence counts, and skipped reasons.
 7. If no targets match, print `No items to clean.` and exit 0.
 8. If `--dry-run` is set, print targets and total candidate space without deleting.
 9. If `--interactive` is set, ask per item.
@@ -101,7 +102,8 @@ Behavior:
 11. Delete ordinary and orphaned targets through cleaner safety checks. Delete
     active worktree members through the Git-aware executor.
 12. Print a cleanup receipt with removed, partial, and failed unit counts,
-    truthful freed bytes, and protected/skipped totals.
+    truthful freed bytes, protected/skipped totals, and nested obligation
+    lineage for every prepared overlap component.
 
 Last-scan cache reuse requires all four compatibility axes:
 
@@ -136,11 +138,15 @@ Human `clean` output must include a cleanup audit before deletion:
 
 - roots and policy (`age`, `risky`, active worktree policy)
 - scan source (`live` or `cached, <age> old`)
-- scan summary with found, eligible, and protected/skipped totals
-- category rows with found, eligible, protected/skipped, and main reason
-- target plan with reason text before confirmation or dry-run completion
+- scan summary with physical found, eligible, and protected/skipped totals plus
+  logical evidence-row count
+- category rows with physical found, eligible, protected/skipped, evidence, and
+  main reason
+- target plan with reason text and zero-byte nested evidence before confirmation
+  or dry-run completion
 - cleanup receipt after execution with removed, partial, and failed unit counts,
-  truthful freed bytes, and protected/skipped totals
+  truthful owner-only freed bytes, protected/skipped totals, and each nested
+  obligation's path, tool, reason, and revalidation outcome
 
 The audit is human output only. `scan --json` remains the machine-readable surface for agents and scripts.
 
@@ -164,7 +170,8 @@ Default guided Codex worktree cleanup:
 - In deletion mode, declining or failing to provide the guided final
   confirmation aborts the whole command before classic targets can execute.
 - Dry-run target normalization treats selected guided cleanup units as parents,
-  so nested classic candidates are reported as covered and never double-counted.
+  so nested classic candidates are reported as covered evidence and never
+  double-counted.
 - The planner must fail closed when Codex activity or git safety evidence is
   unavailable or unsafe.
 - Codex activity uses metadata only: session metadata, working-directory paths,
@@ -217,6 +224,23 @@ Git-aware active execution contract:
 - For a partial multi-member failure, stop, preserve the remaining container,
   identify each removed and remaining member, and credit no bytes unless the
   physical unit is gone.
+
+Cross-category containment uses the same physical-component contract:
+
+- Build deterministic canonical containment components, but retain the raw
+  executable path selected before canonicalization as the mutation target.
+- Assign one outermost executable owner to each component. Exact-path aliases
+  and nested discoveries retain category, tool, classification, policy reason,
+  and overlap reason as logical evidence; only the owner contributes bytes.
+- Selection precedence is `locked > selected > reviewable`, and toggling any
+  selectable logical row toggles its physical owner.
+- A `live` or `undetermined` agent-state ancestor, descendant, or exact overlap
+  shields the complete component. A generic outer owner containing orphaned
+  agent state inherits every child revalidation obligation.
+- Revalidation is atomic at the component boundary. Missing revalidators,
+  errors, cancellation, classification drift, or one blocked child preserve
+  the complete component and credit zero bytes. Completed obligations keep
+  their outcomes; remaining obligations are `not-attempted`.
 
 ### FR4 - AI-guided Skill Workflow
 

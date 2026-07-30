@@ -207,7 +207,24 @@ and then continues into the classic audit for orphaned worktrees, dependencies,
 caches, and other eligible categories. An empty guided selection therefore
 cannot hide classic candidates. In dry-run output, a classic target nested
 inside a selected guided cleanup unit is reported as covered by that parent and
-is not counted or previewed twice.
+is not counted or previewed as a second physical target; its logical evidence
+remains visible.
+
+Cleanup overlap accounting follows one containment component from plan through
+receipt:
+
+- The outermost executable target is the physical owner. Its on-disk size is
+  counted once in found, eligible, selected, protected, planned, and freed
+  totals. Nested and exact-path discovery rows remain visible as evidence and
+  contribute no additional bytes.
+- A `live` or `undetermined` agent-state row anywhere above, below, or exactly
+  on a cleanup target protects the complete component. `--force`, category
+  selectors, and tool selectors cannot bypass this subtree shield.
+- When a generic outer owner contains orphaned agent state, the owner inherits
+  every canonical child revalidation obligation. All obligations must still be
+  orphaned immediately before the first mutation; otherwise the whole component
+  survives, freed bytes are zero, and the receipt identifies the blocking path
+  while unattempted obligations remain `not-attempted`.
 
 For piped or other non-TTY input, EOF accepts the guided default selection.
 `--dry-run` then continues to the classic audit deterministically. In deletion
@@ -317,7 +334,8 @@ Cancellation remains a hard failure.
 - **`--dry-run`** previews before deleting
 - **`--interactive`** confirms each item
 - **Target plan before final confirmation** shows category, size, project,
-  age/status, path, and cleanup command when applicable
+  age/status, path, cleanup command when applicable, and zero-byte nested
+  overlap lineage
 - **Guided Codex cleanup** classifies physical units as recommended,
   reviewable, or locked after member-level Git and activity checks, then uses
   the same dry-run and confirmation model as regular `clean`

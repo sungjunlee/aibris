@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -87,6 +88,31 @@ func TestBuildUnifiedCleanupPlanDeduplicatesPhysicalTargetAndHardLockDominates(t
 	}
 	if selected := plan.SelectedPhysicalTargets(); len(selected) != 0 {
 		t.Fatalf("selected targets = %#v, want none", selected)
+	}
+}
+
+func TestBuildUnifiedCleanupPlanRetainsIdenticalExactDiscoveryRows(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".cache", "same")
+	item := cleanupPlanTestItem(path, types.CategoryBuildCache, 120)
+	plan, err := BuildUnifiedCleanupPlan(context.Background(), []CleanupPlanCandidate{
+		{Item: item, Selection: CleanupPlanSelected},
+		{Item: item, Selection: CleanupPlanSelected},
+	}, CleanupPlanEvidence{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Rows) != 2 || len(plan.Targets) != 1 || len(plan.Components) != 1 {
+		t.Fatalf("rows/targets/components = %d/%d/%d; want 2/1/1",
+			len(plan.Rows), len(plan.Targets), len(plan.Components))
+	}
+	if plan.Rows[0].Key == plan.Rows[1].Key ||
+		plan.Rows[0].Relation != CleanupPlanRelationOwner ||
+		plan.Rows[1].Relation != CleanupPlanRelationExact {
+		t.Fatalf("rows = %+v; identical discoveries must remain distinguishable", plan.Rows)
+	}
+	if totals := plan.Totals(); totals.PhysicalTargets != 1 ||
+		totals.PhysicalBytes != 120 || totals.SelectedBytes != 120 {
+		t.Fatalf("totals = %+v; exact discoveries must not add bytes", totals)
 	}
 }
 
@@ -284,6 +310,160 @@ func TestBuildUnifiedCleanupPlanIsDeterministic(t *testing.T) {
 	}
 	if !reflect.DeepEqual(forward, reversed) {
 		t.Fatalf("plans differ:\nforward=%#v\nreversed=%#v", forward, reversed)
+	}
+}
+
+func TestUnifiedCleanupPlanBuildsDeterministicContainmentComponent(t *testing.T) {
+	root := t.TempDir()
+	outer := filepath.Join(root, ".cache", "owner")
+	nested := filepath.Join(outer, "project", "node_modules")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(root, ".cache", "owner-alias")
+	if err := os.Symlink(outer, alias); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	aliasOwner := cleanupPlanTestItem(alias, types.CategoryBuildCache, 900)
+	aliasOwner.ID = "a-owner"
+	exactDuplicate := cleanupPlanTestItem(outer, types.CategoryOtherCache, 1000)
+	exactDuplicate.ID = "z-duplicate"
+	child := cleanupPlanTestItem(nested, types.CategoryNodeModules, 300)
+	candidates := []CleanupPlanCandidate{
+		{
+			RowKey:    "owner-alias",
+			Item:      aliasOwner,
+			Selection: CleanupPlanSelected,
+			Reasons: []CleanupPlanReason{{
+				Code:        CleanupPlanReasonClassicEligible,
+				Description: "selected alias",
+			}},
+		},
+		{
+			RowKey:    "owner-exact",
+			Item:      exactDuplicate,
+			Selection: CleanupPlanUnselected,
+			Reasons: []CleanupPlanReason{{
+				Code:        CleanupPlanReasonClassicEligible,
+				Description: "exact duplicate evidence",
+			}},
+		},
+		{
+			RowKey:    "nested",
+			Item:      child,
+			Selection: CleanupPlanSelected,
+			Reasons: []CleanupPlanReason{{
+				Code:        CleanupPlanReasonClassicEligible,
+				Description: "nested evidence",
+			}},
+		},
+	}
+
+	forward, err := BuildUnifiedCleanupPlan(context.Background(), candidates, CleanupPlanEvidence{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reversed, err := BuildUnifiedCleanupPlan(context.Background(), []CleanupPlanCandidate{
+		candidates[2],
+		candidates[1],
+		candidates[0],
+	}, CleanupPlanEvidence{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(forward, reversed) {
+		t.Fatalf("reversed input changed plan:\nforward=%#v\nreversed=%#v", forward, reversed)
+	}
+	if len(forward.Rows) != 3 || len(forward.Targets) != 2 || len(forward.Components) != 1 {
+		t.Fatalf("rows/targets/components = %d/%d/%d; want 3/2/1",
+			len(forward.Rows), len(forward.Targets), len(forward.Components))
+	}
+	component := forward.Components[0]
+	canonicalOuter, _ := cleanTargetPathKey(outer)
+	if component.CanonicalPath != canonicalOuter || component.Owner.Path != alias ||
+		component.Owner.Size != 1000 || component.Selection != CleanupPlanSelected {
+		t.Fatalf("component = %+v; want canonical owner with raw alias mutation and max size", component)
+	}
+	totals := forward.Totals()
+	if totals.PhysicalTargets != 1 || totals.PhysicalBytes != 1000 ||
+		totals.SelectedTargets != 1 || totals.SelectedBytes != 1000 {
+		t.Fatalf("totals = %+v; want owner bytes once", totals)
+	}
+	selected := forward.SelectedPhysicalTargets()
+	if len(selected) != 1 || selected[0].Path != alias {
+		t.Fatalf("selected = %+v; canonical identity must not replace raw mutation path", selected)
+	}
+
+	relations := make(map[string]CleanupPlanRelation)
+	for _, row := range forward.Rows {
+		relations[row.Key] = row.Relation
+		if row.OwnerKey != canonicalOuter {
+			t.Fatalf("row %q owner = %q; want %q", row.Key, row.OwnerKey, canonicalOuter)
+		}
+	}
+	if relations["owner-alias"] != CleanupPlanRelationOwner ||
+		relations["owner-exact"] != CleanupPlanRelationExact ||
+		relations["nested"] != CleanupPlanRelationNested {
+		t.Fatalf("relations = %+v; exact duplicate and nesting must remain distinct", relations)
+	}
+
+	toggled, changed := toggleUnifiedCleanupPlanRow(forward, 1)
+	if !changed || len(toggled.SelectedPhysicalTargets()) != 0 {
+		t.Fatalf("nested component toggle did not change physical owner: %+v", toggled)
+	}
+	for _, row := range toggled.Rows {
+		if row.Selection != CleanupPlanUnselected {
+			t.Fatalf("row %q selection = %s; whole component should be unselected", row.Key, row.Selection)
+		}
+	}
+}
+
+func TestUnifiedCleanupPlanHardLockCoversBothContainmentDirections(t *testing.T) {
+	root := t.TempDir()
+	tests := []struct {
+		name       string
+		lockedPath string
+		selected   string
+		wantReason CleanupPlanReasonCode
+	}{
+		{
+			name:       "locked ancestor",
+			lockedPath: filepath.Join(root, "ancestor"),
+			selected:   filepath.Join(root, "ancestor", "node_modules"),
+			wantReason: CleanupPlanReasonOverlapsLockedTarget,
+		},
+		{
+			name:       "locked descendant",
+			lockedPath: filepath.Join(root, "descendant", "protected"),
+			selected:   filepath.Join(root, "descendant"),
+			wantReason: CleanupPlanReasonContainsLockedTarget,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			locked := cleanupPlanTestItem(tt.lockedPath, types.CategoryAgentState, 700)
+			locked.Tool = types.ToolClaude
+			locked.Classification = types.EntryClassLive
+			selected := cleanupPlanTestItem(tt.selected, types.CategoryNodeModules, 500)
+			plan, err := BuildUnifiedCleanupPlan(context.Background(), []CleanupPlanCandidate{
+				{RowKey: "selected", Item: selected, Selection: CleanupPlanSelected},
+				{RowKey: "locked", Item: locked, Selection: CleanupPlanLocked},
+			}, CleanupPlanEvidence{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(plan.Components) != 1 ||
+				plan.Components[0].Selection != CleanupPlanLocked ||
+				len(plan.SelectedPhysicalTargets()) != 0 {
+				t.Fatalf("plan = %+v; hard lock must cover complete component", plan)
+			}
+			selectedRow := cleanupPlanRowByKey(t, plan, "selected")
+			if selectedRow.Selection != CleanupPlanLocked ||
+				!hasCleanupPlanReason(selectedRow.Reasons, tt.wantReason) {
+				t.Fatalf("selected row = %+v; want propagated %s", selectedRow, tt.wantReason)
+			}
+		})
 	}
 }
 

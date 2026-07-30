@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sort"
+	"strings"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/cleaner"
@@ -19,8 +21,45 @@ type cleanupOverlapSafetyRuntime struct {
 
 type cleanupOverlapSafetySelection struct {
 	Plan        cleaner.OverlapSafetyPlan
+	Components  []cleanupOverlapComponent
 	Targets     []types.DebrisInfo
 	Protections map[string]cleanAuditReason
+}
+
+type cleanupOverlapRelation string
+
+const (
+	cleanupOverlapOwner      cleanupOverlapRelation = "physical-owner"
+	cleanupOverlapExact      cleanupOverlapRelation = "exact-path"
+	cleanupOverlapDescendant cleanupOverlapRelation = "nested-descendant"
+	cleanupOverlapAncestor   cleanupOverlapRelation = "containing-ancestor"
+	cleanupOverlapAmbiguous  cleanupOverlapRelation = "ambiguous-path"
+)
+
+type cleanupOverlapLogicalInput struct {
+	Item         types.DebrisInfo
+	PolicyReason string
+}
+
+type cleanupOverlapLogicalRow struct {
+	Key                  string
+	Item                 types.DebrisInfo
+	CanonicalPath        string
+	Relation             cleanupOverlapRelation
+	PolicyReason         string
+	L1Reason             string
+	RevalidationRequired bool
+	PhysicalBytes        int64
+	DiscoveryOrdinal     int
+}
+
+type cleanupOverlapComponent struct {
+	Key           string
+	CanonicalPath string
+	Owner         types.DebrisInfo
+	LogicalRows   []cleanupOverlapLogicalRow
+	Obligations   []cleaner.AgentStateObligation
+	Refusal       *cleaner.OverlapSafetyRefusal
 }
 
 func newDefaultCleanupOverlapSafetyRuntime(
@@ -74,15 +113,313 @@ func applyCleanupOverlapSafety(
 	runtime cleanupOverlapSafetyRuntime,
 	targets []types.DebrisInfo,
 ) (cleanupOverlapSafetySelection, error) {
+	return applyCleanupOverlapSafetyWithRows(ctx, runtime, targets, nil)
+}
+
+func applyCleanupOverlapSafetyWithRows(
+	ctx context.Context,
+	runtime cleanupOverlapSafetyRuntime,
+	targets []types.DebrisInfo,
+	logicalInputs []cleanupOverlapLogicalInput,
+) (cleanupOverlapSafetySelection, error) {
+	targets = normalizeCleanTargets(targets)
+	sort.Slice(targets, func(i, j int) bool {
+		left, _ := cleanTargetPathKey(targets[i].Path)
+		right, _ := cleanTargetPathKey(targets[j].Path)
+		if left == right {
+			return cleanTargetStableKey(targets[i]) < cleanTargetStableKey(targets[j])
+		}
+		return left < right
+	})
 	plan, err := cleaner.BuildOverlapSafetyPlan(ctx, runtime.Initial, targets, runtime.Lookup)
 	if err != nil {
 		return cleanupOverlapSafetySelection{}, err
 	}
+	if len(logicalInputs) == 0 {
+		logicalInputs = defaultCleanupOverlapLogicalInputs(targets, runtime.Initial.Items)
+	}
 	return cleanupOverlapSafetySelection{
 		Plan:        plan,
+		Components:  buildCleanupOverlapComponents(plan, logicalInputs),
 		Targets:     plan.AllowedTargets(),
 		Protections: overlapSafetyAuditProtections(plan),
 	}, nil
+}
+
+func defaultCleanupOverlapLogicalInputs(
+	targets []types.DebrisInfo,
+	evidence []types.DebrisInfo,
+) []cleanupOverlapLogicalInput {
+	inputs := make([]cleanupOverlapLogicalInput, 0, len(targets)+len(evidence))
+	for _, target := range targets {
+		inputs = append(inputs, cleanupOverlapLogicalInput{
+			Item:         target,
+			PolicyReason: "selected cleanup target",
+		})
+	}
+	for _, item := range evidence {
+		inputs = append(inputs, cleanupOverlapLogicalInput{
+			Item:         item,
+			PolicyReason: item.Reason,
+		})
+	}
+	return inputs
+}
+
+func buildCleanupOverlapComponents(
+	plan cleaner.OverlapSafetyPlan,
+	logicalInputs []cleanupOverlapLogicalInput,
+) []cleanupOverlapComponent {
+	components := make([]cleanupOverlapComponent, 0, len(plan.Components))
+	for _, safety := range plan.Components {
+		component := cleanupOverlapComponent{
+			Key:           safety.CanonicalPath,
+			CanonicalPath: safety.CanonicalPath,
+			Owner:         safety.Target,
+			Obligations:   append([]cleaner.AgentStateObligation(nil), safety.Obligations...),
+			Refusal:       safety.Refusal,
+		}
+		for _, input := range logicalInputs {
+			path, ok := cleanTargetPathKey(input.Item.Path)
+			if !ok {
+				continue
+			}
+			relation, overlaps := cleanupLogicalRelation(safety.CanonicalPath, path)
+			if match, matched := cleanupSafetyMatchForInput(safety.Matches, input.Item); matched &&
+				match.Relation == cleaner.OverlapRelationAmbiguous {
+				relation = cleanupOverlapAmbiguous
+				overlaps = true
+			}
+			if !overlaps {
+				continue
+			}
+			component.LogicalRows = append(component.LogicalRows, cleanupOverlapLogicalRow{
+				Item:                 input.Item,
+				CanonicalPath:        path,
+				Relation:             relation,
+				PolicyReason:         cleanupLogicalPolicyReason(input),
+				L1Reason:             cleanupLogicalL1Reason(safety, input.Item, path),
+				RevalidationRequired: cleanupLogicalRevalidationRequired(safety, input.Item, path),
+			})
+		}
+		component.LogicalRows = ensureCleanupOwnerLogicalRow(component.LogicalRows, safety.Target, safety.CanonicalPath)
+		sortCleanupOverlapLogicalRows(component.LogicalRows, safety.Target)
+		if len(component.LogicalRows) > 0 {
+			component.LogicalRows[0].PhysicalBytes = safety.Target.Size
+		}
+		components = append(components, component)
+	}
+	sort.Slice(components, func(i, j int) bool {
+		if components[i].CanonicalPath == components[j].CanonicalPath {
+			return cleanTargetStableKey(components[i].Owner) < cleanTargetStableKey(components[j].Owner)
+		}
+		return components[i].CanonicalPath < components[j].CanonicalPath
+	})
+	return components
+}
+
+func cleanupSafetyMatchForInput(
+	matches []cleaner.OverlapSafetyMatch,
+	item types.DebrisInfo,
+) (cleaner.OverlapSafetyMatch, bool) {
+	for _, match := range matches {
+		if match.Item.Path == item.Path &&
+			match.Item.Tool == item.Tool &&
+			match.Item.ID == item.ID &&
+			match.Item.Classification == item.Classification {
+			return match, true
+		}
+	}
+	return cleaner.OverlapSafetyMatch{}, false
+}
+
+func cleanupLogicalRelation(ownerPath, rowPath string) (cleanupOverlapRelation, bool) {
+	switch {
+	case ownerPath == rowPath:
+		return cleanupOverlapExact, true
+	case cleanTargetContains(ownerPath, rowPath):
+		return cleanupOverlapDescendant, true
+	case cleanTargetContains(rowPath, ownerPath):
+		return cleanupOverlapAncestor, true
+	default:
+		return "", false
+	}
+}
+
+func cleanupLogicalPolicyReason(input cleanupOverlapLogicalInput) string {
+	if input.PolicyReason != "" {
+		return input.PolicyReason
+	}
+	if input.Item.Reason != "" {
+		return input.Item.Reason
+	}
+	if input.Item.Category == types.CategoryAgentState {
+		switch input.Item.Classification {
+		case types.EntryClassOrphaned:
+			return "recorded working directory is absent"
+		case types.EntryClassLive:
+			return "live agent-state protected"
+		default:
+			return "undetermined agent-state protected"
+		}
+	}
+	return "discovered cleanup evidence"
+}
+
+func cleanupLogicalL1Reason(
+	component cleaner.OverlapSafetyComponent,
+	item types.DebrisInfo,
+	canonicalPath string,
+) string {
+	for _, match := range component.Matches {
+		if match.Relation == cleaner.OverlapRelationAmbiguous {
+			if match.Item.Path == item.Path &&
+				match.Item.Tool == item.Tool &&
+				match.Item.ID == item.ID {
+				return string(cleaner.OverlapSafetyAmbiguousIdentity)
+			}
+			continue
+		}
+		matchPath, ok := cleanTargetPathKey(match.Item.Path)
+		if !ok || matchPath != canonicalPath ||
+			match.Item.Tool != item.Tool ||
+			match.Item.ID != item.ID {
+			continue
+		}
+		if component.Refusal != nil {
+			switch component.Refusal.Reason {
+			case cleaner.OverlapSafetyCommandOverlap,
+				cleaner.OverlapSafetyAmbiguousIdentity:
+				return string(component.Refusal.Reason)
+			case cleaner.OverlapSafetyNestedRevalidation:
+				refusalPath, refusalOK := cleanTargetPathKey(component.Refusal.AgentStatePath)
+				if refusalOK && refusalPath == canonicalPath {
+					return string(component.Refusal.Reason)
+				}
+			}
+		}
+		if match.Item.Classification == types.EntryClassOrphaned {
+			return "nested agent-state revalidation required"
+		}
+		switch match.Relation {
+		case cleaner.OverlapRelationAgentStateAncestor:
+			return string(cleaner.OverlapSafetyProtectedAncestor)
+		case cleaner.OverlapRelationExact:
+			return string(cleaner.OverlapSafetyProtectedExact)
+		default:
+			return string(cleaner.OverlapSafetyProtectedDescendant)
+		}
+	}
+	return ""
+}
+
+func cleanupLogicalRevalidationRequired(
+	component cleaner.OverlapSafetyComponent,
+	item types.DebrisInfo,
+	canonicalPath string,
+) bool {
+	if item.Category != types.CategoryAgentState ||
+		item.Classification != types.EntryClassOrphaned {
+		return false
+	}
+	for _, obligation := range component.Obligations {
+		if obligation.Tool == item.Tool && obligation.EntryPath == canonicalPath {
+			return true
+		}
+	}
+	for _, match := range component.Matches {
+		if match.Relation == cleaner.OverlapRelationAmbiguous {
+			continue
+		}
+		matchPath, ok := cleanTargetPathKey(match.Item.Path)
+		if ok && matchPath == canonicalPath &&
+			match.Item.Tool == item.Tool &&
+			match.Item.ID == item.ID {
+			return true
+		}
+	}
+	return false
+}
+
+func ensureCleanupOwnerLogicalRow(
+	rows []cleanupOverlapLogicalRow,
+	owner types.DebrisInfo,
+	canonicalPath string,
+) []cleanupOverlapLogicalRow {
+	for _, row := range rows {
+		if row.CanonicalPath == canonicalPath &&
+			cleanTargetStableKey(row.Item) == cleanTargetStableKey(owner) {
+			return rows
+		}
+	}
+	return append(rows, cleanupOverlapLogicalRow{
+		Item:          owner,
+		CanonicalPath: canonicalPath,
+		Relation:      cleanupOverlapExact,
+		PolicyReason:  "selected cleanup target",
+	})
+}
+
+func sortCleanupOverlapLogicalRows(
+	rows []cleanupOverlapLogicalRow,
+	owner types.DebrisInfo,
+) {
+	sort.SliceStable(rows, func(i, j int) bool {
+		return cleanupOverlapLogicalRowStableKey(rows[i], owner) <
+			cleanupOverlapLogicalRowStableKey(rows[j], owner)
+	})
+	ordinals := make(map[string]int)
+	ownerAssigned := false
+	for i := range rows {
+		baseKey := cleanupOverlapLogicalRowStableKey(rows[i], owner)
+		ordinals[baseKey]++
+		rows[i].DiscoveryOrdinal = ordinals[baseKey]
+		if !ownerAssigned &&
+			rows[i].Relation == cleanupOverlapExact &&
+			cleanTargetStableKey(rows[i].Item) == cleanTargetStableKey(owner) {
+			rows[i].Relation = cleanupOverlapOwner
+			ownerAssigned = true
+		}
+		rows[i].Key = fmt.Sprintf("%s#%d", baseKey, rows[i].DiscoveryOrdinal)
+	}
+}
+
+func cleanupOverlapLogicalRowStableKey(
+	row cleanupOverlapLogicalRow,
+	owner types.DebrisInfo,
+) string {
+	ownerRank := "1"
+	if row.CanonicalPath != "" &&
+		cleanTargetStableKey(row.Item) == cleanTargetStableKey(owner) {
+		ownerRank = "0"
+	}
+	return strings.Join([]string{
+		ownerRank,
+		row.CanonicalPath,
+		string(row.Relation),
+		string(row.Item.Category),
+		string(row.Item.Tool),
+		row.Item.ID,
+		row.Item.Path,
+		string(row.Item.Classification),
+		row.PolicyReason,
+		row.L1Reason,
+	}, "\x00")
+}
+
+func cleanupOverlapComponentForTarget(
+	selection cleanupOverlapSafetySelection,
+	target types.DebrisInfo,
+) (cleanupOverlapComponent, bool) {
+	for _, component := range selection.Components {
+		if component.Owner.Path == target.Path &&
+			component.Owner.Category == target.Category &&
+			component.Owner.Tool == target.Tool &&
+			component.Owner.ID == target.ID {
+			return component, true
+		}
+	}
+	return cleanupOverlapComponent{}, false
 }
 
 func overlapSafetyAuditProtections(plan cleaner.OverlapSafetyPlan) map[string]cleanAuditReason {
@@ -129,10 +466,11 @@ func mergeCleanAuditProtections(
 	return merged
 }
 
-func printOverlapSafetyRefusals(plan cleaner.OverlapSafetyPlan) {
-	for _, component := range plan.Components {
+func printOverlapSafetyRefusals(selection cleanupOverlapSafetySelection) {
+	for _, component := range selection.Components {
 		if component.Refusal != nil {
 			fmt.Printf("  safety  refused %s\n", component.Refusal)
+			printCleanupComponentLineage(component, "    ")
 		}
 	}
 }
@@ -142,15 +480,39 @@ type cleanupMutationSafety struct {
 	runtime   cleanupOverlapSafetyRuntime
 }
 
-func (s cleanupMutationSafety) validate(ctx context.Context) error {
+func (s cleanupMutationSafety) validate(
+	ctx context.Context,
+) (cleaner.OverlapSafetyValidation, error) {
+	report := initialOverlapSafetyValidation(s.component)
 	if s.runtime.Refresh == nil {
-		return cleaner.ErrIncompleteOverlapSafetyEvidence
+		report.BlockingPath = s.component.Target.Path
+		report.BlockingReason = cleaner.ErrIncompleteOverlapSafetyEvidence.Error()
+		return report, cleaner.ErrIncompleteOverlapSafetyEvidence
 	}
 	refreshed, err := s.runtime.Refresh(ctx)
 	if err != nil {
-		return err
+		report.BlockingPath = s.component.Target.Path
+		report.BlockingReason = err.Error()
+		return report, err
 	}
-	return s.component.ValidateBeforeMutation(ctx, refreshed, s.runtime.Lookup)
+	return s.component.ValidateBeforeMutationWithReport(ctx, refreshed, s.runtime.Lookup)
+}
+
+func initialOverlapSafetyValidation(
+	component cleaner.OverlapSafetyComponent,
+) cleaner.OverlapSafetyValidation {
+	report := cleaner.OverlapSafetyValidation{
+		Obligations: make([]cleaner.AgentStateRevalidationOutcome, 0, len(component.Obligations)),
+	}
+	for _, obligation := range component.Obligations {
+		report.Obligations = append(report.Obligations, cleaner.AgentStateRevalidationOutcome{
+			Tool:       obligation.Tool,
+			EntryPath:  obligation.EntryPath,
+			ProviderID: obligation.ProviderID,
+			State:      cleaner.AgentStateRevalidationNotAttempted,
+		})
+	}
+	return report
 }
 
 func mutationSafetyForTarget(
