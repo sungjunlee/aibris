@@ -41,7 +41,7 @@ content that is surfaced rather than reclaimed.
 
 ### Batch 5 — Classify agent byproducts
 
-- [ ] #142 L1 store classification: freeze installed, regenerable, and user-content decisions before adding providers
+- [~] #142 L1 store classification: freeze installed, regenerable, and user-content decisions before adding providers [branch:issue-142-store-classification] — relay run `issue-142-20260730162810830-b1fe8cda`
 
 ### Batch 6 — Introduce protected-content retention semantics
 
@@ -93,6 +93,12 @@ content that is surfaced rather than reclaimed.
   protected-content retention contract, then add regenerable and protected
   providers. `generated_images` and transcripts require an explicit retention
   decision; `--risky` alone is insufficient.
+- #142 L1's store-nature taxonomy is planning language, not a current
+  `types.Category`, JSON classification, or CLI selector. `packages` and
+  `computer-use` are installed content; `tmp` is only a future regenerable
+  candidate; `generated_images` is a retention-selected user artifact; and
+  Codex `sqlite` plus Cursor `ai-tracking` are inventory-only protected stores
+  absent a separate quiescence and atomic database-family manifest contract.
 - Orphan detection must read each store's recorded working directory. Directory
   names are a lossy encoding — `/`, `.`, and `_` all collapse to `-` — and
   decoding them produced false positives during the audit.
@@ -449,3 +455,15 @@ measuring, because the real home lacked the triggering condition.
   (429.4 MB)**. The new container registry increased protected physical
   coverage from 319 to 362 owners while leaving planned and agent-state values
   exactly equal; all aibris real-home clean invocations used `--dry-run`.
+- 2026-07-31 01:28: Shaped #142 as relay request
+  `req-20260730162731396` with three ordered leaves and started L1
+  `store-classification` as hardened run
+  `issue-142-20260730162810830-b1fe8cda`. Read-only metadata corrected two
+  audit assumptions: `computer-use` is an installed OpenAI application bundle,
+  and Cursor `ai-tracking` contains tracked-file and conversation-summary
+  schema rather than disposable telemetry alone. The fail-closed classification
+  keeps packages/computer-use provider-free, makes tmp only a future
+  direct-child candidate, permits generated-image retention selection only
+  after #139 L1, and leaves live sqlite/ai-tracking databases inventory-only.
+  No content bodies, SQLite row values, tracked file values, or image pixels
+  were inspected.
