@@ -37,7 +37,7 @@ content that is surfaced rather than reclaimed.
 
 ### Batch 4 — Fix bounded worktree-container coverage
 
-- [ ] #140 Cover the confirmed `~/.config/superpowers/worktrees` depth gap within a documented finite discovery bound (~3h)
+- [~] #140 Cover the confirmed `~/.config/superpowers/worktrees` depth gap within a documented finite discovery bound (~3h) [branch:issue-140-bounded-worktree-containers] — relay run `issue-140-20260730121915000`
 
 ### Batch 5 — Classify agent byproducts
 
@@ -410,3 +410,19 @@ measuring, because the real home lacked the triggering condition.
   317 physical items, and protected/skipped from 105 to 104, solely because
   Relay reclaimed the completed run's protected worktree during merge cleanup;
   no files were removed by aibris.
+- 2026-07-30 21:20: Started #140 as hardened relay run
+  `issue-140-20260730121915000` on
+  `issue-140-bounded-worktree-containers`. `codexbar usage --json` reported
+  Codex weekly usage at 50% (dashboard and code-review views 31%) versus Claude
+  weekly usage at 88%, so Codex xhigh is the executor and primary reviewer;
+  independent Codex subagents supplied the discovery, invalid-metadata, and
+  same-session measurement audits.
+
+  The frozen contract uses a finite exact registry for known containers while
+  preserving the existing generic depth-4 fallback. It treats every container
+  unit as one physical mutation owner: any missing or malformed Git marker
+  makes the whole owner visible but review-only as `plain-dir`, while I/O
+  uncertainty remains partial provider evidence. Current same-session evidence
+  is an observation, not a target: `fe8eb16` full-home scan finds zero
+  superpowers rows, but a scoped scan finds two valid L2 members under one
+  540,565,504-byte physical owner.
