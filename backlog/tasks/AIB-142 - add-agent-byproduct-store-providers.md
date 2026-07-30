@@ -1,7 +1,7 @@
 ---
 id: AIB-142
 title: Add agent byproduct store providers
-status: To Do
+status: Blocked
 labels:
   - enhancement
   - cli

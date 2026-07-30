@@ -47,7 +47,7 @@ content that is surfaced rather than reclaimed.
 
 - [x] #139 L1 retention contract: freeze bucket, selector, aggregation, timestamp, and execution-manifest semantics → PR #165 (merged `2d9714a`, 3 hardened primary rounds plus final exact-head review)
 
-### Batch 7 — Add byproduct coverage
+### Batch 7 — Add byproduct coverage — blocked on upstream producer cooperation
 
 - [ ] #142 `L2-regenerable-providers` — add only regenerable residue providers.
 - [ ] #142 L3 protected artifacts: surface user artifacts without implicit cleanup through default clean or `--risky`
@@ -508,3 +508,22 @@ measuring, because the real home lacked the triggering condition.
   1.6 GB** planned, with agent-state **277 found / 210 eligible (246.1 MB) /
   67 protected (429.4 MB)**. These are observations rather than baselines, and
   every real-home cleanup invocation used `--dry-run`.
+- 2026-07-31 04:25: Revalidated #142 L2/L3 readiness after #139 L1 and marked
+  the canonical issue `status:blocked`; the unchecked Batch 7 leaves remain
+  incomplete. Codex 0.144.4 exposes heterogeneous `~/.codex/tmp` direct
+  children, and upstream's `.lock` fences individual
+  `arg0/codex-arg0*` session directories rather than freezing the tmp root or
+  every writer before discovery. The generated-image source documents a path
+  shape but persists no producer-version identity/manifest and exposes no
+  cooperative writer fence. SQLite and Cursor `ai-tracking` likewise still
+  lack the complete family registry and all-writer quiescence contract.
+  Independent audits found no safe locally implementable #142 leaf, and no
+  duplicate aibris issue exists.
+
+  A separate audit found #139 L2 technically unblocked if it is kept strictly
+  read-only: a non-additive Codex-session UTC-month projection with no selector,
+  manifest, cleanup candidate, or executor. It does not depend on #142's tmp,
+  generated-image, or database mutation proofs. Advancing Batch 8 ahead of the
+  blocked Batch 7 would change the recorded sprint order, so dispatch awaits an
+  explicit maintainer-approved reorder rather than silently weakening or
+  bypassing the plan.
