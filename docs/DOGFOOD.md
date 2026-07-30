@@ -1,9 +1,11 @@
 # Evidence-Based Reclamation Dogfood
 
-These notes record the sanitized evidence used for issue #90. The real `$HOME`
-exercise was limited to scan, Git inspection, and dry-run planning. The only
-deletion was a disposable branch-backed linked worktree under a temporary
-`HOME`; all temporary repositories and worktrees were removed afterward.
+The initial notes record the sanitized evidence used for issue #90; later
+sections add separate read-only coverage and classification audits. The real
+`$HOME` exercises were limited to scan, metadata/Git inspection, and dry-run
+planning. The only deletion was a disposable branch-backed linked worktree
+under a temporary `HOME`; all temporary repositories and worktrees were
+removed afterward.
 
 ## Preserved 2026-07-10 Before Baseline
 
@@ -564,21 +566,43 @@ it was never an implementation or performance target.
 
 Agent state stores aibris does **not** discover:
 
-| Store | Actual | Nature |
+| Store | Preserved 2026-07-26 size observation | Contents |
 | --- | ---: | --- |
 | `~/.codex/sessions` | 11 GB | Conversation transcripts; 6,711 files, 85% older than 30d |
-| `~/.codex/packages` | 1.0 GB | Single `standalone` entry; installed-vs-residue unconfirmed |
+| `~/.codex/packages` | 1.0 GB | Standalone versioned release installation |
 | `~/.relay/runs` | 933 MB | Executor run manifests |
 | `~/.cursor/chats` | 674 MB | Conversation transcripts |
-| `~/.codex/generated_images` | 548 MB | Agent-produced byproducts |
+| `~/.codex/generated_images` | 548 MB | Generated PNG artifacts |
 | `~/.claude/projects` | 502 MB | Session store keyed by working directory |
-| `~/.codex/sqlite` | 412 MB | Agent state database |
-| `~/.codex/tmp` | 130 MB | Scratch |
+| `~/.codex/sqlite` | 412 MB | Codex application SQLite databases and sidecars |
+| `~/.codex/tmp` | 130 MB | Temporary apply-patch shim store |
 | `~/.gstack/projects` | 91 MB | Per-project agent state |
-| `~/.codex/computer-use` | 61 MB | Byproducts |
-| `~/.cursor/ai-tracking` | 35 MB | Telemetry residue |
+| `~/.codex/computer-use` | 61 MB | Codex Computer Use application bundle |
+| `~/.cursor/ai-tracking` | 35 MB | Tracked-file and conversation-summary database |
 | Remainder (`~/.relay/reviews`, `~/.claude/session-env`, shell snapshots, …) | ~80 MB | |
 | **Preserved 2026-07-26 subtotal after moving superpowers below** | **≈ 15.5 GB** | **aibris discovers 0 B** |
+
+#### 2026-07-31 issue #142 bounded store evidence
+
+This separate read-only observation used shallow names, filesystem metadata,
+application identity, and SQLite schema names. Its sizes and counts describe one
+changing developer home at the time of observation; they are evidence about
+store shape, never cleanup, coverage, performance, or retention targets.
+
+| Store | Point-in-time metadata/schema-name evidence | Conservative decision and downstream policy |
+| --- | --- | --- |
+| `~/.codex/packages` | 1,027,964 KiB observed. `standalone` contained `install.lock`, four versioned architecture release directories, and a `current` symlink to the active version. | Installed content. Exclude it from providers, inventory, and cleanup. |
+| `~/.codex/computer-use` | 62,168 KiB observed. `Codex Computer Use.app` reported bundle identity `com.openai.sky.CUAService`. | Installed content. Exclude it from providers, inventory, and cleanup. |
+| `~/.codex/tmp` | 132,692 KiB observed. The literal `~/.codex/tmp/path/` directory had 4,345 direct `codex-arg*` directories, each with paired `applypatch` and `apply_patch` symlink entries. This observation did not establish `path/` as an upstream-stable name. | Regenerable residue, but only a future safety-bounded default-clean candidate. `path/` was one observed direct-child unit; its descendants were not independent units, and its name is not an allowlist. A future L2 remains blocked on the upstream contract in `CATEGORY.md`, must enumerate every direct child, fail closed on unsupported layouts, honor that contract's symlink boundary, and never delete the tmp root. |
+| `~/.codex/generated_images` | 561,636 KiB observed across 16 ID directories and 414 `.png` files. | Protected user artifacts. Only explicit retention selection after merged #139 L1 may be considered; default clean and `--risky` alone are insufficient. |
+| `~/.codex/sqlite` | 422,320 KiB observed. Filenames identified goals, memories, logs, history snapshots, and state databases; readable schema names included `thread_goals`, `threads`, `agent_jobs`, `app_server_history_snapshots`, and `logs`. WAL/SHM siblings were present for live database families. | Protected live state. A future provider is inventory-only unless the separate contract proves process quiescence and supplies the complete, atomically published database-family manifest defined in `CATEGORY.md`. |
+| `~/.cursor/ai-tracking` | 36,004 KiB observed. `ai-code-tracking.db` schema names included `tracked_file_content`, `conversation_summaries`, `scored_commits`, `ai_deleted_files`, and `tracking_state`. | Protected content and provenance, not disposable telemetry. It has the same inventory-only, quiescence, complete-family, and atomic-manifest boundary as Codex SQLite. |
+
+No conversation body, SQLite row value, generated image pixel, tracked file
+content, or other content body was inspected. Metadata and schema-name evidence
+was sufficient for these conservative decisions; uncertainty would have
+resolved to protected content. No `aibris clean` command was needed or run for
+this classification.
 
 Agent state stores aibris does discover:
 
@@ -691,5 +715,9 @@ buckets, not to reclaim them by default.
 ### Conclusion
 
 aibris covers most of a generic cleaner's territory and about 15% of its own.
-The gap is provider coverage, not policy or rendering. Epic #137 and issues
-#138–#143 track closing it.
+The 2026-07-26 audit originally described the remainder as a provider-coverage
+gap. Issue #142's later classification narrows that statement: installed
+content is intentionally excluded, tmp is only a future safety-bounded
+candidate, and protected stores first need inventory/retention contracts rather
+than generic cleanup providers. Epic #137 and issues #138–#143 track those
+separate obligations.

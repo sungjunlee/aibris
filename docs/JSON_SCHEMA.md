@@ -5,6 +5,12 @@
 Compatibility note: the top-level array is named `worktrees` for historical
 reasons, but it contains all debris items, including caches and `node_modules`.
 
+The installed/regenerable/protected terms used by the issue #142 planning
+taxonomy are not JSON fields or values. They do not extend `category` or
+`classification`, and the six stores covered by that planning decision
+currently emit no inventory rows. This document describes only the shipped
+schema.
+
 A complete scan keeps the established successful JSON shape below. If one or
 more providers fail while other results remain usable, the command adds
 `"partial": true` and a `provider_errors` array, prints the JSON document, and

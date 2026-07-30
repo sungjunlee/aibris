@@ -271,6 +271,16 @@ Cross-category containment uses the same physical-component contract:
 | `agent-state` | orphaned only, no age gate | `claude`, `cursor` | recorded-cwd project stores; `live` and `undetermined` entries are protected |
 | `ai-logs` | no, requires `--risky` | `ai-logs`, `windsurf` | known Codex, Claude, and Windsurf log/cache locations |
 
+The installed/regenerable/protected store-nature terms used to plan issue #142
+are not supported categories, agent-state classifications, JSON fields, or CLI
+selectors. None of the six stores classified there is currently a provider
+surface. Installed stores receive no provider; Codex tmp remains a future
+default-clean child-unit candidate subject to ownership and
+active-use/TOCTOU proof; and generated images, Codex SQLite, and Cursor AI
+tracking remain protected from default clean and `--risky` alone.
+Protected-provider runtime and retention semantics belong to #139, not this
+specification revision.
+
 ## Worktree Health
 
 `WorktreeAdapter` detects linked Git metadata health by reading `.git` files:
