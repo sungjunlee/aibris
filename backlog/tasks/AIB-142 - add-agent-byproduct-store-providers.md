@@ -49,6 +49,15 @@ current categories, agent-state classifications, JSON fields, or CLI selectors.
 | `~/.codex/sqlite` | Protected content | Inventory-only unless a separate future implementation satisfies the fail-closed quiescence, family-registry, and atomic-manifest contract below. |
 | `~/.cursor/ai-tracking` | Protected content | Inventory-only unless a separate future implementation satisfies the fail-closed quiescence, family-registry, and atomic-manifest contract below. |
 
+L2 and L3 are blocked, not locally implementable leaves. In addition to the
+#139 gate for L3, each relevant upstream producer must first expose or document
+a producer-documented, versioned layout/identity contract plus a cooperative
+lock, lease, shutdown, or pause/fencing protocol honored by every writer. That
+is the unblock signal for the existing fail-closed proofs; aibris cannot
+manufacture producer cooperation locally. If the signal never exists, affected
+tmp units remain ineligible and affected protected stores remain
+non-executable and inventory-only indefinitely.
+
 ### L2 safety prerequisite
 
 Each supported Codex release/channel and tmp layout needs a versioned
@@ -60,27 +69,33 @@ insufficient.
 
 Before enumeration, L2 must acquire a producer-cooperative exclusive lock,
 lease, or pause handshake with an observable ownership or fencing token. It
-must be honored by the Codex application/CLI, apply-patch launchers and callers,
-and agent supervisors or background helpers. While it is held, L2 snapshots the
-canonical path, file identities, complete member set, entry types, link targets,
-sizes, and modification times; immediately before mutation it re-enumerates and
-compares the unit and token, then deletes only while exclusion remains held. An
-unknown layout or writer, a writer that does not participate, lock loss, or any
-mismatch leaves the entire child protected with no partial deletion or byte
-credit. Process-name, `lsof`, `/proc`, and open-handle checks alone cannot prove
-exclusion. Fixtures and platform race tests must cover unknown children and
-creation, mutation, rename, and lock loss from every writer class.
+must be honored by the Codex GUI application, Codex CLI, apply-patch launchers
+and callers, and Codex/agent supervisor or helper processes. Every descendant
+symlink and its target is inventoried; an unknown target keeps the whole child
+protected. While exclusion is held, L2 snapshots the canonical path, file
+identities, complete member set, entry types, link targets, sizes, and
+modification times. Immediately before mutation it re-enumerates and compares
+the unit and token, including canonical-path and link-target revalidation.
+Deletion removes only a symlink entry and must never traverse or mutate its
+target. An unknown layout or writer, a writer that does not participate, lock
+loss, or any mismatch leaves the entire child protected with no partial
+deletion or byte credit. Process-name, `lsof`, `/proc`, and open-handle checks
+alone cannot prove exclusion. Fixtures and platform race tests must cover
+unknown children and creation, mutation, rename, and lock loss from every
+writer class.
 
 ### L3 safety prerequisite
 
 Database-family enumeration uses an explicitly open, versioned registry rather
 than a closed suffix list. The registry scans the bounded store directory and
 assigns every entry to one primary family or proves it unrelated. It starts
-with the observed `-wal`, `-shm`, `-journal`, `.wal`, `.shm`, `.journal`,
-`.backup`, and `.bak` conventions; every newly observed store-specific journal,
-backup, or sidecar convention requires a registry and fixture update before
-inventory resumes. An unassigned entry makes the store incomplete, protected,
-and non-inventoriable.
+with the engine-companion conventions `-wal`, `-shm`, `-journal`, `.wal`,
+`.shm`, and `.journal`. `.backup` and `.bak` are independent protected
+artifacts, not SQLite engine companions; only a later store-specific, versioned
+contract may separately prove and register an association. The registry remains
+open: every newly observed store-specific journal, backup, or sidecar convention
+requires a registry and fixture update before inventory resumes. An unassigned
+entry makes the store incomplete, protected, and non-inventoriable.
 
 A complete family is the primary plus every registry-assigned member. Process
 quiescence is a producer-cooperative exclusive lock, lease, shutdown, or pause
@@ -104,7 +119,10 @@ writer, membership or metadata drift, publication failure, or a platform
 without the required atomic-replace and directory-durability primitives aborts
 the operation, removes attempt files where exclusion still permits it, and
 emits no inventory. Platform and fault-injection tests must cover those paths,
-including lock loss before and after replacement.
+including lock loss before and after replacement. The future L3 contract must
+define a supported-platform/filesystem capability matrix and runtime probes for
+atomic replacement and directory durability; a missing or failed capability is
+an abort condition.
 
 Uncertainty resolves to protected content, never broader cleanup eligibility.
 This split does not add a provider or define the protected-content category,

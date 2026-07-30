@@ -50,6 +50,15 @@ runtime model reserved for #139:
 - Installed content receives no provider. Uncertainty never widens cleanup
   eligibility.
 
+L2 and L3 are blocked, not locally implementable leaves. In addition to the
+#139 gate for L3, each relevant upstream producer must first expose or document
+a producer-documented, versioned layout/identity contract plus a cooperative
+lock, lease, shutdown, or pause/fencing protocol honored by every writer. That
+is the unblock signal for the existing fail-closed proofs; aibris cannot
+manufacture producer cooperation locally. If the signal never exists, affected
+tmp units remain ineligible and affected protected stores remain
+non-executable and inventory-only indefinitely.
+
 ### L2 tmp ownership and race-safety contract
 
 Before a tmp provider can be registered, each supported Codex release/channel
@@ -62,20 +71,24 @@ proofs:
   the child and every descendant. A basename, age, paired shim names, process
   name, or current absence of a writer is not ownership proof. An unknown
   version, entry type, link target, or descendant keeps the whole child
-  protected.
+  protected. Every descendant symlink and its target is inventoried and must be
+  accounted for; an unknown target keeps the whole child protected.
 - **Active use:** before enumeration, L2 acquires a producer-cooperative
   exclusive lock, lease, or pause handshake with an observable ownership or
   fencing token. Every writer must consult it, so none can start or mutate the
   unit until deletion finishes. The writer registry must cover the Codex
-  application/CLI, apply-patch launchers and callers, and agent supervisors or
-  background helpers. Process-name checks, `lsof`, `/proc`, and open-handle
-  snapshots are advisory evidence only; if any writer is unknown or does not
-  participate in the same exclusion protocol, the unit is ineligible.
+  GUI application, Codex CLI, apply-patch launchers and callers, and Codex/agent
+  supervisor or helper processes. Process-name checks, `lsof`, `/proc`, and
+  open-handle snapshots are advisory evidence only; if any writer is unknown
+  or does not participate in the same exclusion protocol, the unit is
+  ineligible.
 - **TOCTOU:** while exclusion is held, L2 records the canonical path, file
   identities, complete member set, entry types, link targets, sizes, and
-  modification times. It re-enumerates and compares that snapshot immediately
-  before mutation, deletes only while exclusion remains held, and aborts the
-  whole unit on lock loss or any mismatch. No partial deletion or byte credit is
+  modification times. It re-enumerates and compares that snapshot, including
+  canonical-path and link-target revalidation, immediately before mutation.
+  Deletion removes only a symlink entry and must never traverse or mutate its
+  target. L2 deletes only while exclusion remains held and aborts the whole
+  unit on lock loss or any mismatch. No partial deletion or byte credit is
   allowed.
 - **Tests:** fixtures must cover every supported version/layout plus unknown
   direct children. Platform tests must race creation, mutation, rename, and
@@ -88,11 +101,14 @@ The family definition is deliberately open and registry-driven, not an
 exhaustive suffix list. Each supported store format/version must have a
 versioned family registry that scans the bounded store directory and assigns
 every entry to one primary database family or explicitly classifies it as
-unrelated. The registry starts with the observed `-wal`, `-shm`, `-journal`,
-`.wal`, `.shm`, `.journal`, `.backup`, and `.bak` conventions. A newly observed
-store-specific journal, backup, or sidecar convention requires a registry and
-fixture update before inventory resumes. Any entry the registry cannot assign
-or prove unrelated makes the affected store incomplete, protected, and
+unrelated. The initial engine-companion conventions are `-wal`, `-shm`,
+`-journal`, `.wal`, `.shm`, and `.journal`. `.backup` and `.bak` are independent
+protected artifacts, not SQLite engine companions; only a later
+store-specific, versioned contract may separately prove and register an
+association. The registry remains open: a newly observed store-specific
+journal, backup, or sidecar convention requires a registry and fixture update
+before inventory resumes. Any entry the registry cannot assign or prove
+unrelated makes the affected store incomplete, protected, and
 non-inventoriable; it is never ignored.
 
 A complete database family is one primary database plus every entry assigned
@@ -121,10 +137,13 @@ loss or other mid-publish violation, a non-participating writer, membership or
 metadata drift, sync or replace failure, or a platform without the required
 atomic-replace and directory-durability primitives aborts the operation,
 removes attempt files where exclusion still permits it, and emits no inventory.
-Platform and fault-injection tests must cover writer races, new sidecars, lock
-loss before and after replacement, and every publication failure. Until those
-proofs exist, Codex SQLite and Cursor AI tracking remain protected and
-inventory-only in planning, with no L3 provider.
+The future L3 contract must define a supported-platform/filesystem capability
+matrix and runtime probes for atomic replacement and directory durability; a
+missing or failed capability is an abort condition. Platform and
+fault-injection tests must cover writer races, new sidecars, lock loss before
+and after replacement, and every publication failure. Until those proofs
+exist, Codex SQLite and Cursor AI tracking remain protected and inventory-only
+in planning, with no L3 provider.
 
 ## Agent-State Classification
 
