@@ -497,6 +497,66 @@ regression threshold or stability rule, and the absolute timing spread remains
 large. The final correction series is therefore **inconclusive**, not a
 performance pass, regression, or improvement claim.
 
+##### Final repair full/scoped correctness observation
+
+A following read-only correctness session reused
+`/private/tmp/aibris-140-safety-final.r3PYkh/aibris-change` unchanged. Its
+SHA-256 still matched
+`47f0e7f0de1818576851c621769a880b617d3762443e54a463dc6b999aea60e6`.
+The preserved `change-src` tree was byte-for-byte equal to
+`git archive e65ab5220ec17b30e9c21f181ef9146f098f5ffc`, and an independent
+`go build -trimpath` reproducibility check produced the same binary SHA-256.
+The accepted four-pair performance series above was not rerun or replaced.
+
+Both correctness invocations used the same fixed environment documented above.
+The full scan ran from `2026-07-30T15:38:39Z` through
+`2026-07-30T15:39:22Z` (`2026-07-31T00:38:39+09:00` through
+`2026-07-31T00:39:22+09:00`). The scoped scan immediately followed from
+`2026-07-30T15:39:22Z` through `2026-07-30T15:39:23Z`
+(`2026-07-31T00:39:22+09:00` through `2026-07-31T00:39:23+09:00`).
+
+| Invocation | Exact argv suffix | Overall scale (`sources/items/bytes`) | Completeness |
+| --- | --- | --- | --- |
+| Full HOME | `scan --root /Users/sjlee --json` | 8 / 362 / 34,735,772,762 B | exit 0; `partial=false`; 0 provider errors |
+| Scoped superpowers | `scan --root /Users/sjlee/.config/superpowers/worktrees --json` | 8 / 4 / 1,412,632,576 B | exit 0; `partial=false`; 0 provider errors |
+
+Cache identity was `K1` before the full scan and after the scoped scan: SHA-256
+`bf48b6d973392f6e42f3dc0e5bff9b42f031b3f957b04ab748d290a38485b63c`,
+3,029,853 B, `created_at=2026-07-30T21:24:45.354487+09:00`. Its hash, size,
+and filesystem mtime remained unchanged across the session.
+
+The final repair full-HOME and scoped superpowers rows match exactly by
+`source`, `tool`, physical owner `path`, `project`, `status`, and `size`.
+Their sorted key documents have the same SHA-256,
+`c23d07c115c6a5c1255f07d7fb316de5f8c68bb20081b02d4028a2fa6f723075`:
+
+| Project | Source / tool | Physical owner | Status | Per-row size |
+| --- | --- | --- | --- | ---: |
+| `ds121-question-repair` | `superpowers` / `unknown` | `~/.config/superpowers/worktrees/dear-scene` | `active` | 540,565,504 B |
+| `m61-feedback-loop` | `superpowers` / `unknown` | `~/.config/superpowers/worktrees/dear-scene` | `active` | 540,565,504 B |
+
+The accounting dimensions are deliberately separate:
+
+| Dimension | Full HOME | Scoped |
+| --- | ---: | ---: |
+| Logical superpowers rows | 2 | 2 |
+| Unique physical owners | 1 | 1 |
+| Unique physical owner bytes | 540,565,504 B | 540,565,504 B |
+| Raw row-size sum | 1,081,131,008 B | 1,081,131,008 B |
+
+The read-only filesystem oracle ran from `2026-07-30T15:39:48Z` through
+`2026-07-30T15:39:49Z` (`2026-07-31T00:39:48+09:00` through
+`2026-07-31T00:39:49+09:00`). The registered container had one outer owner,
+`dear-scene`, at 527,896 KiB / 540,565,504 B. It contained the two one-level
+`.git` marker files named by the logical rows, and both referenced gitdirs
+existed. This independently confirms the one-owner/two-member active
+inventory without mutating the container.
+
+The terminal correction commit containing this test and documentation update
+is test/docs-only. `e65ab5220ec17b30e9c21f181ef9146f098f5ffc` remains the
+final binary-affecting source and the immutable final repair binary identity
+remains unchanged.
+
 The prior audit's preserved `516 MB` label came from the 2026-07-26 observation;
 it was never an implementation or performance target.
 

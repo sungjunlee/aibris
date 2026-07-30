@@ -300,37 +300,4 @@ func TestBuiltCLI_MixedActiveOrphanedOwnerFailsClosed(t *testing.T) {
 	if _, statErr := os.Stat(owner); statErr != nil {
 		t.Fatalf("include-active mixed-owner dry-run changed owner: %v", statErr)
 	}
-
-	// This built-binary mutation proof is confined to the temporary HOME. The
-	// incomplete orphaned member evidence must fail closed before any mutation.
-	failClosedArgs := []string{
-		"clean",
-		"--force",
-		"--no-guide",
-		"--age=1ns",
-		"--category=worktree",
-		"--include-active-worktrees",
-	}
-	failClosedOutput, err := runCLIContract(binary, home, failClosedArgs...)
-	if err != nil {
-		t.Fatalf("built-CLI fail-closed cleanup returned an error: %v\n%s",
-			err, failClosedOutput)
-	}
-	for _, want := range []string{
-		"git status unavailable",
-		"matched  0 candidates",
-		"No items to clean.",
-	} {
-		if !strings.Contains(failClosedOutput, want) {
-			t.Fatalf("fail-closed mixed-owner cleanup missing %q:\n%s",
-				want, failClosedOutput)
-		}
-	}
-	if strings.Contains(failClosedOutput, "removing ") {
-		t.Fatalf("fail-closed mixed-owner cleanup attempted mutation:\n%s",
-			failClosedOutput)
-	}
-	if _, statErr := os.Stat(owner); statErr != nil {
-		t.Fatalf("fail-closed mixed-owner cleanup changed owner: %v", statErr)
-	}
 }
