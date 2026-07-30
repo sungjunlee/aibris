@@ -91,6 +91,7 @@ type OverlapSafetyMatch struct {
 type OverlapSafetyRefusal struct {
 	Reason         OverlapSafetyReason
 	TargetPath     string
+	AgentStateTool types.Tool
 	AgentStatePath string
 	Detail         string
 }
@@ -215,7 +216,7 @@ func buildOverlapSafetyComponent(
 	targetIdentity, err := canonicalExistingPathIdentity(target.Path)
 	if err != nil {
 		component.Refusal = overlapRefusal(
-			OverlapSafetyAmbiguousIdentity, target.Path, "", err.Error())
+			OverlapSafetyAmbiguousIdentity, target.Path, "", "", err.Error())
 		return component
 	}
 	component.targetIdentity = targetIdentity
@@ -235,7 +236,7 @@ func buildOverlapSafetyComponent(
 			detail += ": " + resolutionErr.Error()
 		}
 		component.Refusal = overlapRefusal(
-			OverlapSafetyAmbiguousIdentity, target.Path, item.Path,
+			OverlapSafetyAmbiguousIdentity, target.Path, item.Tool, item.Path,
 			detail)
 		return component
 	}
@@ -253,7 +254,8 @@ func buildOverlapSafetyComponent(
 
 	if cleanupKind(target) == types.CleanupCommand && len(component.Matches) > 0 {
 		component.Refusal = overlapRefusal(
-			OverlapSafetyCommandOverlap, target.Path, component.Matches[0].Item.Path,
+			OverlapSafetyCommandOverlap, target.Path, component.Matches[0].Item.Tool,
+			component.Matches[0].Item.Path,
 			"declared command path does not prove subtree-removal semantics")
 		return component
 	}
@@ -263,7 +265,8 @@ func buildOverlapSafetyComponent(
 			continue
 		}
 		component.Refusal = overlapRefusal(
-			protectedOverlapReason(match.Relation), target.Path, match.Item.Path,
+			protectedOverlapReason(match.Relation), target.Path, match.Item.Tool,
+			match.Item.Path,
 			fmt.Sprintf("classified %s", protectedEntryClass(match.Item.Classification)))
 		return component
 	}
@@ -277,7 +280,8 @@ func buildOverlapSafetyComponent(
 		registration, registrationErr := lookupAgentStateRevalidator(lookup, match.Item.Tool)
 		if registrationErr != nil {
 			component.Refusal = overlapRefusal(
-				OverlapSafetyNestedRevalidation, target.Path, match.Item.Path,
+				OverlapSafetyNestedRevalidation, target.Path, match.Item.Tool,
+				match.Item.Path,
 				registrationErr.Error())
 			return component
 		}
@@ -348,13 +352,22 @@ func (c OverlapSafetyComponent) ValidateBeforeMutationWithReport(
 		report.BlockingPath = overlapRefusalBlockingPath(current.Refusal)
 		report.BlockingReason = err.Error()
 		report.blockOutcomeAtPath(
+			current.Refusal.AgentStateTool,
 			current.Refusal.AgentStatePath,
-			overlapMatchClassification(current.Matches, current.Refusal.AgentStatePath),
+			overlapMatchClassification(
+				current.Matches,
+				current.Refusal.AgentStateTool,
+				current.Refusal.AgentStatePath,
+			),
 			err,
 		)
 		if current.Refusal.Reason == OverlapSafetyNestedRevalidation {
 			report.ensureBlockedOutcome(
-				overlapMatchForPath(current.Matches, current.Refusal.AgentStatePath),
+				overlapMatchForPath(
+					current.Matches,
+					current.Refusal.AgentStateTool,
+					current.Refusal.AgentStatePath,
+				),
 				err,
 			)
 		}
@@ -500,6 +513,7 @@ func (r *OverlapSafetyValidation) blockObligation(
 }
 
 func (r *OverlapSafetyValidation) blockOutcomeAtPath(
+	tool types.Tool,
 	path string,
 	classification types.EntryClass,
 	err error,
@@ -512,8 +526,9 @@ func (r *OverlapSafetyValidation) blockOutcomeAtPath(
 		canonicalPath = identity.canonical
 	}
 	for i := range r.Obligations {
-		if r.Obligations[i].EntryPath != path &&
-			r.Obligations[i].EntryPath != canonicalPath {
+		if (tool != "" && r.Obligations[i].Tool != tool) ||
+			(r.Obligations[i].EntryPath != path &&
+				r.Obligations[i].EntryPath != canonicalPath) {
 			continue
 		}
 		r.Obligations[i].State = AgentStateRevalidationBlocked
@@ -568,17 +583,19 @@ func overlapRefusalBlockingPath(refusal *OverlapSafetyRefusal) string {
 
 func overlapMatchClassification(
 	matches []OverlapSafetyMatch,
+	tool types.Tool,
 	path string,
 ) types.EntryClass {
-	return overlapMatchForPath(matches, path).Item.Classification
+	return overlapMatchForPath(matches, tool, path).Item.Classification
 }
 
 func overlapMatchForPath(
 	matches []OverlapSafetyMatch,
+	tool types.Tool,
 	path string,
 ) OverlapSafetyMatch {
 	for _, match := range matches {
-		if match.Item.Path == path {
+		if match.Item.Path == path && (tool == "" || match.Item.Tool == tool) {
 			return match
 		}
 	}
@@ -641,12 +658,14 @@ func entryForMatch(entries []agentStateSafetyEntry, match OverlapSafetyMatch) *a
 func overlapRefusal(
 	reason OverlapSafetyReason,
 	targetPath string,
+	agentStateTool types.Tool,
 	agentStatePath string,
 	detail string,
 ) *OverlapSafetyRefusal {
 	return &OverlapSafetyRefusal{
 		Reason:         reason,
 		TargetPath:     targetPath,
+		AgentStateTool: agentStateTool,
 		AgentStatePath: agentStatePath,
 		Detail:         detail,
 	}

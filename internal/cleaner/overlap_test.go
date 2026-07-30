@@ -299,6 +299,59 @@ func TestOverlapSafetyValidationRefreshesAndRevalidatesBeforeMutation(t *testing
 	}
 }
 
+func TestOverlapSafetyValidationAttributesSamePathRefusalToExactTool(t *testing.T) {
+	root := t.TempDir()
+	target := makeOverlapTestDir(t, filepath.Join(root, "outer"))
+	entry := makeOverlapTestDir(t, filepath.Join(target, "shared"))
+	claude := overlapAgentStateItem(entry, types.EntryClassOrphaned)
+	cursor := claude
+	cursor.Tool = types.ToolCursor
+	inventory := []types.DebrisInfo{claude, cursor}
+
+	lookup := overlapTestLookup(map[types.Tool]overlapTestRevalidator{
+		types.ToolClaude: func(context.Context, string) (types.EntryClass, error) {
+			t.Fatal("refreshed hard lock must refuse before Claude revalidation")
+			return "", nil
+		},
+		types.ToolCursor: func(context.Context, string) (types.EntryClass, error) {
+			t.Fatal("refreshed hard lock must refuse before Cursor revalidation")
+			return "", nil
+		},
+	})
+	component := singleOverlapComponent(t, buildOverlapTestPlan(
+		t,
+		inventory,
+		[]types.DebrisInfo{{Path: target}},
+		lookup,
+	))
+	refreshed := append([]types.DebrisInfo(nil), inventory...)
+	refreshed[1].Classification = types.EntryClassLive
+
+	report, err := component.ValidateBeforeMutationWithReport(
+		context.Background(),
+		OverlapSafetyEvidence{Items: refreshed, Complete: true},
+		lookup,
+	)
+	if !errors.Is(err, ErrOverlapSafetyRefusal) {
+		t.Fatalf("ValidateBeforeMutationWithReport() error = %v; want refusal", err)
+	}
+	if len(report.Obligations) != 2 {
+		t.Fatalf("outcomes = %+v; want both same-path tool obligations", report.Obligations)
+	}
+	outcomes := make(map[types.Tool]AgentStateRevalidationOutcome, len(report.Obligations))
+	for _, outcome := range report.Obligations {
+		outcomes[outcome.Tool] = outcome
+	}
+	if got := outcomes[types.ToolCursor]; got.State != AgentStateRevalidationBlocked ||
+		got.Classification != types.EntryClassLive {
+		t.Fatalf("Cursor outcome = %+v; want blocked live refusal", got)
+	}
+	if got := outcomes[types.ToolClaude]; got.State != AgentStateRevalidationNotAttempted ||
+		got.Classification != "" || got.Reason != "" {
+		t.Fatalf("Claude outcome = %+v; want untouched not-attempted", got)
+	}
+}
+
 func TestOverlapSafetyValidationRejectsCancellationAndSymlinkRetarget(t *testing.T) {
 	root := t.TempDir()
 	first := makeOverlapTestDir(t, filepath.Join(root, "first"))
