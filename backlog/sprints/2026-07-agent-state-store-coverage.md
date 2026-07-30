@@ -43,9 +43,9 @@ content that is surfaced rather than reclaimed.
 
 - [x] #142 L1 store classification: freeze installed, regenerable, and user-content decisions before adding providers → PR #164 (merged `228e0f9`, hardened primary review round 5)
 
-### Batch 6 — Introduce protected-content retention semantics
+### Batch 6 — Introduce protected-content retention semantics — complete
 
-- [~] #139 L1 retention contract: freeze bucket, selector, aggregation, timestamp, and execution-manifest semantics
+- [x] #139 L1 retention contract: freeze bucket, selector, aggregation, timestamp, and execution-manifest semantics → PR #165 (merged `2d9714a`, 3 hardened primary rounds plus final exact-head review)
 
 ### Batch 7 — Add byproduct coverage
 
@@ -489,3 +489,22 @@ measuring, because the real home lacked the triggering condition.
   to an immutable member manifest; and #138 proof-based eligibility plus #151
   overlap hard locks remain authoritative. The contract also keeps #142
   SQLite/ai-tracking inventory-only until producer cooperation exists.
+- 2026-07-31 04:09: #139 L1 → PR #165 → squash-merged as `2d9714a`;
+  Batch 6 completed while #139 remains open for L2–L4. Three exact-head
+  hardened primary rounds passed every Done Criterion, but the advisory lane
+  exhausted its budget on OpenCode schema, Pi authentication, and Antigravity
+  empty-output failures rather than a repository finding. Public review then
+  found two genuine execution-contract gaps: deletion now binds the validated
+  entry and physical identity to a non-following mutation while its fence is
+  held, and a retention-selected plan can no longer widen into a broader
+  recursive #138 cleanup. Both were fixed at `7397525`, independently reviewed
+  with no remaining actionable finding, and all public threads were resolved.
+  Ubuntu/macOS CI, release-build, and CodeRabbit passed; Relay removed the run
+  worktree and local/remote branch.
+
+  Merged `main` passed race tests, build, vet, and Linux/Windows/Darwin builds.
+  Same-session real-home dry-runs from immutable pre-merge `4f6ad77` and merged
+  `2d9714a` binaries produced identical normalized summaries: **213 items /
+  1.6 GB** planned, with agent-state **277 found / 210 eligible (246.1 MB) /
+  67 protected (429.4 MB)**. These are observations rather than baselines, and
+  every real-home cleanup invocation used `--dry-run`.
