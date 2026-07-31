@@ -8,10 +8,10 @@ import (
 	"syscall"
 )
 
-var recordedCWDDeviceID = func(_ string, info os.FileInfo) (uint64, error) {
+var recordedCWDVolumeID = func(_ string, info os.FileInfo) (string, error) {
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	if !ok {
-		return 0, fmt.Errorf("recorded cwd device metadata unavailable")
+		return "", fmt.Errorf("recorded cwd device metadata unavailable")
 	}
-	return uint64(stat.Dev), nil
+	return fmt.Sprintf("device:%d", uint64(stat.Dev)), nil
 }
