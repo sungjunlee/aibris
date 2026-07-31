@@ -530,12 +530,6 @@ func guidedProtectedRows(state guidedCleanState) []guidedCleanRow {
 			rows = append(rows, row)
 		}
 	}
-	sort.SliceStable(rows, func(i, j int) bool {
-		if rows[i].Row.Item.Size == rows[j].Row.Item.Size {
-			return rows[i].Number < rows[j].Number
-		}
-		return rows[i].Row.Item.Size > rows[j].Row.Item.Size
-	})
 	return rows
 }
 

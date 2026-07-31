@@ -407,6 +407,20 @@ func TestGuidedMixedToolOrderingAndSelectionStayStableAcrossAgeReplan(t *testing
 	if row := guidedRowByKey(t, next, unknown.TargetPath); row.Policy != guidedCleanPolicyReviewable || row.Selected {
 		t.Fatalf("unknown row after replan = %+v; want unselected reviewable", row)
 	}
+
+	var output bytes.Buffer
+	renderGuidedClean(&output, next, "", guidedCleanPromptText)
+	rendered := output.String()
+	oldPosition := strings.Index(rendered, "old-codex")
+	unknownPosition := strings.Index(rendered, ".mystery/unknown")
+	newPosition := strings.Index(rendered, "new-codex")
+	if oldPosition < 0 || unknownPosition < 0 || newPosition < 0 {
+		t.Fatalf("replanned protected rows missing from rendered output:\n%s", rendered)
+	}
+	if !(oldPosition < unknownPosition && unknownPosition < newPosition) {
+		t.Fatalf("replanned protected render order positions = old:%d unknown:%d new:%d; want unselected recommended first, then size/key:\n%s",
+			oldPosition, unknownPosition, newPosition, rendered)
+	}
 }
 
 func TestNoSourceRowsDoNotDisplaceCodexRepositoryRetention(t *testing.T) {
