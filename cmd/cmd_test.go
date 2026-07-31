@@ -1007,6 +1007,125 @@ func TestCleanCmd_DropsMissingTargetsFromFreshLastScanCache(t *testing.T) {
 	}
 }
 
+func TestCleanCmd_RefreshesCachedTargetAgeBeforeDryRun(t *testing.T) {
+	resetScanFlags()
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	workspace := filepath.Join(home, "workspace")
+	modules := filepath.Join(workspace, "app", "node_modules")
+	if err := os.MkdirAll(filepath.Join(modules, "pkg"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(modules, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	captureOutput(func() {
+		rootCmd.SetArgs([]string{"scan", "--root", workspace})
+		rootCmd.Execute()
+	})
+	refreshed := time.Now()
+	if err := os.Chtimes(modules, refreshed, refreshed); err != nil {
+		t.Fatal(err)
+	}
+
+	resetCleanFlags()
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--dry-run", "--age=1h", "--root", workspace, "--category=node_modules"})
+		rootCmd.Execute()
+	})
+
+	if !strings.Contains(output, "scan    cached") {
+		t.Errorf("clean should retain the cached scan fast path; got: %s", output)
+	}
+	if !strings.Contains(output, "matched  0 candidates") {
+		t.Errorf("refreshed target must not remain eligible from cached age; got: %s", output)
+	}
+	if !strings.Contains(output, "younger than 1h") {
+		t.Errorf("audit should explain the refreshed age decision; got: %s", output)
+	}
+	if _, err := os.Lstat(modules); err != nil {
+		t.Fatalf("dry-run removed refreshed target: %v", err)
+	}
+}
+
+func TestCleanCmd_ForceDoesNotDeleteTargetRefreshedAfterCachedScan(t *testing.T) {
+	resetScanFlags()
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	workspace := filepath.Join(home, "workspace")
+	modules := filepath.Join(workspace, "app", "node_modules")
+	if err := os.MkdirAll(filepath.Join(modules, "pkg"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(modules, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	captureOutput(func() {
+		rootCmd.SetArgs([]string{"scan", "--root", workspace})
+		rootCmd.Execute()
+	})
+	refreshed := time.Now()
+	if err := os.Chtimes(modules, refreshed, refreshed); err != nil {
+		t.Fatal(err)
+	}
+
+	resetCleanFlags()
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--force", "--age=1h", "--root", workspace, "--category=node_modules"})
+		rootCmd.Execute()
+	})
+
+	if !strings.Contains(output, "matched  0 candidates") {
+		t.Errorf("force must not bypass refreshed age evidence; got: %s", output)
+	}
+	if _, err := os.Lstat(modules); err != nil {
+		t.Fatalf("force removed target refreshed after cached scan: %v", err)
+	}
+}
+
+func TestCleanCmd_InvalidatesScanCacheAfterCleanup(t *testing.T) {
+	resetScanFlags()
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	workspace := filepath.Join(home, "workspace")
+	modules := filepath.Join(workspace, "app", "node_modules")
+	if err := os.MkdirAll(filepath.Join(modules, "pkg"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(modules, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	captureOutput(func() {
+		rootCmd.SetArgs([]string{"scan", "--root", workspace})
+		rootCmd.Execute()
+	})
+	if _, ok := readLastScanCache(); !ok {
+		t.Fatal("expected scan cache before cleanup")
+	}
+
+	resetCleanFlags()
+	captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--force", "--age=1h", "--root", workspace, "--category=node_modules"})
+		rootCmd.Execute()
+	})
+
+	if _, err := os.Lstat(modules); !os.IsNotExist(err) {
+		t.Fatalf("cleanup target still exists: %v", err)
+	}
+	if _, ok := readLastScanCache(); ok {
+		t.Fatal("cleanup left stale scan cache reusable")
+	}
+}
+
 func TestCleanCmd_IgnoresStaleLastScanCache(t *testing.T) {
 	resetCleanFlags()
 	home := t.TempDir()

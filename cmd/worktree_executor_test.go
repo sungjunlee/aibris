@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
@@ -28,10 +29,15 @@ func preparedExecutorTarget(
 	if err != nil {
 		t.Fatal(err)
 	}
+	snapshot, err := captureCleanupTargetSnapshot(item, types.PruneOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	return preparedCleanTarget{
 		Item:           item,
 		ActiveUnit:     &selected,
 		MutationSafety: safety,
+		TargetSnapshot: snapshot,
 	}
 }
 
@@ -157,6 +163,7 @@ func TestExecuteActiveWorktreePreflightCancellationRecordsComponentBlocker(t *te
 		item,
 		component,
 		selected,
+		nil,
 		nil,
 		defaultActiveWorktreeExecutionOptions(),
 	)
@@ -333,6 +340,62 @@ func TestExecuteOrphanedWorktreeKeepsRawPathCleanup(t *testing.T) {
 	}
 	if !pathDoesNotExist(target) {
 		t.Errorf("orphaned target %q still exists", target)
+	}
+}
+
+func TestExecutePreparedPathCleanupRejectsTargetChangedAfterSelection(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	targetPath := filepath.Join(home, ".cache", "changed-after-selection")
+	sentinel := filepath.Join(targetPath, "sentinel")
+	if err := os.MkdirAll(targetPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sentinel, []byte("survive"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-48 * time.Hour)
+	if err := os.Chtimes(targetPath, old, old); err != nil {
+		t.Fatal(err)
+	}
+	target := types.DebrisInfo{
+		Tool:        types.ToolBuildCache,
+		Category:    types.CategoryBuildCache,
+		ID:          "changed-after-selection",
+		Path:        targetPath,
+		Size:        8,
+		ModTime:     old,
+		CleanupKind: types.CleanupRemovePath,
+	}
+	runtime := staticOverlapSafetyRuntime(nil, nil)
+	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared := prepareCleanExecutionWithOptions(
+		context.Background(),
+		selection,
+		runtime,
+		types.PruneOptions{Age: 24 * time.Hour},
+	)
+	changed := time.Now()
+	if err := os.Chtimes(targetPath, changed, changed); err != nil {
+		t.Fatal(err)
+	}
+
+	receipt, err := executePreparedCleanTargets(
+		context.Background(),
+		prepared,
+		defaultActiveWorktreeExecutionOptions(),
+	)
+	if err == nil || receipt.FreedBytes != 0 {
+		t.Fatalf("error=%v, freed=%d; want changed-since-selection refusal", err, receipt.FreedBytes)
+	}
+	if !strings.Contains(err.Error(), "changed since cleanup selection") {
+		t.Fatalf("error=%v; want actionable changed-since-selection reason", err)
+	}
+	if _, statErr := os.Lstat(sentinel); statErr != nil {
+		t.Fatalf("changed target was removed: %v", statErr)
 	}
 }
 

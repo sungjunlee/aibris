@@ -65,6 +65,7 @@ type preparedCleanTarget struct {
 	Component        *cleanupOverlapComponent
 	ActiveUnit       *WorktreeCleanupUnit
 	MutationSafety   *cleanupMutationSafety
+	TargetSnapshot   *cleanupTargetSnapshot
 	PreparationError error
 }
 
@@ -94,10 +95,30 @@ func prepareCleanExecutionWithSafety(
 	selection cleanupOverlapSafetySelection,
 	runtime cleanupOverlapSafetyRuntime,
 ) []preparedCleanTarget {
+	return prepareCleanExecutionWithOptions(
+		ctx,
+		selection,
+		runtime,
+		types.PruneOptions{},
+	)
+}
+
+func prepareCleanExecutionWithOptions(
+	ctx context.Context,
+	selection cleanupOverlapSafetySelection,
+	runtime cleanupOverlapSafetyRuntime,
+	opts types.PruneOptions,
+) []preparedCleanTarget {
 	targets := selection.Targets
 	prepared := make([]preparedCleanTarget, 0, len(targets))
 	for _, target := range targets {
 		entry := preparedCleanTarget{Item: target}
+		snapshot, snapshotErr := captureCleanupTargetSnapshot(target, opts)
+		if snapshotErr != nil {
+			entry.PreparationError = errors.Join(entry.PreparationError, snapshotErr)
+		} else {
+			entry.TargetSnapshot = snapshot
+		}
 		if component, ok := cleanupOverlapComponentForTarget(selection, target); ok {
 			componentCopy := component
 			entry.Component = &componentCopy
@@ -140,6 +161,9 @@ func executeCleanTargets(
 }
 
 func executePreparedCleanTargets(ctx context.Context, targets []preparedCleanTarget, opts activeWorktreeExecutionOptions) (cleanExecutionReceipt, error) {
+	if len(targets) > 0 {
+		defer invalidateLastScanCache()
+	}
 	if opts.removeWorktree == nil {
 		opts.removeWorktree = removeGitWorktree
 	}
@@ -188,6 +212,7 @@ func executePreparedCleanTargets(ctx context.Context, targets []preparedCleanTar
 				target.Item,
 				target.Component,
 				target.MutationSafety,
+				target.TargetSnapshot,
 			)
 		case target.ActiveUnit == nil:
 			receipt = failedPreparedCleanUnitReceipt(
@@ -202,6 +227,7 @@ func executePreparedCleanTargets(ctx context.Context, targets []preparedCleanTar
 				target.Component,
 				*target.ActiveUnit,
 				target.MutationSafety,
+				target.TargetSnapshot,
 				opts,
 			)
 		}
@@ -233,6 +259,7 @@ func executePathCleanupTarget(
 	target types.DebrisInfo,
 	component *cleanupOverlapComponent,
 	safety *cleanupMutationSafety,
+	snapshot *cleanupTargetSnapshot,
 ) (cleanUnitExecutionReceipt, error) {
 	receipt := newCleanUnitExecutionReceipt(target, component, safety)
 	var validation cleaner.OverlapSafetyValidation
@@ -241,6 +268,12 @@ func executePathCleanupTarget(
 		ctx,
 		[]types.DebrisInfo{target},
 		func(ctx context.Context, _ types.DebrisInfo) error {
+			if snapshot == nil {
+				return errors.New("cleanup target snapshot unavailable")
+			}
+			if snapshotErr := snapshot.validate(); snapshotErr != nil {
+				return snapshotErr
+			}
 			var validationErr error
 			validation, validationErr = safety.validate(ctx)
 			validated = true
@@ -281,6 +314,7 @@ func executeActiveWorktreeUnit(
 	component *cleanupOverlapComponent,
 	selected WorktreeCleanupUnit,
 	safety *cleanupMutationSafety,
+	snapshot *cleanupTargetSnapshot,
 	opts activeWorktreeExecutionOptions,
 ) (cleanUnitExecutionReceipt, error) {
 	receipt := newCleanUnitExecutionReceipt(target, component, safety)
@@ -305,6 +339,16 @@ func executeActiveWorktreeUnit(
 	if validationErr != nil {
 		receipt.Error = fmt.Sprintf("pre-mutation safety barrier: %v", validationErr)
 		return receipt, fmt.Errorf("pre-mutation safety barrier: %w", validationErr)
+	}
+	if snapshot == nil {
+		receipt.Error = "pre-mutation safety barrier: cleanup target snapshot unavailable"
+		return receipt, errors.New(receipt.Error)
+	}
+	if snapshotErr := snapshot.validate(); snapshotErr != nil {
+		receipt.BlockingPath = target.Path
+		receipt.BlockingReason = snapshotErr.Error()
+		receipt.Error = fmt.Sprintf("pre-mutation safety barrier: %v", snapshotErr)
+		return receipt, errors.New(receipt.Error)
 	}
 
 	for i, member := range refreshed.Members {

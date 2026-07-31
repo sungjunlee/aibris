@@ -91,6 +91,7 @@ classic cleanup audit and executor route.`,
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
+		refreshCleanupInventoryMetadata(result.Worktrees)
 		overlapSafety, err := newDefaultCleanupOverlapSafetyRuntime(ctx)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: preparing overlap safety: %v\n", err)
@@ -213,7 +214,7 @@ classic cleanup audit and executor route.`,
 			fmt.Println("[DRY-RUN] No files were removed.")
 			return
 		}
-		prepared := prepareCleanExecutionWithSafety(ctx, overlapSelection, overlapSafety)
+		prepared := prepareCleanExecutionWithOptions(ctx, overlapSelection, overlapSafety, opts)
 
 		if opts.Interactive {
 			receipt, err := interactiveClean(ctx, prepared)

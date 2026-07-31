@@ -1,0 +1,87 @@
+package cmd
+
+import (
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/sungjunlee/aibris/internal/types"
+)
+
+type cleanupTargetSnapshot struct {
+	path       string
+	info       os.FileInfo
+	minimumAge time.Duration
+}
+
+func refreshCleanupInventoryMetadata(items []types.DebrisInfo) {
+	for i := range items {
+		if isActiveWorktreeTarget(items[i]) {
+			// Active worktrees use session activity plus Git-aware preflight.
+			// Replacing that evidence with the container mtime would make Git
+			// metadata churn look like user activity.
+			continue
+		}
+		info, err := os.Lstat(items[i].Path)
+		if err != nil {
+			continue
+		}
+		items[i].ModTime = info.ModTime()
+	}
+}
+
+func captureCleanupTargetSnapshot(
+	item types.DebrisInfo,
+	opts types.PruneOptions,
+) (*cleanupTargetSnapshot, error) {
+	info, err := os.Lstat(item.Path)
+	if err != nil {
+		return nil, fmt.Errorf("capturing cleanup target %q: %w", item.Path, err)
+	}
+	minimumAge := time.Duration(0)
+	if item.Category != types.CategoryAgentState && !isActiveWorktreeTarget(item) {
+		minimumAge = opts.Age
+	}
+	snapshot := &cleanupTargetSnapshot{
+		path:       item.Path,
+		info:       info,
+		minimumAge: minimumAge,
+	}
+	if err := snapshot.validateAge(info, time.Now()); err != nil {
+		return nil, err
+	}
+	return snapshot, nil
+}
+
+func (s cleanupTargetSnapshot) validate() error {
+	current, err := os.Lstat(s.path)
+	if err != nil {
+		return fmt.Errorf("cleanup target changed since cleanup selection: %q: %w", s.path, err)
+	}
+	if !os.SameFile(s.info, current) {
+		return fmt.Errorf("cleanup target changed since cleanup selection: path identity changed for %q", s.path)
+	}
+	if s.info.Mode().Type() != current.Mode().Type() {
+		return fmt.Errorf("cleanup target changed since cleanup selection: path type changed for %q", s.path)
+	}
+	if !s.info.ModTime().Equal(current.ModTime()) {
+		return fmt.Errorf(
+			"cleanup target changed since cleanup selection: mtime changed for %q from %s to %s",
+			s.path,
+			s.info.ModTime().Format(time.RFC3339Nano),
+			current.ModTime().Format(time.RFC3339Nano),
+		)
+	}
+	return s.validateAge(current, time.Now())
+}
+
+func (s cleanupTargetSnapshot) validateAge(info os.FileInfo, observedAt time.Time) error {
+	if s.minimumAge <= 0 || info.ModTime().Before(observedAt.Add(-s.minimumAge)) {
+		return nil
+	}
+	return fmt.Errorf(
+		"cleanup target changed since cleanup selection: %q is younger than the configured minimum age %s",
+		s.path,
+		s.minimumAge,
+	)
+}
