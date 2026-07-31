@@ -256,9 +256,8 @@ func cleanupUnitActivityRows(items []types.DebrisInfo) map[string][]types.Debris
 		rows[targetPath] = append(rows[targetPath], item)
 	}
 	for targetPath := range rows {
-		sort.Slice(rows[targetPath], func(i, j int) bool {
-			return cleanTargetStableKey(rows[targetPath][i]) <
-				cleanTargetStableKey(rows[targetPath][j])
+		sort.SliceStable(rows[targetPath], func(i, j int) bool {
+			return guidedWorktreeItemLess(rows[targetPath][i], rows[targetPath][j])
 		})
 	}
 	return rows

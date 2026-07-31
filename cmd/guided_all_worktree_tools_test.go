@@ -198,6 +198,12 @@ func TestCleanCmd_ExplicitGuideShowsAllToolsAndToolSelectorNarrows(t *testing.T)
 			wantIDs:    []string{"claude-explicit"},
 			unwantedID: "unknown-explicit",
 		},
+		{
+			name:       "unknown only",
+			args:       []string{"clean", "--guide", "--tool=unknown", "--dry-run"},
+			wantIDs:    []string{"unknown-explicit"},
+			unwantedID: "claude-explicit",
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			resetCleanFlags()

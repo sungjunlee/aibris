@@ -142,19 +142,7 @@ func guidedCleanupUnitItem(unit WorktreeCleanupUnit, items []types.DebrisInfo) t
 		}
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
-		if candidates[i].Tool != candidates[j].Tool {
-			return candidates[i].Tool < candidates[j].Tool
-		}
-		if candidates[i].Source != candidates[j].Source {
-			return candidates[i].Source < candidates[j].Source
-		}
-		if candidates[i].Project != candidates[j].Project {
-			return candidates[i].Project < candidates[j].Project
-		}
-		if candidates[i].ID != candidates[j].ID {
-			return candidates[i].ID < candidates[j].ID
-		}
-		return candidates[i].Path < candidates[j].Path
+		return guidedWorktreeItemLess(candidates[i], candidates[j])
 	})
 	item := types.DebrisInfo{
 		Tool:     types.ToolUnknown,
@@ -171,6 +159,25 @@ func guidedCleanupUnitItem(unit WorktreeCleanupUnit, items []types.DebrisInfo) t
 		item.ModTime = unit.LastActivity
 	}
 	return item
+}
+
+func guidedWorktreeItemLess(left, right types.DebrisInfo) bool {
+	if left.Tool != right.Tool {
+		return left.Tool < right.Tool
+	}
+	if left.Source != right.Source {
+		return left.Source < right.Source
+	}
+	if left.Project != right.Project {
+		return left.Project < right.Project
+	}
+	if left.ID != right.ID {
+		return left.ID < right.ID
+	}
+	if left.Path != right.Path {
+		return left.Path < right.Path
+	}
+	return cleanTargetStableKey(left) < cleanTargetStableKey(right)
 }
 
 func guidedActiveWorktrees(
