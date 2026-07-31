@@ -84,6 +84,12 @@ type DebrisInfo struct {
 	Reason         string
 	CleanupKind    CleanupKind
 	CleanupCommand []string
+	// ScanPathIdentity, ScanPathType, and ScanPathEvidenceRequired are transient
+	// cleanup safety evidence.
+	// They are deliberately excluded from persisted ScanResult JSON.
+	ScanPathIdentity         string `json:"-"`
+	ScanPathType             uint32 `json:"-"`
+	ScanPathEvidenceRequired bool   `json:"-"`
 }
 
 // ScanResult aggregates all debris found by all adapters.

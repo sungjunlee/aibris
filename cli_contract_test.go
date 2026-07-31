@@ -176,16 +176,10 @@ func TestCLIContractDestructiveCommandIsolatesWindowsUserCache(t *testing.T) {
 		filepath.Join(home, ".cache", "aibris", "last-scan.json"),
 		filepath.Join(home, "Library", "Caches", "aibris", "last-scan.json"),
 	}
-	foundIsolatedCache := false
 	for _, path := range isolatedScanCaches {
-		if _, err := os.Stat(path); err == nil {
-			foundIsolatedCache = true
-			break
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("destructive cleanup left reusable scan cache %q: %v", path, err)
 		}
-	}
-	if !foundIsolatedCache {
-		t.Fatalf("destructive fixture did not write a scan cache under temporary home: %q",
-			isolatedScanCaches)
 	}
 }
 

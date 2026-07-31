@@ -131,6 +131,16 @@ root-mismatched snapshots. This identity does not detect behavior changes
 inside an unchanged concrete provider. Maintainers must bump the explicit cache
 revision for those changes.
 
+Compatibility is necessary but not sufficient to reuse a cached target. Every
+target must carry filesystem identity and type evidence captured by the scan.
+Cache loading revalidates that evidence; a missing, replaced, type-changed,
+symlink, Windows reparse-point, or otherwise unverifiable target makes the
+snapshot incompatible and forces a live scan. A live result also carries the
+same evidence into cleanup preparation. Before selection, `clean` refreshes the
+current modification time. After overlap safety refresh and immediately before
+mutation, it verifies identity, type, modification time, and age again. Evidence
+failure protects the affected target rather than trusting stale scan state.
+
 For `agent-state`, `classification` replaces the age gate. An absent recorded
 working directory proves the associated work is gone and resume is already
 impossible, so `orphaned` is eligible regardless of age after category and tool

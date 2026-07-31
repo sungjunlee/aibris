@@ -91,6 +91,7 @@ classic cleanup audit and executor route.`,
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
+		refreshCleanupInventoryMetadata(result.Worktrees)
 		overlapSafety, err := newDefaultCleanupOverlapSafetyRuntime(ctx)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: preparing overlap safety: %v\n", err)
@@ -159,10 +160,12 @@ classic cleanup audit and executor route.`,
 			opts.IncludeActiveWorktrees,
 		)
 		targets = filterExistingTargets(targets)
+		targets, scanEvidenceProtections := filterTargetsWithoutScanEvidence(targets)
 		targets = normalizeCleanTargets(targets)
 		targets, gitSafetyProtections := filterGitUnsafeActiveWorktreeTargets(ctx, targets)
 		classicProtections := mergeCleanAuditProtections(
 			physicalOwnerProtections,
+			scanEvidenceProtections,
 			gitSafetyProtections,
 		)
 		logicalInputs := cleanupOverlapLogicalInputsForAudit(
@@ -222,7 +225,7 @@ classic cleanup audit and executor route.`,
 			fmt.Println("[DRY-RUN] No files were removed.")
 			return
 		}
-		prepared := prepareCleanExecutionWithSafety(ctx, overlapSelection, overlapSafety)
+		prepared := prepareCleanExecutionWithOptions(ctx, overlapSelection, overlapSafety, opts)
 
 		if opts.Interactive {
 			receipt, err := interactiveClean(ctx, prepared)
@@ -657,6 +660,19 @@ func filterExistingTargets(targets []types.DebrisInfo) []types.DebrisInfo {
 		}
 	}
 	return filtered
+}
+
+func filterTargetsWithoutScanEvidence(targets []types.DebrisInfo) ([]types.DebrisInfo, map[string]cleanAuditReason) {
+	filtered := targets[:0]
+	protections := make(map[string]cleanAuditReason)
+	for _, target := range targets {
+		if target.ScanPathEvidenceRequired && target.ScanPathIdentity == "" {
+			protections[cleanAuditItemKey(target)] = cleanReasonScanEvidenceUnavailable
+			continue
+		}
+		filtered = append(filtered, target)
+	}
+	return filtered, protections
 }
 
 // applyPhysicalWorktreeOwnerSafety evaluates worktree eligibility at the

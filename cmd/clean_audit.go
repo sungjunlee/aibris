@@ -67,6 +67,7 @@ const (
 	cleanReasonCommandOverlap                cleanAuditReason = "cleanup command overlaps agent-state"
 	cleanReasonNestedRevalidation            cleanAuditReason = "nested agent-state revalidation refused"
 	cleanReasonNestedRevalidationRequired    cleanAuditReason = "nested agent-state revalidation required"
+	cleanReasonScanEvidenceUnavailable       cleanAuditReason = "scan identity evidence unavailable"
 	cleanReasonEligible                      cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonEligible)
 )
 

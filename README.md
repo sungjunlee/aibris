@@ -288,7 +288,10 @@ roots, explicit cache revision (`schema_version`), and concrete provider
 membership identity all match. A missing legacy identity or any mismatch falls
 back to a live scan with progress output. The membership identity detects
 provider additions, removals, and duplicate registrations, not behavior changes
-inside an unchanged provider; those changes require a cache revision bump.
+inside an unchanged provider; those changes require a cache revision bump. Each
+cached target also carries filesystem identity and type evidence. Missing,
+replaced, type-changed, symlink, or Windows reparse-point targets reject cache
+reuse instead of being trusted as the object that was scanned.
 
 Live fallback keeps the same audit shape after non-interactive scan progress:
 
@@ -354,7 +357,9 @@ Cancellation remains a hard failure.
   to recursive deletion after Git removal fails.
 - **Recent scan reuse** skips a repeated scan when `clean` can use a fresh
   snapshot with matching roots, cache revision, and concrete provider
-  membership, while still re-checking target paths
+  membership. It binds each target to filesystem identity and type evidence,
+  refreshes current modification time before selection, and verifies identity,
+  type, age, and modification time again at the mutation boundary
 - **`--risky`** must be explicitly set to delete AI logs
 - **Active worktrees are excluded by default**; use
   `--include-active-worktrees` only when you intentionally want age-based

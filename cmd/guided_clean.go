@@ -239,7 +239,7 @@ func runGuidedCodexClean(
 			HadSelection:      true,
 		}, nil
 	}
-	prepared := prepareCleanExecutionWithSafety(ctx, overlapSelection, overlapSafety)
+	prepared := prepareCleanExecutionWithOptions(ctx, overlapSelection, overlapSafety, opts)
 
 	if opts.Interactive {
 		receipt, err := interactiveClean(ctx, prepared)

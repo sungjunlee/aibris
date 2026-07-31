@@ -14,16 +14,17 @@ import (
 const (
 	// Bump this explicit compatibility revision when cache format or provider
 	// behavior changes without a concrete provider-membership change.
-	lastScanCacheSchemaVersion = 4
+	lastScanCacheSchemaVersion = 5
 	lastScanCacheMaxAge        = 5 * time.Minute
 )
 
 type lastScanCache struct {
-	SchemaVersion    int              `json:"schema_version"`
-	ProviderIdentity string           `json:"provider_identity"`
-	CreatedAt        time.Time        `json:"created_at"`
-	Roots            []string         `json:"roots"`
-	Result           types.ScanResult `json:"result"`
+	SchemaVersion    int                               `json:"schema_version"`
+	ProviderIdentity string                            `json:"provider_identity"`
+	CreatedAt        time.Time                         `json:"created_at"`
+	Roots            []string                          `json:"roots"`
+	Result           types.ScanResult                  `json:"result"`
+	TargetEvidence   map[string]lastScanTargetEvidence `json:"target_evidence,omitempty"`
 }
 
 func writeLastScanCache(roots []string, result *types.ScanResult) {
@@ -34,12 +35,18 @@ func writeLastScanCache(roots []string, result *types.ScanResult) {
 		invalidateLastScanCache()
 		return
 	}
+	evidence, err := captureLastScanTargetEvidence(result.Worktrees)
+	if err != nil {
+		invalidateLastScanCache()
+		return
+	}
 	_ = saveLastScanCache(lastScanCache{
 		SchemaVersion:    lastScanCacheSchemaVersion,
 		ProviderIdentity: adapter.DefaultProviderIdentity(),
 		CreatedAt:        time.Now(),
 		Roots:            append([]string(nil), roots...),
 		Result:           *result,
+		TargetEvidence:   evidence,
 	})
 }
 
@@ -81,6 +88,9 @@ func readFreshLastScanCache(roots []string) (*types.ScanResult, time.Duration, b
 		return nil, age, false
 	}
 	if cache.Result.Partial() {
+		return nil, age, false
+	}
+	if !validateLastScanTargetEvidence(cache.Result.Worktrees, cache.TargetEvidence) {
 		return nil, age, false
 	}
 	return &cache.Result, age, true
