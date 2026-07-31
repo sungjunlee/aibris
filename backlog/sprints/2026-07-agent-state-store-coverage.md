@@ -54,7 +54,7 @@ content that is surfaced rather than reclaimed.
 
 ### Batch 8 — Cover the largest retention stores
 
-- [ ] #139 L2 Codex sessions: aggregate counts and sizes by time bucket without parsing conversation bodies
+- [~] #139 L2 Codex sessions: aggregate counts and sizes by time bucket without parsing conversation bodies [branch:issue-139-codex-sessions-retention-inventory]
 - [ ] #139 L3 Cursor/Gstack/Claude: add coverage without duplicate rows or bytes
 - [ ] #139 L4 relay runs and end-to-end retention CLI contract
 
@@ -537,3 +537,8 @@ measuring, because the real home lacked the triggering condition.
   maintainer explicitly approves advancing Batch 8 ahead of blocked Batch 7;
   selector, manifest, cleanup eligibility, executor, and mutation remain out
   of scope.
+- 2026-07-31: [actor:codex] The maintainer explicitly approved advancing Batch 8 ahead of
+  externally blocked Batch 7. #139 L2 is now in progress under the already
+  frozen Relay request `req-20260730192929540`; its 22 Done Criteria and
+  read-only, non-additive boundary remain unchanged
+  [branch:issue-139-codex-sessions-retention-inventory].
