@@ -60,7 +60,7 @@ content that is surfaced rather than reclaimed.
 
 ### Batch 9 — Open guided review to every tool
 
-- [ ] #141 Generalize guided worktree review beyond codex (~3h)
+- [~] #141 Generalize guided worktree review beyond codex (~3h) [run:issue-141-20260731062303100-927250e4]
 
 ### Batch 10 — State the boundary
 
@@ -558,3 +558,11 @@ measuring, because the real home lacked the triggering condition.
   quiescence probe drifted. No PR was opened and nothing was merged. Batch 8
   L3/L4 stay dependent; execution may move to the independent #141 guided
   review batch while L2 awaits an offline measurement window.
+- 2026-07-31 15:23: Started independent Batch 9 issue #141 after parking #139
+  L2. Relay-ready froze one high-risk leaf with 17 Done Criteria: guided review
+  admits every active worktree tool, preserves source/tool identity and every
+  Git/overlap/preflight lock, keeps unavailable registered activity evidence
+  locked, and makes tools with no activity source explicitly reviewable but
+  never auto-recommended. Codex implementation is isolated in Relay run
+  `issue-141-20260731062303100-927250e4`; publication is delayed until hardened
+  internal review, and no PR or merge is authorized by this status change.
