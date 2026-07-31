@@ -28,12 +28,13 @@ Ship the reliability work as a 0.8.x patch only after the milestone contracts ar
 - [x] GitHub Release notes use the curated changelog rather than an unfiltered commit dump.
 - [x] Post-release scan and dry-run dogfood evidence is recorded without deleting real user data.
 
-## Release decision
+## Historical release decision (2026-07-23)
 
-Deferred on 2026-07-23 pending explicit maintainer approval. Do not create a
-tag, date, or release commitment merely because #105-#110 are complete.
-Published-asset installation verification and post-release read-only dogfood
-remain intentionally open until an actual 0.8.x patch is approved.
+The release was deferred on 2026-07-23 pending explicit maintainer approval.
+No tag, date, or release commitment was created merely because #105-#110 were
+complete. Published-asset installation verification and post-release read-only
+dogfood remained intentionally open until the maintainer resumed this task on
+2026-07-31.
 
 ## Completion evidence
 
@@ -47,6 +48,8 @@ remain intentionally open until an actual 0.8.x patch is approved.
   isolated temporary prefix, verified its checksum, and reported
   `aibris version 0.8.1`.
 - The installed public binary completed a real-home `scan --json` and
-  `clean --dry-run`. The dry-run planned 213 targets / 1.6 GB, protected or
-  skipped 160 targets / 30.6 GB, and ended with
+  `clean --dry-run`. Guided review selected 0 items / 0 B and protected 12
+  items / 1.1 GB. The unified classic audit reported 213 eligible physical
+  targets / 1.6 GB and 160 protected or skipped targets / 30.6 GB. The run
+  ended with
   `[DRY-RUN] No files were removed.` No deletion-mode clean was run.

@@ -42,11 +42,12 @@ explicit maintainer release decision.
 
 - [x] #104 [Epic] Harden CLI contracts and public trust (~20min) → #105-#110 complete
 
-## Deferred Release Gate
+## Completed Release Gate
 
-- #111 Prepare the next 0.8.x reliability patch release (~60min) remains open
-  in `status:todo` pending explicit maintainer approval. It is not counted as
-  completed sprint work, and milestone #6 remains open without a tag or date.
+- [x] #111 Prepare the next 0.8.x reliability patch release (~60min) was
+  resumed with maintainer approval on 2026-07-31. PR #169, annotated tag
+  `v0.8.1`, release workflow `30608576573`, published-asset installer smoke,
+  and post-release read-only dogfood completed the deferred gate.
 
 ## Running Context
 
@@ -138,5 +139,10 @@ explicit maintainer release decision.
 - 2026-07-23: Promoted the durable reliability contracts to project context
   and transferred open release gate #111 out of sprint execution scope without
   closing it or milestone #6.
-  
+
 - 2026-07-23: Sprint closed. 7/7 tasks completed.
+- 2026-07-31: Maintainer approval resumed deferred release gate #111. PR #169
+  merged, annotated tag `v0.8.1` published six platform archives plus
+  `checksums.txt`, the public installer smoke reported `aibris version 0.8.1`,
+  and installed-binary `scan --json` plus `clean --dry-run` completed without
+  deleting files.

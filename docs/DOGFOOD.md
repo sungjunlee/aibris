@@ -765,3 +765,26 @@ physical targets / 1.6 GB and 160 protected or skipped targets / 30.6 GB.
 
 The run ended with `[DRY-RUN] No files were removed.` No deletion-mode
 `aibris clean` command was run.
+
+## 2026-07-31 v0.8.1 published-binary read-only dogfood
+
+After release workflow `30608576573` published tag `v0.8.1`, `install.sh 0.8.1`
+ran with an isolated temporary `HOME` and install prefix. It downloaded the
+public `aibris_darwin_arm64.tar.gz`, verified it against the published
+`checksums.txt`, installed successfully, and reported `aibris version 0.8.1`.
+No existing installation was replaced.
+
+That installed public binary then ran against the real home with its cache
+isolated under `/tmp`. `scan --json` completed at
+`2026-07-31T15:12:35+09:00` with 374 evidence rows and 35,135,449,228 B:
+47 live, 210 orphaned, 22 undetermined, and 95 rows without an agent-state
+classification.
+
+The subsequent no-selector `clean --dry-run` completed at
+`2026-07-31T15:18:20+09:00`. Guided review selected 0 items / 0 B and protected
+12 items / 1.1 GB. The unified classic audit reported 373 physical items from
+374 evidence rows, including 213 eligible physical targets / 1.6 GB and 160
+protected or skipped targets / 30.6 GB.
+
+The published-binary run ended with `[DRY-RUN] No files were removed.` No
+deletion-mode `aibris clean` command was run.
