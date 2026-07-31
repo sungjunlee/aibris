@@ -226,7 +226,7 @@ aibris clean
   |
   +-- otherwise run scan with progress
   |
-  +-- always re-check path safety and existence before deletion
+  +-- bind filesystem identity/type and revalidate mtime/age before deletion
 ```
 
 ### 8. Clean Audit Output Follow-Up
@@ -321,7 +321,8 @@ CODE PATH COVERAGE
     +-- prints scan progress while finding clean candidates
     +-- reuses a fresh compatible last-scan cache
     +-- falls back to live scan when freshness, roots, revision, or provider membership differs
-    +-- drops stale cached targets whose paths no longer exist
+    +-- rejects missing, replaced, type-changed, symlink, and reparse-point cached targets
+    +-- refreshes mtime before selection and revalidates identity/type/mtime/age at mutation
     +-- dry-run reports filtered targets
     +-- confirmation uses the same target renderer as dry-run
     +-- unknown project display never renders as "?"
@@ -331,8 +332,8 @@ CODE PATH COVERAGE
 [+] cmd/scan_cache.go
     |
     +-- writes cache under the user cache directory
-    +-- stores revision, provider identity, created_at, normalized roots, and ScanResult
-    +-- rejects stale, revision-mismatched, provider-mismatched, and root-mismatched snapshots
+    +-- stores revision, provider identity, created_at, normalized roots, ScanResult, and per-target identity/type
+    +-- rejects stale, revision/provider/root-mismatched snapshots and unverifiable target evidence
 ```
 
 ### Unit Tests
@@ -387,7 +388,7 @@ CODE PATH COVERAGE
 | `$HOME` scan is too slow | prune noisy roots, keep `--root` for narrowing |
 | `clean` appears hung during its implicit scan | reuse scan progress printer in `clean` |
 | a large deletion appears hung | print per-item start progress before delete/command work |
-| stale cached scan points at removed paths | reject old cache and re-check target path existence before presentation/deletion |
+| stale cached scan points at a removed or replaced object | reject cache reuse when target identity/type cannot be revalidated; refresh mtime before selection and verify identity/type/mtime/age again at mutation |
 | cached scan was for different roots | require exact normalized root match |
 | cache revision changes | require exact `schema_version` match |
 | concrete provider membership changes or is absent | require the registry-derived membership identity; use the revision for unchanged-provider behavior changes |
