@@ -275,6 +275,10 @@ func saveCleanCacheFixture(t *testing.T, home string, items []types.DebrisInfo) 
 	for _, item := range items {
 		totalSize += item.Size
 	}
+	evidence, err := captureLastScanTargetEvidence(items)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := saveLastScanCache(lastScanCache{
 		SchemaVersion:    lastScanCacheSchemaVersion,
 		ProviderIdentity: adapter.DefaultProviderIdentity(),
@@ -285,6 +289,7 @@ func saveCleanCacheFixture(t *testing.T, home string, items []types.DebrisInfo) 
 			TotalCount: len(items),
 			TotalSize:  totalSize,
 		},
+		TargetEvidence: evidence,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -993,14 +998,11 @@ func TestCleanCmd_DropsMissingTargetsFromFreshLastScanCache(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	if !strings.Contains(output, "scan    cached") {
-		t.Errorf("clean should use fresh cache before dropping stale target; got: %s", output)
+	if strings.Contains(output, "scan    cached") || !strings.Contains(output, "scan    live") {
+		t.Errorf("clean should reject cached evidence for a missing target and rescan live; got: %s", output)
 	}
 	if !strings.Contains(output, "matched  0 candidates") {
 		t.Errorf("clean should drop missing cached target; got: %s", output)
-	}
-	if !strings.Contains(output, "path no longer exists") {
-		t.Errorf("clean audit should explain missing cached target; got: %s", output)
 	}
 	if strings.Contains(output, filepath.Join("~", "workspace", "app", "node_modules")) {
 		t.Errorf("clean should not show missing cached target; got: %s", output)
@@ -1086,6 +1088,178 @@ func TestCleanCmd_ForceDoesNotDeleteTargetRefreshedAfterCachedScan(t *testing.T)
 	}
 	if _, err := os.Lstat(modules); err != nil {
 		t.Fatalf("force removed target refreshed after cached scan: %v", err)
+	}
+}
+
+func TestCleanCmd_ForceRejectsCachedTargetReplacedWithDifferentType(t *testing.T) {
+	resetScanFlags()
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	workspace := filepath.Join(home, "workspace")
+	modules := filepath.Join(workspace, "app", "node_modules")
+	if err := os.MkdirAll(filepath.Join(modules, "pkg"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(modules, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	captureOutput(func() {
+		rootCmd.SetArgs([]string{"scan", "--root", workspace})
+		rootCmd.Execute()
+	})
+	if err := os.Rename(modules, modules+"-original"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(modules, []byte("replacement must survive"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(modules, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	resetCleanFlags()
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--force", "--age=1h", "--root", workspace, "--category=node_modules"})
+		rootCmd.Execute()
+	})
+
+	if strings.Contains(output, "scan    cached") {
+		t.Errorf("clean must reject cache whose target identity or type changed; got: %s", output)
+	}
+	if !strings.Contains(output, "scan    live") || !strings.Contains(output, "matched  0 candidates") {
+		t.Errorf("clean should fall back to a live scan that rejects the replacement file; got: %s", output)
+	}
+	data, err := os.ReadFile(modules)
+	if err != nil {
+		t.Fatalf("force removed replacement target: %v", err)
+	}
+	if string(data) != "replacement must survive" {
+		t.Fatalf("replacement contents changed: %q", data)
+	}
+}
+
+func TestCleanupPathIdentityRejectsSymbolicLink(t *testing.T) {
+	target := filepath.Join(t.TempDir(), "target")
+	if err := os.MkdirAll(target, 0755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("creating symbolic link: %v", err)
+	}
+	if _, _, err := cleanupPathIdentity(link); err == nil ||
+		!strings.Contains(err.Error(), "not cacheable") {
+		t.Fatalf("cleanupPathIdentity(%q) error = %v; want fail-closed symlink refusal", link, err)
+	}
+}
+
+func TestCleanCmd_UnselectedSymlinkDoesNotBlockLiveCleanupPlan(t *testing.T) {
+	resetScanFlags()
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	modules := filepath.Join(home, "workspace", "app", "node_modules")
+	if err := os.MkdirAll(filepath.Join(modules, "pkg"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(modules, old, old); err != nil {
+		t.Fatal(err)
+	}
+	logTarget := filepath.Join(home, "elsewhere", "logs.sqlite")
+	if err := os.MkdirAll(filepath.Dir(logTarget), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(logTarget, []byte("logs"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	logLink := filepath.Join(home, ".codex", "logs_2.sqlite")
+	if err := os.MkdirAll(filepath.Dir(logLink), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(logTarget, logLink); err != nil {
+		t.Skipf("creating symbolic link: %v", err)
+	}
+
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{
+			"clean",
+			"--no-guide",
+			"--dry-run",
+			"--age=1h",
+			"--root", home,
+			"--category=node_modules",
+		})
+		rootCmd.Execute()
+	})
+
+	if !strings.Contains(output, "scan    live") || !strings.Contains(output, "matched  1 candidate") {
+		t.Fatalf("unselected symlink blocked unrelated live cleanup plan: %s", output)
+	}
+	if _, err := os.Lstat(modules); err != nil {
+		t.Fatalf("dry-run removed unrelated node_modules target: %v", err)
+	}
+}
+
+func TestCleanCmd_SelectedSymlinkIsProtectedInDryRunAndForce(t *testing.T) {
+	resetScanFlags()
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	logTarget := filepath.Join(home, "elsewhere", "logs.sqlite")
+	if err := os.MkdirAll(filepath.Dir(logTarget), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(logTarget, []byte("logs"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(logTarget, old, old); err != nil {
+		t.Fatal(err)
+	}
+	logLink := filepath.Join(home, ".codex", "logs_2.sqlite")
+	if err := os.MkdirAll(filepath.Dir(logLink), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(logTarget, logLink); err != nil {
+		t.Skipf("creating symbolic link: %v", err)
+	}
+
+	run := func(force bool) string {
+		t.Helper()
+		resetCleanFlags()
+		args := []string{
+			"clean",
+			"--no-guide",
+			"--risky",
+			"--age=1ns",
+			"--category=ai-logs",
+		}
+		if force {
+			args = append(args, "--force")
+		} else {
+			args = append(args, "--dry-run")
+		}
+		return captureOutput(func() {
+			rootCmd.SetArgs(args)
+			rootCmd.Execute()
+		})
+	}
+
+	for _, output := range []string{run(false), run(true)} {
+		if !strings.Contains(output, "matched  0 candidates") ||
+			!strings.Contains(output, "scan identity evidence unavailable") {
+			t.Fatalf("selected symlink was not protected consistently: %s", output)
+		}
+		if strings.Contains(output, "clean plan") {
+			t.Fatalf("protected symlink appeared in cleanup plan: %s", output)
+		}
+	}
+	if _, err := os.Lstat(logLink); err != nil {
+		t.Fatalf("force removed protected symbolic link: %v", err)
 	}
 }
 

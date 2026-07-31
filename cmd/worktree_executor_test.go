@@ -399,6 +399,141 @@ func TestExecutePreparedPathCleanupRejectsTargetChangedAfterSelection(t *testing
 	}
 }
 
+func TestExecutePreparedPathCleanupRevalidatesSnapshotAfterOverlapRefresh(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	targetPath := filepath.Join(home, ".cache", "changed-during-overlap-refresh")
+	sentinel := filepath.Join(targetPath, "sentinel")
+	if err := os.MkdirAll(targetPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sentinel, []byte("survive"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-48 * time.Hour)
+	if err := os.Chtimes(targetPath, old, old); err != nil {
+		t.Fatal(err)
+	}
+	target := types.DebrisInfo{
+		Tool:        types.ToolBuildCache,
+		Category:    types.CategoryBuildCache,
+		ID:          "changed-during-overlap-refresh",
+		Path:        targetPath,
+		Size:        8,
+		ModTime:     old,
+		CleanupKind: types.CleanupRemovePath,
+	}
+	runtime := cleanupOverlapSafetyRuntime{
+		Initial: cleaner.OverlapSafetyEvidence{Complete: true},
+		Refresh: func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
+			changed := time.Now()
+			if err := os.Chtimes(targetPath, changed, changed); err != nil {
+				return cleaner.OverlapSafetyEvidence{}, err
+			}
+			return cleaner.OverlapSafetyEvidence{Complete: true}, nil
+		},
+	}
+	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared := prepareCleanExecutionWithOptions(
+		context.Background(),
+		selection,
+		runtime,
+		types.PruneOptions{Age: 24 * time.Hour},
+	)
+
+	receipt, err := executePreparedCleanTargets(
+		context.Background(),
+		prepared,
+		defaultActiveWorktreeExecutionOptions(),
+	)
+	if err == nil || receipt.FreedBytes != 0 {
+		t.Fatalf("error=%v, freed=%d; want final snapshot refusal", err, receipt.FreedBytes)
+	}
+	if !strings.Contains(err.Error(), "changed since cleanup selection") {
+		t.Fatalf("error=%v; want changed-since-selection reason", err)
+	}
+	if _, statErr := os.Lstat(sentinel); statErr != nil {
+		t.Fatalf("target changed during overlap refresh was removed: %v", statErr)
+	}
+}
+
+func TestPreparePathCleanupRejectsReplacementAfterScanEvidenceValidation(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	targetPath := filepath.Join(home, ".cache", "replaced-after-scan")
+	if err := os.MkdirAll(targetPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-48 * time.Hour)
+	if err := os.Chtimes(targetPath, old, old); err != nil {
+		t.Fatal(err)
+	}
+	item := types.DebrisInfo{
+		Tool:        types.ToolBuildCache,
+		Category:    types.CategoryBuildCache,
+		ID:          "replaced-after-scan",
+		Path:        targetPath,
+		Size:        8,
+		ModTime:     old,
+		CleanupKind: types.CleanupRemovePath,
+	}
+	saveCleanCacheFixture(t, home, []types.DebrisInfo{item})
+	resolvedHome, err := filepath.EvalSymlinks(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cached, _, ok := readFreshLastScanCache([]string{resolvedHome})
+	if !ok {
+		t.Fatal("readFreshLastScanCache() rejected valid fixture")
+	}
+	if len(cached.Worktrees) != 1 {
+		t.Fatalf("readFreshLastScanCache() items = %d; want one bound cached target",
+			len(cached.Worktrees))
+	}
+	if err := os.Rename(targetPath, targetPath+"-original"); err != nil {
+		t.Fatal(err)
+	}
+	sentinel := filepath.Join(targetPath, "replacement-sentinel")
+	if err := os.MkdirAll(targetPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sentinel, []byte("survive"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(targetPath, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	runtime := staticOverlapSafetyRuntime(nil, nil)
+	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, cached.Worktrees)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared := prepareCleanExecutionWithOptions(
+		context.Background(),
+		selection,
+		runtime,
+		types.PruneOptions{Age: 24 * time.Hour},
+	)
+	receipt, err := executePreparedCleanTargets(
+		context.Background(),
+		prepared,
+		defaultActiveWorktreeExecutionOptions(),
+	)
+	if err == nil || receipt.FreedBytes != 0 {
+		t.Fatalf("error=%v, freed=%d; want scan-identity refusal", err, receipt.FreedBytes)
+	}
+	if !strings.Contains(err.Error(), "changed since scan") {
+		t.Fatalf("error=%v; want changed-since-scan reason", err)
+	}
+	if _, statErr := os.Lstat(sentinel); statErr != nil {
+		t.Fatalf("replacement after scan evidence was removed: %v", statErr)
+	}
+}
+
 func newExecutorWorktree(t *testing.T, branch string) (home, repository, worktree string) {
 	t.Helper()
 	home = t.TempDir()

@@ -160,10 +160,12 @@ classic cleanup audit and executor route.`,
 			opts.IncludeActiveWorktrees,
 		)
 		targets = filterExistingTargets(targets)
+		targets, scanEvidenceProtections := filterTargetsWithoutScanEvidence(targets)
 		targets = normalizeCleanTargets(targets)
 		targets, gitSafetyProtections := filterGitUnsafeActiveWorktreeTargets(ctx, targets)
 		classicProtections := mergeCleanAuditProtections(
 			physicalOwnerProtections,
+			scanEvidenceProtections,
 			gitSafetyProtections,
 		)
 		logicalInputs := cleanupOverlapLogicalInputsForAudit(
@@ -658,6 +660,19 @@ func filterExistingTargets(targets []types.DebrisInfo) []types.DebrisInfo {
 		}
 	}
 	return filtered
+}
+
+func filterTargetsWithoutScanEvidence(targets []types.DebrisInfo) ([]types.DebrisInfo, map[string]cleanAuditReason) {
+	filtered := targets[:0]
+	protections := make(map[string]cleanAuditReason)
+	for _, target := range targets {
+		if target.ScanPathEvidenceRequired && target.ScanPathIdentity == "" {
+			protections[cleanAuditItemKey(target)] = cleanReasonScanEvidenceUnavailable
+			continue
+		}
+		filtered = append(filtered, target)
+	}
+	return filtered, protections
 }
 
 // applyPhysicalWorktreeOwnerSafety evaluates worktree eligibility at the

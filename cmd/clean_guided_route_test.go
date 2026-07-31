@@ -347,6 +347,11 @@ func appendCleanCacheItem(t *testing.T, item types.DebrisInfo) {
 	cache.Result.Worktrees = append(cache.Result.Worktrees, item)
 	cache.Result.TotalCount = len(cache.Result.Worktrees)
 	cache.Result.TotalSize += item.Size
+	evidence, err := captureLastScanTargetEvidence(cache.Result.Worktrees)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cache.TargetEvidence = evidence
 	if err := saveLastScanCache(cache); err != nil {
 		t.Fatal(err)
 	}

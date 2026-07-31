@@ -34,9 +34,34 @@ func captureCleanupTargetSnapshot(
 	item types.DebrisInfo,
 	opts types.PruneOptions,
 ) (*cleanupTargetSnapshot, error) {
-	info, err := os.Lstat(item.Path)
-	if err != nil {
-		return nil, fmt.Errorf("capturing cleanup target %q: %w", item.Path, err)
+	var info os.FileInfo
+	if item.ScanPathEvidenceRequired && item.ScanPathIdentity == "" {
+		return nil, fmt.Errorf("cleanup target %q has no usable scan identity evidence", item.Path)
+	}
+	if item.ScanPathIdentity != "" {
+		current, identity, err := cleanupPathIdentity(item.Path)
+		if err != nil {
+			return nil, fmt.Errorf("capturing cleanup target %q: %w", item.Path, err)
+		}
+		if uint32(current.Mode().Type()) != item.ScanPathType {
+			return nil, fmt.Errorf(
+				"cleanup target changed since scan: path type changed for %q",
+				item.Path,
+			)
+		}
+		if identity != item.ScanPathIdentity {
+			return nil, fmt.Errorf(
+				"cleanup target changed since scan: path identity changed for %q",
+				item.Path,
+			)
+		}
+		info = current
+	} else {
+		current, err := os.Lstat(item.Path)
+		if err != nil {
+			return nil, fmt.Errorf("capturing cleanup target %q: %w", item.Path, err)
+		}
+		info = current
 	}
 	minimumAge := time.Duration(0)
 	if item.Category != types.CategoryAgentState && !isActiveWorktreeTarget(item) {
@@ -58,11 +83,11 @@ func (s cleanupTargetSnapshot) validate() error {
 	if err != nil {
 		return fmt.Errorf("cleanup target changed since cleanup selection: %q: %w", s.path, err)
 	}
-	if !os.SameFile(s.info, current) {
-		return fmt.Errorf("cleanup target changed since cleanup selection: path identity changed for %q", s.path)
-	}
 	if s.info.Mode().Type() != current.Mode().Type() {
 		return fmt.Errorf("cleanup target changed since cleanup selection: path type changed for %q", s.path)
+	}
+	if !os.SameFile(s.info, current) {
+		return fmt.Errorf("cleanup target changed since cleanup selection: path identity changed for %q", s.path)
 	}
 	if !s.info.ModTime().Equal(current.ModTime()) {
 		return fmt.Errorf(

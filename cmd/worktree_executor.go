@@ -271,13 +271,13 @@ func executePathCleanupTarget(
 			if snapshot == nil {
 				return errors.New("cleanup target snapshot unavailable")
 			}
-			if snapshotErr := snapshot.validate(); snapshotErr != nil {
-				return snapshotErr
-			}
 			var validationErr error
 			validation, validationErr = safety.validate(ctx)
 			validated = true
-			return validationErr
+			if validationErr != nil {
+				return validationErr
+			}
+			return snapshot.validate()
 		},
 	)
 	if validated {
