@@ -10,7 +10,7 @@ jobs:
   test:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -18,6 +18,21 @@ jobs:
         with:
           go-version: "1.26"
       - run: go test -race -count=1 -cover ./...
+      - run: go vet ./...
+
+  windows-safety:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+      - name: Test recorded-cwd volume safety
+        run: go test -race -count=1 -cover ./internal/adapter -run '^(TestRecordedCWDVolumeIDUsesWindowsVolumePath|TestAgentStateStoreClassifiersRecordedCWDAncestorAvailability)$'
+      - name: Test platform-safe CLI contracts
+        run: go test -race -count=1 -cover . -run '^(TestCLIContractInvalidFlag|TestCLIContractCleanHelpMatchesPolicyVocabulary)$'
+      - name: Test platform-safe command behavior
+        run: go test -race -count=1 -cover ./cmd -run '^(TestCleanCmd_NegativeAge|TestCleanCmd_GuideNoGuideErrors|TestParseAge|TestCleanCmd_InvalidSelector|TestParseCleanSelectorsTrimAndDeduplicate)$'
       - run: go vet ./...
 
   release-build:

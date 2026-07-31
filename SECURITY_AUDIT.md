@@ -161,9 +161,9 @@ go vet ./...
 - Homebrew installation is documented as pending until the tap is published.
 - Release archives have checksums but do not yet publish an SBOM or signed
   provenance.
-- Windows artifacts are experimental. Windows CI runs tests and vet, including
-  native recorded-cwd volume lookup, but the Bash installer and complete
-  adapter/cache support contract have not yet been replaced by native Windows
-  installation and coverage guidance.
+- Windows artifacts are experimental. Windows CI runs native recorded-cwd
+  safety and platform-safe command tests plus vet, but the Bash installer and
+  complete adapter/cache support contract have not yet been replaced by native
+  Windows installation and coverage guidance.
 - The JSON top-level `worktrees` field contains all debris items for backward
   compatibility, not only worktrees.
