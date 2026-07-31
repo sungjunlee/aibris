@@ -210,6 +210,60 @@ func TestCLIContractInvalidSelectors(t *testing.T) {
 	}
 }
 
+func TestCLIContractCleanHelpMatchesPolicyVocabulary(t *testing.T) {
+	result := runCLIContract(t, t.TempDir(), nil, "clean", "--help")
+	if result.ExitCode != 0 {
+		t.Fatalf("clean --help exit = %d\nstdout:\n%s\nstderr:\n%s",
+			result.ExitCode, result.Stdout, result.Stderr)
+	}
+	for _, want := range []string{
+		"Minimum idle age",
+		"unknown",
+		"selected targets enter the cleanup plan",
+		"reviewable targets",
+		"protected targets",
+		"review displays protected targets as locked rows",
+	} {
+		if !strings.Contains(result.Stdout, want) {
+			t.Errorf("clean --help missing %q:\n%s", want, result.Stdout)
+		}
+	}
+	if strings.Contains(result.Stdout, "Max age") {
+		t.Errorf("clean --help still describes --age as a maximum:\n%s", result.Stdout)
+	}
+}
+
+func TestCLIContractShortClassicAgeWarningPreservesScopeAndProtections(t *testing.T) {
+	home := t.TempDir()
+	result := runCLIContract(
+		t,
+		home,
+		nil,
+		"clean",
+		"--no-guide",
+		"--dry-run",
+		"--root", home,
+		"--category=node_modules",
+		"--age=30m",
+	)
+	if result.ExitCode != 0 {
+		t.Fatalf("short-age dry-run exit = %d\nstdout:\n%s\nstderr:\n%s",
+			result.ExitCode, result.Stdout, result.Stderr)
+	}
+	for _, want := range []string{
+		"very low classic minimum-age threshold",
+		"selected category/tool scope",
+		"safety protections still apply",
+	} {
+		if !strings.Contains(result.Stderr, want) {
+			t.Errorf("short-age warning missing %q:\n%s", want, result.Stderr)
+		}
+	}
+	if strings.Contains(result.Stderr, "match ALL items including active ones") {
+		t.Errorf("short-age warning still overstates active matching:\n%s", result.Stderr)
+	}
+}
+
 func TestCLIContractInvalidRoot(t *testing.T) {
 	home := t.TempDir()
 	outside := t.TempDir()

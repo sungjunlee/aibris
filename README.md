@@ -343,6 +343,9 @@ Cancellation remains a hard failure.
   3-day minimum idle age while always keeping its 6-hour recent-activity lock
   and recent-three retention
 - **Human age units** support `h`, `d`, `w`, `mo`, and `y`
+- **Low classic age warnings** describe the widened minimum-age eligibility
+  within the selected category/tool scope; they do not imply that risky,
+  active-worktree, agent-state, overlap, or Git protections are bypassed
 - **`--dry-run`** previews before deleting
 - **`--interactive`** confirms each item
 - **Target plan before final confirmation** shows category, size, project,
