@@ -43,7 +43,11 @@ With no classic cleanup filters, clean uses guided Codex worktree review by defa
 After guided worktree review, clean continues with the classic all-category audit.
 Use --no-guide, or pass an explicit classic selector such as --category, --tool,
 --risky, --force, --include-active-worktrees, or --interactive to keep the
-classic cleanup audit and executor route.`,
+classic cleanup audit and executor route.
+
+Across both routes, selected targets enter the cleanup plan, reviewable targets
+require explicit selection, and protected targets never enter the plan. Guided
+review displays protected targets as locked rows.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if cleanGuide && cleanNoGuide {
 			fmt.Fprintln(os.Stderr, "error: cannot use --guide with --no-guide")
@@ -116,7 +120,11 @@ classic cleanup audit and executor route.`,
 			os.Exit(1)
 		}
 		if experience == cleanExperienceClassic && age < time.Hour {
-			fmt.Fprintf(os.Stderr, "Warning: --age %s will match ALL items including active ones.\n", cleanAge)
+			fmt.Fprintf(
+				os.Stderr,
+				"Warning: --age %s is a very low classic minimum-age threshold; it broadens age-eligible items within the selected category/tool scope, but risky-category, active-worktree, agent-state, overlap, and Git safety protections still apply.\n",
+				cleanAge,
+			)
 		}
 
 		opts := types.PruneOptions{
@@ -410,9 +418,21 @@ func toolStrings(values []types.Tool) []string {
 }
 
 func init() {
-	cleanCmd.Flags().StringVarP(&cleanAge, "age", "a", "7d", "Max age (7d, 2w, 1mo, 1y, 24h)")
-	cleanCmd.Flags().StringVarP(&cleanCategory, "category", "c", "", "Comma-separated categories (worktree,node_modules,build-cache,other-cache,agent-state,ai-logs)")
-	cleanCmd.Flags().StringVarP(&cleanTools, "tool", "t", "", "Comma-separated tools (codex,claude,cursor,windsurf,node_modules,build-cache,pip-cache,ai-logs)")
+	cleanCmd.Flags().StringVarP(&cleanAge, "age", "a", "7d", "Minimum idle age (7d, 2w, 1mo, 1y, 24h)")
+	cleanCmd.Flags().StringVarP(
+		&cleanCategory,
+		"category",
+		"c",
+		"",
+		"Comma-separated categories ("+strings.Join(categoryStrings(validCleanCategories), ",")+")",
+	)
+	cleanCmd.Flags().StringVarP(
+		&cleanTools,
+		"tool",
+		"t",
+		"",
+		"Comma-separated tools ("+strings.Join(toolStrings(validCleanTools), ",")+")",
+	)
 	cleanCmd.Flags().BoolVar(&cleanDryRun, "dry-run", false, "Preview without deleting")
 	cleanCmd.Flags().BoolVarP(&cleanInteractive, "interactive", "i", false, "Confirm each deletion")
 	cleanCmd.Flags().BoolVar(&cleanRisky, "risky", false, "Include risky categories (ai-logs)")

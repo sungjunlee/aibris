@@ -93,7 +93,10 @@ authorize protected-content retention.
 Behavior:
 
 1. Parse and validate `--age`.
-2. Warn when `--age` is shorter than one hour.
+2. Warn when classic `--age` is shorter than one hour. The warning describes
+   the broadened minimum-age eligibility only within the selected category/tool
+   scope and explicitly preserves risky-category, active-worktree, agent-state,
+   overlap, and Git safety protections.
 3. Obtain scan results from a fresh compatible scan cache or by scanning providers.
 4. Choose guided or classic cleanup. Classic cleanup applies category and tool
    selectors plus category-specific eligibility: age, risky status, and

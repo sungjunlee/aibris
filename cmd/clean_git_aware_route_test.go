@@ -113,7 +113,8 @@ func TestCleanCmd_GuidedAgeFlagChangesOnlyMinimumIdleAge(t *testing.T) {
 
 	for _, want := range []string{
 		"policy     idle>1h, recent<6h locked, keep=3/repo, min-size=256.0 MB",
-		"locked      activity within recent safety window",
+		"locked",
+		"activity within recent safety window",
 		"No items selected.",
 	} {
 		if !strings.Contains(output, want) {
