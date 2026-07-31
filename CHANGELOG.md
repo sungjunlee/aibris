@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## [0.8.1] - 2026-07-31
+
+### Added
+- Claude and Cursor project stores are now classified from every recorded
+  working directory as `live`, `orphaned`, or `undetermined`. Proven orphaned
+  state can be cleaned without an age gate; ambiguous or live state stays
+  protected.
+- Mixed-category cleanup now uses one unified physical-owner plan and review,
+  preserving nested evidence and reporting each physical target's bytes once.
+- Registered worktree discovery now covers Codex, Relay, GStack, and
+  Superpowers containers alongside the bounded `$HOME` convention fallback.
+- Windows CI now executes native recorded-cwd volume safety, compiled CLI
+  contracts, command behavior, build, and vet checks. Windows release archives
+  remain experimental and use manual installation.
+
 ### Changed
 - Last-scan cache reuse now also requires a deterministic identity of the
   concrete provider membership. Legacy or mismatched snapshots visibly fall
@@ -12,6 +27,24 @@
   of the risky `ai-logs` category. `--category ai-logs` no longer selects these
   entries; `--category agent-state` does. Windsurf and the generic AI log
   provider remain in `ai-logs`.
+- Guided cleanup now continues into the classic audit, so an empty Codex
+  selection cannot hide eligible dependencies, caches, orphaned worktrees, or
+  agent state.
+- Partial provider scans remain visible but exit non-zero, invalidate cached
+  cleanup authority, and cannot produce a deletion plan.
+- `clean --help`, selector values, low-age warnings, and guided terminology now
+  describe the enforced safety policy and distinguish selected, reviewable,
+  protected, and locked items.
+
+### Fixed
+- Fresh scan-cache entries are no longer trusted solely because their paths
+  still exist. Cleanup rechecks filesystem identity, type, modification time,
+  and age before selection and again at the mutation boundary.
+- Overlapping discovery rows no longer double-count projected or reclaimed
+  bytes, and protected nested agent state blocks its whole physical cleanup
+  component.
+- Compiled CLI contracts now cover stdout, stderr, prompts, cancellation, exit
+  status, destructive isolation, and Windows executable naming.
 
 ### Safety
 - Agent-state cleanup now refuses an individual item when its tool has no
@@ -36,6 +69,11 @@
   unavailable tree is not deleted as though it were orphaned. An unmounted
   mountpoint inside `$HOME` is indistinguishable from an ordinary empty
   directory and is not detected.
+- Windows uses `GetVolumePathNameW` to detect the same recorded-cwd volume
+  boundary. A boundary or API failure is `undetermined` and remains protected.
+- Every nested agent-state obligation is re-derived immediately before its
+  physical owner mutates. Classification drift or new protected overlap keeps
+  the complete component intact.
 
 ## [0.8.0] - 2026-07-13
 

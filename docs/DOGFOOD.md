@@ -734,3 +734,34 @@ content is intentionally excluded, tmp is only a future safety-bounded
 candidate, and protected stores first need inventory/retention contracts rather
 than generic cleanup providers. Epic #137 and issues #138–#143 track those
 separate obligations.
+
+## 2026-07-31 v0.8.1 release-candidate read-only dogfood
+
+This release gate used a candidate built from `main` merge
+`6789f8e5a03193ff675afb2c6acaa9a6e445444a` plus release-only documentation and
+workflow changes. The binary reported `v0.8.1-rc.1` and had SHA-256
+`f7a68e6f9721427bb4198c3782aad5801080911a020fd17c26837d32f7584f06`.
+Its cache was isolated under `/tmp`; no installed aibris binary or user cache
+was replaced.
+
+The read-only JSON scan completed at `2026-07-31T14:52:20+09:00`:
+
+| Category | Logical rows | Bytes |
+| --- | ---: | ---: |
+| `agent-state` | 279 | 710,069,259 |
+| `ai-logs` | 5 | 1,610,699,242 |
+| `build-cache` | 2 | 15,166,551,008 |
+| `node_modules` | 10 | 8,359,514,112 |
+| `other-cache` | 1 | 4,932,605,623 |
+| `worktree` | 77 | 4,355,854,336 |
+| **Total** | **374** | **35,135,293,580** |
+
+Recorded classifications were 47 live, 210 orphaned, 22 undetermined, and 95
+rows without an agent-state classification. The subsequent no-selector
+`clean --dry-run` completed at `2026-07-31T14:53:49+09:00`. Guided Codex review
+selected 0 items / 0 B and protected 12 items / 1.1 GB. The unified classic
+audit reported 373 physical items from 374 evidence rows, with 213 eligible
+physical targets / 1.6 GB and 160 protected or skipped targets / 30.6 GB.
+
+The run ended with `[DRY-RUN] No files were removed.` No deletion-mode
+`aibris clean` command was run.
