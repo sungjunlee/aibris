@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"context"
+	"errors"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -89,21 +90,21 @@ func TestAgentStateStoreClassifiersRecordedCWDAncestorAvailability(t *testing.T)
 		if err != nil {
 			t.Fatal(err)
 		}
-		parentDevice, err := recordedCWDDeviceID(filepath.Dir(ancestor), parentInfo)
+		parentVolume, err := recordedCWDVolumeID(filepath.Dir(ancestor), parentInfo)
 		if err != nil {
 			t.Fatal(err)
 		}
-		mountDevice := parentDevice ^ 1
+		mountVolume := parentVolume + "-mounted"
 
-		originalDeviceID := recordedCWDDeviceID
-		recordedCWDDeviceID = func(path string, info os.FileInfo) (uint64, error) {
+		originalVolumeID := recordedCWDVolumeID
+		recordedCWDVolumeID = func(path string, info os.FileInfo) (string, error) {
 			if path == ancestor {
-				return mountDevice, nil
+				return mountVolume, nil
 			}
-			return originalDeviceID(path, info)
+			return originalVolumeID(path, info)
 		}
 		t.Cleanup(func() {
-			recordedCWDDeviceID = originalDeviceID
+			recordedCWDVolumeID = originalVolumeID
 		})
 
 		recordedCWD := filepath.Join(ancestor, "missing-project")
@@ -142,24 +143,24 @@ func TestAgentStateStoreClassifiersRecordedCWDAncestorAvailability(t *testing.T)
 		if err != nil {
 			t.Fatal(err)
 		}
-		parentDevice, err := recordedCWDDeviceID(filepath.Dir(ancestor), parentInfo)
+		parentVolume, err := recordedCWDVolumeID(filepath.Dir(ancestor), parentInfo)
 		if err != nil {
 			t.Fatal(err)
 		}
-		mountDevice := parentDevice ^ 1
+		mountVolume := parentVolume + "-mounted"
 
-		originalDeviceID := recordedCWDDeviceID
-		recordedCWDDeviceID = func(path string, info os.FileInfo) (uint64, error) {
+		originalVolumeID := recordedCWDVolumeID
+		recordedCWDVolumeID = func(path string, info os.FileInfo) (string, error) {
 			if path == ancestor {
 				if info.Mode()&os.ModeSymlink != 0 {
-					return parentDevice, nil
+					return parentVolume, nil
 				}
-				return mountDevice, nil
+				return mountVolume, nil
 			}
-			return originalDeviceID(path, info)
+			return originalVolumeID(path, info)
 		}
 		t.Cleanup(func() {
-			recordedCWDDeviceID = originalDeviceID
+			recordedCWDVolumeID = originalVolumeID
 		})
 
 		recordedCWD := filepath.Join(ancestor, "missing-project")
@@ -204,6 +205,41 @@ func TestAgentStateStoreClassifiersRecordedCWDAncestorAvailability(t *testing.T)
 				if classification != types.EntryClassOrphaned {
 					t.Fatalf("Classification = %q; want orphaned; reason: %s",
 						classification, reason)
+				}
+			})
+		}
+	})
+
+	t.Run("volume lookup failure is undetermined", func(t *testing.T) {
+		ancestor := filepath.Join(home, "unverifiable-volume")
+		if err := os.MkdirAll(ancestor, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		originalVolumeID := recordedCWDVolumeID
+		recordedCWDVolumeID = func(string, os.FileInfo) (string, error) {
+			return "", errors.New("volume lookup unavailable")
+		}
+		t.Cleanup(func() {
+			recordedCWDVolumeID = originalVolumeID
+		})
+
+		recordedCWD := filepath.Join(ancestor, "missing-project")
+		for _, store := range stores {
+			t.Run(store.name, func(t *testing.T) {
+				entryPath := filepath.Join(home, "."+store.name, "projects", "volume-error-entry")
+				store.write(t, entryPath, recordedCWD)
+
+				classification, reason, _, err := store.classify(context.Background(), entryPath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if classification != types.EntryClassUndetermined {
+					t.Fatalf("Classification = %q; want undetermined; reason: %s",
+						classification, reason)
+				}
+				if !strings.Contains(reason, "existence could not be verified") {
+					t.Fatalf("Reason = %q; want volume lookup failure to fail closed", reason)
 				}
 			})
 		}

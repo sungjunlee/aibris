@@ -76,6 +76,13 @@ add it for your shell. For a system-wide install, pass an explicit prefix:
 curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.sh | bash -s -- --prefix /usr/local/bin
 ```
 
+Windows archives are currently experimental. Pull-request CI runs native
+recorded-cwd safety and platform-safe command tests plus vet on
+`windows-latest`, but `install.sh` is a Bash installer and the complete
+adapter/cache coverage has not yet been audited for Windows. Native Windows
+users should download the matching `aibris_windows_*.zip` and `checksums.txt`
+from GitHub Releases, verify the checksum, and place `aibris.exe` on `PATH`.
+
 ### Usage
 
 ```bash
@@ -367,6 +374,10 @@ Cancellation remains a hard failure.
 - **Active worktrees are excluded by default**; use
   `--include-active-worktrees` only when you intentionally want age-based
   cleanup for valid worktrees
+- **Recorded-cwd volume boundaries fail closed**: agent-state classification
+  compares the nearest existing ancestor with its parent. Unix uses device
+  identity and Windows uses `GetVolumePathNameW`; a different volume or a
+  lookup failure leaves the entry `undetermined` and protected.
 - **Home-scoped roots**: default scanning starts at `$HOME`; `--root` can narrow
   scope to one or more existing directories under `$HOME`
 - **Convention-based worktree discovery**: worktrees are discovered by finding

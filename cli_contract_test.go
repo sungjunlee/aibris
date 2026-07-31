@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -23,7 +24,11 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "create CLI contract build directory: %v\n", err)
 		os.Exit(1)
 	}
-	cliContractBinary = filepath.Join(buildDir, "aibris")
+	binaryName := "aibris"
+	if runtime.GOOS == "windows" {
+		binaryName += ".exe"
+	}
+	cliContractBinary = filepath.Join(buildDir, binaryName)
 	build := exec.Command("go", "build", "-o", cliContractBinary, ".")
 	if output, err := build.CombinedOutput(); err != nil {
 		fmt.Fprintf(os.Stderr, "build CLI contract binary: %v\n%s", err, output)

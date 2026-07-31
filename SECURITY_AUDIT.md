@@ -118,7 +118,7 @@ cleanup.
 
 Repository release controls include:
 
-- GitHub Actions CI on push and pull requests
+- GitHub Actions CI on push and pull requests across Linux, macOS, and Windows
 - `go test -race -count=1 -cover ./...`
 - `go vet ./...`
 - Dependabot for Go modules and GitHub Actions
@@ -161,7 +161,9 @@ go vet ./...
 - Homebrew installation is documented as pending until the tap is published.
 - Release archives have checksums but do not yet publish an SBOM or signed
   provenance.
-- Windows artifacts are built, but the full Windows behavior and support
-  contract has not yet been established.
+- Windows artifacts are experimental. Windows CI runs native recorded-cwd
+  safety and platform-safe command tests plus vet, but the Bash installer and
+  complete adapter/cache support contract have not yet been replaced by native
+  Windows installation and coverage guidance.
 - The JSON top-level `worktrees` field contains all debris items for backward
   compatibility, not only worktrees.

@@ -150,17 +150,18 @@ func recordedCWDAbsenceProven(cwd string) (bool, string, error) {
 				if err != nil {
 					return false, ancestor, err
 				}
-				ancestorDevice, err := recordedCWDDeviceID(ancestor, info)
+				ancestorVolume, err := recordedCWDVolumeID(ancestor, info)
 				if err != nil {
 					return false, ancestor, err
 				}
-				parentDevice, err := recordedCWDDeviceID(parent, parentInfo)
+				parentVolume, err := recordedCWDVolumeID(parent, parentInfo)
 				if err != nil {
 					return false, ancestor, err
 				}
-				if ancestorDevice != parentDevice {
-					// An unmounted mountpoint inside $HOME has its parent's device and
-					// remains indistinguishable from an ordinary empty directory.
+				if ancestorVolume != parentVolume {
+					// An unmounted mountpoint inside $HOME has its parent's volume
+					// identity and remains indistinguishable from an ordinary empty
+					// directory.
 					return false, ancestor, nil
 				}
 			}

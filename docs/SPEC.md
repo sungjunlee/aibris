@@ -149,6 +149,12 @@ working directory proves the associated work is gone and resume is already
 impossible, so `orphaned` is eligible regardless of age after category and tool
 selection. `live` and `undetermined` are protected.
 
+Absence is proven only when the nearest existing ancestor is inside an
+available home or temporary tree and shares a volume identity with its parent.
+Unix obtains that identity from filesystem device metadata; Windows obtains the
+volume path with `GetVolumePathNameW`. A volume boundary, unresolvable link, or
+volume lookup failure yields `undetermined` rather than deletion eligibility.
+
 Command-backed cleanup:
 
 - `cleanup_kind=command` uses argv-only execution with `exec.CommandContext`.
