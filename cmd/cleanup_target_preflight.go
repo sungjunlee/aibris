@@ -36,7 +36,7 @@ func captureCleanupTargetSnapshot(
 ) (*cleanupTargetSnapshot, error) {
 	var info os.FileInfo
 	if item.ScanPathEvidenceRequired && item.ScanPathIdentity == "" {
-		return nil, fmt.Errorf("cleanup target %q has no usable scan identity evidence", item.Path)
+		return nil, fmt.Errorf("cleanup target %q: scan identity evidence unavailable", item.Path)
 	}
 	if item.ScanPathIdentity != "" {
 		current, identity, err := cleanupPathIdentity(item.Path)
@@ -73,7 +73,7 @@ func captureCleanupTargetSnapshot(
 		minimumAge: minimumAge,
 	}
 	if err := snapshot.validateAge(info, time.Now()); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cleanup target changed since scan: %w", err)
 	}
 	return snapshot, nil
 }
@@ -97,7 +97,10 @@ func (s cleanupTargetSnapshot) validate() error {
 			current.ModTime().Format(time.RFC3339Nano),
 		)
 	}
-	return s.validateAge(current, time.Now())
+	if err := s.validateAge(current, time.Now()); err != nil {
+		return fmt.Errorf("cleanup target changed since cleanup selection: %w", err)
+	}
+	return nil
 }
 
 func (s cleanupTargetSnapshot) validateAge(info os.FileInfo, observedAt time.Time) error {
@@ -105,7 +108,7 @@ func (s cleanupTargetSnapshot) validateAge(info os.FileInfo, observedAt time.Tim
 		return nil
 	}
 	return fmt.Errorf(
-		"cleanup target changed since cleanup selection: %q is younger than the configured minimum age %s",
+		"%q is younger than the configured minimum age %s",
 		s.path,
 		s.minimumAge,
 	)

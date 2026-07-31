@@ -41,6 +41,30 @@ func preparedExecutorTarget(
 	}
 }
 
+func TestCaptureCleanupTargetSnapshotReportsAgeChangeSinceScan(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	targetPath := filepath.Join(home, ".cache", "recent-target")
+	if err := os.MkdirAll(targetPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	item := types.DebrisInfo{
+		Tool:        types.ToolBuildCache,
+		Category:    types.CategoryBuildCache,
+		Path:        targetPath,
+		CleanupKind: types.CleanupRemovePath,
+	}
+
+	_, err := captureCleanupTargetSnapshot(item, types.PruneOptions{Age: 24 * time.Hour})
+	if err == nil {
+		t.Fatal("captureCleanupTargetSnapshot() error = nil; want minimum-age refusal")
+	}
+	if !strings.Contains(err.Error(), "changed since scan") ||
+		strings.Contains(err.Error(), "changed since cleanup selection") {
+		t.Fatalf("error=%v; want changed-since-scan age reason", err)
+	}
+}
+
 func TestExecuteActiveWorktreePreservesAttachedLocalOnlyBranch(t *testing.T) {
 	home, repository, worktree := newExecutorWorktree(t, "local-only")
 	t.Setenv("HOME", home)

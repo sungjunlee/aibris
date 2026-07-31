@@ -1236,6 +1236,7 @@ func TestCleanCmd_SelectedSymlinkIsProtectedInDryRunAndForce(t *testing.T) {
 			"--no-guide",
 			"--risky",
 			"--age=1ns",
+			"--root", home,
 			"--category=ai-logs",
 		}
 		if force {
@@ -1249,13 +1250,14 @@ func TestCleanCmd_SelectedSymlinkIsProtectedInDryRunAndForce(t *testing.T) {
 		})
 	}
 
-	for _, output := range []string{run(false), run(true)} {
+	for _, force := range []bool{false, true} {
+		output := run(force)
 		if !strings.Contains(output, "matched  0 candidates") ||
 			!strings.Contains(output, "scan identity evidence unavailable") {
-			t.Fatalf("selected symlink was not protected consistently: %s", output)
+			t.Fatalf("selected symlink was not protected (force=%v): %s", force, output)
 		}
 		if strings.Contains(output, "clean plan") {
-			t.Fatalf("protected symlink appeared in cleanup plan: %s", output)
+			t.Fatalf("protected symlink appeared in cleanup plan (force=%v): %s", force, output)
 		}
 	}
 	if _, err := os.Lstat(logLink); err != nil {
