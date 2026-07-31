@@ -104,17 +104,7 @@ func newGuidedCleanStateFromCleanupPlan(source scanSource, reason string, activi
 		row.Selected = row.Policy == guidedCleanPolicyRecommended
 		rows = append(rows, row)
 	}
-	sort.SliceStable(rows, func(i, j int) bool {
-		leftRecommended := rows[i].Policy == guidedCleanPolicyRecommended
-		rightRecommended := rows[j].Policy == guidedCleanPolicyRecommended
-		if leftRecommended != rightRecommended {
-			return leftRecommended
-		}
-		if rows[i].Row.Item.Size != rows[j].Row.Item.Size {
-			return rows[i].Row.Item.Size > rows[j].Row.Item.Size
-		}
-		return rows[i].Key < rows[j].Key
-	})
+	sortGuidedCleanRows(rows)
 	for i := range rows {
 		rows[i].Number = i + 1
 	}
@@ -127,6 +117,20 @@ func newGuidedCleanStateFromCleanupPlan(source scanSource, reason string, activi
 		Units:      units,
 		CanReplan:  true,
 	}
+}
+
+func sortGuidedCleanRows(rows []guidedCleanRow) {
+	sort.SliceStable(rows, func(i, j int) bool {
+		leftRecommended := rows[i].Policy == guidedCleanPolicyRecommended
+		rightRecommended := rows[j].Policy == guidedCleanPolicyRecommended
+		if leftRecommended != rightRecommended {
+			return leftRecommended
+		}
+		if rows[i].Row.Item.Size != rows[j].Row.Item.Size {
+			return rows[i].Row.Item.Size > rows[j].Row.Item.Size
+		}
+		return rows[i].Key < rows[j].Key
+	})
 }
 
 func guidedCleanupUnitItem(unit WorktreeCleanupUnit, items []types.DebrisInfo) types.DebrisInfo {
@@ -676,6 +680,9 @@ func replanGuidedCleanAge(state guidedCleanState, age time.Duration) (guidedClea
 		next.Rows[i].Selected = next.Rows[i].Policy == guidedCleanPolicyRecommended
 	}
 	applyGuidedCleanSelectionOverrides(&next, overrides)
+	// Reapply the display contract after policy changes while leaving Number
+	// attached to the cleanup-unit identity for stable selection commands.
+	sortGuidedCleanRows(next.Rows)
 	return next, fmt.Sprintf("minimum idle age set to %s", guidedAgeString(age))
 }
 

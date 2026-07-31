@@ -313,7 +313,8 @@ func TestGuidedNoSourceRowStartsUnselectedCanPreviewAndAgeCannotPromote(t *testi
 
 func TestGuidedMixedToolOrderingAndSelectionStayStableAcrossAgeReplan(t *testing.T) {
 	now := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
-	newCodex := cleanupPolicyUnit("new-codex", now.Add(-4*24*time.Hour), 512*cleanupPolicyMiB, "/repos/codex/.git")
+	newCodex := cleanupPolicyUnit("new-codex", now.Add(-24*time.Hour), 512*cleanupPolicyMiB, "/repos/codex/.git")
+	middleCodex := cleanupPolicyUnit("middle-codex", now.Add(-2*24*time.Hour), 800*cleanupPolicyMiB, "/repos/codex/.git")
 	oldCodex := cleanupPolicyUnit("old-codex", now.Add(-30*24*time.Hour), 600*cleanupPolicyMiB, "/repos/codex/.git")
 	claude := cleanupPolicyUnit("claude", now.Add(-60*24*time.Hour), 800*cleanupPolicyMiB, "/repos/claude/.git")
 	unknown := cleanupPolicyUnit("unknown", now.Add(-90*24*time.Hour), 700*cleanupPolicyMiB, "/repos/unknown/.git")
@@ -325,9 +326,10 @@ func TestGuidedMixedToolOrderingAndSelectionStayStableAcrossAgeReplan(t *testing
 	unknown.Source = ".mystery"
 	unknown.RegisteredActivityAvailable = false
 	unknown.RegisteredActivitySource = worktreeActivitySourceNotRegistered
-	units := []WorktreeCleanupUnit{unknown, newCodex, claude, oldCodex}
+	units := []WorktreeCleanupUnit{unknown, middleCodex, newCodex, claude, oldCodex}
 	items := []types.DebrisInfo{
 		guidedToolWorktreeItem(types.ToolUnknown, ".mystery", unknown.TargetPath, unknown.Size, unknown.LastActivity),
+		guidedToolWorktreeItem(types.ToolCodex, ".codex", middleCodex.TargetPath, middleCodex.Size, middleCodex.LastActivity),
 		guidedToolWorktreeItem(types.ToolCodex, ".codex", newCodex.TargetPath, newCodex.Size, newCodex.LastActivity),
 		guidedToolWorktreeItem(types.ToolClaude, ".claude", claude.TargetPath, claude.Size, claude.LastActivity),
 		guidedToolWorktreeItem(types.ToolCodex, ".codex", oldCodex.TargetPath, oldCodex.Size, oldCodex.LastActivity),
@@ -347,6 +349,7 @@ func TestGuidedMixedToolOrderingAndSelectionStayStableAcrossAgeReplan(t *testing
 	wantKeys := []string{
 		oldCodex.TargetPath,
 		claude.TargetPath,
+		middleCodex.TargetPath,
 		unknown.TargetPath,
 		newCodex.TargetPath,
 	}
@@ -366,15 +369,37 @@ func TestGuidedMixedToolOrderingAndSelectionStayStableAcrossAgeReplan(t *testing
 	if !toggleGuidedCleanRow(&state, claudeRow.Number) {
 		t.Fatal("Claude reviewable row should be manually selectable")
 	}
+	oldCodexRow := guidedRowByKey(t, state, oldCodex.TargetPath)
+	if !toggleGuidedCleanRow(&state, oldCodexRow.Number) {
+		t.Fatal("recommended Codex row should be manually unselectable")
+	}
 
 	next, _, ok := applyGuidedCleanCommand(state, "age 6h")
 	if !ok {
 		t.Fatal("mixed-tool age replan command not handled")
 	}
+	gotKeys = gotKeys[:0]
 	for _, row := range next.Rows {
+		gotKeys = append(gotKeys, row.Key)
 		if row.Number != numbers[row.Key] {
 			t.Errorf("row %q number = %d after replan; want stable %d", row.Key, row.Number, numbers[row.Key])
 		}
+	}
+	wantKeys = []string{
+		middleCodex.TargetPath,
+		oldCodex.TargetPath,
+		claude.TargetPath,
+		unknown.TargetPath,
+		newCodex.TargetPath,
+	}
+	if !reflect.DeepEqual(gotKeys, wantKeys) {
+		t.Fatalf("age-replanned order = %v; want newly recommended rows first by size, then reviewable rows %v", gotKeys, wantKeys)
+	}
+	if row := guidedRowByKey(t, next, middleCodex.TargetPath); row.Policy != guidedCleanPolicyRecommended || !row.Selected {
+		t.Fatalf("middle Codex row after replan = %+v; want newly recommended default selection", row)
+	}
+	if row := guidedRowByKey(t, next, oldCodex.TargetPath); row.Policy != guidedCleanPolicyRecommended || row.Selected {
+		t.Fatalf("manually unselected Codex row after replan = %+v; want unselected recommendation override", row)
 	}
 	if row := guidedRowByKey(t, next, claude.TargetPath); row.Policy != guidedCleanPolicyReviewable || !row.Selected {
 		t.Fatalf("manually selected Claude row after replan = %+v; want selected reviewable override", row)
