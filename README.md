@@ -24,7 +24,7 @@ confirmation, and path safety checks.
 
 | Category | Examples | Default clean |
 |----------|----------|---------------|
-| AI worktrees | Finite known containers plus `$HOME` conventions such as `.tool/worktrees` and project-local `worktrees` | Classic: orphaned; guided Codex: evidence-based |
+| AI worktrees | Finite known containers plus `$HOME` conventions such as `.tool/worktrees` and project-local `worktrees` | Classic: orphaned; guided: evidence-based active-worktree review |
 | Dependencies | project `node_modules` directories | Yes |
 | Build caches | Go, npm, Gradle, Cargo, Xcode | Yes |
 | Python caches | pip and uv cache directories | Yes |
@@ -175,13 +175,13 @@ targets
 [DRY-RUN] No files were removed.
 ```
 
-When active Codex worktrees are the useful cleanup decision and no classic
-cleanup selector is supplied, `aibris clean --dry-run` opens guided Codex
-worktree review by default. This includes protected-only pressure: at least one
-validated active Codex cleanup unit and either 256 MB total or three units. The
-guide defaults recommended rows to selected, keeps reviewable and locked rows
-visible, lets you toggle selectable rows by number, and still hands the final
-selection to the normal dry-run plan before anything can be deleted:
+When active worktrees are the useful cleanup decision and no classic cleanup
+selector is supplied, `aibris clean --dry-run` opens guided worktree review by
+default. This includes non-Codex and protected-only pressure: at least one
+validated active worktree cleanup unit and either 256 MB total or three units.
+The guide defaults recommended rows to selected, keeps reviewable and locked
+rows visible, lets you toggle selectable rows by number, and still hands the
+final selection to the normal dry-run plan before anything can be deleted:
 
 ```bash
 aibris clean --dry-run
@@ -195,13 +195,19 @@ common-dir, not by the path-derived project label.
 Policy evaluation is ordered:
 
 1. Lock the unit when it contains the current directory, dirty or untracked
-   files, unreadable Git or Codex activity evidence, a detached HEAD unreachable
-   from named refs, or activity within the last 6 hours.
-2. Keep the three most recently active units per canonical repository as
+   files, unreadable Git evidence, a registered activity source that is
+   unavailable, a detached HEAD unreachable from named refs, or activity from a
+   healthy registered source within the last 6 hours.
+2. If the scanner tool has no registered activity source, keep the otherwise
+   safe unit reviewable and initially unselected with the exact reason
+   `activity source not registered for this tool`. Age changes never recommend
+   or preselect this row, but the user may explicitly select it.
+3. For units with healthy activity evidence, keep the three most recently active
+   units per canonical repository as
    reviewable and unselected. A user may explicitly select these soft holds.
-3. Keep units younger than the guided minimum idle age (3 days by default) or
+4. Keep units younger than the guided minimum idle age (3 days by default) or
    smaller than 256 MB reviewable and unselected.
-4. Recommend and select the remaining units.
+5. Recommend and select the remaining units.
 
 An attached local branch is recoverable even without an upstream. A detached
 HEAD is recoverable when a local or remote named ref contains it. Missing or
@@ -210,15 +216,19 @@ Changing `--age` or using the prompt's `age`, `+`, `-`, `[` or `]` commands
 changes only the minimum idle age; the 6-hour lock and recent-three ranking do
 not change.
 
-The guide reads only Codex session metadata such as timestamps and working
-directories, never conversation bodies. A real deletion still requires the
-dry-run preview first and then the normal confirmation prompt unless `--force`
-is explicitly provided. `--force` skips only that prompt: it cannot select a
-locked row and is never passed to `git worktree remove`. Use `--no-guide` to
-keep the classic cleanup audit/executor route, or `--guide` to force guided
-Codex review.
+The registered Codex activity source reads only session metadata such as
+timestamps and working directories, never conversation bodies. That evidence
+applies only to Codex rows; other tools without a registered source show the
+explicit reviewable reason above. A real deletion still requires the dry-run
+preview first and then the normal confirmation prompt unless `--force` is
+explicitly provided. `--force` skips only that prompt: it cannot select a locked
+row and is never passed to `git worktree remove`. Use `--no-guide` to keep the
+classic cleanup audit/executor route, or `--guide` to force guided worktree
+review. With `--guide`, an omitted category defaults to `worktree`, while an
+omitted tool remains unrestricted; an explicit `--tool` narrows the guided
+inventory normally.
 
-When default guided review activates, it owns active Codex worktree decisions
+When default guided review activates, it owns active worktree decisions
 and then continues into the classic audit for orphaned worktrees, dependencies,
 caches, and other eligible categories. An empty guided selection therefore
 cannot hide classic candidates. In dry-run output, a classic target nested
@@ -320,7 +330,7 @@ scan summary
   protected/skipped 2 items   1.3 GB
 ```
 
-For unscoped guided Codex cleanup, the no-selector loop is fast and visible:
+For unscoped guided worktree cleanup, the no-selector loop is fast and visible:
 
 ```bash
 aibris scan
@@ -346,9 +356,10 @@ Cancellation remains a hard failure.
 ### Safety
 
 - **Independent age policies**: classic cleanup defaults to `--age 7d`, except
-  for proof-classified orphaned agent state; guided Codex cleanup defaults to a
-  3-day minimum idle age while always keeping its 6-hour recent-activity lock
-  and recent-three retention
+  for proof-classified orphaned agent state; guided worktree cleanup defaults to
+  a 3-day minimum idle age. Codex rows with healthy activity evidence retain the
+  6-hour recent-activity lock and recent-three policy; rows without a registered
+  activity source cannot be promoted by age
 - **Human age units** support `h`, `d`, `w`, `mo`, and `y`
 - **Low classic age warnings** describe the widened minimum-age eligibility
   within the selected category/tool scope; they do not imply that risky,
@@ -358,7 +369,7 @@ Cancellation remains a hard failure.
 - **Target plan before final confirmation** shows category, size, project,
   age/status, path, cleanup command when applicable, and zero-byte nested
   overlap lineage
-- **Guided Codex cleanup** classifies physical units as recommended,
+- **Guided worktree cleanup** classifies physical units as recommended,
   reviewable, or locked after member-level Git and activity checks, then uses
   the same dry-run and confirmation model as regular `clean`
 - **Git-aware active removal** preflights every member, removes it with
@@ -424,7 +435,7 @@ New tools can be added by implementing the `DebrisProvider` interface.
 
 ### Agent Workflow
 
-No-selector guided Codex cleanup:
+No-selector guided worktree cleanup:
 
 ```bash
 aibris scan --json
@@ -442,7 +453,7 @@ aibris clean --no-guide --category worktree --age 7d
 ```
 
 The intended agent flow is: scan, summarize by project/category/age, use guided
-review for active Codex pressure, run a dry-run, ask again, then execute. Treat
+review for active worktree pressure, run a dry-run, ask again, then execute. Treat
 `active` as linked Git metadata, not proof of recent use; rely on the guided
 class and reason before proposing an active unit. A scoped execution must never
 fall back to plain `aibris clean`: preserve all approved `--category`, `--tool`,

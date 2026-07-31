@@ -61,8 +61,16 @@ type guidedCleanRunResult struct {
 	HadSelection      bool
 }
 
-func buildGuidedCleanState(ctx context.Context, result *types.ScanResult, source scanSource, minIdleAge time.Duration, reason string) (guidedCleanState, error) {
-	items := activeCodexWorktrees(result.Worktrees)
+func buildGuidedCleanState(
+	ctx context.Context,
+	result *types.ScanResult,
+	source scanSource,
+	categories []types.Category,
+	tools []types.Tool,
+	minIdleAge time.Duration,
+	reason string,
+) (guidedCleanState, error) {
+	items := guidedActiveWorktrees(result.Worktrees, categories, tools)
 	units, err := buildWorktreeCleanupUnits(ctx, items)
 	if err != nil {
 		return guidedCleanState{}, err
@@ -130,6 +138,12 @@ func guidedCleanupUnitItem(unit WorktreeCleanupUnit, items []types.DebrisInfo) t
 		}
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
+		if candidates[i].Tool != candidates[j].Tool {
+			return candidates[i].Tool < candidates[j].Tool
+		}
+		if candidates[i].Source != candidates[j].Source {
+			return candidates[i].Source < candidates[j].Source
+		}
 		if candidates[i].Project != candidates[j].Project {
 			return candidates[i].Project < candidates[j].Project
 		}
@@ -139,20 +153,66 @@ func guidedCleanupUnitItem(unit WorktreeCleanupUnit, items []types.DebrisInfo) t
 		return candidates[i].Path < candidates[j].Path
 	})
 	item := types.DebrisInfo{
-		Tool:     types.ToolCodex,
+		Tool:     types.ToolUnknown,
 		Category: types.CategoryWorktree,
 		Status:   types.WorktreeActive,
+		Source:   unit.Source,
 	}
 	if len(candidates) > 0 {
 		item = candidates[0]
 	}
 	item.Path = unit.TargetPath
 	item.Size = unit.Size
-	item.Source = unit.Source
 	if !unit.LastActivity.IsZero() {
 		item.ModTime = unit.LastActivity
 	}
 	return item
+}
+
+func guidedActiveWorktrees(
+	items []types.DebrisInfo,
+	categories []types.Category,
+	tools []types.Tool,
+) []types.DebrisInfo {
+	var candidates []types.DebrisInfo
+	for _, item := range items {
+		if !isGuidedActiveWorktree(item) ||
+			!guidedCategorySelected(categories, item.Category) ||
+			!guidedToolSelected(tools, item.Tool) {
+			continue
+		}
+		candidates = append(candidates, item)
+	}
+	return candidates
+}
+
+func isGuidedActiveWorktree(item types.DebrisInfo) bool {
+	return item.Category == types.CategoryWorktree &&
+		item.Status == types.WorktreeActive
+}
+
+func guidedCategorySelected(categories []types.Category, category types.Category) bool {
+	if len(categories) == 0 {
+		return true
+	}
+	for _, selected := range categories {
+		if selected == category {
+			return true
+		}
+	}
+	return false
+}
+
+func guidedToolSelected(tools []types.Tool, tool types.Tool) bool {
+	if len(tools) == 0 {
+		return true
+	}
+	for _, selected := range tools {
+		if selected == tool {
+			return true
+		}
+	}
+	return false
 }
 
 func guidedCleanupDecisionReason(decision WorktreeCleanupDecision) string {
@@ -192,7 +252,7 @@ func guidedMemberReason(unit WorktreeCleanupUnit, member GitWorktreeMember, reas
 	return reason
 }
 
-func runGuidedCodexClean(
+func runGuidedWorktreeClean(
 	ctx context.Context,
 	opts types.PruneOptions,
 	state guidedCleanState,
@@ -290,7 +350,7 @@ func applyGuidedPolicyReasons(
 		}
 	}
 	for i := range inputs {
-		if !isActiveCodexWorktree(inputs[i].Item) {
+		if !isGuidedActiveWorktree(inputs[i].Item) {
 			continue
 		}
 		path, ok := cleanTargetPathKey(inputs[i].Item.Path)
@@ -391,7 +451,7 @@ func renderGuidedClean(output io.Writer, state guidedCleanState, status string, 
 	protectedCount, protectedSize := guidedProtectedTotals(state)
 	projectedFreed := guidedProjectedFreedSize(state)
 
-	fmt.Fprintln(output, "guided codex worktree cleanup")
+	fmt.Fprintln(output, "guided worktree cleanup")
 	if mode == guidedCleanPromptTTY {
 		fmt.Fprintf(output, "  mode       %s\n", mode)
 	}
@@ -406,7 +466,7 @@ func renderGuidedClean(output io.Writer, state guidedCleanState, status string, 
 	if status != "" {
 		fmt.Fprintf(output, "  status     %s\n", status)
 	}
-	fmt.Fprintf(output, "\nscan\n  source     %s\n  activity   %s\n", cleanAuditScanSourceLine(state.ScanSource), guidedActivitySourceLine(state.Activity))
+	fmt.Fprintf(output, "\nscan\n  source     %s\n  activity   %s\n", cleanAuditScanSourceLine(state.ScanSource), guidedActivitySourceLine(state.Activity, state.Rows))
 	fmt.Fprintf(output, "\nsummary\n  selected   %d %s   %s\n  projected  %s\n  protected  %d %s   %s\n",
 		selectedCount, itemNoun(selectedCount), cleaner.FormatSize(selectedSize),
 		cleaner.FormatSize(projectedFreed),
@@ -490,10 +550,11 @@ func renderGuidedRows(output io.Writer, rows []guidedCleanRow, selected bool, li
 		} else if row.Policy == guidedCleanPolicyLocked {
 			box = "[!]"
 		}
-		fmt.Fprintf(output, "  %s %2d  %8s  %-24s %-18s %-11s %s\n",
+		fmt.Fprintf(output, "  %s %2d  %8s  %-10s %-24s %-18s %-11s %s\n",
 			box,
 			row.Number,
 			cleaner.FormatSize(row.Row.Item.Size),
+			row.Row.Item.Tool,
 			itemName(row.Row.Item),
 			itemAgeAndStatus(row.Row.Item),
 			row.Policy,
@@ -505,14 +566,21 @@ func renderGuidedRows(output io.Writer, rows []guidedCleanRow, selected bool, li
 	}
 }
 
-func guidedActivitySourceLine(activity codexActivityIndex) string {
+func guidedActivitySourceLine(activity codexActivityIndex, rows []guidedCleanRow) string {
+	status := "unavailable"
 	if !activity.Available {
-		return "unavailable"
+		status = "unavailable"
+	} else if activity.Source == codexActivitySourceCache {
+		status = fmt.Sprintf("cached, %s old", shortDurationString(activity.Age))
+	} else {
+		status = "indexed"
 	}
-	if activity.Source == codexActivitySourceCache {
-		return fmt.Sprintf("cached, %s old", shortDurationString(activity.Age))
+	for _, row := range rows {
+		if row.Row.Item.Tool != types.ToolCodex {
+			return "codex " + status + "; unregistered tools noted per row"
+		}
 	}
-	return "indexed"
+	return "codex " + status
 }
 
 func applyGuidedCleanCommand(state guidedCleanState, line string) (guidedCleanState, string, bool) {

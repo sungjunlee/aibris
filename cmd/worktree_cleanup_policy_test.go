@@ -216,7 +216,7 @@ func TestPlanWorktreeCleanupOrdersHardLockReasonsAndDecisions(t *testing.T) {
 	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
 	unit := cleanupPolicyUnit("zeta", now.Add(-time.Hour), 512*cleanupPolicyMiB, "/repos/zeta/.git")
 	unit.HardLocked = true
-	unit.CodexActivityAvailable = false
+	unit.RegisteredActivityAvailable = false
 	unit.Members[0].EvidenceAvailable = false
 	unit.Members[0].RepositoryID = ""
 	unit.Members[0].Dirty = true
@@ -302,29 +302,29 @@ func cleanupPolicyUnit(name string, activity time.Time, size int64, repositoryID
 	members := make([]GitWorktreeMember, 0, len(repositoryIDs))
 	for i, repositoryID := range repositoryIDs {
 		members = append(members, GitWorktreeMember{
-			WorktreePath:           target + "/member-" + string(rune('a'+i)),
-			RepositoryID:           repositoryID,
-			DisplayRepository:      "shared",
-			BranchRef:              "refs/heads/fixture",
-			Recoverable:            true,
-			EvidenceAvailable:      true,
-			GitEvidenceAvailable:   true,
-			LastActivity:           activity,
-			ActivityAvailable:      true,
-			CodexActivityAvailable: true,
+			WorktreePath:                target + "/member-" + string(rune('a'+i)),
+			RepositoryID:                repositoryID,
+			DisplayRepository:           "shared",
+			BranchRef:                   "refs/heads/fixture",
+			Recoverable:                 true,
+			EvidenceAvailable:           true,
+			GitEvidenceAvailable:        true,
+			LastActivity:                activity,
+			ActivityAvailable:           true,
+			RegisteredActivityAvailable: true,
 			Reason: GitEvidenceReason{
 				Code: GitReasonAttachedBranch,
 			},
 		})
 	}
 	return WorktreeCleanupUnit{
-		TargetPath:             target,
-		Size:                   size,
-		Source:                 ".codex",
-		Members:                members,
-		LastActivity:           activity,
-		ActivityAvailable:      true,
-		CodexActivityAvailable: true,
+		TargetPath:                  target,
+		Size:                        size,
+		Source:                      ".codex",
+		Members:                     members,
+		LastActivity:                activity,
+		ActivityAvailable:           true,
+		RegisteredActivityAvailable: true,
 	}
 }
 
@@ -348,10 +348,10 @@ func cleanupPolicyMissingGitUnit(unit WorktreeCleanupUnit) WorktreeCleanupUnit {
 }
 
 func cleanupPolicyMissingActivityUnit(unit WorktreeCleanupUnit) WorktreeCleanupUnit {
-	unit.CodexActivityAvailable = false
-	unit.CodexActivityError = "fixture activity index unavailable"
+	unit.RegisteredActivityAvailable = false
+	unit.RegisteredActivityError = "fixture activity index unavailable"
 	for i := range unit.Members {
-		unit.Members[i].CodexActivityAvailable = false
+		unit.Members[i].RegisteredActivityAvailable = false
 	}
 	return unit
 }

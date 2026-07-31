@@ -3,8 +3,9 @@
 ## Architecture Decisions
 
 - `aibris` remains a conservative scanner/executor, while plain no-filter
-  `clean` may choose the guided Codex decision path. Explicit cleanup selectors
-  and `--no-guide` preserve the classic executor path.
+  `clean` may choose the guided worktree decision path across scanner tools.
+  Explicit cleanup selectors and `--no-guide` preserve the classic executor
+  path.
 - `active` worktree status is structural linked health, not recent liveness.
   Automatic recommendations must combine Git recoverability, activity,
   retention, age, and size rather than age-only filtering.

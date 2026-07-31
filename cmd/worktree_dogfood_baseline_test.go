@@ -110,13 +110,13 @@ func TestEvidenceBasedReclamationBaseline(t *testing.T) {
 func baselineCleanupUnit(name, repository string, size int64, activity time.Time) WorktreeCleanupUnit {
 	target := "/fixture/.codex/worktrees/" + name
 	return WorktreeCleanupUnit{
-		TargetPath:             target,
-		Size:                   size,
-		Source:                 ".codex",
-		Members:                []GitWorktreeMember{baselineCleanupMember(target, repository)},
-		LastActivity:           activity,
-		ActivityAvailable:      true,
-		CodexActivityAvailable: true,
+		TargetPath:                  target,
+		Size:                        size,
+		Source:                      ".codex",
+		Members:                     []GitWorktreeMember{baselineCleanupMember(target, repository)},
+		LastActivity:                activity,
+		ActivityAvailable:           true,
+		RegisteredActivityAvailable: true,
 	}
 }
 

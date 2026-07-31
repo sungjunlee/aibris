@@ -33,7 +33,7 @@ func TestPromptGuidedCleanRendersAndTogglesSelection(t *testing.T) {
 		t.Fatalf("targets = %#v; want toggled row two", targets)
 	}
 	text := output.String()
-	for _, want := range []string{"guided codex worktree cleanup", "selected   1 item", "[x]  2"} {
+	for _, want := range []string{"guided worktree cleanup", "selected   1 item", "[x]  2"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("output missing %q:\n%s", want, text)
 		}
@@ -377,7 +377,7 @@ func TestRenderGuidedCleanTTYAndTextSharePolicyClassAndReasonData(t *testing.T) 
 }
 
 func TestChooseCleanExperienceRoutesDefaultGuidedOnlyWhenUseful(t *testing.T) {
-	got, reason, err := chooseCleanExperience(cleanExperienceInput{UsefulGuidedCodexReview: true})
+	got, reason, err := chooseCleanExperience(cleanExperienceInput{UsefulGuidedWorktreeReview: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -416,7 +416,7 @@ func TestChooseCleanExperienceNoGuideAndClassicSelectorsKeepClassic(t *testing.T
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.input.UsefulGuidedCodexReview = true
+			tt.input.UsefulGuidedWorktreeReview = true
 			got, reason, err := chooseCleanExperience(tt.input)
 			if err != nil {
 				t.Fatal(err)
@@ -468,8 +468,8 @@ func TestApplyGuidedCleanDefaultsUsesMinimumIdleAgeOnlyWhenAgeOmitted(t *testing
 	if cleanCategory != string(types.CategoryWorktree) {
 		t.Fatalf("cleanCategory = %q; want worktree", cleanCategory)
 	}
-	if cleanTools != string(types.ToolCodex) {
-		t.Fatalf("cleanTools = %q; want codex", cleanTools)
+	if cleanTools != "" {
+		t.Fatalf("cleanTools = %q; want omitted tool selector", cleanTools)
 	}
 
 	resetCleanFlags()

@@ -12,23 +12,23 @@ import (
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
-func TestGuidedCodexCleanupPressureThresholdEdges(t *testing.T) {
+func TestGuidedWorktreeCleanupPressureThresholdEdges(t *testing.T) {
 	tests := []struct {
 		name  string
 		count int
 		size  int64
 		want  bool
 	}{
-		{name: "exact size threshold", count: 1, size: guidedCodexCleanupPressureMinSize, want: true},
-		{name: "below size threshold", count: 1, size: guidedCodexCleanupPressureMinSize - 1, want: false},
-		{name: "exact unit threshold", count: guidedCodexCleanupPressureUnitThreshold, size: 3, want: true},
-		{name: "below unit threshold", count: guidedCodexCleanupPressureUnitThreshold - 1, size: 2, want: false},
-		{name: "empty", count: 0, size: guidedCodexCleanupPressureMinSize, want: false},
+		{name: "exact size threshold", count: 1, size: guidedWorktreeCleanupPressureMinSize, want: true},
+		{name: "below size threshold", count: 1, size: guidedWorktreeCleanupPressureMinSize - 1, want: false},
+		{name: "exact unit threshold", count: guidedWorktreeCleanupPressureUnitThreshold, size: 3, want: true},
+		{name: "below unit threshold", count: guidedWorktreeCleanupPressureUnitThreshold - 1, size: 2, want: false},
+		{name: "empty", count: 0, size: guidedWorktreeCleanupPressureMinSize, want: false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isGuidedCodexCleanupPressureValuable(tt.count, tt.size)
+			got := isGuidedWorktreeCleanupPressureValuable(tt.count, tt.size)
 			if got != tt.want {
 				t.Fatalf("pressure count=%d size=%d valuable=%t; want %t", tt.count, tt.size, got, tt.want)
 			}
@@ -36,27 +36,27 @@ func TestGuidedCodexCleanupPressureThresholdEdges(t *testing.T) {
 	}
 }
 
-func TestGuidedCodexCleanupPressureCountsPhysicalTargetOnce(t *testing.T) {
+func TestGuidedWorktreeCleanupPressureCountsPhysicalTargetOnce(t *testing.T) {
 	home := t.TempDir()
 	worktree := createCleanCodexGitWorktree(t, home, "duplicate-pressure")
 	item := guidedRouteWorktreeItem(worktree, 128*1024*1024, time.Now().Add(-48*time.Hour))
 
-	count, size := guidedCodexCleanupPressure(context.Background(), []types.DebrisInfo{item, item})
+	count, size := guidedWorktreeCleanupPressure(context.Background(), []types.DebrisInfo{item, item})
 	if count != 1 || size != item.Size {
 		t.Fatalf("pressure = %d units/%d bytes; want one physical unit/%d bytes", count, size, item.Size)
 	}
-	if hasGuidedCodexCleanupPressure(context.Background(), []types.DebrisInfo{item, item}) {
+	if hasGuidedWorktreeCleanupPressure(context.Background(), []types.DebrisInfo{item, item}) {
 		t.Fatal("duplicate scanner rows must not combine to cross the pressure threshold")
 	}
 }
 
-func TestGuidedCodexCleanupPressureRoutesThreeSmallValidatedUnits(t *testing.T) {
+func TestGuidedWorktreeCleanupPressureRoutesThreeSmallValidatedUnits(t *testing.T) {
 	home := t.TempDir()
 	repository := filepath.Join(home, "repositories", "repo")
 	newGitFixtureRepoAt(t, repository)
 
-	items := make([]types.DebrisInfo, 0, guidedCodexCleanupPressureUnitThreshold)
-	for i := 0; i < guidedCodexCleanupPressureUnitThreshold; i++ {
+	items := make([]types.DebrisInfo, 0, guidedWorktreeCleanupPressureUnitThreshold)
+	for i := 0; i < guidedWorktreeCleanupPressureUnitThreshold; i++ {
 		id := fmt.Sprintf("small-pressure-%d", i)
 		worktree := filepath.Join(home, ".codex", "worktrees", id)
 		if err := os.MkdirAll(filepath.Dir(worktree), 0755); err != nil {
@@ -66,32 +66,29 @@ func TestGuidedCodexCleanupPressureRoutesThreeSmallValidatedUnits(t *testing.T) 
 		items = append(items, guidedRouteWorktreeItem(worktree, 1, time.Now().Add(-48*time.Hour)))
 	}
 
-	count, size := guidedCodexCleanupPressure(context.Background(), items)
-	if count != guidedCodexCleanupPressureUnitThreshold || size != int64(guidedCodexCleanupPressureUnitThreshold) {
-		t.Fatalf("pressure = %d units/%d bytes; want %d units/%d bytes", count, size, guidedCodexCleanupPressureUnitThreshold, guidedCodexCleanupPressureUnitThreshold)
+	count, size := guidedWorktreeCleanupPressure(context.Background(), items)
+	if count != guidedWorktreeCleanupPressureUnitThreshold || size != int64(guidedWorktreeCleanupPressureUnitThreshold) {
+		t.Fatalf("pressure = %d units/%d bytes; want %d units/%d bytes", count, size, guidedWorktreeCleanupPressureUnitThreshold, guidedWorktreeCleanupPressureUnitThreshold)
 	}
-	if !hasGuidedCodexCleanupPressure(context.Background(), items) {
-		t.Fatal("three validated active Codex cleanup units should open guided review")
+	if !hasGuidedWorktreeCleanupPressure(context.Background(), items) {
+		t.Fatal("three validated active cleanup units should open guided review")
 	}
 }
 
-func TestGuidedCodexCleanupPressureIgnoresEmptyAndUnvalidatedTargets(t *testing.T) {
+func TestGuidedWorktreeCleanupPressureIgnoresEmptyAndUnvalidatedTargets(t *testing.T) {
 	home := t.TempDir()
 	plain := filepath.Join(home, ".codex", "worktrees", "plain")
 	if err := os.MkdirAll(plain, 0755); err != nil {
 		t.Fatal(err)
 	}
-	item := guidedRouteWorktreeItem(plain, guidedCodexCleanupPressureMinSize, time.Now().Add(-48*time.Hour))
-	nonCodexSource := item
-	nonCodexSource.Source = "project-local"
+	item := guidedRouteWorktreeItem(plain, guidedWorktreeCleanupPressureMinSize, time.Now().Add(-48*time.Hour))
 
 	for name, items := range map[string][]types.DebrisInfo{
-		"empty":            nil,
-		"plain directory":  {item},
-		"non codex source": {nonCodexSource},
+		"empty":           nil,
+		"plain directory": {item},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if hasGuidedCodexCleanupPressure(context.Background(), items) {
+			if hasGuidedWorktreeCleanupPressure(context.Background(), items) {
 				t.Fatalf("items %+v unexpectedly created guided pressure", items)
 			}
 		})
@@ -127,7 +124,7 @@ func TestCleanCmd_ProtectedOnlyPressureOpensGuidedDryRun(t *testing.T) {
 	})
 
 	for _, want := range []string{
-		"guided codex worktree cleanup",
+		"guided worktree cleanup",
 		"selected   0 items",
 		"No items selected.",
 		"scan summary",
@@ -166,7 +163,7 @@ func TestCleanCmd_ProtectedOnlyEnterDoesNotPreviewOrDelete(t *testing.T) {
 	})
 
 	for _, want := range []string{
-		"guided codex worktree cleanup",
+		"guided worktree cleanup",
 		"selected   0 items",
 		"No items selected.",
 		"scan summary",
@@ -199,7 +196,7 @@ func TestCleanCmd_ProtectedOnlyNonTTYReturnsWithoutDeleting(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	for _, want := range []string{"guided codex worktree cleanup", "No items selected.", "scan summary", "No items to clean."} {
+	for _, want := range []string{"guided worktree cleanup", "No items selected.", "scan summary", "No items to clean."} {
 		if !strings.Contains(output, want) {
 			t.Errorf("non-TTY protected-only output missing %q; got: %s", want, output)
 		}
@@ -238,7 +235,7 @@ func TestCleanCmd_GuidedDryRunContinuesWithMixedCategoryCandidates(t *testing.T)
 	})
 
 	for _, want := range []string{
-		"guided codex worktree cleanup",
+		"guided worktree cleanup",
 		"selected   1 item",
 		"scan summary",
 		"node_modules",
@@ -380,7 +377,7 @@ func TestCleanCmd_ProtectedOnlyPressureRespectsClassicOverrides(t *testing.T) {
 				rootCmd.Execute()
 			})
 
-			if strings.Contains(output, "guided codex worktree cleanup") {
+			if strings.Contains(output, "guided worktree cleanup") {
 				t.Fatalf("classic override %v entered guided review: %s", tt.args, output)
 			}
 			if !strings.Contains(output, "scan summary") {

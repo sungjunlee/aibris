@@ -9,9 +9,9 @@ build caches, package caches, and AI tool logs.
 The product stance is conservative cleanup for development machines. The CLI
 does four things: discover development debris, report structured data, preview
 filtered targets, and delete only inside conservative safety boundaries. Human
-or AI-guided judgment usually happens outside the CLI; the guided Codex cleanup
-mode is a conservative review surface that still uses the normal preview and
-confirmation path before deletion.
+or AI-guided judgment usually happens outside the CLI; guided worktree cleanup
+is a conservative review surface for every active `worktree` scanner tool that
+still uses the normal preview and confirmation path before deletion.
 
 ## Non-goals
 
@@ -82,8 +82,8 @@ Flags:
 | `--risky` | `false` | Include risky categories such as AI logs. |
 | `--include-active-worktrees` | `false` | Include active Git worktrees in cleanup candidates. |
 | `--force`, `-f` | `false` | Skip the final confirmation prompt. It does not bypass hard locks or force Git worktree removal. |
-| `--guide` | `false` | Force the guided Codex worktree cleanup flow. When category/tool filters are omitted, it implies `--category worktree --tool codex`. When age is omitted, guided cleanup uses a 3-day minimum idle age; explicit `--age` changes only that value. |
-| `--no-guide` | `false` | Keep the classic cleanup audit/executor route even when active Codex pressure would open guided review. |
+| `--guide` | `false` | Force the guided worktree cleanup flow. An omitted category defaults to `worktree`; an omitted tool remains unrestricted, and an explicit `--tool` narrows guided inventory normally. When age is omitted, guided cleanup uses a 3-day minimum idle age; explicit `--age` changes only that value. |
+| `--no-guide` | `false` | Keep the classic cleanup audit/executor route even when active worktree pressure would open guided review. |
 
 The planned repeatable `--retention-bucket <store_id>@<YYYY-MM>` spelling is
 reserved by `docs/PROTECTED_RETENTION.md` but is not a shipped flag and is
@@ -179,21 +179,24 @@ Human `clean` output must include a cleanup audit before deletion:
 
 The audit is human output only. `scan --json` remains the machine-readable surface for agents and scripts.
 
-Default guided Codex worktree cleanup:
+Default guided worktree cleanup:
 
 - Plain `clean` and `clean --dry-run` build a guided plan when no classic
-  selector is supplied, at least one validated active Codex cleanup unit exists,
-  and pressure is at least 256 MB or three units. Routing does not require an
-  initially recommended row, so protected-only pressure is still reviewable.
+  selector is supplied, at least one validated active `worktree` cleanup unit
+  exists, and pressure across all scanner tools is at least 256 MB or three
+  units. Routing does not require an initially recommended row, so non-Codex,
+  unknown-tool, and protected-only pressure can still open review.
 - Classic selectors such as `--category`, `--tool`, `--risky`,
   `--include-active-worktrees`, `--interactive`, and `--force` keep the classic
   cleanup route unless `--guide` is explicit.
 - `--root` only narrows scan scope; it does not disable default guided routing.
 - `--no-guide` disables the default guided route and keeps the classic audit.
-- `--guide` explicitly forces guided Codex worktree cleanup.
+- `--guide` explicitly forces guided worktree cleanup. If `--category` is
+  omitted it defaults only that selector to `worktree`; it never synthesizes
+  `--tool codex`. An explicit `--tool` remains a normal narrowing selector.
 - `recommended` rows start selected. `reviewable` rows are soft-policy holds and
   may be toggled. `locked` rows remain visible and cannot be selected.
-- Guided review owns active Codex worktree rows, then the classic audit exposes
+- Guided review owns active `worktree` rows for every scanner tool, then the classic audit exposes
   remaining eligible categories. Blank input or non-TTY EOF accepts the guided
   defaults in dry-run mode and continues; `q` aborts the whole cleanup flow.
 - In deletion mode, declining or failing to provide the guided final
@@ -201,10 +204,17 @@ Default guided Codex worktree cleanup:
 - Dry-run target normalization treats selected guided cleanup units as parents,
   so nested classic candidates are reported as covered evidence and never
   double-counted.
-- The planner must fail closed when Codex activity or git safety evidence is
-  unavailable or unsafe.
+- The planner must fail closed when Git safety evidence is unavailable or
+  unsafe. A registered activity source that is unavailable also remains a hard
+  lock.
+- Structural absence of an activity source is distinct: the otherwise safe row
+  is `reviewable`, initially unselected, and carries the exact reason
+  `activity source not registered for this tool`. It can be manually toggled,
+  but age replanning can never make it recommended, initially selected, or
+  projected-freed without that explicit selection.
 - Codex activity uses metadata only: session metadata, working-directory paths,
-  timestamps, and cache file metadata. It must not read conversation bodies.
+  timestamps, and cache file metadata. It must not read conversation bodies,
+  and its evidence applies only to Codex rows.
 - Git safety protects current working directories, dirty or untracked members,
   unreadable evidence, and detached HEADs not reachable from named refs.
   Missing or gone upstream is explanatory metadata, not a lock. An attached
@@ -218,24 +228,38 @@ Guided cleanup unit and policy contract:
 - One canonical target path is one physical cleanup unit, counted and removed
   once. Every direct or one-level nested `.git` member is inspected; any hard
   failure locks the entire unit.
+- Unit construction preserves the representative scanner row's `Tool`,
+  `Source`, identity, project, physical target, and size. If no representative
+  row is available, fallback is deterministic and tool-neutral rather than
+  inventing Codex identity. `unknown` is a valid guided tool identity;
+  non-worktree categories and retention projections are never admitted.
 - Canonical, symlink-resolved Git common-dir is repository identity. Display
   project names do not control retention, and a multi-repository unit is
   retained when any member repository retains it.
-- Member activity is the maximum trusted timestamp from matching Codex session
-  metadata, per-worktree HEAD reflog, and scanner metadata fallback. Codex
-  activity availability remains a separate required signal.
-- Policy order is hard lock, recent-three repository retention, minimum idle
-  age, minimum size, then recommendation.
+- For Codex members, activity is the maximum trusted timestamp from matching
+  Codex session metadata, per-worktree HEAD reflog, and scanner metadata
+  fallback. Codex activity availability remains a separate required signal and
+  does not supply evidence for another tool.
+- Policy order is hard lock, explicit no-source reviewability, recent-three
+  repository retention, minimum idle age, minimum size, then recommendation.
 - Hard locks are: current working directory containment; dirty or untracked
-  members; unavailable Git or Codex activity evidence; detached HEAD not
-  reachable from a named local or remote ref; and activity within 6 hours.
-- The three most recent units per canonical repository are reviewable. Ranking
-  includes locked units and is deterministic by activity then stable unit key.
-- The guided minimum idle age defaults to 3 days and the recommendation size to
-  256 MB. Younger or smaller safe units are reviewable.
+  members; unavailable Git evidence; an unavailable registered activity source;
+  detached HEAD not reachable from a named local or remote ref; and activity
+  from a healthy registered source within 6 hours.
+- A tool with no registered activity source takes the explicit reviewable state
+  before automatic retention/age/size recommendation. Its reason and initial
+  unselection are deterministic and age cannot promote it.
+- For tools with healthy activity evidence, the three most recent units per
+  canonical repository are reviewable. Ranking includes locked units and is
+  deterministic by activity then stable unit key.
+- For those rows, the guided minimum idle age defaults to 3 days and the
+  recommendation size to 256 MB. Younger or smaller safe units are reviewable.
 - Explicit `--age` and prompt age controls change only minimum idle age. They do
   not alter the 6-hour lock or recent-three ranking. User selection overrides
   survive replanning while a row remains selectable.
+- Guided display order is deterministic: recommended rows first, then size,
+  then stable cleanup-unit key. Mixed-tool numbering and selection overrides
+  remain stable across age replans.
 
 Git-aware active execution contract:
 
@@ -253,6 +277,9 @@ Git-aware active execution contract:
 - For a partial multi-member failure, stop, preserve the remaining container,
   identify each removed and remaining member, and credit no bytes unless the
   physical unit is gone.
+- A selected non-Codex or unknown-tool row uses this same prepared-target,
+  deletion-time preflight, non-forced removal, verification, and receipt path;
+  there is no tool-specific executor.
 
 Cross-category containment uses the same physical-component contract:
 
@@ -261,6 +288,8 @@ Cross-category containment uses the same physical-component contract:
 - Assign one outermost executable owner to each component. Exact-path aliases
   and nested discoveries retain category, tool, classification, policy reason,
   and overlap reason as logical evidence; only the owner contributes bytes.
+- Propagate overlap policy reasons for every guided active worktree regardless
+  of scanner tool.
 - Selection precedence is `locked > selected > reviewable`, and toggling any
   selectable logical row toggles its physical owner.
 - A `live` or `undetermined` agent-state ancestor, descendant, or exact overlap
@@ -277,7 +306,7 @@ Cross-category containment uses the same physical-component contract:
 
 1. Run `aibris scan --json`.
 2. Summarize by project, category, size, and age.
-3. For an unscoped active Codex worktree cleanup, use the separate no-selector
+3. For an unscoped active worktree cleanup, use the separate no-selector
    guided branch: preview with `aibris clean --dry-run`, ask again, and execute
    with `aibris clean` only after the user approves the guided selection.
 4. For ordinary cleanup groups, ask the user which groups to remove.
@@ -327,8 +356,10 @@ Cleanup excludes `active` worktrees by default. `orphaned` worktrees remain
 eligible when age/category/tool filters match. Use `--include-active-worktrees`
 to intentionally include active worktrees in classic cleanup. `plain-dir`,
 empty, and unknown statuses remain review-only regardless of age, `--risky`,
-or active-worktree opt-in. The default guided Codex route may recommend linked
-active units only after the cleanup-unit policy passes.
+or active-worktree opt-in. The default guided route may recommend linked active
+units only after the cleanup-unit policy passes. Tools without a registered
+activity source remain reviewable and initially unselected instead of being
+recommended.
 
 Worktree discovery combines two bounded mechanisms. A finite exact registry
 looks up `$HOME/.codex/worktrees`, `$HOME/.relay/worktrees`,
@@ -385,7 +416,7 @@ deduplicated, and collapsed when one root is nested inside another.
   eligible for cleanup safety checks.
 - Risky categories must be excluded unless `--risky` is set.
 - Classic cleanup must exclude active worktrees unless
-  `--include-active-worktrees` is set. Guided Codex recommendations instead
+  `--include-active-worktrees` is set. Guided worktree recommendations instead
   require cleanup-unit hard safety.
 - Active worktree execution must preserve branch refs, revalidate the full
   member set, use non-forced Git worktree removal, and fail closed without raw

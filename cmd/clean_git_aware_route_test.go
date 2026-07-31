@@ -87,7 +87,7 @@ func TestCleanCmd_GuidedRouteReachesLocalOnlyActiveWorktree(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	for _, want := range []string{"guided codex worktree cleanup", "selected   1 item", "clean plan", "[DRY-RUN] No files were removed."} {
+	for _, want := range []string{"guided worktree cleanup", "selected   1 item", "clean plan", "[DRY-RUN] No files were removed."} {
 		if !strings.Contains(output, want) {
 			t.Errorf("guided Git-aware route missing %q; got: %s", want, output)
 		}

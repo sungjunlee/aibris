@@ -58,6 +58,7 @@ const (
 	DecisionReasonDetachedUnreferenced    DecisionReasonCode = "git_detached_head_unreferenced"
 	DecisionReasonActivityUnavailable     DecisionReasonCode = "activity_evidence_unavailable"
 	DecisionReasonRecentActivity          DecisionReasonCode = "recent_activity"
+	DecisionReasonActivityNotRegistered   DecisionReasonCode = "activity_source_not_registered"
 	DecisionReasonRepositoryRetention     DecisionReasonCode = "retained_per_repository"
 	DecisionReasonMinimumIdleAge          DecisionReasonCode = "younger_than_min_idle_age"
 	DecisionReasonMinimumSize             DecisionReasonCode = "below_min_size"
@@ -82,8 +83,9 @@ type CleanupPlan struct {
 	Decisions []WorktreeCleanupDecision
 }
 
-// PlanWorktreeCleanup evaluates hard locks, ranks every unit per canonical
-// repository, then classifies by hard lock, retention, idle age, and size.
+// PlanWorktreeCleanup evaluates hard locks, keeps units without a registered
+// activity source explicitly reviewable, then classifies registered-source
+// units by repository retention, idle age, and size.
 func PlanWorktreeCleanup(units []WorktreeCleanupUnit, policy CleanupPolicy) CleanupPlan {
 	policy = fillCleanupPolicy(policy)
 	hardLockReasons := make([][]DecisionReasonCode, len(units))
@@ -99,6 +101,9 @@ func PlanWorktreeCleanup(units []WorktreeCleanupUnit, policy CleanupPolicy) Clea
 		case len(hardLockReasons[i]) > 0:
 			decision.Class = DecisionLocked
 			decision.Reasons = decisionReasons(hardLockReasons[i]...)
+		case !cleanupUnitHasRegisteredActivitySource(unit):
+			decision.Class = DecisionReviewable
+			decision.Reasons = decisionReasons(DecisionReasonActivityNotRegistered)
 		case retained[cleanupUnitStableKey(unit)]:
 			decision.Class = DecisionReviewable
 			decision.Reasons = decisionReasons(DecisionReasonRepositoryRetention)
@@ -146,6 +151,9 @@ type repositoryCleanupUnit struct {
 func retainedCleanupUnits(units []WorktreeCleanupUnit, keep int) map[string]bool {
 	byRepository := make(map[string][]repositoryCleanupUnit)
 	for _, unit := range units {
+		if !cleanupUnitHasRegisteredActivitySource(unit) {
+			continue
+		}
 		key := cleanupUnitStableKey(unit)
 		seenRepositories := make(map[string]bool)
 		for _, member := range unit.Members {
@@ -212,11 +220,13 @@ func cleanupUnitHardLockReasonCodes(unit WorktreeCleanupUnit, policy CleanupPoli
 	if unit.HardLocked && !present[DecisionReasonGitEvidenceUnavailable] && !present[DecisionReasonDirtyWorktree] && !present[DecisionReasonDetachedUnreferenced] {
 		present[DecisionReasonGitEvidenceUnavailable] = true
 	}
-	if !unit.ActivityAvailable || !unit.CodexActivityAvailable {
-		present[DecisionReasonActivityUnavailable] = true
-	}
-	if unit.ActivityAvailable && unit.LastActivity.After(policy.Now.Add(-policy.RecentActivityWindow)) {
-		present[DecisionReasonRecentActivity] = true
+	if cleanupUnitHasRegisteredActivitySource(unit) {
+		if !unit.ActivityAvailable || !unit.RegisteredActivityAvailable {
+			present[DecisionReasonActivityUnavailable] = true
+		}
+		if unit.ActivityAvailable && unit.LastActivity.After(policy.Now.Add(-policy.RecentActivityWindow)) {
+			present[DecisionReasonRecentActivity] = true
+		}
 	}
 
 	order := []DecisionReasonCode{
@@ -234,6 +244,10 @@ func cleanupUnitHardLockReasonCodes(unit WorktreeCleanupUnit, policy CleanupPoli
 		}
 	}
 	return reasons
+}
+
+func cleanupUnitHasRegisteredActivitySource(unit WorktreeCleanupUnit) bool {
+	return unit.RegisteredActivitySource != worktreeActivitySourceNotRegistered
 }
 
 func cleanupUnitContainsPath(target, path string) bool {
@@ -315,6 +329,8 @@ func decisionReasonDescription(code DecisionReasonCode) string {
 		return "activity evidence unavailable"
 	case DecisionReasonRecentActivity:
 		return "activity within recent safety window"
+	case DecisionReasonActivityNotRegistered:
+		return worktreeActivityNotRegisteredReason
 	case DecisionReasonRepositoryRetention:
 		return "retained among the most recent units for a repository"
 	case DecisionReasonMinimumIdleAge:

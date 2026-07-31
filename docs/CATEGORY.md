@@ -7,7 +7,7 @@ AI-workflow artifact without broad filesystem cleanup.
 
 | Category | Default clean | Risk | Description |
 |----------|---------------|------|-------------|
-| `worktree` | classic: orphaned only; guided Codex: evidence-based | low | Temporary Git worktrees discovered under `$HOME` by worktree directory conventions and validated `.git` metadata. Classic filters exclude active worktrees unless `--include-active-worktrees` is set; guided Codex review may recommend safe linked units. |
+| `worktree` | classic: orphaned only; guided: evidence-based active review | low | Temporary Git worktrees discovered under `$HOME` by worktree directory conventions and validated `.git` metadata. Classic filters exclude active worktrees unless `--include-active-worktrees` is set; guided review includes every scanner tool and may recommend only units with sufficient registered activity evidence. |
 | `node_modules` | yes | medium | Project dependency folders under `$HOME` scan roots. They can be recreated with package managers. |
 | `build-cache` | yes | medium | Go, Xcode, Gradle, npm, and Cargo caches. They are usually safe but may slow the next build. |
 | `other-cache` | yes | low | pip and uv package caches. |
@@ -225,14 +225,26 @@ This explicit selector uses classic cleanup and means:
 Empty `--category` means all categories allowed by `--risky`. Empty `--tool`
 means all tools.
 
-With no classic selector, plain `clean` uses guided Codex review when validated
-active pressure reaches 256 MB or three physical units. Guided cleanup groups
-members by physical target, groups retention by canonical Git common-dir, and
-classifies rows as recommended, reviewable, or locked. Its independent defaults
-are a 6-hour recent-activity hard lock, three retained units per repository, a
-3-day minimum idle age, and a 256 MB recommendation threshold. Missing upstream
-does not lock a row; dirty state, unavailable evidence, and an unreferenced
+Explicit `--guide` defaults only an omitted category to `worktree`; it does not
+imply `--tool codex`. An explicit `--tool` narrows the guided worktree inventory
+normally.
+
+With no classic selector, plain `clean` uses guided worktree review when
+validated active pressure across all scanner tools reaches 256 MB or three
+physical units. Guided cleanup groups members by physical target, groups
+retention by canonical Git common-dir, and classifies rows as recommended,
+reviewable, or locked. For tools with a healthy registered activity source, its
+independent defaults are a 6-hour recent-activity hard lock, three retained
+units per repository, a 3-day minimum idle age, and a 256 MB recommendation
+threshold. Missing upstream does not lock a row; dirty state, unavailable Git
+evidence, a registered activity source that is unavailable, and an unreferenced
 detached HEAD do.
+
+A tool with no registered activity source is different from an unavailable
+registered source. Its otherwise safe row is reviewable and initially
+unselected with the exact reason `activity source not registered for this
+tool`. It may be selected manually, but age replanning cannot make it
+recommended, initially selected, or projected-freed.
 
 Scan roots default to `$HOME`. Use repeatable `--root` flags to narrow scope:
 
@@ -276,10 +288,10 @@ aibris clean --no-guide --root ~/path/to/project --category worktree --tool code
 aibris clean --no-guide --root ~/path/to/project --category worktree --tool codex --age 7d --include-active-worktrees
 ```
 
-### No-selector guided Codex cleanup
+### No-selector guided worktree cleanup
 
 Use the plain-command pair only when the user approved an unscoped guided
-Codex review and did not approve any CLI selector or safety flag:
+worktree review and did not approve any CLI selector or safety flag:
 
 ```bash
 aibris scan --json
@@ -288,9 +300,9 @@ aibris clean
 ```
 
 Agents should summarize worktrees by `source`, `project`, and `status`, ask the
-user what to remove, use guided evidence for active Codex worktrees, run a
-dry-run first, and only execute cleanup after a second explicit confirmation.
-Classic active cleanup still needs `--include-active-worktrees`; guided active
-cleanup needs an explicitly accepted recommended or reviewable row. Active
-members are removed through non-forced Git worktree semantics with branch-ref
-and parent-metadata verification.
+user what to remove, use guided evidence for active worktrees, run a dry-run
+first, and only execute cleanup after a second explicit confirmation. Classic
+active cleanup still needs `--include-active-worktrees`; guided active cleanup
+needs an explicitly accepted recommended or reviewable row. Selected rows from
+every tool use the same overlap checks, deletion-time preflight, non-forced Git
+worktree removal, verification, and receipt path.

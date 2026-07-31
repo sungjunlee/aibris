@@ -39,7 +39,7 @@ var cleanCmd = &cobra.Command{
 	Short: "Clean up old AI tool debris",
 	Long: `Clean up old AI tool debris.
 
-With no classic cleanup filters, clean uses guided Codex worktree review by default when useful.
+With no classic cleanup filters, clean uses guided worktree review by default when useful.
 After guided worktree review, clean continues with the classic all-category audit.
 Use --no-guide, or pass an explicit classic selector such as --category, --tool,
 --risky, --force, --include-active-worktrees, or --interactive to keep the
@@ -47,7 +47,10 @@ classic cleanup audit and executor route.
 
 Across both routes, selected targets enter the cleanup plan, reviewable targets
 require explicit selection, and protected targets never enter the plan. Guided
-review displays protected targets as locked rows.`,
+review displays protected targets as locked rows. --guide defaults only an
+omitted category to worktree; an explicit --tool narrows the review normally.
+Tools without a registered activity source are reviewable but never initially
+selected or automatically recommended.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if cleanGuide && cleanNoGuide {
 			fmt.Fprintln(os.Stderr, "error: cannot use --guide with --no-guide")
@@ -103,18 +106,26 @@ review displays protected targets as locked rows.`,
 		}
 
 		var guidedState guidedCleanState
-		usefulGuidedCodexReview := false
+		usefulGuidedWorktreeReview := false
 		if shouldPrepareGuidedClean(cmd) {
-			usefulGuidedCodexReview = hasGuidedCodexCleanupPressure(ctx, result.Worktrees)
+			usefulGuidedWorktreeReview = hasGuidedWorktreeCleanupPressure(ctx, result.Worktrees)
 		}
-		if cleanGuide || usefulGuidedCodexReview {
-			guidedState, err = buildGuidedCleanState(ctx, result, source, guidedAge, "")
+		if cleanGuide || usefulGuidedWorktreeReview {
+			guidedState, err = buildGuidedCleanState(
+				ctx,
+				result,
+				source,
+				categories,
+				tools,
+				guidedAge,
+				"",
+			)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: preparing guided cleanup: %v\n", err)
 				os.Exit(1)
 			}
 		}
-		experience, reason, err := chooseCleanExperience(cleanExperienceInputFromCommand(cmd, usefulGuidedCodexReview))
+		experience, reason, err := chooseCleanExperience(cleanExperienceInputFromCommand(cmd, usefulGuidedWorktreeReview))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
@@ -146,7 +157,7 @@ review displays protected targets as locked rows.`,
 			guidedOpts := opts
 			guidedOpts.Age = guidedAge
 			guidedState.Reason = reason
-			guidedResult, err := runGuidedCodexClean(ctx, guidedOpts, guidedState, overlapSafety)
+			guidedResult, err := runGuidedWorktreeClean(ctx, guidedOpts, guidedState, overlapSafety)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
@@ -437,8 +448,8 @@ func init() {
 	cleanCmd.Flags().BoolVarP(&cleanInteractive, "interactive", "i", false, "Confirm each deletion")
 	cleanCmd.Flags().BoolVar(&cleanRisky, "risky", false, "Include risky categories (ai-logs)")
 	cleanCmd.Flags().BoolVarP(&cleanForce, "force", "f", false, "Skip confirmation prompt")
-	cleanCmd.Flags().BoolVar(&cleanGuide, "guide", false, "Guided Codex worktree cleanup review")
-	cleanCmd.Flags().BoolVar(&cleanNoGuide, "no-guide", false, "Use classic cleanup even when guided Codex review is available")
+	cleanCmd.Flags().BoolVar(&cleanGuide, "guide", false, "Guided worktree cleanup review (defaults only omitted category to worktree)")
+	cleanCmd.Flags().BoolVar(&cleanNoGuide, "no-guide", false, "Use classic cleanup even when guided worktree review is available")
 	cleanCmd.Flags().StringArrayVar(&cleanRoots, "root", nil, "Scan root under $HOME (repeatable)")
 	cleanCmd.Flags().BoolVar(&cleanIncludeActiveWorktrees, "include-active-worktrees", false, "Include active worktrees in cleanup candidates")
 }
@@ -446,9 +457,6 @@ func init() {
 func applyGuidedCleanDefaults(cmd *cobra.Command, age time.Duration) time.Duration {
 	if cleanCategory == "" {
 		cleanCategory = string(types.CategoryWorktree)
-	}
-	if cleanTools == "" {
-		cleanTools = string(types.ToolCodex)
 	}
 	return guidedCleanAge(cmd, age)
 }
@@ -464,12 +472,12 @@ type cleanExperience string
 
 const (
 	cleanExperienceClassic cleanExperience = "classic"
-	cleanExperienceGuided  cleanExperience = "guided-codex"
+	cleanExperienceGuided  cleanExperience = "guided-worktree"
 
-	guidedCodexCleanupPressureMinSize       int64 = 256 * 1024 * 1024
-	guidedCodexCleanupPressureUnitThreshold       = 3
+	guidedWorktreeCleanupPressureMinSize       int64 = 256 * 1024 * 1024
+	guidedWorktreeCleanupPressureUnitThreshold       = 3
 
-	guidedCleanReasonAuto     = "active Codex worktrees are the largest cleanup decision"
+	guidedCleanReasonAuto     = "active worktrees are the largest cleanup decision"
 	guidedCleanReasonExplicit = "requested by --guide"
 )
 
@@ -482,10 +490,10 @@ type cleanExperienceInput struct {
 	ForceChanged                  bool
 	IncludeActiveWorktreesChanged bool
 	InteractiveChanged            bool
-	UsefulGuidedCodexReview       bool
+	UsefulGuidedWorktreeReview    bool
 }
 
-func cleanExperienceInputFromCommand(cmd *cobra.Command, usefulGuidedCodexReview bool) cleanExperienceInput {
+func cleanExperienceInputFromCommand(cmd *cobra.Command, usefulGuidedWorktreeReview bool) cleanExperienceInput {
 	return cleanExperienceInput{
 		Guide:                         cleanGuide,
 		NoGuide:                       cleanNoGuide,
@@ -495,7 +503,7 @@ func cleanExperienceInputFromCommand(cmd *cobra.Command, usefulGuidedCodexReview
 		ForceChanged:                  cmd.Flags().Changed("force"),
 		IncludeActiveWorktreesChanged: cmd.Flags().Changed("include-active-worktrees"),
 		InteractiveChanged:            cmd.Flags().Changed("interactive"),
-		UsefulGuidedCodexReview:       usefulGuidedCodexReview,
+		UsefulGuidedWorktreeReview:    usefulGuidedWorktreeReview,
 	}
 }
 
@@ -509,7 +517,7 @@ func chooseCleanExperience(input cleanExperienceInput) (cleanExperience, string,
 	if input.NoGuide || input.hasClassicSelector() {
 		return cleanExperienceClassic, "", nil
 	}
-	if input.UsefulGuidedCodexReview {
+	if input.UsefulGuidedWorktreeReview {
 		return cleanExperienceGuided, guidedCleanReasonAuto, nil
 	}
 	return cleanExperienceClassic, "", nil
@@ -534,22 +542,17 @@ func shouldPrepareGuidedClean(cmd *cobra.Command) bool {
 	return !cleanExperienceInputFromCommand(cmd, false).hasClassicSelector()
 }
 
-func hasGuidedCodexCleanupPressure(ctx context.Context, items []types.DebrisInfo) bool {
-	unitCount, totalSize := guidedCodexCleanupPressure(ctx, items)
-	return isGuidedCodexCleanupPressureValuable(unitCount, totalSize)
+func hasGuidedWorktreeCleanupPressure(ctx context.Context, items []types.DebrisInfo) bool {
+	unitCount, totalSize := guidedWorktreeCleanupPressure(ctx, items)
+	return isGuidedWorktreeCleanupPressureValuable(unitCount, totalSize)
 }
 
-func isGuidedCodexCleanupPressureValuable(unitCount int, totalSize int64) bool {
-	return unitCount > 0 && (totalSize >= guidedCodexCleanupPressureMinSize || unitCount >= guidedCodexCleanupPressureUnitThreshold)
+func isGuidedWorktreeCleanupPressureValuable(unitCount int, totalSize int64) bool {
+	return unitCount > 0 && (totalSize >= guidedWorktreeCleanupPressureMinSize || unitCount >= guidedWorktreeCleanupPressureUnitThreshold)
 }
 
-func guidedCodexCleanupPressure(ctx context.Context, items []types.DebrisInfo) (int, int64) {
-	candidates := make([]types.DebrisInfo, 0, len(items))
-	for _, item := range items {
-		if isActiveCodexWorktree(item) && item.Source == ".codex" {
-			candidates = append(candidates, item)
-		}
-	}
+func guidedWorktreeCleanupPressure(ctx context.Context, items []types.DebrisInfo) (int, int64) {
+	candidates := guidedActiveWorktrees(items, nil, nil)
 
 	units, err := buildWorktreeCleanupUnits(ctx, candidates)
 	if err != nil || len(units) == 0 {

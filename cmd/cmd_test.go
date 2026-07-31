@@ -652,8 +652,8 @@ func TestCleanCmd_DryRunDefaultsToGuidedWhenUsefulCodexReviewExists(t *testing.T
 	})
 
 	for _, want := range []string{
-		"guided codex worktree cleanup",
-		"reason     active Codex worktrees are the largest cleanup decision",
+		"guided worktree cleanup",
+		"reason     active worktrees are the largest cleanup decision",
 		"selected   1 item",
 		"clean plan",
 		"mode     dry-run",
@@ -682,7 +682,7 @@ func TestCleanCmd_NoGuideKeepsClassicCleanRoute(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	if strings.Contains(output, "guided codex worktree cleanup") {
+	if strings.Contains(output, "guided worktree cleanup") {
 		t.Fatalf("--no-guide should not enter guided route; got: %s", output)
 	}
 	for _, want := range []string{"scan summary", "active worktree protected", "No items to clean."} {
@@ -719,7 +719,7 @@ func TestCleanCmd_ExplicitSelectorsKeepClassicRouteUnlessGuideSupplied(t *testin
 				rootCmd.Execute()
 			})
 
-			if strings.Contains(output, "guided codex worktree cleanup") {
+			if strings.Contains(output, "guided worktree cleanup") {
 				t.Fatalf("explicit selector %v should keep classic route; got: %s", tt.args, output)
 			}
 			if !strings.Contains(output, "scan summary") {
@@ -738,7 +738,7 @@ func TestCleanCmd_ExplicitSelectorsKeepClassicRouteUnlessGuideSupplied(t *testin
 		rootCmd.SetArgs([]string{"clean", "--dry-run", "--tool=codex", "--guide"})
 		rootCmd.Execute()
 	})
-	for _, want := range []string{"guided codex worktree cleanup", "reason     requested by --guide"} {
+	for _, want := range []string{"guided worktree cleanup", "reason     requested by --guide"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("--guide should override explicit selector; missing %q in: %s", want, output)
 		}
@@ -758,7 +758,7 @@ func TestCleanCmd_DefaultGuidedNonTTYCleanDoesNotBlockOrDelete(t *testing.T) {
 	})
 
 	for _, want := range []string{
-		"guided codex worktree cleanup",
+		"guided worktree cleanup",
 		"clean plan",
 		"No confirmation received; rerun with --dry-run to review or --force to delete selected targets.",
 	} {
@@ -782,18 +782,24 @@ func TestCleanCmd_HelpDocumentsDefaultGuidedCleanAndNoGuide(t *testing.T) {
 	})
 
 	for _, want := range []string{
-		"With no classic cleanup filters, clean uses guided Codex worktree review by default when useful.",
+		"With no classic cleanup filters, clean uses guided worktree review by default when useful.",
 		"selected targets enter the cleanup plan",
 		"reviewable targets",
 		"protected targets",
 		"review displays protected targets as locked rows",
+		"--guide defaults only an",
+		"an explicit --tool narrows the review normally",
+		"Tools without a registered activity source are reviewable",
 		"Minimum idle age",
 		"--no-guide",
-		"Use classic cleanup even when guided Codex review is available",
+		"Use classic cleanup even when guided worktree review is available",
 	} {
 		if !strings.Contains(output, want) {
 			t.Errorf("help output missing %q; got: %s", want, output)
 		}
+	}
+	if strings.Contains(output, "Guided Codex") {
+		t.Errorf("help output retains Codex-only guided copy: %s", output)
 	}
 	for _, tool := range toolStrings(validCleanTools) {
 		if !strings.Contains(output, tool) {

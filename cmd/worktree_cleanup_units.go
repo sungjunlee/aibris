@@ -15,19 +15,19 @@ import (
 // WorktreeCleanupUnit is one canonical physical deletion target. A unit may
 // contain more than one Git worktree member, but its size is counted once.
 type WorktreeCleanupUnit struct {
-	TargetPath             string
-	Size                   int64
-	Source                 string
-	Members                []GitWorktreeMember
-	LastActivity           time.Time
-	ActivitySource         WorktreeActivitySource
-	ActivityMember         string
-	ActivityAvailable      bool
-	CodexActivityAvailable bool
-	CodexActivitySource    string
-	CodexActivityError     string
-	HardLocked             bool
-	HardLockReasons        []GitEvidenceReason
+	TargetPath                  string
+	Size                        int64
+	Source                      string
+	Members                     []GitWorktreeMember
+	LastActivity                time.Time
+	ActivitySource              WorktreeActivitySource
+	ActivityMember              string
+	ActivityAvailable           bool
+	RegisteredActivityAvailable bool
+	RegisteredActivitySource    string
+	RegisteredActivityError     string
+	HardLocked                  bool
+	HardLockReasons             []GitEvidenceReason
 }
 
 // GitWorktreeMember identifies an actual direct or one-level nested Git
@@ -48,17 +48,17 @@ type GitWorktreeMember struct {
 	// EvidenceAvailable reports whether repository identity metadata resolved.
 	// GitEvidenceAvailable separately reports whether the recoverability
 	// inspection completed; both are required for a member to pass hard safety.
-	EvidenceAvailable      bool
-	EvidenceError          string
-	GitEvidenceAvailable   bool
-	GitEvidenceError       string
-	LastActivity           time.Time
-	ActivitySource         WorktreeActivitySource
-	ActivityAvailable      bool
-	ActivityEvidence       []WorktreeActivityEvidence
-	CodexActivityAvailable bool
-	CodexActivitySource    string
-	CodexActivityError     string
+	EvidenceAvailable           bool
+	EvidenceError               string
+	GitEvidenceAvailable        bool
+	GitEvidenceError            string
+	LastActivity                time.Time
+	ActivitySource              WorktreeActivitySource
+	ActivityAvailable           bool
+	ActivityEvidence            []WorktreeActivityEvidence
+	RegisteredActivityAvailable bool
+	RegisteredActivitySource    string
+	RegisteredActivityError     string
 }
 
 type worktreeCleanupUnitRows struct {

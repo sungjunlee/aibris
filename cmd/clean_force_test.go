@@ -18,7 +18,7 @@ func TestCleanCmd_ForceKeepsClassicRoute(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	if strings.Contains(output, "guided codex worktree cleanup") {
+	if strings.Contains(output, "guided worktree cleanup") {
 		t.Fatalf("--force should keep classic cleanup route; got: %s", output)
 	}
 	if !strings.Contains(output, "scan summary") {
@@ -38,7 +38,7 @@ func TestCleanCmd_GuideOverridesForceSelector(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	for _, want := range []string{"guided codex worktree cleanup", "reason     requested by --guide"} {
+	for _, want := range []string{"guided worktree cleanup", "reason     requested by --guide"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("--guide should override --force selector; missing %q in: %s", want, output)
 		}
