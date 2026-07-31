@@ -14,6 +14,7 @@ var markdownLinkPattern = regexp.MustCompile(`\[[^\]]+\]\(([^)]+)\)`)
 func TestPublicDocumentationLocalLinks(t *testing.T) {
 	files := []string{
 		"README.md",
+		filepath.Join("docs", "WINDOWS.md"),
 		"SECURITY.md",
 		"SECURITY_AUDIT.md",
 		"CONTRIBUTING.md",
@@ -59,6 +60,59 @@ func TestPublicDocumentationLocalLinks(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestWindowsReleaseDocumentationContract(t *testing.T) {
+	read := func(path string) string {
+		t.Helper()
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+
+	readme := read("README.md")
+	if !strings.Contains(readme, "[Windows support contract](docs/WINDOWS.md)") {
+		t.Error("README must link to the canonical Windows support contract")
+	}
+
+	windows := read(filepath.Join("docs", "WINDOWS.md"))
+	for _, required := range []string{
+		"Windows archives are **experimental**",
+		"`windows-latest`",
+		"`aibris_windows_amd64.zip`",
+		"`aibris_windows_arm64.zip`",
+		"`install.sh`",
+	} {
+		if !strings.Contains(windows, required) {
+			t.Errorf("Windows support contract is missing %q", required)
+		}
+	}
+
+	goreleaser := read(".goreleaser.yaml")
+	for _, required := range []string{
+		"- windows",
+		"- amd64",
+		"- arm64",
+		"goos: windows",
+		"formats: [zip]",
+		"name_template: 'checksums.txt'",
+	} {
+		if !strings.Contains(goreleaser, required) {
+			t.Errorf("GoReleaser no longer satisfies the documented Windows contract: missing %q", required)
+		}
+	}
+
+	releaseWorkflow := read(filepath.Join(".github", "workflows", "release.yml"))
+	for _, required := range []string{
+		`RELEASE_NOTES: .github/release-notes/${{ github.ref_name }}.md`,
+		`grep -Fxq '## Windows status' "$RELEASE_NOTES"`,
+	} {
+		if !strings.Contains(releaseWorkflow, required) {
+			t.Errorf("release workflow is missing the Windows-status publication gate %q", required)
+		}
 	}
 }
 

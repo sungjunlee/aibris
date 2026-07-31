@@ -92,7 +92,7 @@ func newCLIContractCommand(t *testing.T, ctx context.Context, home string, extra
 	}
 
 	env := filteredCLIContractEnv()
-	values := make(map[string]string, len(extraEnv)+7)
+	values := make(map[string]string, len(extraEnv)+9)
 	for key, value := range extraEnv {
 		values[key] = value
 	}
@@ -104,6 +104,8 @@ func newCLIContractCommand(t *testing.T, ctx context.Context, home string, extra
 	values["XDG_CACHE_HOME"] = cache
 	values["LOCALAPPDATA"] = cache
 	values["TMPDIR"] = temp
+	values["TMP"] = temp
+	values["TEMP"] = temp
 	for key, value := range values {
 		env = append(env, key+"="+value)
 	}
@@ -123,6 +125,8 @@ func filteredCLIContractEnv() []string {
 		"XDG_CACHE_HOME": true,
 		"LOCALAPPDATA":   true,
 		"TMPDIR":         true,
+		"TMP":            true,
+		"TEMP":           true,
 	}
 	var env []string
 	for _, entry := range os.Environ() {

@@ -18,6 +18,18 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: "1.26"
+      - name: Validate curated Windows release status
+        env:
+          RELEASE_NOTES: .github/release-notes/${{ github.ref_name }}.md
+        run: |
+          if [ ! -f "$RELEASE_NOTES" ]; then
+            echo "Missing curated release notes: $RELEASE_NOTES" >&2
+            exit 1
+          fi
+          if ! grep -Fxq '## Windows status' "$RELEASE_NOTES"; then
+            echo "Curated release notes must contain an exact '## Windows status' section." >&2
+            exit 1
+          fi
       - uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
