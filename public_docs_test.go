@@ -3,8 +3,10 @@ package main
 import (
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -108,11 +110,59 @@ func TestWindowsReleaseDocumentationContract(t *testing.T) {
 	releaseWorkflow := read(filepath.Join(".github", "workflows", "release.yml"))
 	for _, required := range []string{
 		`RELEASE_NOTES: .github/release-notes/${{ github.ref_name }}.md`,
-		`grep -Fxq '## Windows status' "$RELEASE_NOTES"`,
+		`.github/scripts/validate-windows-release-status.sh "$RELEASE_NOTES"`,
 	} {
 		if !strings.Contains(releaseWorkflow, required) {
 			t.Errorf("release workflow is missing the Windows-status publication gate %q", required)
 		}
+	}
+}
+
+func TestWindowsReleaseStatusGate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("release gate runs in the Ubuntu release job")
+	}
+
+	script := filepath.Join(".github", "scripts", "validate-windows-release-status.sh")
+	tests := []struct {
+		name    string
+		notes   string
+		wantErr bool
+	}{
+		{
+			name:    "missing section",
+			notes:   "# Release notes\n\nNo Windows status is documented.\n",
+			wantErr: true,
+		},
+		{
+			name:    "empty section",
+			notes:   "# Release notes\n\n## Windows status\n\n \t\n",
+			wantErr: true,
+		},
+		{
+			name:    "heading-only section",
+			notes:   "# Release notes\n\n## Windows status\n\n## Checksums\n\nChecksums are attached.\n",
+			wantErr: true,
+		},
+		{
+			name:    "non-empty section",
+			notes:   "# Release notes\n\n## Windows status\n\nWindows archives remain experimental.\n\n## Checksums\n",
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			releaseNotes := filepath.Join(t.TempDir(), "release-notes.md")
+			if err := os.WriteFile(releaseNotes, []byte(tt.notes), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			output, err := exec.Command("sh", script, releaseNotes).CombinedOutput()
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("gate error = %v, wantErr %v; output: %s", err, tt.wantErr, output)
+			}
+		})
 	}
 }
 
