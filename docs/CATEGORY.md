@@ -17,6 +17,149 @@ AI-workflow artifact without broad filesystem cleanup.
 Unknown or future categories should stay risky until they have explicit safety
 rules.
 
+## Protected Retention Is Not a Category
+
+The canonical [protected-content retention contract](PROTECTED_RETENTION.md)
+defines a separate, future authorization axis for session, transcript,
+run-manifest, and generated-image stores. Its UTC-month aggregates are
+non-additive inventory projections, never executable `DebrisInfo` rows.
+Nothing in that planned contract changes current category risk,
+`agent-state` classification, #138 proof-based orphan eligibility, or #151
+overlap hard locks. The planned retention selector and execution manifest are
+not shipped CLI or provider surfaces.
+
+## Store-Nature Planning Taxonomy (Issue #142)
+
+installed/regenerable/protected are planning taxonomy only, not `types.Category`, agent-state `classification`, a JSON field, or a current CLI selector.
+The taxonomy records what a future provider may do; it does not make any of
+these stores discoverable, selectable, or eligible today. When shallow metadata
+cannot settle a store's nature, the decision fails closed to protected content.
+
+| Store | Bounded evidence | Store-nature decision | Current and future consequence |
+| --- | --- | --- | --- |
+| `~/.codex/packages` | `standalone` has an installer lock, versioned architecture releases, and a `current` symlink to the active release. | Installed content | Excluded from providers, inventory, and every cleanup surface. No provider is planned. |
+| `~/.codex/computer-use` | The directory contains the Codex Computer Use application bundle with bundle identity `com.openai.sky.CUAService`. | Installed content | Excluded from providers, inventory, and every cleanup surface. No provider is planned. |
+| `~/.codex/tmp` | In the 2026-07-31 observation, the literal `~/.codex/tmp/path/` directory contained direct `codex-arg*` directories with paired `applypatch` and `apply_patch` shims; no upstream contract established that `path/` is a stable name. | Regenerable residue | Currently undiscovered, unselectable, and ineligible. A future L2 may consider only direct children of the tmp root, and only after each child passes the ownership and active-use/TOCTOU contract below. A basename such as `path/` is evidence, not identity or an allowlist; L2 must never delete the whole tmp root. |
+| `~/.codex/generated_images` | ID directories contain generated PNG artifacts, which are user artifacts rather than a cache reconstruction input. | Protected content | Must not be default-clean or become deletable through `--risky` alone. It may be considered for explicit retention selection only after the #139 L1 semantics merge. |
+| `~/.codex/sqlite` | Database filenames and schema names cover goals, threads, jobs, history snapshots, memories, logs, and state; live databases also have sidecar family members. | Protected content | Must not be default-clean or become deletable through `--risky` alone. A future provider is inventory-only unless it satisfies the fail-closed quiescence, family-registry, and atomic-manifest contract below. |
+| `~/.cursor/ai-tracking` | `ai-code-tracking.db` schema names cover tracked-file content, conversation summaries, scored commits, deleted files, and tracking state. | Protected content | Must not be default-clean or become deletable through `--risky` alone. A future provider is inventory-only unless it satisfies the fail-closed quiescence, family-registry, and atomic-manifest contract below. |
+
+This freezes the downstream split. The separate protected-content runtime
+model is now fixed in [PROTECTED_RETENTION.md](PROTECTED_RETENTION.md), but its
+providers, JSON projection, selector, planner, and executor remain unshipped:
+
+- L2 may add only direct child units of `~/.codex/tmp`. The observed `path/`
+  child is one example, not a stable selector. Its `codex-arg*` descendants and
+  shim entries are evidence inside that unit, not independently selectable or
+  deletable units. L2 must enumerate every direct child, evaluate it by the
+  versioned safety contract below, and surface an unsupported child as
+  protected and ineligible rather than silently skipping it. L2 must never
+  delete `~/.codex/tmp` itself.
+- L3 starts only after #139 L1 has merged. Generated images must follow that
+  explicit retention-selection contract; Codex SQLite and Cursor AI tracking
+  remain inventory-only absent the separate quiescence and atomic-family
+  contract below. The L1 document alone does not unblock #142 L2 or L3.
+- Installed content receives no provider. Uncertainty never widens cleanup
+  eligibility.
+
+L2 and L3 are blocked, not locally implementable leaves. In addition to the
+#139 gate for L3, each relevant upstream producer must first expose or document
+a producer-documented, versioned layout/identity contract plus a cooperative
+lock, lease, shutdown, or pause/fencing protocol honored by every writer. That
+is the unblock signal for the existing fail-closed proofs; aibris cannot
+manufacture producer cooperation locally. If the signal never exists, affected
+tmp units remain ineligible and affected protected stores remain
+non-executable and inventory-only indefinitely.
+
+### L2 tmp ownership and race-safety contract
+
+Before a tmp provider can be registered, each supported Codex release/channel
+and layout must have a versioned recognizer, fixtures, and these fail-closed
+proofs:
+
+- **Ownership:** the candidate resolves to one canonical, non-symlink direct
+  child of the canonical tmp root, and producer-issued identity evidence or a
+  documented upstream layout tied to the detected Codex version accounts for
+  the child and every descendant. A basename, age, paired shim names, process
+  name, or current absence of a writer is not ownership proof. An unknown
+  version, entry type, link target, or descendant keeps the whole child
+  protected. Every descendant symlink and its target is inventoried and must be
+  accounted for; an unknown target keeps the whole child protected.
+- **Active use:** before enumeration, L2 acquires a producer-cooperative
+  exclusive lock, lease, or pause handshake with an observable ownership or
+  fencing token. Every writer must consult it, so none can start or mutate the
+  unit until deletion finishes. The writer registry must cover the Codex
+  GUI application, Codex CLI, apply-patch launchers and callers, and Codex/agent
+  supervisor or helper processes. Process-name checks, `lsof`, `/proc`, and
+  open-handle snapshots are advisory evidence only; if any writer is unknown
+  or does not participate in the same exclusion protocol, the unit is
+  ineligible.
+- **TOCTOU:** while exclusion is held, L2 records the canonical path, file
+  identities, complete member set, entry types, link targets, sizes, and
+  modification times. It re-enumerates and compares that snapshot, including
+  canonical-path and link-target revalidation, immediately before mutation.
+  An eligible direct-child unit may be removed recursively, including its
+  contained ordinary files and directories. For each symlink encountered
+  inside the unit, deletion unlinks only the symlink directory entry and never
+  follows, traverses, removes, or mutates the symlink target. L2 deletes only
+  while exclusion remains held and aborts the whole
+  unit on lock loss or any mismatch. No partial deletion or byte credit is
+  allowed.
+- **Tests:** fixtures must cover every supported version/layout plus unknown
+  direct children. Platform tests must race creation, mutation, rename, and
+  exclusion loss from each writer class and prove that every race leaves the
+  unit intact and ineligible.
+
+### L3 protected-store inventory contract
+
+The family definition is deliberately open and registry-driven, not an
+exhaustive suffix list. Each supported store format/version must have a
+versioned family registry that scans the bounded store directory and assigns
+every entry to one primary database family or explicitly classifies it as
+unrelated. The initial engine-companion conventions are `-wal`, `-shm`,
+`-journal`, `.wal`, `.shm`, and `.journal`. `.backup` and `.bak` are independent
+protected artifacts, not SQLite engine companions; only a later
+store-specific, versioned contract may separately prove and register an
+association. The registry remains open: a newly observed store-specific
+journal, backup, or sidecar convention requires a registry and fixture update
+before inventory resumes. Any entry the registry cannot assign or prove
+unrelated makes the affected store incomplete, protected, and
+non-inventoriable; it is never ignored.
+
+A complete database family is one primary database plus every entry assigned
+to it by that registry. One atomic manifest is one immutable record for the
+complete family, listing each member's canonical path, file identity, size, and
+modification time. Process quiescence means a producer-cooperative exclusive
+lock, lease, shutdown, or pause protocol with an observable ownership or
+fencing token prevents every registered database owner and background writer
+from opening, creating, renaming, or modifying any store member. Each supported
+store/version must register all such writers, including its application,
+database connections, indexing or sync workers, and agent or supervisor
+helpers. Exclusion is acquired before the first directory enumeration, its
+token is revalidated before and after each publication step, and it is held
+without interruption until after publication and directory durability are
+confirmed. An unknown or non-participating writer means quiescence is
+unprovable. `lsof`, `/proc`, process-name checks, and point-in-time open-handle
+enumeration do not prove quiescence on any platform.
+
+While quiescence is held, L3 captures the family, writes and syncs a temporary
+manifest, re-enumerates and compares the family and exclusion token, atomically
+replaces the same-directory destination, makes the directory entry durable,
+and verifies the token again before releasing exclusion. The provider may emit
+or accept that manifest as inventory only after every step succeeds; a file
+left by an interrupted or previous attempt is never inventory evidence. Lock
+loss or other mid-publish violation, a non-participating writer, membership or
+metadata drift, sync or replace failure, or a platform without the required
+atomic-replace and directory-durability primitives aborts the operation,
+removes attempt files where exclusion still permits it, and emits no inventory.
+The future L3 contract must define a supported-platform/filesystem capability
+matrix and runtime probes for atomic replacement and directory durability; a
+missing or failed capability is an abort condition. Platform and
+fault-injection tests must cover writer races, new sidecars, lock loss before
+and after replacement, and every publication failure. Until those proofs
+exist, Codex SQLite and Cursor AI tracking remain protected and inventory-only
+in planning, with no L3 provider.
+
 ## Agent-State Classification
 
 The `classification` field applies to `agent-state` entries and is omitted for

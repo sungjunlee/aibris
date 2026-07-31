@@ -13,6 +13,7 @@ const (
 	EligibilityReasonFiltered               EligibilityReason = "outside category/tool filters"
 	EligibilityReasonRisky                  EligibilityReason = "requires --risky"
 	EligibilityReasonActiveWorktree         EligibilityReason = "active worktree protected"
+	EligibilityReasonWorktreeReview         EligibilityReason = "worktree status requires review"
 	EligibilityReasonAge                    EligibilityReason = "younger than configured age"
 	EligibilityReasonAgentStateLive         EligibilityReason = "live agent-state protected"
 	EligibilityReasonAgentStateUndetermined EligibilityReason = "undetermined agent-state protected"
@@ -45,10 +46,16 @@ func EvaluateEligibility(item types.DebrisInfo, opts types.PruneOptions, observe
 	if !opts.Risky && item.Category.IsRisky() {
 		return false, EligibilityReasonRisky
 	}
-	if !opts.IncludeActiveWorktrees &&
-		item.Category == types.CategoryWorktree &&
-		item.Status == types.WorktreeActive {
-		return false, EligibilityReasonActiveWorktree
+	if item.Category == types.CategoryWorktree {
+		switch item.Status {
+		case types.WorktreeActive:
+			if !opts.IncludeActiveWorktrees {
+				return false, EligibilityReasonActiveWorktree
+			}
+		case types.WorktreeOrphaned:
+		default:
+			return false, EligibilityReasonWorktreeReview
+		}
 	}
 	if !item.ModTime.Before(observedAt.Add(-opts.Age)) {
 		return false, EligibilityReasonAge

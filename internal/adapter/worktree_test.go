@@ -3,8 +3,12 @@ package adapter
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/sungjunlee/aibris/internal/types"
@@ -228,8 +232,11 @@ func TestWorktreeAdapter_ClaudeStyle_NoDotGit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 0 {
-		t.Errorf("expected 0 (no .git), got %d", len(results))
+	if len(results) != 1 {
+		t.Fatalf("expected 1 review-only row, got %d", len(results))
+	}
+	if results[0].Status != types.WorktreePlain || results[0].Reason == "" {
+		t.Errorf("plain row = %+v; want explicit review reason", results[0])
 	}
 }
 
@@ -518,11 +525,11 @@ func TestWorktreeAdapter_ClaudeNotDeduplicatedByGeneric(t *testing.T) {
 
 // --- Edge cases ---
 
-func TestWorktreeAdapter_SkipsPlainDir(t *testing.T) {
+func TestWorktreeAdapter_ReportsPlainDir(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	// Plain directory without .git should be skipped
+	// Plain directory without .git remains visible for review.
 	plainDir := filepath.Join(home, ".codex", "worktrees", "plain-hash")
 	os.MkdirAll(filepath.Join(plainDir, "src"), 0755)
 	os.WriteFile(filepath.Join(plainDir, "src", "file.go"), []byte("package main"), 0644)
@@ -538,11 +545,15 @@ func TestWorktreeAdapter_SkipsPlainDir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 1 {
-		t.Fatalf("expected 1 (skip plain dir), got %d", len(results))
+	if len(results) != 2 {
+		t.Fatalf("expected valid and review-only rows, got %d", len(results))
 	}
-	if results[0].ID != "valid-hash" {
-		t.Errorf("expected valid-hash, got %s", results[0].ID)
+	statusByID := map[string]types.WorktreeStatus{}
+	for _, result := range results {
+		statusByID[result.ID] = result.Status
+	}
+	if statusByID["valid-hash"] != types.WorktreeActive || statusByID["plain-hash"] != types.WorktreePlain {
+		t.Errorf("statuses = %v; want valid active and plain review-only", statusByID)
 	}
 }
 
@@ -550,7 +561,7 @@ func TestWorktreeAdapter_EmptyWorktreeDir(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	// Empty directory under .codex/worktrees — not a real worktree
+	// Empty directory under .codex/worktrees is visible but review-only.
 	os.MkdirAll(filepath.Join(home, ".codex", "worktrees", "empty-hash"), 0755)
 
 	a := &WorktreeAdapter{}
@@ -558,8 +569,11 @@ func TestWorktreeAdapter_EmptyWorktreeDir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 0 {
-		t.Errorf("expected 0 (empty dir, no .git), got %d", len(results))
+	if len(results) != 1 {
+		t.Fatalf("expected 1 review-only row, got %d", len(results))
+	}
+	if results[0].Status != types.WorktreePlain || results[0].Reason != noWorktreeMetadataReason {
+		t.Errorf("row = %+v; want deterministic no-metadata reason", results[0])
 	}
 }
 
@@ -614,6 +628,437 @@ func TestWorktreeAdapter_MultipleSubdirsInOneEntry(t *testing.T) {
 		if r.Tool != types.ToolUnknown {
 			t.Errorf("Tool = %q; want unknown", r.Tool)
 		}
+	}
+}
+
+func TestWorktreeAdapter_RegisteredContainers(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	tests := []struct {
+		relativePath string
+		source       string
+		tool         types.Tool
+	}{
+		{filepath.Join(".codex", "worktrees"), ".codex", types.ToolCodex},
+		{filepath.Join(".relay", "worktrees"), ".relay", types.ToolUnknown},
+		{filepath.Join(".gstack", "worktrees"), ".gstack", types.ToolUnknown},
+		{filepath.Join(".config", "superpowers", "worktrees"), "superpowers", types.ToolUnknown},
+	}
+	for i, tt := range tests {
+		unit := filepath.Join(home, tt.relativePath, fmt.Sprintf("unit-%d", i))
+		createWorktreeGit(t, unit, filepath.Join(home, fmt.Sprintf("parent-%d", i)), fmt.Sprintf("unit-%d", i))
+	}
+
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != len(tests) {
+		t.Fatalf("results = %d; want %d registered rows: %+v", len(results), len(tests), results)
+	}
+	for i, tt := range tests {
+		id := fmt.Sprintf("unit-%d", i)
+		var got *types.DebrisInfo
+		for j := range results {
+			if results[j].ID == id {
+				got = &results[j]
+				break
+			}
+		}
+		if got == nil {
+			t.Fatalf("missing %s in %+v", id, results)
+		}
+		if got.Source != tt.source || got.Tool != tt.tool {
+			t.Errorf("%s source/tool = %q/%q; want %q/%q", id, got.Source, got.Tool, tt.source, tt.tool)
+		}
+	}
+}
+
+func TestWorktreeAdapter_SuperpowersFullHomeAndScopedL2(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	container := filepath.Join(home, ".config", "superpowers", "worktrees")
+	unit := filepath.Join(container, "physical-owner")
+	active := filepath.Join(unit, "project-a")
+	orphaned := filepath.Join(unit, "project-b")
+	createWorktreeGit(t, active, filepath.Join(home, "parent"), "project-a")
+	if err := os.MkdirAll(orphaned, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(orphaned, ".git"),
+		[]byte("gitdir: "+filepath.Join(home, "missing", ".git", "worktrees", "project-b")+"\n"),
+		0644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	scan := func(opts types.ScanOptions) []types.DebrisInfo {
+		t.Helper()
+		results, err := (&WorktreeAdapter{}).Scan(context.Background(), opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return results
+	}
+	full := scan(types.ScanOptions{})
+	scoped := scan(types.ScanOptions{Roots: []string{container}})
+	if !reflect.DeepEqual(full, scoped) {
+		t.Fatalf("full/scoped mismatch:\nfull=%+v\nscoped=%+v", full, scoped)
+	}
+	if len(full) != 2 {
+		t.Fatalf("rows = %d; want two logical members: %+v", len(full), full)
+	}
+	statusByProject := make(map[string]types.WorktreeStatus)
+	for _, row := range full {
+		if row.Source != "superpowers" || row.Tool != types.ToolUnknown {
+			t.Errorf("source/tool = %q/%q; want superpowers/unknown", row.Source, row.Tool)
+		}
+		if row.Path != canonicalExistingPath(unit) {
+			t.Errorf("path = %q; want shared physical owner %q", row.Path, unit)
+		}
+		statusByProject[row.Project] = row.Status
+	}
+	if statusByProject["project-a"] != types.WorktreeActive ||
+		statusByProject["project-b"] != types.WorktreeOrphaned {
+		t.Errorf("statuses = %v; want active and missing-parent orphaned", statusByProject)
+	}
+}
+
+func TestWorktreeAdapter_RegisteredLookupRespectsDisjointRoot(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	superpowersUnit := filepath.Join(home, ".config", "superpowers", "worktrees", "outside")
+	createWorktreeGit(t, superpowersUnit, filepath.Join(home, "parent"), "outside")
+	disjoint := filepath.Join(home, "workspace")
+	if err := os.MkdirAll(disjoint, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{Roots: []string{disjoint}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 0 {
+		t.Fatalf("disjoint root pulled registered HOME rows: %+v", results)
+	}
+}
+
+func TestWorktreeAdapter_RootAliasesAndRegistryFallbackDeduplicateDeterministically(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	project := filepath.Join(home, "project")
+	unit := filepath.Join(project, "worktrees", "unit")
+	createWorktreeGit(t, unit, filepath.Join(home, "parent"), "unit")
+	alias := filepath.Join(home, "project-alias")
+	if err := os.Symlink(project, alias); err != nil {
+		t.Skipf("symlink not supported: %v", err)
+	}
+
+	scan := func(roots []string) []types.DebrisInfo {
+		t.Helper()
+		results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{Roots: roots})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return results
+	}
+	forward := scan([]string{project, alias})
+	reverse := scan([]string{alias, project})
+	if !reflect.DeepEqual(forward, reverse) {
+		t.Fatalf("root order changed results:\nforward=%+v\nreverse=%+v", forward, reverse)
+	}
+	if len(forward) != 1 || forward[0].Path != canonicalExistingPath(unit) {
+		t.Fatalf("canonical aliases were not deduplicated: %+v", forward)
+	}
+
+	codexUnit := filepath.Join(home, ".codex", "worktrees", "registered-and-generic")
+	createWorktreeGit(t, codexUnit, filepath.Join(home, "codex-parent"), "registered-and-generic")
+	results := scan([]string{home})
+	var matches []types.DebrisInfo
+	for _, row := range results {
+		if row.ID == "registered-and-generic" {
+			matches = append(matches, row)
+		}
+	}
+	if len(matches) != 1 || matches[0].Source != ".codex" {
+		t.Fatalf("registry/fallback match = %+v; want one registered .codex row", matches)
+	}
+}
+
+func TestWorktreeAdapter_RegisteredLookupDoesNotFanOutConfig(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	superpowers := filepath.Join(home, ".config", "superpowers", "worktrees", "known")
+	createWorktreeGit(t, superpowers, filepath.Join(home, "known-parent"), "known")
+	for i := 0; i < 64; i++ {
+		decoy := filepath.Join(home, ".config", fmt.Sprintf("decoy-%03d", i), "worktrees", "unit")
+		createWorktreeGit(t, decoy, filepath.Join(home, fmt.Sprintf("decoy-parent-%03d", i)), "unit")
+	}
+
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].ID != "known" || results[0].Source != "superpowers" {
+		t.Fatalf("exact registry lookup traversed unrelated .config fanout: %+v", results)
+	}
+}
+
+func TestWorktreeAdapter_RegisteredSymlinkEscapeIsNotCleanable(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	outside := t.TempDir()
+
+	outsideContainer := filepath.Join(outside, "worktrees")
+	outsideUnit := filepath.Join(outsideContainer, "escape")
+	createWorktreeGit(t, outsideUnit, filepath.Join(outside, "parent"), "escape")
+	registered := filepath.Join(home, ".config", "superpowers", "worktrees")
+	if err := os.MkdirAll(filepath.Dir(registered), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outsideContainer, registered); err != nil {
+		t.Skipf("symlink not supported: %v", err)
+	}
+
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range results {
+		if row.Status == types.WorktreeActive || row.Status == types.WorktreeOrphaned {
+			t.Fatalf("registered symlink escape yielded cleanable row: %+v", row)
+		}
+	}
+}
+
+func TestWorktreeAdapter_RegisteredInHomeSymlinkIsNotReintroducedByFallback(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	actualContainer := filepath.Join(home, "actual", "worktrees")
+	actualUnit := filepath.Join(actualContainer, "alias-target")
+	createWorktreeGit(t, actualUnit, filepath.Join(home, "parent"), "alias-target")
+	registered := filepath.Join(home, ".config", "superpowers", "worktrees")
+	if err := os.MkdirAll(filepath.Dir(registered), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(actualContainer, registered); err != nil {
+		t.Skipf("symlink not supported: %v", err)
+	}
+
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range results {
+		if row.ID == "alias-target" {
+			t.Fatalf("registered symlink target was reintroduced by convention fallback: %+v", row)
+		}
+	}
+}
+
+func TestWorktreeAdapter_InvalidMarkersAreReviewOnly(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	container := filepath.Join(home, ".config", "superpowers", "worktrees")
+
+	fixtures := []struct {
+		id     string
+		create func(string) error
+		reason string
+	}{
+		{
+			id: "missing",
+			create: func(unit string) error {
+				return os.MkdirAll(unit, 0755)
+			},
+			reason: noWorktreeMetadataReason,
+		},
+		{
+			id: "empty",
+			create: func(unit string) error {
+				if err := os.MkdirAll(unit, 0755); err != nil {
+					return err
+				}
+				return os.WriteFile(filepath.Join(unit, ".git"), nil, 0644)
+			},
+			reason: ".git marker is empty",
+		},
+		{
+			id: "malformed",
+			create: func(unit string) error {
+				if err := os.MkdirAll(unit, 0755); err != nil {
+					return err
+				}
+				return os.WriteFile(filepath.Join(unit, ".git"), []byte("not git metadata\n"), 0644)
+			},
+			reason: ".git marker is malformed",
+		},
+		{
+			id: "directory",
+			create: func(unit string) error {
+				return os.MkdirAll(filepath.Join(unit, ".git"), 0755)
+			},
+			reason: ".git marker is a directory",
+		},
+	}
+	for _, fixture := range fixtures {
+		if err := fixture.create(filepath.Join(container, fixture.id)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != len(fixtures) {
+		t.Fatalf("rows = %d; want %d: %+v", len(results), len(fixtures), results)
+	}
+	for _, fixture := range fixtures {
+		var got *types.DebrisInfo
+		for i := range results {
+			if results[i].ID == fixture.id {
+				got = &results[i]
+				break
+			}
+		}
+		if got == nil {
+			t.Errorf("missing row %q", fixture.id)
+			continue
+		}
+		if got.Status != types.WorktreePlain || got.Reason != fixture.reason {
+			t.Errorf("%s = %+v; want plain-dir reason %q", fixture.id, *got, fixture.reason)
+		}
+	}
+}
+
+func TestWorktreeAdapter_MixedValidAndInvalidNestedMarkersProtectOwner(t *testing.T) {
+	tests := []struct {
+		name   string
+		create func(string) error
+		want   string
+	}{
+		{
+			name: "missing",
+			create: func(path string) error {
+				return os.MkdirAll(path, 0755)
+			},
+			want: "missing .git marker",
+		},
+		{
+			name: "directory",
+			create: func(path string) error {
+				return os.MkdirAll(filepath.Join(path, ".git"), 0755)
+			},
+			want: ".git marker is a directory",
+		},
+		{
+			name: "empty",
+			create: func(path string) error {
+				if err := os.MkdirAll(path, 0755); err != nil {
+					return err
+				}
+				return os.WriteFile(filepath.Join(path, ".git"), nil, 0644)
+			},
+			want: ".git marker is empty",
+		},
+		{
+			name: "malformed",
+			create: func(path string) error {
+				if err := os.MkdirAll(path, 0755); err != nil {
+					return err
+				}
+				return os.WriteFile(filepath.Join(path, ".git"), []byte("broken\n"), 0644)
+			},
+			want: ".git marker is malformed",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			unit := filepath.Join(home, ".config", "superpowers", "worktrees", "owner")
+			createWorktreeGit(t, filepath.Join(unit, "valid"), filepath.Join(home, "parent"), "valid")
+			if err := tt.create(filepath.Join(unit, "invalid")); err != nil {
+				t.Fatal(err)
+			}
+
+			results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(results) != 1 {
+				t.Fatalf("mixed owner emitted valid sibling: %+v", results)
+			}
+			if results[0].Path != canonicalExistingPath(unit) || results[0].Status != types.WorktreePlain ||
+				!strings.Contains(results[0].Reason, tt.want) {
+				t.Fatalf("mixed owner row = %+v; want protected plain-dir containing %q", results[0], tt.want)
+			}
+		})
+	}
+}
+
+func TestWorktreeAdapter_InvalidReasonsAreSortedAndMemberTraversalStopsAtOneLevel(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	unit := filepath.Join(home, ".config", "superpowers", "worktrees", "owner")
+	createWorktreeGit(t, filepath.Join(unit, "valid"), filepath.Join(home, "parent"), "valid")
+	for _, name := range []string{"z-invalid", "a-invalid"} {
+		if err := os.MkdirAll(filepath.Join(unit, name, "deeper"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		createWorktreeGit(
+			t,
+			filepath.Join(unit, name, "deeper"),
+			filepath.Join(home, name+"-parent"),
+			name,
+		)
+	}
+
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].Status != types.WorktreePlain {
+		t.Fatalf("deep nested markers should protect one owner, got %+v", results)
+	}
+	want := "invalid linked worktree metadata: a-invalid: missing .git marker; z-invalid: missing .git marker"
+	if results[0].Reason != want {
+		t.Fatalf("reason = %q; want sorted %q", results[0].Reason, want)
+	}
+}
+
+func TestWorktreeAdapter_UnreadableMarkerIsProviderError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX file mode fixture")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	marker := filepath.Join(home, ".config", "superpowers", "worktrees", "owner", ".git")
+	if err := os.MkdirAll(filepath.Dir(marker), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(marker, []byte("gitdir: /missing\n"), 0000); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(marker, 0644)
+
+	_, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err == nil {
+		if _, openErr := os.Open(marker); openErr == nil {
+			t.Skip("current user can read mode-000 files")
+		}
+		t.Fatal("unreadable marker should fail the provider")
+	}
+	if !strings.Contains(err.Error(), "reading worktree marker") {
+		t.Fatalf("error = %v; want marker read context", err)
 	}
 }
 

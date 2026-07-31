@@ -5,6 +5,17 @@
 Compatibility note: the top-level array is named `worktrees` for historical
 reasons, but it contains all debris items, including caches and `node_modules`.
 
+The installed/regenerable/protected terms used by the issue #142 planning
+taxonomy are not JSON fields or values. They do not extend `category` or
+`classification`, and the six stores covered by that planning decision
+currently emit no inventory rows. This document describes only the shipped
+schema.
+
+The future protected-content retention surface is frozen in
+[PROTECTED_RETENTION.md](PROTECTED_RETENTION.md), but it is not present in
+current output. When implemented, it must be an additive top-level projection,
+never aggregate rows disguised inside the historical `worktrees` array.
+
 A complete scan keeps the established successful JSON shape below. If one or
 more providers fail while other results remain usable, the command adds
 `"partial": true` and a `provider_errors` array, prints the JSON document, and
@@ -79,11 +90,11 @@ as an item list, not as a worktree-only list.
 | `category` | string | Debris category (`worktree`, `node_modules`, `build-cache`, `other-cache`, `agent-state`, `ai-logs`). Cursor entries under `~/.cursor/projects` use `agent-state`, not `ai-logs`. |
 | `id` | string | Unique identifier (hash, directory name, or cache key) |
 | `project` | string | Project name if detectable, empty otherwise |
-| `source` | string | Path-derived worktree source such as `.codex`, `.somename`, or `project-local`; empty for non-worktree items |
+| `source` | string | Worktree source such as `.codex`, `.somename`, `project-local`, or the registered `superpowers`; empty for non-worktree items. Superpowers rows use `tool=unknown`. |
 | `path` | string | Absolute filesystem path |
 | `size` | integer | Size in bytes |
 | `mod_time` | string | Last modification time in RFC 3339 format |
-| `status` | string | Worktree health (`active`, `orphaned`, `plain-dir`) or empty for non-worktree items |
+| `status` | string | Worktree health (`active`, `orphaned`, `plain-dir`) or empty for non-worktree items. Only scanner-validated `active` and `orphaned` worktree rows can enter cleanup safety; `plain-dir`, empty, and unknown values are review-only. |
 | `classification` | string | Agent-state health (`live`, `orphaned`, `undetermined`), omitted for items outside `agent-state`. Cursor project-store entries derive this from all distinct absolute `workspacePath=` values in `worker.log` that are outside `~/.cursor`; any live path wins and `orphaned` requires every usable path to be proven absent. |
 | `risk` | string | Derived cleanup risk (`low`, `medium`, `high`) |
 | `reason` | string | Short derived explanation for cleanup review |
@@ -93,6 +104,13 @@ as an item list, not as a worktree-only list.
 `risk` and `reason` are presentation fields derived from `category`, `status`,
 and `classification`; they are intended for human and AI-assisted cleanup
 decisions.
+
+Worktree units support only a direct `.git` marker or markers in immediate
+project children. A readable unit without valid metadata is emitted once as
+`plain-dir` with an explicit `reason`. If valid and invalid immediate members
+are mixed, that same one-row owner representation prevents the valid sibling
+from becoming executable. An I/O failure while inspecting a container or
+marker is not `plain-dir`; it is a top-level partial provider error.
 
 For Cursor `agent-state`, `project` is the final path segment of the recorded
 workspace, not a decoded form of the project-store directory name. Missing,
@@ -120,3 +138,31 @@ Orphaned Cursor entries are eligible for default cleanup without an age gate;
 |-------|------|-------------|
 | `count` | integer | Number of items |
 | `size` | integer | Total size in bytes |
+
+## Future retention projection (contract only; unshipped)
+
+No released `scan --json` output currently contains retention rows or the
+fields below. A future schema revision may add a top-level retention projection
+without changing the meaning of `worktrees` or existing `summary` values. That
+projection is non-additive physical accounting: one aggregate row exists per
+`(store_id, bucket_id)`, aggregate and manifest-member values are never summed,
+and each existing physical owner remains counted once.
+
+The minimum future aggregate fields are:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `store_id` | string | Exact registered retention store ID. |
+| `bucket_id` | string | UTC month `YYYY-MM`, or visible protected `unknown`. |
+| `unit_count` | integer | Bounded retention units in the bucket. |
+| `member_count` | integer | Owned physical regular-file leaves in those units. |
+| `apparent_bytes` | integer | Deduplicated owned `Lstat.Size` bytes; not allocated or guaranteed freed bytes. |
+| `orphaned_count` | integer | Codex orphan-statistics subset; zero for stores without that contract. |
+| `orphaned_bytes` | integer | Apparent bytes in the Codex orphan subset; never added to `apparent_bytes`. |
+| `selectable` | boolean | Whether the exact closed bucket may enter future manifest preparation. |
+| `blocked_reason` | string | Fail-closed reason when the bucket cannot be selected. |
+
+These aggregate rows will never be executable `DebrisInfo` rows. Only the
+future exact-member manifest and revalidation path defined by the canonical
+contract can prepare an explicitly selected closed bucket. The planned
+`--retention-bucket` spelling is likewise unshipped.

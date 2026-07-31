@@ -42,8 +42,10 @@ func IsSafePath(home, target string) bool {
 }
 
 func IsSafeTarget(home string, item types.DebrisInfo) bool {
-	if item.Category == types.CategoryWorktree &&
-		(item.Status == types.WorktreeActive || item.Status == types.WorktreeOrphaned) {
+	if item.Category == types.CategoryWorktree {
+		if item.Status != types.WorktreeActive && item.Status != types.WorktreeOrphaned {
+			return false
+		}
 		_, ok := safeHomeRel(home, item.Path)
 		return ok
 	}

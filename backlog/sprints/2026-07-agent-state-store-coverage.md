@@ -35,26 +35,26 @@ content that is surfaced rather than reclaimed.
 - [x] #151 L1 overlap safety: protected agent-state shields its subtree and outer targets inherit nested safety/revalidation → PR #159 (merged `d348ede`, hardened review round 4)
 - [x] #151 L2 plan/audit accounting: outermost physical target owns bytes while rows, reasons, and receipts retain nested obligations → PR #160 (merged `23f7b38`, hardened review round 3)
 
-### Batch 4 — Fix bounded worktree-container coverage
+### Batch 4 — Fix bounded worktree-container coverage — complete
 
-- [~] #140 Cover the confirmed `~/.config/superpowers/worktrees` depth gap within a documented finite discovery bound (~3h) [branch:issue-140-bounded-worktree-containers] — relay run `issue-140-20260730121915000`
+- [x] #140 Cover the confirmed `~/.config/superpowers/worktrees` depth gap within a documented finite discovery bound → PR #163 (merged `8caa554`, hardened primary review round 6)
 
 ### Batch 5 — Classify agent byproducts
 
-- [ ] #142 L1 store classification: freeze installed, regenerable, and user-content decisions before adding providers
+- [x] #142 L1 store classification: freeze installed, regenerable, and user-content decisions before adding providers → PR #164 (merged `228e0f9`, hardened primary review round 5)
 
-### Batch 6 — Introduce protected-content retention semantics
+### Batch 6 — Introduce protected-content retention semantics — complete
 
-- [ ] #139 L1 retention contract: freeze bucket, selector, aggregation, timestamp, and execution-manifest semantics
+- [x] #139 L1 retention contract: freeze bucket, selector, aggregation, timestamp, and execution-manifest semantics → PR #165 (merged `2d9714a`, 3 hardened primary rounds plus final exact-head review)
 
-### Batch 7 — Add byproduct coverage
+### Batch 7 — Add byproduct coverage — blocked on upstream producer cooperation
 
 - [ ] #142 `L2-regenerable-providers` — add only regenerable residue providers.
 - [ ] #142 L3 protected artifacts: surface user artifacts without implicit cleanup through default clean or `--risky`
 
 ### Batch 8 — Cover the largest retention stores
 
-- [ ] #139 L2 Codex sessions: aggregate counts and sizes by time bucket without parsing conversation bodies
+- [~] #139 L2 Codex sessions: aggregate counts and sizes by time bucket without parsing conversation bodies [branch:issue-139-codex-sessions-retention-inventory]
 - [ ] #139 L3 Cursor/Gstack/Claude: add coverage without duplicate rows or bytes
 - [ ] #139 L4 relay runs and end-to-end retention CLI contract
 
@@ -93,6 +93,15 @@ content that is surfaced rather than reclaimed.
   protected-content retention contract, then add regenerable and protected
   providers. `generated_images` and transcripts require an explicit retention
   decision; `--risky` alone is insufficient.
+- #142 L1's store-nature taxonomy is planning language, not a current
+  `types.Category`, JSON classification, or CLI selector. `packages` and
+  `computer-use` are installed content; `tmp` is only a future regenerable
+  candidate; `generated_images` is a retention-selected user artifact; and
+  Codex `sqlite` plus Cursor `ai-tracking` are inventory-only protected stores
+  absent a separate quiescence and atomic database-family manifest contract.
+  L2 and L3 are blocked until the relevant upstream producer documents a
+  versioned layout/identity contract and exposes a cooperative exclusion
+  protocol honored by every writer; aibris cannot manufacture that evidence.
 - Orphan detection must read each store's recorded working directory. Directory
   names are a lossy encoding — `/`, `.`, and `_` all collapse to `-` — and
   decoding them produced false positives during the audit.
@@ -108,6 +117,11 @@ content that is surfaced rather than reclaimed.
 - Report provider performance as a same-session paired delta: build base and
   change together, alternate runs, and record cache condition and observed
   scale. Keep 19.2s only as a labelled historical observation.
+- Known worktree containers use a finite exact registry for `.codex`, `.relay`,
+  `.gstack`, and `.config/superpowers/worktrees`; the generic depth-4 fallback
+  remains bounded. Invalid metadata or mixed valid/invalid members protect the
+  whole physical owner, and any active logical member protects a shared
+  active/orphaned owner unless active cleanup is explicitly included.
 - #147 returns to the paused 0.9.x execution-contract stream after #151; it
   should reuse #115's single plan pipeline rather than add another normalization
   implementation in this milestone.
@@ -426,3 +440,105 @@ measuring, because the real home lacked the triggering condition.
   is an observation, not a target: `fe8eb16` full-home scan finds zero
   superpowers rows, but a scoped scan finds two valid L2 members under one
   540,565,504-byte physical owner.
+- 2026-07-31 01:10: #140 dispatched → PR #163 → hardened primary review
+  (semantic PASS, round 6) → squash-merged as `8caa554`; #140 closed, Batch 4
+  completed, and the run worktree plus local/remote branch were cleaned. The
+  maintainer authorized force-finalization after the final Codex review passed
+  all 12 Done Criteria and the hardened OpenCode advisory returned empty stdout
+  twice after reviewer-swap exhaustion. The post-review Ubuntu failure exposed
+  a deterministic audit-only path-alias bug hidden by macOS `/var` canonical
+  aliases; an independent audit confirmed the three-line priority fix, its
+  direct regression test, and no mutation-path effect. Ubuntu/macOS CI,
+  release-build, and CodeRabbit all passed at the final PR head.
+
+  Merged `main` passed race tests, build, vet, and Linux/Windows/Darwin builds.
+  Same-session real-home dry-runs from immutable pre-merge `41cab28` and merged
+  `8caa554` binaries both planned **213 items / 1.6 GB** and reported
+  agent-state **277 found / 210 eligible (246.1 MB) / 67 protected
+  (429.4 MB)**. The new container registry increased protected physical
+  coverage from 319 to 362 owners while leaving planned and agent-state values
+  exactly equal; all aibris real-home clean invocations used `--dry-run`.
+- 2026-07-31 01:28: Shaped #142 as relay request
+  `req-20260730162731396` with three ordered leaves and started L1
+  `store-classification` as hardened run
+  `issue-142-20260730162810830-b1fe8cda`. Read-only metadata corrected two
+  audit assumptions: `computer-use` is an installed OpenAI application bundle,
+  and Cursor `ai-tracking` contains tracked-file and conversation-summary
+  schema rather than disposable telemetry alone. The fail-closed classification
+  keeps packages/computer-use provider-free, makes tmp only a future
+  direct-child candidate, permits generated-image retention selection only
+  after #139 L1, and leaves live sqlite/ai-tracking databases inventory-only.
+  No content bodies, SQLite row values, tracked file values, or image pixels
+  were inspected.
+- 2026-07-31 02:56: #142 L1 dispatched → PR #164 → hardened primary review
+  (all ten Done Criteria and 10/10 evidence-to-policy traceability passed in
+  round 5) → squash-merged as `228e0f9`; #142 remains open for L2/L3, and the
+  run worktree plus local/remote branch were cleaned. The maintainer authorized
+  force-finalization after the OpenCode adversarial lane exhausted its
+  two-demotion budget and continued proposing future L2/L3 implementation
+  details beyond this Markdown-only classification leaf. Genuine findings were
+  incorporated through final head `28c3beb`, including the literal tmp
+  direct-child boundary, upstream cooperation gate, database-family
+  fail-closed rules, and recursive-unit versus non-traversing symlink deletion
+  distinction. Exact-head race tests, build, vet, Linux/Windows/Darwin builds,
+  and all four public checks passed.
+- 2026-07-31: Froze #139 L1 as relay-ready request
+  `req-20260730181100894` after two independent architecture stress-tests.
+  L1 is Markdown-only: retention buckets are a non-additive projection, never
+  executable `DebrisInfo` rows; exact closed UTC-month selection must resolve
+  to an immutable member manifest; and #138 proof-based eligibility plus #151
+  overlap hard locks remain authoritative. The contract also keeps #142
+  SQLite/ai-tracking inventory-only until producer cooperation exists.
+- 2026-07-31 04:09: #139 L1 → PR #165 → squash-merged as `2d9714a`;
+  Batch 6 completed while #139 remains open for L2–L4. Three exact-head
+  hardened primary rounds passed every Done Criterion, but the advisory lane
+  exhausted its budget on OpenCode schema, Pi authentication, and Antigravity
+  empty-output failures rather than a repository finding. Public review then
+  found two genuine execution-contract gaps: deletion now binds the validated
+  entry and physical identity to a non-following mutation while its fence is
+  held, and a retention-selected plan can no longer widen into a broader
+  recursive #138 cleanup. Both were fixed at `7397525`, independently reviewed
+  with no remaining actionable finding, and all public threads were resolved.
+  Ubuntu/macOS CI, release-build, and CodeRabbit passed; Relay removed the run
+  worktree and local/remote branch.
+
+  Merged `main` passed race tests, build, vet, and Linux/Windows/Darwin builds.
+  Same-session real-home dry-runs from immutable pre-merge `4f6ad77` and merged
+  `2d9714a` binaries produced identical normalized summaries: **213 items /
+  1.6 GB** planned, with agent-state **277 found / 210 eligible (246.1 MB) /
+  67 protected (429.4 MB)**. These are observations rather than baselines, and
+  every real-home cleanup invocation used `--dry-run`.
+- 2026-07-31 04:25: Revalidated #142 L2/L3 readiness after #139 L1 and marked
+  the canonical issue `status:blocked`; the unchecked Batch 7 leaves remain
+  incomplete. Codex 0.144.4 exposes heterogeneous `~/.codex/tmp` direct
+  children, and upstream's `.lock` fences individual
+  `arg0/codex-arg0*` session directories rather than freezing the tmp root or
+  every writer before discovery. The generated-image source documents a path
+  shape but persists no producer-version identity/manifest and exposes no
+  cooperative writer fence. SQLite and Cursor `ai-tracking` likewise still
+  lack the complete family registry and all-writer quiescence contract.
+  Independent audits found no safe locally implementable #142 leaf, and no
+  duplicate aibris issue exists.
+
+  A separate audit found #139 L2 technically unblocked if it is kept strictly
+  read-only: a non-additive Codex-session UTC-month projection with no selector,
+  manifest, cleanup candidate, or executor. It does not depend on #142's tmp,
+  generated-image, or database mutation proofs. Advancing Batch 8 ahead of the
+  blocked Batch 7 would change the recorded sprint order, so dispatch awaits an
+  explicit maintainer-approved reorder rather than silently weakening or
+  bypassing the plan.
+- 2026-07-31 04:29: Prepared but did not plan or dispatch #139 L2 as Relay
+  request `req-20260730192929540`. The single frozen leaf,
+  `l2-codex-sessions-retention-inventory`, has 22 Done Criteria covering a
+  separate non-additive retention projection, bounded first-record metadata,
+  UTC-month and orphan-subset aggregation, cache/JSON compatibility, cleanup
+  non-interference, same-session accuracy, paired performance, and the full Go
+  gate. Its escalation contract stops before `relay-plan` or dispatch until the
+  maintainer explicitly approves advancing Batch 8 ahead of blocked Batch 7;
+  selector, manifest, cleanup eligibility, executor, and mutation remain out
+  of scope.
+- 2026-07-31: [actor:codex] The maintainer explicitly approved advancing Batch 8 ahead of
+  externally blocked Batch 7. #139 L2 is now in progress under the already
+  frozen Relay request `req-20260730192929540`; its 22 Done Criteria and
+  read-only, non-additive boundary remain unchanged
+  [branch:issue-139-codex-sessions-retention-inventory].
