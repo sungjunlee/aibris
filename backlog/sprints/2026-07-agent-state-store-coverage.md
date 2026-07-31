@@ -60,7 +60,7 @@ content that is surfaced rather than reclaimed.
 
 ### Batch 9 — Open guided review to every tool
 
-- [~] #141 Generalize guided worktree review beyond codex (~3h) [run:issue-141-20260731062303100-927250e4]
+- [~] #141 Generalize guided worktree review beyond codex (~3h) — implementation and full gates complete at `0a47323`; pre-publication parked on hardened advisory adapter availability [run:issue-141-20260731062303100-927250e4]
 
 ### Batch 10 — State the boundary
 
@@ -126,6 +126,18 @@ content that is surfaced rather than reclaimed.
   run the prepared offline correctness/A-B and four-pair performance protocol,
   then complete hardened review. L3/L4 remain dependent on L2 and must not
   start from the unpublished branch.
+- #141 is likewise parked without weakening its hardened policy. Branch
+  `issue-141-guided-review-all-worktree-tools` at `0a47323` is clean, pushed,
+  current with `main`, and passes the exact-head race/build/vet gate plus
+  Linux/Windows/Darwin builds. Codex primary review passed all 17 frozen Done
+  Criteria and quality in rounds 2–4. The remaining Relay escalation is
+  advisory infrastructure only: Pi lacks credentials, OpenCode returned useful
+  findings with an invalid `line: 0` schema value, Antigravity returned no
+  structured result, and ClinePass is not subscribed. OpenCode's recoverable
+  findings were checked; the valid comparator/unknown-selector gaps were fixed
+  and tested. Do not publish or merge until one healthy structured advisory
+  round succeeds or the maintainer explicitly chooses a separate audited
+  exception.
 - Known worktree containers use a finite exact registry for `.codex`, `.relay`,
   `.gstack`, and `.config/superpowers/worktrees`; the generic depth-4 fallback
   remains bounded. Invalid metadata or mixed valid/invalid members protect the
@@ -566,3 +578,20 @@ measuring, because the real home lacked the triggering condition.
   never auto-recommended. Codex implementation is isolated in Relay run
   `issue-141-20260731062303100-927250e4`; publication is delayed until hardened
   internal review, and no PR or merge is authorized by this status change.
+- 2026-07-31 17:51: Parked #141 pre-publication at pushed head `0a47323`.
+  Implementation, exact-head race tests, build, vet, and all three release
+  target builds pass. Independent review found two genuine ordering blind
+  spots—age replans and the protected display could violate
+  recommended/size/stable-key order—and both now have render-level regression
+  coverage. The recovered OpenCode advisory also prompted one shared
+  representative/activity comparator and an explicit `--tool=unknown` CLI
+  test. Codex primary rounds 2–4 then passed all 17 Done Criteria and quality
+  with zero issues.
+
+  Relay remains `escalated` solely because no configured advisory adapter
+  produced valid hardened evidence: Pi had no API credentials, OpenCode emitted
+  an otherwise useful response with an invalid zero line number, Antigravity
+  emitted no structured result, and the owner-approved fourth Cline attempt
+  lacked a ClinePass subscription. The review cap was increased once from 3 to
+  4 with audited owner approval and will not be extended again. No PR was
+  opened and nothing was merged.
