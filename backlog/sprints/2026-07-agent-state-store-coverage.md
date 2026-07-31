@@ -54,7 +54,7 @@ content that is surfaced rather than reclaimed.
 
 ### Batch 8 — Cover the largest retention stores
 
-- [~] #139 L2 Codex sessions: aggregate counts and sizes by time bucket without parsing conversation bodies [branch:issue-139-codex-sessions-retention-inventory]
+- [~] #139 L2 Codex sessions: aggregate counts and sizes by time bucket without parsing conversation bodies [branch:issue-139-codex-sessions-retention-inventory] — paused at `6b89b00`; DC19–21 await a quiet-home window
 - [ ] #139 L3 Cursor/Gstack/Claude: add coverage without duplicate rows or bytes
 - [ ] #139 L4 relay runs and end-to-end retention CLI contract
 
@@ -117,6 +117,15 @@ content that is surfaced rather than reclaimed.
 - Report provider performance as a same-session paired delta: build base and
   change together, alternate runs, and record cache condition and observed
   scale. Keep 19.2s only as a labelled historical observation.
+- #139 L2 is parked after implementation rather than weakened or merged without
+  evidence. Branch `issue-139-codex-sessions-retention-inventory` at `6b89b00`
+  passed independent local review, the full race/build/vet gate, and
+  Linux/Windows/Darwin builds. DC19–21 remain open: fourteen consecutive
+  aggregate-only probes observed the active Codex store changing, so no
+  drifted real-home result was accepted. Resume only in a quiet-home window,
+  run the prepared offline correctness/A-B and four-pair performance protocol,
+  then complete hardened review. L3/L4 remain dependent on L2 and must not
+  start from the unpublished branch.
 - Known worktree containers use a finite exact registry for `.codex`, `.relay`,
   `.gstack`, and `.config/superpowers/worktrees`; the generic depth-4 fallback
   remains bounded. Invalid metadata or mixed valid/invalid members protect the
@@ -542,3 +551,10 @@ measuring, because the real home lacked the triggering condition.
   frozen Relay request `req-20260730192929540`; its 22 Done Criteria and
   read-only, non-additive boundary remain unchanged
   [branch:issue-139-codex-sessions-retention-inventory].
+- 2026-07-31 15:05: Parked #139 L2 with the frozen contract intact after the
+  maintainer chose not to stop other active Codex work. Implementation and
+  local verification are complete at `6b89b00`, but the run remains
+  pre-publication and DC19–21 remain unverified because every real-home
+  quiescence probe drifted. No PR was opened and nothing was merged. Batch 8
+  L3/L4 stay dependent; execution may move to the independent #141 guided
+  review batch while L2 awaits an offline measurement window.
