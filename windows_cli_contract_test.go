@@ -66,6 +66,8 @@ func TestWindowsCLIContractRootContainmentAndHomeIsolation(t *testing.T) {
 			"windows-contract",
 		)+"\n",
 	)
+	canonicalHome := canonicalWindowsCLIContractPath(t, home)
+	canonicalInsideModules := canonicalWindowsCLIContractPath(t, insideModules)
 
 	t.Setenv("HOME", outsideHome)
 	t.Setenv("USERPROFILE", siblingPrefix)
@@ -109,8 +111,8 @@ func TestWindowsCLIContractRootContainmentAndHomeIsolation(t *testing.T) {
 	}
 	foundDefault := map[string]bool{}
 	for _, item := range decodeScan(defaultScan) {
-		path := filepath.Clean(item.Path)
-		rel, err := filepath.Rel(home, path)
+		path := canonicalWindowsCLIContractPath(t, item.Path)
+		rel, err := filepath.Rel(canonicalHome, path)
 		if err != nil || rel == ".." ||
 			strings.HasPrefix(rel, ".."+string(filepath.Separator)) ||
 			filepath.IsAbs(rel) {
@@ -119,7 +121,7 @@ func TestWindowsCLIContractRootContainmentAndHomeIsolation(t *testing.T) {
 		foundDefault[path] = true
 	}
 	for _, want := range []string{insideModules, worktreeOwner} {
-		if !foundDefault[filepath.Clean(want)] {
+		if !foundDefault[canonicalWindowsCLIContractPath(t, want)] {
 			t.Fatalf("isolated default scan did not report %q:\n%s", want, defaultScan.Stdout)
 		}
 	}
@@ -137,13 +139,14 @@ func TestWindowsCLIContractRootContainmentAndHomeIsolation(t *testing.T) {
 	}
 	foundInside := false
 	for _, item := range decodeScan(result) {
-		rel, err := filepath.Rel(home, filepath.Clean(item.Path))
+		path := canonicalWindowsCLIContractPath(t, item.Path)
+		rel, err := filepath.Rel(canonicalHome, path)
 		if err != nil || rel == ".." ||
 			strings.HasPrefix(rel, ".."+string(filepath.Separator)) ||
 			filepath.IsAbs(rel) {
 			t.Fatalf("isolated scan escaped profile %q with path %q", home, item.Path)
 		}
-		if filepath.Clean(item.Path) == filepath.Clean(insideModules) {
+		if path == canonicalInsideModules {
 			foundInside = true
 		}
 	}
@@ -182,4 +185,18 @@ func TestWindowsCLIContractRootContainmentAndHomeIsolation(t *testing.T) {
 	if !strings.Contains(tildeBackslash.Stderr, "must be absolute or start with ~") {
 		t.Fatalf(`unsupported "~\workspace" root error was unclear: %s`, tildeBackslash.Stderr)
 	}
+}
+
+func canonicalWindowsCLIContractPath(t *testing.T, path string) string {
+	t.Helper()
+
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		t.Fatalf("make Windows path %q absolute: %v", path, err)
+	}
+	canonical, err := filepath.EvalSymlinks(absolute)
+	if err != nil {
+		t.Fatalf("canonicalize Windows path %q: %v", path, err)
+	}
+	return filepath.Clean(canonical)
 }

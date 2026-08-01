@@ -145,6 +145,16 @@ func TestWindowsReleaseStatusGate(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:    "HTML-comment-only section",
+			notes:   "# Release notes\n\n## Windows status\n\n<!-- TODO: document Windows status -->\n\n## Checksums\n",
+			wantErr: true,
+		},
+		{
+			name:    "section inside fenced code",
+			notes:   "# Release notes\n\n```markdown\n## Windows status\nWindows archives remain experimental.\n```\n\n## Checksums\n",
+			wantErr: true,
+		},
+		{
 			name:    "non-empty section",
 			notes:   "# Release notes\n\n## Windows status\n\nWindows archives remain experimental.\n\n## Checksums\n",
 			wantErr: false,
