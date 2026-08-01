@@ -74,7 +74,7 @@ if ! awk '
 			next
 		}
 
-		if (line !~ /^#{1,2}([[:space:]]|$)/) {
+		if (line !~ /^ {0,3}#{1,2}([[:space:]]|$)/) {
 			if (in_windows_status && line ~ /[^[:space:]]/) {
 				has_content = 1
 			}

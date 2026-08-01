@@ -145,6 +145,11 @@ func TestWindowsReleaseStatusGate(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:    "heading-only section followed by indented heading",
+			notes:   "# Release notes\n\n## Windows status\n\n  ## Checksums\n\nChecksums are attached.\n",
+			wantErr: true,
+		},
+		{
 			name:    "HTML-comment-only section",
 			notes:   "# Release notes\n\n## Windows status\n\n<!-- TODO: document Windows status -->\n\n## Checksums\n",
 			wantErr: true,
