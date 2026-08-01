@@ -163,6 +163,11 @@ func executeCleanTargets(
 func executePreparedCleanTargets(ctx context.Context, targets []preparedCleanTarget, opts activeWorktreeExecutionOptions) (cleanExecutionReceipt, error) {
 	if len(targets) > 0 {
 		defer invalidateLastScanCache()
+		// One full agent-state re-scan per batch: the mutation barrier shares
+		// this memo across all targets instead of re-scanning per target.
+		if safety := targets[0].MutationSafety; safety != nil {
+			safety.runtime.resetRefreshMemo()
+		}
 	}
 	if opts.removeWorktree == nil {
 		opts.removeWorktree = removeGitWorktree

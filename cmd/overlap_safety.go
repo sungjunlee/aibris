@@ -6,6 +6,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/cleaner"
@@ -17,6 +18,64 @@ type cleanupOverlapSafetyRuntime struct {
 	Initial cleaner.OverlapSafetyEvidence
 	Refresh func(context.Context) (cleaner.OverlapSafetyEvidence, error)
 	Lookup  cleaner.AgentStateRevalidatorLookup
+	// memo, when non-nil, collapses the expensive full agent-state re-scan
+	// (Refresh) so every per-target mutation barrier within one execution
+	// batch shares a single scan instead of re-running it per target. The
+	// per-obligation revalidation inside ValidateBeforeMutationWithReport
+	// still runs live for every target, so each mutation stays fail-closed
+	// against its own entries drifting; only the whole-home overlap re-scan
+	// is shared. nil disables memoization (tests build runtimes this way).
+	memo *refreshMemo
+}
+
+// refreshMemo caches one full agent-state re-scan for the lifetime of a single
+// execution batch. It is safe for concurrent use; executePreparedCleanTargets
+// runs targets sequentially today, but the barrier contract does not require it.
+type refreshMemo struct {
+	mu       sync.Mutex
+	loaded   bool
+	evidence cleaner.OverlapSafetyEvidence
+	err      error
+}
+
+func (m *refreshMemo) get(
+	ctx context.Context,
+	refresh func(context.Context) (cleaner.OverlapSafetyEvidence, error),
+) (cleaner.OverlapSafetyEvidence, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.loaded {
+		return m.evidence, m.err
+	}
+	m.evidence, m.err = refresh(ctx)
+	m.loaded = true
+	return m.evidence, m.err
+}
+
+func (m *refreshMemo) reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.loaded = false
+	m.evidence = cleaner.OverlapSafetyEvidence{}
+	m.err = nil
+}
+
+// refreshedEvidence returns the refreshed overlap evidence, memoizing the full
+// re-scan across a batch when a memo is configured.
+func (r cleanupOverlapSafetyRuntime) refreshedEvidence(
+	ctx context.Context,
+) (cleaner.OverlapSafetyEvidence, error) {
+	if r.memo != nil {
+		return r.memo.get(ctx, r.Refresh)
+	}
+	return r.Refresh(ctx)
+}
+
+// resetRefreshMemo clears any cached re-scan so the next batch starts fresh.
+func (r cleanupOverlapSafetyRuntime) resetRefreshMemo() {
+	if r.memo != nil {
+		r.memo.reset()
+	}
 }
 
 type cleanupOverlapSafetySelection struct {
@@ -105,6 +164,7 @@ func newCleanupOverlapSafetyRuntime(
 		Initial: initial,
 		Refresh: scanEvidence,
 		Lookup:  lookup,
+		memo:    &refreshMemo{},
 	}, nil
 }
 
@@ -489,7 +549,7 @@ func (s cleanupMutationSafety) validate(
 		report.BlockingReason = cleaner.ErrIncompleteOverlapSafetyEvidence.Error()
 		return report, cleaner.ErrIncompleteOverlapSafetyEvidence
 	}
-	refreshed, err := s.runtime.Refresh(ctx)
+	refreshed, err := s.runtime.refreshedEvidence(ctx)
 	if err != nil {
 		report.BlockingPath = s.component.Target.Path
 		report.BlockingReason = err.Error()
