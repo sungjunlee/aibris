@@ -2,9 +2,25 @@
 
 ## Unreleased
 
+## [0.8.2] - 2026-08-01
+
+### Changed
+
+- `clean` now runs the expensive full agent-state re-scan once per execution
+  batch instead of once per cleanup target, and shares it across all targets.
+  Cleaning many small orphaned agent-state entries no longer re-walks
+  `~/.claude/projects` and `~/.cursor/projects` (parsing every session record
+  and estimating every directory size) for each target. The cached scan is
+  invalidated before each mutation whenever the set of agent-state entries
+  changes (an entry added, removed, or renamed), so a newly created overlapping
+  entry is still discovered and stays protected; entries already known to
+  overlap a target remain revalidated live per target. A transient scan failure
+  no longer blocks the rest of the batch.
+
 ## [0.8.1] - 2026-07-31
 
 ### Added
+
 - Claude and Cursor project stores are now classified from every recorded
   working directory as `live`, `orphaned`, or `undetermined`. Proven orphaned
   state can be cleaned without an age gate; ambiguous or live state stays
@@ -18,6 +34,7 @@
   remain experimental and use manual installation.
 
 ### Changed
+
 - Last-scan cache reuse now also requires a deterministic identity of the
   concrete provider membership. Legacy or mismatched snapshots visibly fall
   back to a live scan. The explicit cache revision remains the compatibility
@@ -37,6 +54,7 @@
   protected, and locked items.
 
 ### Fixed
+
 - Fresh scan-cache entries are no longer trusted solely because their paths
   still exist. Cleanup rechecks filesystem identity, type, modification time,
   and age before selection and again at the mutation boundary.
@@ -47,6 +65,7 @@
   status, destructive isolation, and Windows executable naming.
 
 ### Safety
+
 - Agent-state cleanup now refuses an individual item when its tool has no
   registered pre-deletion revalidator, while continuing to process unrelated
   items in the same run.
@@ -78,6 +97,7 @@
 ## [0.8.0] - 2026-07-13
 
 ### Added
+
 - Guided cleanup now groups nested Git members into one physical cleanup unit,
   uses canonical repository identity for retention, and combines metadata-only
   Codex session, reflog, and filesystem fallback activity evidence.
@@ -86,6 +106,7 @@
   overstating reclaimed bytes.
 
 ### Changed
+
 - Cleanup recommendations now apply independent recent-activity, per-repository
   retention, idle-age, and size policies; protected-only Codex pressure still
   opens guided review with nothing preselected.
@@ -93,6 +114,7 @@
   named ref makes the commit recoverable.
 
 ### Safety
+
 - Dirty, unreadable, recently active, current-directory, and unreferenced
   detached worktrees remain locked. `--force` skips only final confirmation and
   never forces Git worktree removal or bypasses hard-safety checks.
@@ -106,6 +128,7 @@
 ## [0.7.0] - 2026-07-10
 
 ### Added
+
 - Guided Codex worktree cleanup now has a checklist selection model for
   terminal use, separating recommended, reviewable, and locked rows.
 - The guide shows projected freed space from normalized selected targets, so
@@ -114,6 +137,7 @@
   preserving user deselect overrides where safety policy still allows them.
 
 ### Changed
+
 - Low-risk recommendations remain selected by default, while hard-safety rows
   stay visible as locked rows and cannot be selected.
 - Non-TTY and piped usage keep the line-oriented text fallback, including
@@ -125,6 +149,7 @@
 ## [0.6.1] - 2026-07-10
 
 ### Changed
+
 - `clean` and `clean --dry-run` now open guided Codex worktree review by
   default when no classic cleanup selector is supplied and useful guided
   recommendations exist.
@@ -136,6 +161,7 @@
 ## [0.6.0] - 2026-07-07
 
 ### Added
+
 - `clean --guide` for guided Codex worktree cleanup. The guide defaults
   low-risk active Codex worktrees to selected, shows protected rows, supports
   number toggles and abort, and hands the final selection to the normal dry-run
@@ -147,6 +173,7 @@
 - Real local guided dry-run dogfood evidence in `docs/DOGFOOD.md`.
 
 ### Changed
+
 - `skills/aibris/SKILL.md` now routes active Codex worktree bloat to
   `aibris clean --guide --dry-run` while preserving dry-run-before-delete
   rules.
@@ -157,18 +184,21 @@
 ## [0.5.1] - 2026-06-26
 
 ### Changed
+
 - HOME-wide scans now batch worktree and `node_modules` size estimation on Unix
   with `du -sk`, while retaining the Go walker as a fallback.
 - Provider scan parallelism is tuned to reduce disk I/O contention during large
   HOME scans.
 
 ### Fixed
+
 - Real HOME dogfood scan latency improved from 178.55s to 78.32s on the
   measured machine.
 
 ## [0.5.0] - 2026-06-25
 
 ### Added
+
 - Worktree discovery now follows `$HOME` worktree directory conventions instead
   of relying on a fixed tool list, so hidden owners such as `.relay`,
   `.codex`, `.claude`, and future local tools can be detected when they expose
@@ -179,6 +209,7 @@
   worktrees, age-blocked items, risky items, and category/tool-filtered items.
 
 ### Changed
+
 - Generic worktrees are now cleanable only after scanner validation proves they
   are active or orphaned Git worktrees under `$HOME`.
 - Human-readable worktree names include the source owner for unknown tools,
@@ -187,12 +218,14 @@
   full-home scans practical.
 
 ### Fixed
+
 - Cancelled worktree root scans now propagate the context error instead of
   allowing partial scan results to be treated as successful.
 
 ## [0.4.0] - 2026-06-14
 
 ### Added
+
 - `clean` now shows scan progress before candidate filtering, so running
   cleanup without a prior scan no longer looks stalled.
 - `scan` writes a short-lived last-scan snapshot, and `clean` reuses it for
@@ -200,6 +233,7 @@
 - `clean` re-checks cached target paths before presenting or deleting them.
 
 ### Changed
+
 - `clean --dry-run` and delete confirmation now share the same target plan
   renderer with category, size, project, age/status, path, and action.
 - Target lists now use explicit `global` or `-` labels instead of ambiguous
@@ -208,6 +242,7 @@
   directly.
 
 ### Fixed
+
 - Long deletions now print per-item start progress before slow remove or
   cleanup-command work.
 - Future-dated, stale, schema-mismatched, or root-mismatched scan snapshots are
@@ -216,6 +251,7 @@
 ## [0.3.4] - 2026-06-06
 
 ### Fixed
+
 - Installer now runs correctly when executed from stdin via `curl ... | bash`.
   The `0.3.3` installer guard could fail under `set -u` with
   `BASH_SOURCE[0]: unbound variable`.
@@ -223,6 +259,7 @@
 ## [0.3.3] - 2026-06-06
 
 ### Changed
+
 - Installer now defaults to `~/.local/bin` so normal installs do not require
   administrator privileges.
 - Installer only falls back to `sudo` for explicitly requested prefixes, such
@@ -234,6 +271,7 @@
 ## [0.3.2] - 2026-06-06
 
 ### Added
+
 - Human-readable `scan` now runs providers with bounded parallelism and shows
   interactive spinner progress on terminals.
 - `clean` confirmation now prints a target plan with category, size, project,
@@ -241,12 +279,14 @@
 - Test coverage for spinner output and deterministic provider concurrency.
 
 ### Fixed
+
 - `node_modules` entries found under workspace-style roots are now accepted by
   cleanup path safety validation instead of being rejected as unsafe.
 
 ## [0.3.1] - 2026-06-03
 
 ### Changed
+
 - Installer now prefers GitHub `releases/latest/download` URLs for latest
   binaries and no longer falls back to source builds unless `main` is requested.
 - GoReleaser archive names are stable across versions for API-free latest
@@ -255,6 +295,7 @@
 ## [0.3.0] - 2026-06-01
 
 ### Added
+
 - `--age` now accepts human values such as `7d`, `2w`, `1mo`, and `1y`.
 - `install.sh` for Homebrew-free installation from GitHub Releases or `main`.
 - Unified `WorktreeAdapter` for Codex, Claude, and generic AI worktree discovery.
@@ -263,12 +304,14 @@
 - Security audit documentation.
 
 ### Changed
+
 - README and project docs now focus on AI coding workflow debris.
 - GoReleaser config updated for current v2 keys.
 - GitHub Actions updated to current Node 24-compatible actions.
 - Directory size estimation uses a bounded worker-pool walker.
 
 ### Fixed
+
 - Symlink-aware cleanup path validation.
 - Default scanner test no longer scans the real home directory.
 - CI no longer depends on a Go-version-incompatible golangci-lint binary.
@@ -276,6 +319,7 @@
 ## [0.2.0] - 2026-05-25
 
 ### Added
+
 - `--version` flag showing version 0.2.0
 - `--force` / `-f` flag to skip confirmation prompt
 - Confirmation prompt before deletion (unless `--force` or `--dry-run`)
@@ -287,6 +331,7 @@
 - CONTRIBUTING.md and community health files
 
 ### Changed
+
 - `containsTool` now returns `false` for empty list (caller handles all-match logic)
 - `FormatSize` has bounds check for extremely large sizes
 - `DryRun` uses human-friendly age format (`today`/`Nd ago`) instead of raw Go duration
@@ -297,11 +342,13 @@
 - No-result messages updated ("No items to clean", "No AI tool debris found")
 
 ### Fixed
+
 - README: `aibris prune` → `aibris clean`, duration examples clarified
 - README expanded with English, features, safety section, usage examples
 - `containsTool` no longer conflates "contains" with "match all"
 
 ## [0.1.0] - initial
+
 - scan and clean commands
 - 7 adapters: codex, claude, cursor, ai-logs, node_modules, build-cache, pip-cache
 - age filtering, category filtering, tool filtering
