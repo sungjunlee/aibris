@@ -155,6 +155,21 @@ func TestWindowsReleaseStatusGate(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:    "reference-definition-only section",
+			notes:   "# Release notes\n\n## Windows status\n\n[windows-docs]: https://example.com\n\n## Checksums\n",
+			wantErr: true,
+		},
+		{
+			name:    "space-indented-code-only section",
+			notes:   "# Release notes\n\n## Windows status\n\n    ## Next section\n",
+			wantErr: true,
+		},
+		{
+			name:    "tab-indented-code-only section",
+			notes:   "# Release notes\n\n## Windows status\n\n\t## Next section\n",
+			wantErr: true,
+		},
+		{
 			name:    "section inside fenced code",
 			notes:   "# Release notes\n\n```markdown\n## Windows status\nWindows archives remain experimental.\n```\n\n## Checksums\n",
 			wantErr: true,
@@ -162,6 +177,11 @@ func TestWindowsReleaseStatusGate(t *testing.T) {
 		{
 			name:    "non-empty section",
 			notes:   "# Release notes\n\n## Windows status\n\nWindows archives remain experimental.\n\n## Checksums\n",
+			wantErr: false,
+		},
+		{
+			name:    "non-empty CRLF section",
+			notes:   "# Release notes\r\n\r\n## Windows status\r\n\r\nWindows archives remain experimental.\r\n\r\n## Checksums\r\n",
 			wantErr: false,
 		},
 	}

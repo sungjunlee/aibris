@@ -57,15 +57,23 @@ if ! awk '
 		return rest !~ /[^[:space:]]/
 	}
 
+	function is_invisible_markdown(text) {
+		return text ~ /^( {4}| {0,3}\t)/ || \
+			text ~ /^ {0,3}\[[^]]+\]:[[:space:]]*(<[^>]*>|[^[:space:]]+)/
+	}
+
 	{
+		raw_line = $0
+		sub(/\r$/, "", raw_line)
+
 		if (in_fence) {
-			if (closes_fence($0)) {
+			if (closes_fence(raw_line)) {
 				in_fence = 0
 			}
 			next
 		}
 
-		line = strip_html_comments($0)
+		line = strip_html_comments(raw_line)
 		run = fence_run(line)
 		if (run != "") {
 			in_fence = 1
@@ -75,7 +83,7 @@ if ! awk '
 		}
 
 		if (line !~ /^ {0,3}#{1,2}([[:space:]]|$)/) {
-			if (in_windows_status && line ~ /[^[:space:]]/) {
+			if (in_windows_status && line ~ /[^[:space:]]/ && !is_invisible_markdown(line)) {
 				has_content = 1
 			}
 			next
