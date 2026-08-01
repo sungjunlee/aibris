@@ -120,7 +120,9 @@ func (r cleanupOverlapSafetyRuntime) resetRefreshMemo() {
 // This mirrors how the Claude/Cursor providers enumerate entries (each child
 // directory is one entry) without parsing jsonl or walking sizes, so it is
 // cheap enough to run before every mutation. Adding, removing, or renaming an
-// entry changes the returned key.
+// entry changes the returned key. Names are joined with \x00, which cannot
+// appear in a filename, so the key is injective in the entry set (a directory
+// named "a,b" can never alias two directories "a" and "b").
 func agentStateEntryFingerprint(ctx context.Context) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
@@ -150,7 +152,7 @@ func agentStateEntryFingerprint(ctx context.Context) (string, error) {
 			}
 		}
 		sort.Strings(names)
-		parts = append(parts, root+"\x00"+strings.Join(names, ","))
+		parts = append(parts, root+"\x00"+strings.Join(names, "\x00"))
 	}
 	return strings.Join(parts, "|"), nil
 }

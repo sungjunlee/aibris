@@ -1273,3 +1273,87 @@ func TestExecuteOverlapSafetyMemoInvalidatesOnNewEntryAcrossBatch(t *testing.T) 
 	}
 	assertOverlapSentinelsSurvive(t, filepath.Join(outerB, "sentinel"), filepath.Join(newEntry, "sentinel"))
 }
+
+func TestAgentStateEntryFingerprintTracksEntrySet(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	ctx := context.Background()
+
+	claudeRoot := filepath.Join(home, ".claude", "projects")
+	if err := os.MkdirAll(filepath.Join(claudeRoot, "alpha"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(claudeRoot, "beta"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	base, err := agentStateEntryFingerprint(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Adding an entry changes the key.
+	if err := os.MkdirAll(filepath.Join(claudeRoot, "gamma"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	afterAdd, err := agentStateEntryFingerprint(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterAdd == base {
+		t.Fatalf("fingerprint did not change after adding an entry")
+	}
+
+	// Removing an entry changes the key again.
+	if err := os.RemoveAll(filepath.Join(claudeRoot, "alpha")); err != nil {
+		t.Fatal(err)
+	}
+	afterRemove, err := agentStateEntryFingerprint(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterRemove == afterAdd || afterRemove == base {
+		t.Fatalf("fingerprint did not change after removing an entry")
+	}
+
+	// A non-directory entry is ignored (only directories count).
+	if err := os.WriteFile(filepath.Join(claudeRoot, "not-a-dir.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	afterFile, err := agentStateEntryFingerprint(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterFile != afterRemove {
+		t.Fatalf("fingerprint changed for a non-directory entry")
+	}
+
+	// The key is injective in entry names: a single directory named "a,b" must
+	// not alias two directories named "a" and "b".
+	home2 := t.TempDir()
+	t.Setenv("HOME", home2)
+	root2 := filepath.Join(home2, ".claude", "projects")
+	if err := os.MkdirAll(filepath.Join(root2, "a,b"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	single, err := agentStateEntryFingerprint(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(filepath.Join(root2, "a,b")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root2, "a"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root2, "b"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	split, err := agentStateEntryFingerprint(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if single == split {
+		t.Fatalf("fingerprint aliased {a,b} with {a},{b}: %q", single)
+	}
+}
