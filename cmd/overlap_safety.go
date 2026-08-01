@@ -2,10 +2,14 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/cleaner"
@@ -17,6 +21,140 @@ type cleanupOverlapSafetyRuntime struct {
 	Initial cleaner.OverlapSafetyEvidence
 	Refresh func(context.Context) (cleaner.OverlapSafetyEvidence, error)
 	Lookup  cleaner.AgentStateRevalidatorLookup
+	// memo, when non-nil, collapses the expensive full agent-state re-scan
+	// (Refresh) so per-target mutation barriers within one execution batch
+	// share a single scan instead of re-running it per target. The cached scan
+	// is only reused while fingerprint reports an unchanged agent-state entry
+	// set; any added, removed, or renamed entry invalidates it and forces a
+	// fresh full scan so newly created overlapping state is still discovered
+	// before the next mutation. Classification drift of entries already known
+	// to overlap a target is independently caught by the per-obligation
+	// RevalidateAgentState inside ValidateBeforeMutationWithReport, which runs
+	// live for every target. A nil memo disables memoization (tests build
+	// runtimes this way and keep the previous per-item refresh behavior).
+	memo *refreshMemo
+	// fingerprint cheaply enumerates the current agent-state entry set (entry
+	// directory names under the agent-state store roots, no jsonl parsing or
+	// size walking). It must enumerate the same roots the agent-state providers
+	// scan; today those are ~/.claude/projects and ~/.cursor/projects. If a
+	// future agent-state provider scans a different root, extend
+	// agentStateEntryFingerprint accordingly or the memo could miss a newly
+	// added entry there.
+	fingerprint func(context.Context) (string, error)
+}
+
+// refreshMemo caches one full agent-state re-scan for the lifetime of a single
+// execution batch, keyed by a cheap entry-set fingerprint so that additions,
+// removals, or renames of agent-state entries invalidate the cache and force a
+// fresh scan. It is safe for concurrent use; executePreparedCleanTargets runs
+// targets sequentially today, but the barrier contract does not require it.
+type refreshMemo struct {
+	mu       sync.Mutex
+	loaded   bool
+	key      string
+	evidence cleaner.OverlapSafetyEvidence
+}
+
+// get returns the cached evidence when the fingerprint key is unchanged,
+// otherwise runs refresh and caches a successful result. Errors are never
+// cached: a failed scan leaves the previous state untouched so the next target
+// retries instead of inheriting one target's transient failure. A fingerprint
+// error fails closed by forcing a rescan.
+func (m *refreshMemo) get(
+	ctx context.Context,
+	fingerprint func(context.Context) (string, error),
+	refresh func(context.Context) (cleaner.OverlapSafetyEvidence, error),
+) (cleaner.OverlapSafetyEvidence, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	key := ""
+	if fingerprint != nil {
+		if fp, err := fingerprint(ctx); err == nil {
+			key = fp
+		}
+		// On fingerprint error key stays "" so the cache is never reused
+		// (fail closed: an unverifiable entry set must trigger a fresh scan).
+	}
+	if m.loaded && fingerprint != nil && key != "" && key == m.key {
+		return m.evidence, nil
+	}
+	evidence, err := refresh(ctx)
+	if err != nil {
+		return evidence, err
+	}
+	m.evidence = evidence
+	m.key = key
+	m.loaded = true
+	return evidence, nil
+}
+
+func (m *refreshMemo) reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.loaded = false
+	m.key = ""
+	m.evidence = cleaner.OverlapSafetyEvidence{}
+}
+
+// refreshedEvidence returns the refreshed overlap evidence, memoizing the full
+// re-scan across a batch when a memo is configured and the entry-set
+// fingerprint is unchanged.
+func (r cleanupOverlapSafetyRuntime) refreshedEvidence(
+	ctx context.Context,
+) (cleaner.OverlapSafetyEvidence, error) {
+	if r.memo != nil {
+		return r.memo.get(ctx, r.fingerprint, r.Refresh)
+	}
+	return r.Refresh(ctx)
+}
+
+// resetRefreshMemo clears any cached re-scan so the next batch starts fresh.
+func (r cleanupOverlapSafetyRuntime) resetRefreshMemo() {
+	if r.memo != nil {
+		r.memo.reset()
+	}
+}
+
+// agentStateEntryFingerprint enumerates the current agent-state entry set by
+// listing immediate child directory names under each agent-state store root.
+// This mirrors how the Claude/Cursor providers enumerate entries (each child
+// directory is one entry) without parsing jsonl or walking sizes, so it is
+// cheap enough to run before every mutation. Adding, removing, or renaming an
+// entry changes the returned key. Names are joined with \x00, which cannot
+// appear in a filename, so the key is injective in the entry set (a directory
+// named "a,b" can never alias two directories "a" and "b").
+func agentStateEntryFingerprint(ctx context.Context) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	roots := []string{
+		filepath.Join(home, ".claude", "projects"),
+		filepath.Join(home, ".cursor", "projects"),
+	}
+	parts := make([]string, 0, len(roots))
+	for _, root := range roots {
+		entries, err := os.ReadDir(root)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				parts = append(parts, root+"\x00<absent>")
+				continue
+			}
+			return "", err
+		}
+		names := make([]string, 0, len(entries))
+		for _, entry := range entries {
+			if entry.IsDir() {
+				names = append(names, entry.Name())
+			}
+		}
+		sort.Strings(names)
+		parts = append(parts, root+"\x00"+strings.Join(names, "\x00"))
+	}
+	return strings.Join(parts, "|"), nil
 }
 
 type cleanupOverlapSafetySelection struct {
@@ -102,9 +240,11 @@ func newCleanupOverlapSafetyRuntime(
 		return cleanupOverlapSafetyRuntime{}, err
 	}
 	return cleanupOverlapSafetyRuntime{
-		Initial: initial,
-		Refresh: scanEvidence,
-		Lookup:  lookup,
+		Initial:     initial,
+		Refresh:     scanEvidence,
+		Lookup:      lookup,
+		memo:        &refreshMemo{},
+		fingerprint: agentStateEntryFingerprint,
 	}, nil
 }
 
@@ -489,7 +629,7 @@ func (s cleanupMutationSafety) validate(
 		report.BlockingReason = cleaner.ErrIncompleteOverlapSafetyEvidence.Error()
 		return report, cleaner.ErrIncompleteOverlapSafetyEvidence
 	}
-	refreshed, err := s.runtime.Refresh(ctx)
+	refreshed, err := s.runtime.refreshedEvidence(ctx)
 	if err != nil {
 		report.BlockingPath = s.component.Target.Path
 		report.BlockingReason = err.Error()

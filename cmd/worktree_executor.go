@@ -163,6 +163,15 @@ func executeCleanTargets(
 func executePreparedCleanTargets(ctx context.Context, targets []preparedCleanTarget, opts activeWorktreeExecutionOptions) (cleanExecutionReceipt, error) {
 	if len(targets) > 0 {
 		defer invalidateLastScanCache()
+		// One full agent-state re-scan per batch: every prepared target in a
+		// batch shares a single refresh memo (prepareCleanExecutionWithOptions
+		// copies the runtime value but the memo is a shared pointer), so
+		// resetting it through any one target resets it for all. The memo still
+		// re-scans within the batch whenever the agent-state entry set changes,
+		// so newly created overlapping state is discovered before each mutation.
+		if safety := targets[0].MutationSafety; safety != nil {
+			safety.runtime.resetRefreshMemo()
+		}
 	}
 	if opts.removeWorktree == nil {
 		opts.removeWorktree = removeGitWorktree
