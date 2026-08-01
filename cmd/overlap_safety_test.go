@@ -1124,3 +1124,152 @@ func makeOverlapCmdSymlinkCycleError(t *testing.T, aliasesRoot string) string {
 	}
 	return alias
 }
+
+func TestRefreshMemoInvalidatesOnFingerprintChangeAndDoesNotCacheErrors(t *testing.T) {
+	ctx := context.Background()
+	key := "v1"
+	fingerprint := func(context.Context) (string, error) { return key, nil }
+	calls := 0
+	refresh := func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
+		calls++
+		if calls == 2 {
+			return cleaner.OverlapSafetyEvidence{}, errors.New("transient scan failure")
+		}
+		return cleaner.OverlapSafetyEvidence{Complete: true}, nil
+	}
+	m := &refreshMemo{}
+
+	// First call scans and caches under v1.
+	if _, err := m.get(ctx, fingerprint, refresh); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("calls=%d; want 1", calls)
+	}
+	// Unchanged fingerprint -> cache hit, no rescan.
+	if _, err := m.get(ctx, fingerprint, refresh); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("calls=%d; want 1 (cache hit on unchanged fingerprint)", calls)
+	}
+	// Fingerprint change -> rescan; the scan error surfaces and is not cached.
+	key = "v2"
+	if _, err := m.get(ctx, fingerprint, refresh); err == nil {
+		t.Fatalf("expected the scan error to surface after fingerprint change")
+	}
+	if calls != 2 {
+		t.Fatalf("calls=%d; want 2 (fingerprint change forces rescan)", calls)
+	}
+	// The error must not be cached: retrying with the same key re-scans.
+	if _, err := m.get(ctx, fingerprint, refresh); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 3 {
+		t.Fatalf("calls=%d; want 3 (error not cached, retry re-scans)", calls)
+	}
+	// The successful result is cached again under v2.
+	if _, err := m.get(ctx, fingerprint, refresh); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 3 {
+		t.Fatalf("calls=%d; want 3 (success cached again)", calls)
+	}
+	// A fingerprint error fails closed by forcing a rescan rather than reusing.
+	fingerprint = func(context.Context) (string, error) { return "", errors.New("fingerprint failure") }
+	if _, err := m.get(ctx, fingerprint, refresh); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 4 {
+		t.Fatalf("calls=%d; want 4 (fingerprint error forces rescan)", calls)
+	}
+}
+
+// TestExecuteOverlapSafetyMemoInvalidatesOnNewEntryAcrossBatch is the
+// regression test for the P1: a batch-scoped refresh memo must not let a later
+// target be deleted when a new overlapping live agent-state entry appears after
+// an earlier target's scan. The fingerprint change must force a rescan so the
+// new entry is discovered and refuses the later mutation.
+func TestExecuteOverlapSafetyMemoInvalidatesOnNewEntryAcrossBatch(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	// Two independent cache targets in one batch; batch-a sorts before batch-b.
+	outerA := filepath.Join(home, ".cache", "batch-a")
+	outerB := filepath.Join(home, ".cache", "batch-b")
+	for _, dir := range []string{outerA, outerB} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "sentinel"), []byte("fixture"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A live agent-state entry nested under target B; it only appears in the
+	// refreshed evidence (simulating creation after target A's scan).
+	newEntry := filepath.Join(outerB, "new-agent-entry")
+	if err := os.MkdirAll(newEntry, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(newEntry, "sentinel"), []byte("fixture"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	lookup := overlapCmdLookup(map[types.Tool]overlapCmdRevalidator{
+		types.ToolClaude: func(context.Context, string) (types.EntryClass, error) {
+			t.Fatal("refusal must precede obligation revalidation for the new live entry")
+			return "", nil
+		},
+	})
+
+	fingerprintCalls := 0
+	fingerprint := func(context.Context) (string, error) {
+		fingerprintCalls++
+		if fingerprintCalls == 1 {
+			return "entry-set-v1", nil
+		}
+		return "entry-set-v2", nil // a new entry appeared before target B
+	}
+	refreshCalls := 0
+	refresh := func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
+		refreshCalls++
+		if refreshCalls == 1 {
+			return cleaner.OverlapSafetyEvidence{Complete: true}, nil
+		}
+		return cleaner.OverlapSafetyEvidence{
+			Items:    []types.DebrisInfo{overlapCmdAgentStateItem(newEntry, types.EntryClassLive)},
+			Complete: true,
+		}, nil
+	}
+
+	runtime := cleanupOverlapSafetyRuntime{
+		Initial:     cleaner.OverlapSafetyEvidence{Complete: true},
+		Refresh:     refresh,
+		Lookup:      lookup,
+		memo:        &refreshMemo{},
+		fingerprint: fingerprint,
+	}
+	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{
+		overlapCmdTarget(outerA, 11),
+		overlapCmdTarget(outerB, 22),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := executeCleanTargets(context.Background(), selection, runtime)
+	// Target B must be refused (new live nested entry); the batch reports an
+	// error but target A is still removed.
+	if err == nil {
+		t.Fatalf("expected refusal for target B after a new live entry appeared")
+	}
+	if receipt.FreedBytes != 11 {
+		t.Fatalf("freed=%d; want 11 (only target A removed)", receipt.FreedBytes)
+	}
+	if refreshCalls != 2 {
+		t.Fatalf("refresh calls=%d; want 2 (fingerprint change must force a rescan for target B)", refreshCalls)
+	}
+	if _, statErr := os.Lstat(filepath.Join(outerA, "sentinel")); !os.IsNotExist(statErr) {
+		t.Fatalf("target A sentinel survived; expected removal: %v", statErr)
+	}
+	assertOverlapSentinelsSurvive(t, filepath.Join(outerB, "sentinel"), filepath.Join(newEntry, "sentinel"))
+}
