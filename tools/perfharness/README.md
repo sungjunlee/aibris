@@ -3,7 +3,8 @@
 An offline measurement harness implementing the **frozen #139 L2 four-pair
 performance + correctness/A-B protocol**. It is the deterministic-input layer
 that issue **#129** owns: it produces reproducible evidence about the
-Codex-sessions retention projection without touching a live home, so that the
+Codex-sessions retention projection without modifying the inventory-bearing
+stores of a live home, so that the
 eventual real-home measurement (the still-open Done Criteria **DC19-21**) can be
 short and low-risk.
 
@@ -46,6 +47,13 @@ This tool **only produces evidence**. It does **not** close DC19-21, does
   `81 orphaned / 44 live / 11 undetermined`); a synthetic home cannot stand in
   for them.
 - It never runs `clean`. It only runs read-only `scan`.
+- It does **not** modify the inventory-bearing stores (sessions, `node_modules`,
+  caches, agent state). Note that `aibris scan` writes its own last-scan and
+  codex-activity caches under the home's cache dir (`<home>/Library/Caches/aibris/`
+  on macOS, `<home>/.cache/aibris/` on Linux) as a normal scan side-effect; with
+  `-home` this lands inside the measured home. These cache paths are excluded
+  from the input fingerprint, so they neither affect measurement validity nor
+  trigger self-inflicted drift.
 
 ## Usage
 
@@ -76,8 +84,8 @@ go run ./tools/perfharness --home "$HOME" --pairs 4 --md-out real-home.md
 | `-quick` | off | tiny synthetic home for a fast smoke run |
 | `-months` | `2024-01..2024-06` | comma-separated UTC month buckets (synthetic) |
 | `-files-per-month` | `40` | rollout leaves per month (synthetic) |
-| `-min-bytes` / `-max-bytes` | `512` / `65536` | apparent-byte range per rollout (synthetic) |
-| `-live-every` | `4` | one live recorded cwd per N rollouts; `0` ⇒ all orphaned (synthetic) |
+| `-min-bytes` / `-max-bytes` | `512` / `4096` | apparent-byte range per rollout (synthetic) |
+| `-live-every` | `3` | one live recorded cwd per N rollouts; `0` ⇒ all orphaned (synthetic) |
 | `-node-modules-files` | `3` | files in the auxiliary node_modules dir; `<=0` omits it (synthetic) |
 | `-workdir` | a temp dir | working dir for exported trees, binaries, and the synthetic home |
 | `-keep` | off | keep the working dir after the run |

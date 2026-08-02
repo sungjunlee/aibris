@@ -117,3 +117,25 @@ func TestParseScanOutputBucketsSorted(t *testing.T) {
 		t.Fatalf("retention sig should be bucket-order-insensitive:\n%s\n%s", rx.RetentionSig, ry.RetentionSig)
 	}
 }
+
+// TestParseScanOutputPreservesLargeIntegers verifies the signatures are
+// number-preserving: integers beyond 2^53 (which float64 cannot represent
+// exactly) must sign by their exact literal value, not a rounded float.
+func TestParseScanOutputPreservesLargeIntegers(t *testing.T) {
+	a := `{"worktrees":[{"path":"/a","category":"node_modules","id":"1","size":9007199254740993}],"summary":{"total_count":1,"total_size":9007199254740993}}`
+	b := `{"worktrees":[{"path":"/a","category":"node_modules","id":"1","size":9007199254740992}],"summary":{"total_count":1,"total_size":9007199254740992}}`
+	ra, err := parseScanOutput([]byte(a))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rb, err := parseScanOutput([]byte(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ra.WorktreesSig == rb.WorktreesSig {
+		t.Fatalf("sizes 2^53+1 and 2^53 must sign differently (number-preserving); both = %s", ra.WorktreesSig)
+	}
+	if ra.SummarySig == rb.SummarySig {
+		t.Fatalf("summary sizes 2^53+1 and 2^53 must sign differently; both = %s", ra.SummarySig)
+	}
+}

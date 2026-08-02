@@ -268,6 +268,10 @@ func rejectReason(base, change Invocation, rep *Report) string {
 	return ""
 }
 
+// durationStats returns the median, min, and max of ds. The median is the
+// upper-middle element for an even-length slice (a "high median"), a common
+// conservative convention in performance reporting. It is an observation only,
+// never a pass/fail, absent a predeclared threshold.
 func durationStats(ds []time.Duration) (median, min, max time.Duration) {
 	s := append([]time.Duration(nil), ds...)
 	sort.Slice(s, func(i, j int) bool { return s[i] < s[j] })

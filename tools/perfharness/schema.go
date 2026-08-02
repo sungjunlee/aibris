@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -59,6 +60,9 @@ type scanResult struct {
 	SummarySig   string
 	RetentionSig string
 	// InventorySig signs the whole comparable output (worktrees+summary+retention).
+	// It is a diagnostic whole-output signature (asserted in tests to prove
+	// additivity); the protocol decision logic instead compares existingInvSig
+	// (worktrees+summary, excluding retention) and RetSig separately.
 	InventorySig string
 
 	Partial bool
@@ -69,6 +73,16 @@ type scanResult struct {
 // input key order.
 func canonicalJSON(v any) ([]byte, error) {
 	return json.Marshal(v)
+}
+
+// decodeUseNumber decodes raw JSON into dst preserving numeric literals as
+// json.Number, so canonicalJSON re-marshals them verbatim. This keeps the
+// inventory/summary signatures number-preserving (no float64 rounding for
+// integers beyond 2^53).
+func decodeUseNumber(raw json.RawMessage, dst any) error {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	return dec.Decode(dst)
 }
 
 func hashHex(b []byte) string {
@@ -123,7 +137,7 @@ func parseScanOutput(data []byte) (*scanResult, error) {
 	res := &scanResult{Partial: env.Partial}
 
 	if len(env.Worktrees) > 0 {
-		if err := json.Unmarshal(env.Worktrees, &res.Worktrees); err != nil {
+		if err := decodeUseNumber(env.Worktrees, &res.Worktrees); err != nil {
 			return nil, fmt.Errorf("decoding worktrees: %w", err)
 		}
 	}
@@ -135,7 +149,7 @@ func parseScanOutput(data []byte) (*scanResult, error) {
 	res.WorktreesSig = hashHex(wb)
 
 	if len(env.Summary) > 0 {
-		if err := json.Unmarshal(env.Summary, &res.Summary); err != nil {
+		if err := decodeUseNumber(env.Summary, &res.Summary); err != nil {
 			return nil, fmt.Errorf("decoding summary: %w", err)
 		}
 	}

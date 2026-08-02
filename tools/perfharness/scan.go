@@ -124,8 +124,10 @@ func hashHomeInputs(home string) (string, int, error) {
 }
 
 // hashCacheIdentity fingerprints the scan cache (empty string if no cache
-// exists yet). The protocol confirms this is stable across measured invocations
-// of a warm series.
+// exists yet). It is captured per invocation as diagnostic evidence in the JSON
+// report; it is NOT an acceptance gate. Determinism is gated by the inventory
+// signature (InvSig/RetSig) and the home input fingerprint, which already catch
+// any home mutation — the cache is an internal detail of `aibris scan`.
 func hashCacheIdentity(home string) string {
 	h := sha256.New()
 	found := false
