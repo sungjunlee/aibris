@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## [0.8.3] - 2026-08-03
+
+### Changed
+
+- Claude and Cursor agent-state scans now size every project-store entry with
+  one batched `du` call instead of one directory walk per entry, matching the
+  existing `node_modules` and worktree sizing path. On Unix the reported
+  agent-state sizes are now physical (block-rounded) bytes, consistent with
+  those categories; item counts and classifications are unchanged, and Windows
+  keeps the walk-based fallback.
+
+### Fixed
+
+- `scan`'s `default clean` figure now applies the same existence filtering and
+  target normalization that `clean` applies before planning, so an eligible
+  target nested inside another eligible target (for example `node_modules`
+  inside an orphaned worktree) is counted once instead of twice, and targets
+  removed between scan and clean stay excluded in both commands. The figure is
+  relabelled `default clean (estimate)` because clean-time safety protections
+  (git safety, overlap safety, scan-evidence filtering, physical owner checks)
+  can still shrink the final plan; `aibris clean --dry-run` shows the exact
+  plan.
+
 ## [0.8.2] - 2026-08-01
 
 ### Changed
