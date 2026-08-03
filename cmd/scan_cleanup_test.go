@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -13,15 +15,24 @@ func TestSummarizeCleanup_EligibilityMatchesFilterForMixedCategories(t *testing.
 	now := time.Now()
 	old := now.Add(-2 * 365 * 24 * time.Hour)
 	recent := now.Add(-time.Hour)
+	base := t.TempDir()
+	existingPath := func(t *testing.T, name string) string {
+		t.Helper()
+		path := filepath.Join(base, name)
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
 	items := []types.DebrisInfo{
-		{ID: "state-orphaned", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassOrphaned, Size: 11, ModTime: recent},
-		{ID: "state-live", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassLive, Size: 13, ModTime: old},
-		{ID: "state-undetermined", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassUndetermined, Size: 17, ModTime: old},
-		{ID: "node-old", Tool: types.ToolNodeModules, Category: types.CategoryNodeModules, Size: 19, ModTime: old},
-		{ID: "node-recent", Tool: types.ToolNodeModules, Category: types.CategoryNodeModules, Size: 23, ModTime: recent},
-		{ID: "cache-old", Tool: types.ToolBuildCache, Category: types.CategoryBuildCache, Size: 29, ModTime: old},
-		{ID: "worktree-active", Tool: types.ToolCodex, Category: types.CategoryWorktree, Status: types.WorktreeActive, Size: 31, ModTime: old},
-		{ID: "logs-old", Tool: types.ToolAILogs, Category: types.CategoryAILogs, Size: 37, ModTime: old},
+		{ID: "state-orphaned", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassOrphaned, Path: existingPath(t, "state-orphaned"), Size: 11, ModTime: recent},
+		{ID: "state-live", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassLive, Path: existingPath(t, "state-live"), Size: 13, ModTime: old},
+		{ID: "state-undetermined", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassUndetermined, Path: existingPath(t, "state-undetermined"), Size: 17, ModTime: old},
+		{ID: "node-old", Tool: types.ToolNodeModules, Category: types.CategoryNodeModules, Path: existingPath(t, "node-old"), Size: 19, ModTime: old},
+		{ID: "node-recent", Tool: types.ToolNodeModules, Category: types.CategoryNodeModules, Path: existingPath(t, "node-recent"), Size: 23, ModTime: recent},
+		{ID: "cache-old", Tool: types.ToolBuildCache, Category: types.CategoryBuildCache, Path: existingPath(t, "cache-old"), Size: 29, ModTime: old},
+		{ID: "worktree-active", Tool: types.ToolCodex, Category: types.CategoryWorktree, Status: types.WorktreeActive, Path: existingPath(t, "worktree-active"), Size: 31, ModTime: old},
+		{ID: "logs-old", Tool: types.ToolAILogs, Category: types.CategoryAILogs, Path: existingPath(t, "logs-old"), Size: 37, ModTime: old},
 	}
 
 	for _, tt := range []struct {
@@ -91,5 +102,113 @@ func TestSummarizeCleanup_EligibilityMatchesFilterForMixedCategories(t *testing.
 				}
 			}
 		})
+	}
+}
+
+func TestSummarizeCleanup_CollapsesNestedEligibleTargetsLikeClean(t *testing.T) {
+	base := t.TempDir()
+	parent := filepath.Join(base, "entry")
+	child := filepath.Join(parent, "node_modules")
+	if err := os.MkdirAll(child, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-30 * 24 * time.Hour)
+	items := []types.DebrisInfo{
+		{ID: "entry", Tool: types.ToolCodex, Category: types.CategoryWorktree, Status: types.WorktreeOrphaned, Path: parent, Size: 100, ModTime: old},
+		{ID: "nested", Tool: types.ToolNodeModules, Category: types.CategoryNodeModules, Path: child, Size: 40, ModTime: old},
+	}
+	opts := types.PruneOptions{Age: 7 * 24 * time.Hour}
+
+	diagnostics := summarizeCleanup(items, opts)
+	if diagnostics.EligibleCount != 1 || diagnostics.EligibleSize != 100 {
+		t.Fatalf("scan diagnostics eligible = %d/%d; want 1 target with the parent size 100",
+			diagnostics.EligibleCount, diagnostics.EligibleSize)
+	}
+
+	// The classic clean pipeline runs the same eligibility, existence, and
+	// normalization stages before planning, so it must collapse the pair the
+	// same way.
+	planned := normalizeCleanTargets(filterExistingTargets(cleaner.Filter(items, opts)))
+	if len(planned) != 1 || planned[0].Size != 100 {
+		t.Fatalf("clean pipeline planned %d targets; want exactly the parent with size 100", len(planned))
+	}
+}
+
+func TestSummarizeCleanup_DropsTargetsRemovedBetweenScanAndSummary(t *testing.T) {
+	gone := filepath.Join(t.TempDir(), "gone")
+	if err := os.MkdirAll(gone, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-30 * 24 * time.Hour)
+	items := []types.DebrisInfo{
+		{ID: "gone", Tool: types.ToolNodeModules, Category: types.CategoryNodeModules, Path: gone, Size: 50, ModTime: old},
+	}
+	if err := os.RemoveAll(gone); err != nil {
+		t.Fatal(err)
+	}
+	opts := types.PruneOptions{Age: 7 * 24 * time.Hour}
+
+	diagnostics := summarizeCleanup(items, opts)
+	if diagnostics.EligibleCount != 0 || diagnostics.EligibleSize != 0 {
+		t.Fatalf("scan diagnostics eligible = %d/%d; want vanished target excluded",
+			diagnostics.EligibleCount, diagnostics.EligibleSize)
+	}
+
+	// Eligibility alone still selects the row; clean's existence filter is
+	// what removes it, and scan now agrees.
+	if targets := cleaner.Filter(items, opts); len(targets) != 1 {
+		t.Fatalf("Filter = %d targets; want 1 (eligibility unchanged)", len(targets))
+	}
+	if planned := filterExistingTargets(cleaner.Filter(items, opts)); len(planned) != 0 {
+		t.Fatalf("clean pipeline planned %d targets; want vanished target excluded", len(planned))
+	}
+}
+
+func TestScanDefaultCleanEstimateMatchesCleanDryRunForNestedTargets(t *testing.T) {
+	resetScanFlags()
+	resetCleanFlags()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	entry := filepath.Join(home, "proj", "worktrees", "entry")
+	nodeModules := filepath.Join(entry, "node_modules")
+	if err := os.MkdirAll(nodeModules, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nodeModules, "dep.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitdir := filepath.Join(home, "gone", ".git", "worktrees", "entry")
+	if err := os.WriteFile(filepath.Join(entry, ".git"), []byte("gitdir: "+gitdir+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-8 * 24 * time.Hour)
+	for _, path := range []string{entry, nodeModules, filepath.Join(entry, ".git"), filepath.Join(nodeModules, "dep.txt")} {
+		if err := os.Chtimes(path, old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	scanOutput := captureOutput(func() {
+		rootCmd.SetArgs([]string{"scan"})
+		rootCmd.Execute()
+	})
+	estimateLine := cliContractLineWithPrefix(t, scanOutput, "default clean (estimate)")
+	estimateSize := strings.Join(strings.Fields(estimateLine)[3:], " ")
+
+	defer withStdin(t, "")()
+	cleanOutput := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--dry-run", "--force"})
+		rootCmd.Execute()
+	})
+	targetsLine := cliContractLineWithPrefix(t, cleanOutput, "targets")
+	fields := strings.Fields(targetsLine)
+	if len(fields) < 4 || fields[1] != "1" {
+		t.Fatalf("clean plan should collapse the nested pair to one target; got %q:\n%s",
+			targetsLine, cleanOutput)
+	}
+	planSize := strings.Join(fields[3:], " ")
+	if planSize != estimateSize {
+		t.Fatalf("scan default clean estimate %q != clean dry-run plan size %q", estimateSize, planSize)
 	}
 }

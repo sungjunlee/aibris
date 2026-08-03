@@ -74,7 +74,7 @@ func TestScanCmd_NoWorktrees(t *testing.T) {
 		rootCmd.SetArgs([]string{"scan"})
 		rootCmd.Execute()
 	})
-	for _, want := range []string{"scan", "roots", "scanning", "found", "summary", "found       0 items", "found size  0 B", "default clean 0 B", "next", "aibris scan --json"} {
+	for _, want := range []string{"scan", "roots", "scanning", "found", "summary", "found       0 items", "found size  0 B", "default clean (estimate) 0 B", "next", "aibris scan --json"} {
 		if !strings.Contains(output, want) {
 			t.Errorf("output missing %q; got: %s", want, output)
 		}
