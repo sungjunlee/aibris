@@ -23,7 +23,7 @@ confirmation, and path safety checks.
 ## What it cleans
 
 | Category | Examples | Default clean |
-|----------|----------|---------------|
+| ---------- | ---------- | --------------- |
 | AI worktrees | Finite known containers plus `$HOME` conventions such as `.tool/worktrees` and project-local `worktrees` | Classic: orphaned; guided Codex: evidence-based |
 | Dependencies | project `node_modules` directories | Yes |
 | Build caches | Go, npm, Gradle, Cargo, Xcode | Yes |
@@ -122,7 +122,7 @@ scan
 summary
   found       4 items
   found size  3.2 GB
-  default clean 3.1 GB
+  default clean (estimate) 3.1 GB
   protected   96.0 MB active worktrees; use --include-active-worktrees after review
 
 by category
@@ -140,6 +140,13 @@ next
   aibris clean --dry-run
   aibris scan --json
 ```
+
+The `default clean` figure is an estimate. `scan` applies the same existence
+filtering and target normalization that `clean` applies, so nested or
+duplicate targets count once; but clean-time safety protections (git safety,
+overlap safety, physical owner checks) can only be resolved by `clean` itself
+and can only shrink the final plan. Run `aibris clean --dry-run` for the
+exact plan.
 
 Preview before deleting anything:
 

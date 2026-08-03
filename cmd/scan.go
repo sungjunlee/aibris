@@ -338,7 +338,7 @@ func printHumanScanResult(ctx context.Context, r *types.ScanResult) {
 	} else {
 		defaultPolicy := types.PruneOptions{Age: 7 * 24 * time.Hour}
 		diagnostics := summarizeCleanup(r.Worktrees, defaultPolicy)
-		fmt.Printf("  default clean %s\n", cleaner.FormatSize(diagnostics.EligibleSize))
+		fmt.Printf("  default clean (estimate) %s\n", cleaner.FormatSize(diagnostics.EligibleSize))
 		printCleanupDiagnostics(diagnostics, defaultPolicy)
 	}
 
@@ -494,11 +494,11 @@ type cleanupDiagnosticBucket struct {
 func summarizeCleanup(items []types.DebrisInfo, opts types.PruneOptions) cleanupDiagnostics {
 	observedAt := time.Now()
 	var summary cleanupDiagnostics
+	var eligible []types.DebrisInfo
 	for _, item := range items {
-		eligible, reason := cleaner.EvaluateEligibility(item, opts, observedAt)
-		if eligible {
-			summary.EligibleCount++
-			summary.EligibleSize += item.Size
+		isEligible, reason := cleaner.EvaluateEligibility(item, opts, observedAt)
+		if isEligible {
+			eligible = append(eligible, item)
 			continue
 		}
 		switch reason {
@@ -529,6 +529,18 @@ func summarizeCleanup(items []types.DebrisInfo, opts types.PruneOptions) cleanup
 			bucket.Size += item.Size
 			summary.OtherBlocked[reason] = bucket
 		}
+	}
+	// clean applies the same existence filter and target normalization before
+	// planning an execution, so the estimate counts each physical deletion
+	// once: canonical aliases dedupe, eligible children nested inside an
+	// eligible parent collapse to the parent, and vanished paths drop out.
+	// Remaining clean-time safety protections (git safety, overlap safety,
+	// physical owner checks) can only reduce the final plan, which is why the
+	// figure is labelled an estimate.
+	planned := normalizeCleanTargets(filterExistingTargets(eligible))
+	for _, target := range planned {
+		summary.EligibleCount++
+		summary.EligibleSize += target.Size
 	}
 	return summary
 }
