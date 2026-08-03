@@ -147,11 +147,17 @@ func TestAgentStateCLIContract(t *testing.T) {
 		"targets    1 item",
 		"removed    1 item",
 		"failed     0 items",
-		"freed      " + cleaner.FormatSize(int64(len(claudeOrphanEvidence))),
 	} {
 		if !strings.Contains(receiptOutput, want) {
 			t.Fatalf("agent-state receipt missing %q:\n%s", want, receiptOutput)
 		}
+	}
+	// Freed is reported in on-disk block-rounded units (batched du) on Unix and
+	// apparent bytes (WalkDir) on Windows, so no single exact byte value is
+	// portable across platforms. Assert a positive freed amount instead.
+	freedFields := strings.Fields(cliContractLineWithPrefix(t, receiptOutput, "freed"))
+	if len(freedFields) < 3 || freedFields[1] == "0" {
+		t.Fatalf("agent-state receipt reports no freed bytes (want positive):\n%s", receiptOutput)
 	}
 	if _, statErr := os.Stat(claudeOrphan); !os.IsNotExist(statErr) {
 		t.Fatalf("orphaned Claude state still exists after cleanup: %v", statErr)

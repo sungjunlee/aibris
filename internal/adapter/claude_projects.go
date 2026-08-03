@@ -71,21 +71,24 @@ func (a *ClaudeProjectAdapter) Scan(ctx context.Context, opts types.ScanOptions)
 		if err != nil {
 			return nil, err
 		}
-		size := estimateDirSize(ctx, entryPath)
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
 		results = append(results, types.DebrisInfo{
 			Tool:           types.ToolClaude,
 			Category:       types.CategoryAgentState,
 			ID:             entry.Name(),
 			Project:        project,
 			Path:           entryPath,
-			Size:           size,
 			ModTime:        info.ModTime(),
 			Classification: classification,
 			Reason:         reason,
 		})
+	}
+	sizePaths := make([]string, 0, len(results))
+	for _, result := range results {
+		sizePaths = append(sizePaths, result.Path)
+	}
+	sizes := estimateDirSizes(ctx, sizePaths)
+	for i := range results {
+		results[i].Size = sizes[results[i].Path]
 	}
 	return results, nil
 }
