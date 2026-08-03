@@ -8,3 +8,6 @@
 *.out
 *.prof
 cover.html
+
+# local AI-tooling artifacts
+.pi-subagents/
