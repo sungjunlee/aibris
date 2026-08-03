@@ -87,6 +87,9 @@ func (a *CursorAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([]typ
 		sizePaths = append(sizePaths, result.Path)
 	}
 	sizes := estimateDirSizes(ctx, sizePaths)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	for i := range results {
 		results[i].Size = sizes[results[i].Path]
 	}
