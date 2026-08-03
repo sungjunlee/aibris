@@ -144,7 +144,8 @@ next
 The `default clean` figure is an estimate. `scan` applies the same existence
 filtering and target normalization that `clean` applies, so nested or
 duplicate targets count once; but clean-time safety protections (git safety,
-overlap safety, physical owner checks) can only be resolved by `clean` itself
+overlap safety, scan-evidence filtering, physical owner checks) can only be
+resolved by `clean` itself
 and can only shrink the final plan. Run `aibris clean --dry-run` for the
 exact plan.
 

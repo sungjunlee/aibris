@@ -535,8 +535,8 @@ func summarizeCleanup(items []types.DebrisInfo, opts types.PruneOptions) cleanup
 	// once: canonical aliases dedupe, eligible children nested inside an
 	// eligible parent collapse to the parent, and vanished paths drop out.
 	// Remaining clean-time safety protections (git safety, overlap safety,
-	// physical owner checks) can only reduce the final plan, which is why the
-	// figure is labelled an estimate.
+	// scan-evidence filtering, physical owner checks) can only reduce the final
+	// plan, which is why the figure is labelled an estimate.
 	planned := normalizeCleanTargets(filterExistingTargets(eligible))
 	for _, target := range planned {
 		summary.EligibleCount++
