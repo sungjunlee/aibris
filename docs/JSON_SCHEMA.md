@@ -1,9 +1,19 @@
 # aibris JSON Output Schema
 
-`aibris scan --json` outputs the following JSON structure.
+`aibris scan --json` outputs the following JSON structure. The output is
+versioned; the top-level `schema_version` tells consumers which contract to
+branch on.
 
-Compatibility note: the top-level array is named `worktrees` for historical
-reasons, but it contains all debris items, including caches and `node_modules`.
+## Versioning
+
+- `schema_version` is `1` today. Consumers must treat an unknown (newer)
+  `schema_version` as unsupported and stop rather than assume the shape.
+- The canonical all-debris array is `items`; it represents every debris
+  category.
+- The historical field name `worktrees` is retained as a **0.x compatibility
+  alias** and mirrors `items` exactly. It exists so existing 0.x consumers do
+  not break, and is scheduled for removal after the 0.x compatibility period.
+  New consumers should read `items`.
 
 The installed/regenerable/protected terms used by the issue #142 planning
 taxonomy are not JSON fields or values. They do not extend `category` or
@@ -26,6 +36,24 @@ and must not use a partial inventory as cleanup authorization.
 
 ```json
 {
+  "schema_version": 1,
+  "items": [
+    {
+      "tool": "codex",
+      "category": "worktree",
+      "id": "abc123",
+      "project": "my-project",
+      "source": ".codex",
+      "path": "/Users/user/.codex/worktrees/abc123",
+      "size": 102400,
+      "mod_time": "2026-05-25T12:00:00Z",
+      "status": "orphaned",
+      "risk": "low",
+      "reason": "orphaned worktree; parent repo metadata missing",
+      "cleanup_kind": "remove-path",
+      "cleanup_command": []
+    }
+  ],
   "worktrees": [
     {
       "tool": "codex",
@@ -79,13 +107,30 @@ result.
 
 ## Fields
 
-### `worktrees` array
-
-This array contains debris items from every category. Consumers should treat it
-as an item list, not as a worktree-only list.
+### `schema_version`
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `schema_version` | integer | Top-level contract version. `1` today; unknown values are unsupported. |
+
+### `items` array (canonical)
+
+`items` is the canonical all-debris array. It contains one entry per debris
+item from every category (worktrees, caches, `node_modules`, logs, agent
+state). Its field set is identical to `worktrees`.
+
+### `worktrees` array (0.x compatibility alias)
+
+`worktrees` is the historical 0.x array name and is retained as a documented
+compatibility alias. It is byte-for-byte identical to `items`. Consumers should
+read `items`; the `worktrees` field is scheduled for removal after the 0.x
+compatibility period.
+
+It contains debris items from every category. Consumers should treat it as an
+item list, not as a worktree-only list.
+
+| Field | Type | Description |
+| ------- | ------ | ------------- |
 | `tool` | string | Tool name (`codex`, `claude`, `unknown`, `cursor`, `windsurf`, `node_modules`, `build-cache`, `pip-cache`, `ai-logs`). Generic worktree owners may remain `unknown`. |
 | `category` | string | Debris category (`worktree`, `node_modules`, `build-cache`, `other-cache`, `agent-state`, `ai-logs`). Cursor entries under `~/.cursor/projects` use `agent-state`, not `ai-logs`. |
 | `id` | string | Unique identifier (hash, directory name, or cache key) |
@@ -119,8 +164,9 @@ Orphaned Cursor entries are eligible for default cleanup without an age gate;
 `live` and `undetermined` entries remain protected.
 
 ### `summary` object
+
 | Field | Type | Description |
-|-------|------|-------------|
+| ------- | ------ | ------------- |
 | `total_count` | integer | Total number of debris items |
 | `total_size` | integer | Total size in bytes |
 | `by_category` | object | Per-category counts and sizes |
@@ -134,6 +180,7 @@ Orphaned Cursor entries are eligible for default cleanup without an age gate;
 | `provider_errors` | array | Failed provider names and related error messages; present only for partial scans |
 
 ### `by_category` / `by_tool` entries
+
 | Field | Type | Description |
 |-------|------|-------------|
 | `count` | integer | Number of items |

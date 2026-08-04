@@ -22,6 +22,12 @@ import (
 var (
 	scanJSON  bool
 	scanRoots []string
+
+	// scanJSONSchemaVersion is the version of the top-level `scan --json`
+	// contract. Consumers should treat an unknown version as unsupported. The
+	// historical `worktrees` field stays as a 0.x compatibility alias for the
+	// canonical `items` array during the 0.x period (see docs/JSON_SCHEMA.md).
+	scanJSONSchemaVersion = 1
 )
 
 var scanCmd = &cobra.Command{
@@ -111,16 +117,21 @@ type jsonProviderError struct {
 }
 
 type jsonOutput struct {
+	SchemaVersion  int                 `json:"schema_version"`
 	Worktrees      []jsonWorktree      `json:"worktrees"`
+	Items          []jsonWorktree      `json:"items"`
 	Summary        jsonSummary         `json:"summary"`
 	Partial        bool                `json:"partial,omitempty"`
 	ProviderErrors []jsonProviderError `json:"provider_errors,omitempty"`
 }
 
 func printJSON(r *types.ScanResult) {
+	items := make([]jsonWorktree, len(r.Worktrees))
 	out := jsonOutput{
-		Worktrees: make([]jsonWorktree, len(r.Worktrees)),
-		Partial:   r.Partial(),
+		SchemaVersion: scanJSONSchemaVersion,
+		Worktrees:     items,
+		Items:         items,
+		Partial:       r.Partial(),
 		Summary: jsonSummary{
 			TotalCount: r.TotalCount,
 			TotalSize:  r.TotalSize,
@@ -139,7 +150,7 @@ func printJSON(r *types.ScanResult) {
 		if cleanupCommand == nil {
 			cleanupCommand = []string{}
 		}
-		out.Worktrees[i] = jsonWorktree{
+		items[i] = jsonWorktree{
 			Tool:           string(w.Tool),
 			Category:       string(w.Category),
 			ID:             w.ID,
