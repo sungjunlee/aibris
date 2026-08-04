@@ -51,6 +51,17 @@ outlier pair cannot trip CI:
 4. at least `quorum` (default 0.67) of the *accepted* pairs individually exceed
    `-threshold` (the majority guard).
 
+Note on the majority guard: because the median is the **high-median** (upper
+middle element) and pairs count strictly above the threshold, at the default
+four-pair configuration (accepted count ∈ {3, 4, 5}) a median above the
+threshold already implies the quorum is met — the high-median alone prevents a
+single outlier from tripping CI. The `-quorum` guard only becomes binding when
+`-pairs` is raised above 5, where it additionally requires the regression to be
+broad (a majority of accepted pairs) rather than concentrated. This is a
+deliberate anti-flake vs. false-negative trade-off: with `acceptedN ≥ 6`, a
+regression that affects only half the pairs is reported as `no regression …
+treated as noise`.
+
 If the median exceeds the threshold but the quorum is not met, the verdict is
 `no regression … treated as noise`. With fewer than `-min-pairs` accepted pairs
 the verdict is `inconclusive`. Every report is labelled with its `platform`

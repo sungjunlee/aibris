@@ -184,6 +184,10 @@ func TestVerdict(t *testing.T) {
 	}
 
 	// Noise, not regression: median above threshold but quorum not met.
+	// Not reachable at the default four-pair config (high-median already implies
+	// the quorum for acceptedN <= 5); here it validates the branch in isolation
+	// for larger -pairs where a regression affecting only half the pairs is
+	// correctly reported as noise, not a false regression.
 	r = base()
 	r.ThresholdSet = true
 	r.Threshold = 4 * time.Second
