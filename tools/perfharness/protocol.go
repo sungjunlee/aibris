@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"runtime"
 	"sort"
 	"time"
 )
@@ -76,6 +77,10 @@ type Report struct {
 	Max          time.Duration   `json:"max_ns"`
 	ThresholdSet bool            `json:"threshold_set"`
 	Threshold    time.Duration   `json:"threshold_ns"`
+	MinPairs     int             `json:"min_pairs"`
+	Quorum       float64         `json:"quorum"`
+	Exceeding    int             `json:"exceeding_pairs"`
+	Platform     string          `json:"platform"`
 	Verdict      string          `json:"verdict"`
 }
 
@@ -95,9 +100,22 @@ func pairSequence(n int) []string {
 }
 
 // Measure runs the four-pair protocol against a pre-generated synthetic home.
-func Measure(baseBin, changeBin *Binary, home, homeDesc string, pairs int, threshold time.Duration, thresholdSet bool, tmpDir string) (*Report, error) {
+// minPairs is the minimum number of drift-free pairs required before any
+// pass/fail verdict can be issued (below it the result is inconclusive); quorum
+// is the fraction of accepted pairs that must individually exceed the threshold
+// for a regression to be declared (the non-flaky majority guard).
+func Measure(baseBin, changeBin *Binary, home, homeDesc string, pairs int, threshold time.Duration, thresholdSet bool, minPairs int, quorum float64, tmpDir string) (*Report, error) {
 	if pairs <= 0 {
 		pairs = 4
+	}
+	if minPairs <= 0 {
+		minPairs = 1
+	}
+	if quorum <= 0 {
+		quorum = 1
+	}
+	if quorum > 1 {
+		quorum = 1
 	}
 	rep := &Report{
 		BaseRef: baseBin.SourceRef, ChangeRef: changeBin.SourceRef,
@@ -105,6 +123,8 @@ func Measure(baseBin, changeBin *Binary, home, homeDesc string, pairs int, thres
 		BaseBinSHA: baseBin.SHA256, ChangeBinSHA: changeBin.SHA256,
 		HomeDesc: homeDesc, Pairs: pairs,
 		ThresholdSet: thresholdSet, Threshold: threshold,
+		MinPairs: minPairs, Quorum: quorum,
+		Platform: runtime.GOOS + "/" + runtime.GOARCH,
 	}
 
 	inputStart, _, err := hashHomeInputs(home)
@@ -181,6 +201,7 @@ func Measure(baseBin, changeBin *Binary, home, homeDesc string, pairs int, thres
 	if len(accepted) > 0 {
 		rep.Median, rep.Min, rep.Max = durationStats(accepted)
 	}
+	rep.Exceeding = countExceeding(accepted, threshold)
 	rep.Verdict = verdict(rep)
 	return rep, nil
 }
@@ -292,9 +313,46 @@ func verdict(rep *Report) string {
 		return fmt.Sprintf("inconclusive: no predeclared threshold (observation only; median %s, range [%s, %s] over %d drift-free pair(s))",
 			rep.Median, rep.Min, rep.Max, rep.AcceptedN)
 	}
-	if rep.Median > rep.Threshold {
-		return fmt.Sprintf("regression: median change-minus-base %s exceeds threshold %s", rep.Median, rep.Threshold)
+	if rep.AcceptedN < rep.MinPairs {
+		return fmt.Sprintf("inconclusive: only %d drift-free pair(s); need >= %d (min-pairs) for a pass/fail verdict",
+			rep.AcceptedN, rep.MinPairs)
 	}
-	return fmt.Sprintf("within threshold: median change-minus-base %s <= %s (range [%s, %s] over %d drift-free pair(s))",
-		rep.Median, rep.Threshold, rep.Min, rep.Max, rep.AcceptedN)
+	medianExceeds := rep.Median > rep.Threshold
+	majorityMet := rep.Exceeding >= majorityNeeded(rep.AcceptedN, rep.Quorum)
+	switch {
+	case medianExceeds && majorityMet:
+		return fmt.Sprintf("regression: median change-minus-base %s exceeds threshold %s and %d/%d accepted pair(s) exceed individually (quorum %.2f)",
+			rep.Median, rep.Threshold, rep.Exceeding, rep.AcceptedN, rep.Quorum)
+	case medianExceeds:
+		return fmt.Sprintf("no regression: median %s exceeds threshold %s but only %d/%d accepted pair(s) exceed individually (need >= %d for quorum %.2f); treated as noise",
+			rep.Median, rep.Threshold, rep.Exceeding, rep.AcceptedN, majorityNeeded(rep.AcceptedN, rep.Quorum), rep.Quorum)
+	default:
+		return fmt.Sprintf("within threshold: median change-minus-base %s <= %s (range [%s, %s] over %d drift-free pair(s), %d exceed individually)",
+			rep.Median, rep.Threshold, rep.Min, rep.Max, rep.AcceptedN, rep.Exceeding)
+	}
+}
+
+// countExceeding returns how many accepted deltas exceed the threshold. With no
+// predeclared threshold it is always zero.
+func countExceeding(accepted []time.Duration, threshold time.Duration) int {
+	n := 0
+	for _, d := range accepted {
+		if threshold > 0 && d > threshold {
+			n++
+		}
+	}
+	return n
+}
+
+// majorityNeeded returns the number of accepted pairs that must individually
+// exceed the threshold for a regression: at least quorum (scaled up, minimum 1).
+func majorityNeeded(acceptedN int, quorum float64) int {
+	need := int(quorum * float64(acceptedN))
+	if need < 1 {
+		need = 1
+	}
+	if need > acceptedN {
+		need = acceptedN
+	}
+	return need
 }

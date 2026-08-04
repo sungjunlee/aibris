@@ -122,7 +122,10 @@ func TestVerdict(t *testing.T) {
 		return &Report{
 			Correctness: Correctness{NonInterference: true, Additive: true},
 			InputStable: true,
-			AcceptedN:   2,
+			AcceptedN:   3,
+			Quorum:      0.67,
+			MinPairs:    3,
+			Accepted:    []time.Duration{5 * time.Second, 5 * time.Second, 5 * time.Second},
 			Median:      5 * time.Second,
 			Min:         1 * time.Second,
 			Max:         9 * time.Second,
@@ -149,6 +152,7 @@ func TestVerdict(t *testing.T) {
 
 	r = base()
 	r.AcceptedN = 0
+	r.Accepted = nil
 	if v := verdict(r); !strings.HasPrefix(v, "inconclusive: no drift-free pairs") {
 		t.Fatalf("verdict = %q; want inconclusive: no drift-free pairs", v)
 	}
@@ -159,18 +163,61 @@ func TestVerdict(t *testing.T) {
 		t.Fatalf("verdict = %q; want inconclusive: no predeclared threshold...", v)
 	}
 
+	// Below min-pairs: no pass/fail verdict even with a threshold.
+	r = base()
+	r.ThresholdSet = true
+	r.Threshold = 4 * time.Second
+	r.Exceeding = 3
+	r.AcceptedN = 2
+	r.Accepted = []time.Duration{5 * time.Second, 5 * time.Second}
+	if v := verdict(r); !strings.HasPrefix(v, "inconclusive: only 2 drift-free pair(s)") {
+		t.Fatalf("verdict = %q; want inconclusive below min-pairs", v)
+	}
+
+	// Regression: median above threshold AND majority individually exceed.
 	r = base()
 	r.ThresholdSet = true
 	r.Threshold = 4 * time.Second // median 5s > 4s
+	r.Exceeding = 3               // quorum 0.67 of 3 = 2, so 3 meets it
 	if v := verdict(r); !strings.HasPrefix(v, "regression") {
 		t.Fatalf("verdict = %q; want regression...", v)
 	}
 
+	// Noise, not regression: median above threshold but quorum not met.
+	r = base()
+	r.ThresholdSet = true
+	r.Threshold = 4 * time.Second
+	r.Exceeding = 1 // quorum 0.67 of 3 = 2, so 1 is insufficient
+	if v := verdict(r); !strings.HasPrefix(v, "no regression") {
+		t.Fatalf("verdict = %q; want no regression (noise)...", v)
+	}
+
+	// Within threshold: median at/below threshold.
 	r = base()
 	r.ThresholdSet = true
 	r.Threshold = 6 * time.Second // median 5s <= 6s
+	r.Exceeding = 0
 	if v := verdict(r); !strings.HasPrefix(v, "within threshold") {
 		t.Fatalf("verdict = %q; want within threshold...", v)
+	}
+}
+
+func TestCountExceedingAndMajorityNeeded(t *testing.T) {
+	if got := countExceeding([]time.Duration{time.Millisecond, 2 * time.Millisecond, 3 * time.Millisecond, 10 * time.Millisecond}, 5*time.Millisecond); got != 1 {
+		t.Fatalf("countExceeding = %d; want 1", got)
+	}
+	// No threshold => always zero.
+	if got := countExceeding([]time.Duration{time.Millisecond, 2 * time.Millisecond, 3 * time.Millisecond, 10 * time.Millisecond}, 0); got != 0 {
+		t.Fatalf("countExceeding (no threshold) = %d; want 0", got)
+	}
+	if got := majorityNeeded(3, 0.67); got != 2 {
+		t.Fatalf("majorityNeeded(3, 0.67) = %d; want 2", got)
+	}
+	if got := majorityNeeded(4, 0.5); got != 2 {
+		t.Fatalf("majorityNeeded(4, 0.5) = %d; want 2", got)
+	}
+	if got := majorityNeeded(4, 1.0); got != 4 {
+		t.Fatalf("majorityNeeded(4, 1.0) = %d; want 4", got)
 	}
 }
 

@@ -40,6 +40,23 @@ This tool **only produces evidence**. It does **not** close DC19-21, does
    not a pass/fail), exactly as the frozen protocol requires; `#129` owns the
    non-flaky threshold.
 
+## Non-flaky threshold verdict
+
+A regression is declared only when **all** of these hold, so a single noisy
+outlier pair cannot trip CI:
+
+1. correctness A/B passes and the series is drift-free;
+2. at least `-min-pairs` (default 3) drift-free pairs are accepted;
+3. the median `change-minus-base` exceeds `-threshold`; **and**
+4. at least `quorum` (default 0.67) of the *accepted* pairs individually exceed
+   `-threshold` (the majority guard).
+
+If the median exceeds the threshold but the quorum is not met, the verdict is
+`no regression … treated as noise`. With fewer than `-min-pairs` accepted pairs
+the verdict is `inconclusive`. Every report is labelled with its `platform`
+(`GOOS/GOARCH`), so baselines can be recorded and compared per OS (macOS vs
+Linux).
+
 ## What it does NOT do
 
 - It does **not** verify the real-home Done Criteria (DC19-21). Those require a
@@ -80,6 +97,8 @@ go run ./tools/perfharness --home "$HOME" --pairs 4 --md-out real-home.md
 | `-change` | `issue-139-codex-sessions-retention-inventory` | change git ref |
 | `-pairs` | `4` | number of adjacent base/change pairs |
 | `-threshold` | `0` | predeclared regression threshold for the median `change-minus-base` (`0` ⇒ report inconclusive) |
+| `-min-pairs` | `3` | minimum drift-free pairs required before a pass/fail threshold verdict is issued |
+| `-quorum` | `0.67` | fraction of accepted pairs that must individually exceed `-threshold` for a regression (the non-flaky majority guard) |
 | `-home` | (unset) | measure an existing home instead of generating a synthetic one |
 | `-quick` | off | tiny synthetic home for a fast smoke run |
 | `-months` | `2024-01..2024-06` | comma-separated UTC month buckets (synthetic) |

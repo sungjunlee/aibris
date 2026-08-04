@@ -41,6 +41,8 @@ func RenderMarkdown(rep *Report) string {
 	w("")
 	w("## Immutable inputs")
 	w("")
+	w("Platform: `%s`", rep.Platform)
+	w("")
 	w("| | base | change |")
 	w("| --- | --- | --- |")
 	w("| source ref | `%s` | `%s` |", rep.BaseRef, rep.ChangeRef)
@@ -93,7 +95,8 @@ func RenderMarkdown(rep *Report) string {
 	if rep.AcceptedN > 0 {
 		w("- median / min / max: %s / %s / %s", dur(rep.Median), dur(rep.Min), dur(rep.Max))
 		if rep.ThresholdSet {
-			w("- predeclared threshold: %s", dur(rep.Threshold))
+			w("- predeclared threshold: %s; min-pairs %d; quorum %.2f; %d accepted pair(s) exceed individually",
+				dur(rep.Threshold), rep.MinPairs, rep.Quorum, rep.Exceeding)
 		} else {
 			w("- predeclared threshold: none (series is an observation, not a pass/fail)")
 		}
