@@ -18,6 +18,11 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: "1.26"
+      - name: Validate curated Windows release status
+        env:
+          RELEASE_NOTES: .github/release-notes/${{ github.ref_name }}.md
+        run: |
+          .github/scripts/validate-windows-release-status.sh "$RELEASE_NOTES"
       - uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser

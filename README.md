@@ -76,12 +76,9 @@ add it for your shell. For a system-wide install, pass an explicit prefix:
 curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.sh | bash -s -- --prefix /usr/local/bin
 ```
 
-Windows archives are currently experimental. Pull-request CI runs native
-recorded-cwd safety and platform-safe command tests plus vet on
-`windows-latest`, but `install.sh` is a Bash installer and the complete
-adapter/cache coverage has not yet been audited for Windows. Native Windows
-users should download the matching `aibris_windows_*.zip` and `checksums.txt`
-from GitHub Releases, verify the checksum, and place `aibris.exe` on `PATH`.
+Windows archives are experimental. See the canonical
+[Windows support contract](docs/WINDOWS.md) for native installation, tested
+behavior, and unaudited boundaries. `install.sh` remains Unix/Bash-only.
 
 ### Usage
 
