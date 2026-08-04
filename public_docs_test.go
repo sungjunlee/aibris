@@ -65,6 +65,32 @@ func TestPublicDocumentationLocalLinks(t *testing.T) {
 	}
 }
 
+func TestScanJSONSchemaVersioningDocumented(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("docs", "JSON_SCHEMA.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	for _, want := range []string{
+		"schema_version",
+		"`items` is the canonical all-debris array",
+		"0.x compatibility\n  alias",
+		"mirrors `items` exactly",
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf("docs/JSON_SCHEMA.md must document %q", want)
+		}
+	}
+	// The canonical items array and the 0.x worktrees alias must both appear in
+	// the top-level structure fixture with identical item content.
+	if !strings.Contains(content, `"schema_version": 1,`+"\n"+`  "items": [`) {
+		t.Errorf("docs/JSON_SCHEMA.md top-level fixture must lead with schema_version then items")
+	}
+	if !strings.Contains(content, `"worktrees": [`) {
+		t.Errorf("docs/JSON_SCHEMA.md must retain the worktrees compatibility alias in the fixture")
+	}
+}
+
 func TestWindowsReleaseDocumentationContract(t *testing.T) {
 	read := func(path string) string {
 		t.Helper()

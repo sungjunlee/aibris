@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -368,23 +369,6 @@ func createCleanCodexGitWorktree(t *testing.T, home, id string) string {
 	}
 	runGitFixture(t, repository, "worktree", "add", "-b", id, worktree, "HEAD")
 	return worktree
-}
-
-func runGit(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	if dir != "" {
-		cmd.Dir = dir
-	}
-	cmd.Env = append(os.Environ(),
-		"GIT_AUTHOR_NAME=Aibris Test",
-		"GIT_AUTHOR_EMAIL=test@example.com",
-		"GIT_COMMITTER_NAME=Aibris Test",
-		"GIT_COMMITTER_EMAIL=test@example.com",
-	)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, out)
-	}
 }
 
 func saveFreshCodexActivityCacheFixture(t *testing.T) {
@@ -2266,6 +2250,25 @@ func TestPrintJSON_WithData(t *testing.T) {
 	}
 	if out.Summary.TotalSize != 307200 {
 		t.Errorf("TotalSize = %d; want 307200", out.Summary.TotalSize)
+	}
+	if out.SchemaVersion != scanJSONSchemaVersion {
+		t.Errorf("SchemaVersion = %d; want %d", out.SchemaVersion, scanJSONSchemaVersion)
+	}
+	if len(out.Items) != len(out.Worktrees) {
+		t.Fatalf("Items = %d; Worktrees = %d; want both 2", len(out.Items), len(out.Worktrees))
+	}
+	// Items is the canonical array; it must exactly mirror Worktrees (the 0.x
+	// compatibility alias).
+	itemsJSON, err := json.Marshal(out.Items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	worktreesJSON, err := json.Marshal(out.Worktrees)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(itemsJSON, worktreesJSON) {
+		t.Errorf("items and worktrees arrays differ:\nitems=%s\nworktrees=%s", itemsJSON, worktreesJSON)
 	}
 	if len(out.Worktrees) != 2 {
 		t.Fatalf("Worktrees = %d; want 2", len(out.Worktrees))
