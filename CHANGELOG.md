@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## [0.8.4] - 2026-08-04
+
+### Added
+
+- `aibris scan --json` output is now versioned. It emits a top-level
+  `schema_version` (`1` today) and a canonical `items` array representing
+  every debris category. The historical `worktrees` field is retained as a
+  documented 0.x compatibility alias that mirrors `items` exactly, so existing
+  consumers keep working. See `docs/JSON_SCHEMA.md`.
+- A Windows support contract is now documented (`docs/WINDOWS.md`) and
+  enforced: the release workflow requires every curated release notes file to
+  contain a non-empty `## Windows status` section. Windows archives remain
+  experimental.
+
 ## [0.8.3] - 2026-08-03
 
 ### Changed
