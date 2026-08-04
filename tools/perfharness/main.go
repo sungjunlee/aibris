@@ -30,6 +30,8 @@ func run() error {
 		liveEvery     = flag.Int("live-every", 3, "one live cwd per N rollouts (0 = all orphaned)")
 		nmFiles       = flag.Int("node-modules-files", 3, "files in the auxiliary node_modules dir (<=0 omits it)")
 		threshold     = flag.Duration("threshold", 0, "predeclared regression threshold for median change-minus-base (0 = report inconclusive)")
+		minPairs      = flag.Int("min-pairs", 3, "minimum drift-free pairs required for a pass/fail threshold verdict")
+		quorum        = flag.Float64("quorum", 0.67, "fraction of accepted pairs that must individually exceed the threshold for a regression")
 		workdirFlag   = flag.String("workdir", "", "working directory for exported trees/binaries/home (default: a temp dir)")
 		keep          = flag.Bool("keep", false, "keep the working directory after the run")
 		jsonOut       = flag.String("json-out", "", "write the JSON report to this path")
@@ -124,7 +126,7 @@ func run() error {
 	}
 
 	fmt.Fprintf(os.Stderr, "running %d-pair measurement on %s...\n", *pairs, homeDesc)
-	rep, err := Measure(baseBin, changeBin, home, homeDesc, *pairs, *threshold, *threshold > 0, tmpDir)
+	rep, err := Measure(baseBin, changeBin, home, homeDesc, *pairs, *threshold, *threshold > 0, *minPairs, *quorum, tmpDir)
 	if err != nil {
 		return err
 	}
