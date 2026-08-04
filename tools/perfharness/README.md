@@ -53,7 +53,7 @@ outlier pair cannot trip CI:
 
 Note on the majority guard: because the median is the **high-median** (upper
 middle element) and pairs count strictly above the threshold, at the default
-four-pair configuration (accepted count ∈ {3, 4, 5}) a median above the
+four-pair configuration (accepted count ∈ {3, 4}) a median above the
 threshold already implies the quorum is met — the high-median alone prevents a
 single outlier from tripping CI. The `-quorum` guard only becomes binding when
 `-pairs` is raised above 5, where it additionally requires the regression to be
