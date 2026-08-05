@@ -1357,3 +1357,113 @@ func TestAgentStateEntryFingerprintTracksEntrySet(t *testing.T) {
 		t.Fatalf("fingerprint aliased {a,b} with {a},{b}: %q", single)
 	}
 }
+
+func TestAgentStateEntryFingerprintEnumeratesAgentStateRoots(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	ctx := context.Background()
+
+	roots, err := adapter.AgentStateStoreRoots()
+	if err != nil {
+		t.Fatal(err)
+	}
+	claudeRoot, cursorRoot := roots[0], roots[1]
+	if err := os.MkdirAll(filepath.Join(claudeRoot, "claude-entry"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(cursorRoot, "cursor-entry"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	key, err := agentStateEntryFingerprint(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, root := range roots {
+		if !strings.Contains(key, root) {
+			t.Fatalf("fingerprint key %q does not enumerate root %q", key, root)
+		}
+	}
+	for _, name := range []string{"claude-entry", "cursor-entry"} {
+		if !strings.Contains(key, name) {
+			t.Fatalf("fingerprint key %q does not reflect entry %q", key, name)
+		}
+	}
+
+	// Adding an entry changes the key.
+	if err := os.MkdirAll(filepath.Join(cursorRoot, "cursor-entry-two"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	afterAdd, err := agentStateEntryFingerprint(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterAdd == key {
+		t.Fatalf("fingerprint did not change after adding an entry")
+	}
+
+	// Creating a previously absent root changes the key.
+	home2 := t.TempDir()
+	t.Setenv("HOME", home2)
+	roots2, err := adapter.AgentStateStoreRoots()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(roots2[0], 0o755); err != nil {
+		t.Fatal(err)
+	}
+	oneRoot, err := agentStateEntryFingerprint(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(roots2[1], 0o755); err != nil {
+		t.Fatal(err)
+	}
+	twoRoots, err := agentStateEntryFingerprint(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if twoRoots == oneRoot {
+		t.Fatalf("fingerprint did not change after creating a root")
+	}
+}
+
+func TestAgentStateEntryFingerprintCoversProviderRoots(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	ctx := context.Background()
+
+	roots, err := adapter.AgentStateStoreRoots()
+	if err != nil {
+		t.Fatal(err)
+	}
+	known := make(map[string]bool, len(roots))
+	for _, root := range roots {
+		known[root] = true
+		if err := os.MkdirAll(root, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	key, err := agentStateEntryFingerprint(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, root := range roots {
+		if !strings.Contains(key, root+"\x00") {
+			t.Fatalf("fingerprint key %q does not enumerate root %q", key, root)
+		}
+	}
+	// Every \x00-joined root marker in the key must come from
+	// AgentStateStoreRoots; an unexpected root fails the single-source
+	// invariant.
+	for _, part := range strings.Split(key, "|") {
+		root, _, ok := strings.Cut(part, "\x00")
+		if !ok {
+			t.Fatalf("fingerprint part %q has no root marker", part)
+		}
+		if !known[root] {
+			t.Fatalf("fingerprint enumerates unexpected root %q", root)
+		}
+	}
+}
