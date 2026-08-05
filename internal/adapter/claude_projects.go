@@ -32,16 +32,15 @@ func (a *ClaudeProjectAdapter) Scan(ctx context.Context, opts types.ScanOptions)
 		return nil, err
 	}
 
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
-	}
 	roots, err := scanRootsOrHome(opts.Roots)
 	if err != nil {
 		return nil, err
 	}
 
-	base := filepath.Join(home, ".claude", "projects")
+	base, err := agentStateStoreRootFor(filepath.Join(".claude", "projects"))
+	if err != nil {
+		return nil, err
+	}
 	if !pathUnderRoots(base, roots) {
 		return nil, nil
 	}

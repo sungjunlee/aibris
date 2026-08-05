@@ -3,6 +3,9 @@ package adapter
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -38,6 +41,36 @@ func DefaultAgentStateProviders() []DebrisProvider {
 		}
 	}
 	return providers
+}
+
+// AgentStateStoreRoots is the single source of truth for the store roots
+// that agent-state providers scan. The cleanup refresh-memo fingerprint (in
+// package cmd) and every agent-state store adapter must reference it, so a
+// newly added agent-state root automatically flows to the fingerprint too.
+func AgentStateStoreRoots() ([]string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	return []string{
+		filepath.Join(home, ".claude", "projects"),
+		filepath.Join(home, ".cursor", "projects"),
+	}, nil
+}
+
+// agentStateStoreRootFor selects the registered store root whose path ends
+// with suffix.
+func agentStateStoreRootFor(suffix string) (string, error) {
+	roots, err := AgentStateStoreRoots()
+	if err != nil {
+		return "", err
+	}
+	for _, root := range roots {
+		if strings.HasSuffix(root, suffix) {
+			return root, nil
+		}
+	}
+	return "", fmt.Errorf("agent-state store root %q is not registered", suffix)
 }
 
 // DefaultProviderIdentity identifies the concrete provider membership in the

@@ -31,16 +31,15 @@ func (a *CursorAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([]typ
 	default:
 	}
 
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
-	}
 	roots, err := scanRootsOrHome(opts.Roots)
 	if err != nil {
 		return nil, err
 	}
 
-	base := filepath.Join(home, ".cursor", "projects")
+	base, err := agentStateStoreRootFor(filepath.Join(".cursor", "projects"))
+	if err != nil {
+		return nil, err
+	}
 	if !pathUnderRoots(base, roots) {
 		return nil, nil
 	}

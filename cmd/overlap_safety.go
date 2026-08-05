@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -35,11 +34,9 @@ type cleanupOverlapSafetyRuntime struct {
 	memo *refreshMemo
 	// fingerprint cheaply enumerates the current agent-state entry set (entry
 	// directory names under the agent-state store roots, no jsonl parsing or
-	// size walking). It must enumerate the same roots the agent-state providers
-	// scan; today those are ~/.claude/projects and ~/.cursor/projects. If a
-	// future agent-state provider scans a different root, extend
-	// agentStateEntryFingerprint accordingly or the memo could miss a newly
-	// added entry there.
+	// size walking). It enumerates the roots from adapter.AgentStateStoreRoots(),
+	// the single source of truth shared with the agent-state providers, so a
+	// newly added agent-state root automatically flows to the fingerprint.
 	fingerprint func(context.Context) (string, error)
 }
 
@@ -127,13 +124,9 @@ func agentStateEntryFingerprint(ctx context.Context) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	home, err := os.UserHomeDir()
+	roots, err := adapter.AgentStateStoreRoots()
 	if err != nil {
 		return "", err
-	}
-	roots := []string{
-		filepath.Join(home, ".claude", "projects"),
-		filepath.Join(home, ".cursor", "projects"),
 	}
 	parts := make([]string, 0, len(roots))
 	for _, root := range roots {
