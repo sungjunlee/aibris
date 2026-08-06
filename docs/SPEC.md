@@ -60,10 +60,11 @@ Output contains:
 
 The schema is documented in `docs/JSON_SCHEMA.md`.
 
-The future retention projection is specified separately in
-`docs/PROTECTED_RETENTION.md`. It is an additive, non-`worktrees` JSON surface
-that is not shipped by this specification revision. Its aggregate rows are not
-`DebrisInfo` values and do not change current physical summary accounting.
+The read-only retention projection is specified separately in
+docs/PROTECTED_RETENTION.md and ships as the additive top-level `retention`
+JSON object. It is a non-`worktrees` surface; its aggregate rows are not
+`DebrisInfo` values and never enter physical summary accounting, cleanup
+eligibility, or the last-scan cache's debris completeness.
 
 ### FR3 - `aibris clean`
 
@@ -72,7 +73,7 @@ that is not shipped by this specification revision. Its aggregate rows are not
 Flags:
 
 | Flag | Default | Behavior |
-|------|---------|----------|
+| ------ | --------- | ---------- |
 | `--age`, `-a` | `7d` | Classic cleanup includes only items older than this duration. In guided cleanup an explicit value changes only the minimum idle age. Supports `h`, `d`, `w`, `mo`, and `y`; Go duration units such as `m` and `s` are also accepted. Must be positive. |
 | `--category`, `-c` | empty | Comma-separated category filter. Empty means all categories allowed by `--risky`. |
 | `--tool`, `-t` | empty | Comma-separated tool filter. Empty means all tools. |
@@ -86,9 +87,10 @@ Flags:
 | `--no-guide` | `false` | Keep the classic cleanup audit/executor route even when active Codex pressure would open guided review. |
 
 The planned repeatable `--retention-bucket <store_id>@<YYYY-MM>` spelling is
-reserved by `docs/PROTECTED_RETENTION.md` but is not a shipped flag and is
-therefore intentionally absent from this table. Current selectors do not
-authorize protected-content retention.
+reserved by `docs/PROTECTED_RETENTION.md` but remains parked (no execution
+layer ships with the read-only inventory) and is therefore intentionally
+absent from this table. Current selectors do not authorize protected-content
+retention.
 
 Behavior:
 
@@ -292,7 +294,7 @@ Cross-category containment uses the same physical-component contract:
 ## Supported Categories
 
 | Category | Default clean | Tools | Default locations |
-|----------|---------------|-------|-------------------|
+| ---------- | --------------- | ------- | ------------------- |
 | `worktree` | orphaned only | `codex`, `claude`, `unknown` | Finite exact registry plus depth-4 convention fallback for directories named `worktrees`, `worktree`, `worktree-*`, or `worktrees-*`; units are validated only at direct or one-level nested `.git` markers |
 | `node_modules` | yes | `node_modules` | `$HOME/**/node_modules`, with noisy system/media/cache directories pruned |
 | `build-cache` | yes | `build-cache` | `~/.cache/go-build`, `~/.gradle/caches`, `~/.npm/_cacache`, `~/.cargo/registry`, `~/Library/Caches/Xcode` |
@@ -302,23 +304,22 @@ Cross-category containment uses the same physical-component contract:
 
 The installed/regenerable/protected store-nature terms used to plan issue #142
 are not supported categories, agent-state classifications, JSON fields, or CLI
-selectors. None of the six stores classified there is currently a provider
-surface. Installed stores receive no provider; Codex tmp remains a future
+selectors. Installed stores receive no provider; Codex tmp remains a future
 default-clean child-unit candidate subject to ownership and
 active-use/TOCTOU proof; and generated images, Codex SQLite, and Cursor AI
 tracking remain protected from default clean and `--risky` alone.
 Protected-provider retention semantics are frozen in
-`docs/PROTECTED_RETENTION.md`, but every provider, projection, selector,
-manifest, planner, and executor described there remains unshipped. In
-particular, no retention-only row changes #138 proof-based orphan eligibility
-or outranks #151 overlap hard locks.
+`docs/PROTECTED_RETENTION.md`. The shipped surface is the read-only `codex-sessions`
+inventory (top-level `retention` JSON object); the selector, manifest, planner,
+and executor remain parked and unshipped. In particular, no retention-only row
+changes #138 proof-based orphan eligibility or outranks #151 overlap hard locks.
 
 ## Worktree Health
 
 `WorktreeAdapter` detects linked Git metadata health by reading `.git` files:
 
 | Status | Meaning |
-|--------|---------|
+| -------- | --------- |
 | `active` | `.git` exists and parent repository metadata still exists. This means linked, not recently used. |
 | `orphaned` | `.git` exists but parent repository metadata is gone. |
 | `plain-dir` | No valid worktree metadata was found, or one physical unit contained any missing/empty/malformed/directory marker. Review-only and never cleanable. |
@@ -422,9 +423,9 @@ Each adapter implements:
 
 ```go
 type DebrisProvider interface {
-	Name() types.Tool
-	Category() types.Category
-	Scan(ctx context.Context, opts types.ScanOptions) ([]types.DebrisInfo, error)
+ Name() types.Tool
+ Category() types.Category
+ Scan(ctx context.Context, opts types.ScanOptions) ([]types.DebrisInfo, error)
 }
 ```
 

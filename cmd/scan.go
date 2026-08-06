@@ -116,11 +116,33 @@ type jsonProviderError struct {
 	Message string `json:"message"`
 }
 
+type jsonRetentionProviderError struct {
+	StoreID string `json:"store_id"`
+	Message string `json:"message"`
+}
+
+type jsonRetentionBucket struct {
+	StoreID       string `json:"store_id"`
+	BucketID      string `json:"bucket_id"`
+	UnitCount     int    `json:"unit_count"`
+	MemberCount   int    `json:"member_count"`
+	ApparentBytes int64  `json:"apparent_bytes"`
+	OrphanedCount int    `json:"orphaned_count"`
+	OrphanedBytes int64  `json:"orphaned_bytes"`
+}
+
+type jsonRetention struct {
+	Buckets        []jsonRetentionBucket        `json:"buckets"`
+	Partial        bool                         `json:"partial"`
+	ProviderErrors []jsonRetentionProviderError `json:"provider_errors"`
+}
+
 type jsonOutput struct {
 	SchemaVersion  int                 `json:"schema_version"`
 	Items          []jsonWorktree      `json:"items"`
 	Worktrees      []jsonWorktree      `json:"worktrees"`
 	Summary        jsonSummary         `json:"summary"`
+	Retention      jsonRetention       `json:"retention"`
 	Partial        bool                `json:"partial,omitempty"`
 	ProviderErrors []jsonProviderError `json:"provider_errors,omitempty"`
 }
@@ -132,6 +154,11 @@ func printJSON(r *types.ScanResult) {
 		Worktrees:     items,
 		Items:         items,
 		Partial:       r.Partial(),
+		Retention: jsonRetention{
+			Buckets:        make([]jsonRetentionBucket, len(r.Retention.Buckets)),
+			Partial:        r.Retention.Partial,
+			ProviderErrors: make([]jsonRetentionProviderError, len(r.Retention.ProviderErrors)),
+		},
 		Summary: jsonSummary{
 			TotalCount: r.TotalCount,
 			TotalSize:  r.TotalSize,
@@ -165,6 +192,23 @@ func printJSON(r *types.ScanResult) {
 			Reason:         itemReason(w),
 			CleanupKind:    string(cleanupKind(w)),
 			CleanupCommand: cleanupCommand,
+		}
+	}
+	for i, bucket := range r.Retention.Buckets {
+		out.Retention.Buckets[i] = jsonRetentionBucket{
+			StoreID:       string(bucket.StoreID),
+			BucketID:      bucket.BucketID,
+			UnitCount:     bucket.UnitCount,
+			MemberCount:   bucket.MemberCount,
+			ApparentBytes: bucket.ApparentBytes,
+			OrphanedCount: bucket.OrphanedCount,
+			OrphanedBytes: bucket.OrphanedBytes,
+		}
+	}
+	for i, providerErr := range r.Retention.ProviderErrors {
+		out.Retention.ProviderErrors[i] = jsonRetentionProviderError{
+			StoreID: string(providerErr.StoreID),
+			Message: providerErr.Message,
 		}
 	}
 	for cat, s := range r.ByCategory {
@@ -355,6 +399,7 @@ func printHumanScanResult(ctx context.Context, r *types.ScanResult) {
 
 	printCategorySummary(r.ByCategory)
 	printLargestItems(r.Worktrees)
+	printRetentionProjection(r.Retention)
 	printCodexActivityRecommendations(ctx, r.Worktrees)
 
 	fmt.Println("\nnext")
@@ -364,6 +409,31 @@ func printHumanScanResult(ctx context.Context, r *types.ScanResult) {
 		fmt.Println("  aibris clean --dry-run")
 	}
 	fmt.Println("  aibris scan --json")
+}
+
+func printRetentionProjection(projection types.RetentionProjection) {
+	if len(projection.Buckets) == 0 && !projection.Partial {
+		return
+	}
+
+	fmt.Println("\nretention (protected content, read-only)")
+	if projection.Partial {
+		fmt.Println("  completeness partial (retention inventory only)")
+		for _, providerErr := range projection.ProviderErrors {
+			fmt.Printf("  failed      %-16s %s\n", providerErr.StoreID, providerErr.Message)
+		}
+	}
+	for _, bucket := range projection.Buckets {
+		fmt.Printf("  %-16s %7s  units %d  members %d  %s  orphaned %d/%s\n",
+			bucket.StoreID,
+			bucket.BucketID,
+			bucket.UnitCount,
+			bucket.MemberCount,
+			cleaner.FormatSize(bucket.ApparentBytes),
+			bucket.OrphanedCount,
+			cleaner.FormatSize(bucket.OrphanedBytes),
+		)
+	}
 }
 
 func printCodexActivityRecommendations(ctx context.Context, items []types.DebrisInfo) {

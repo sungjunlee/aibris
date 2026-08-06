@@ -17,14 +17,12 @@ branch on.
 
 The installed/regenerable/protected terms used by the issue #142 planning
 taxonomy are not JSON fields or values. They do not extend `category` or
-`classification`, and the six stores covered by that planning decision
-currently emit no inventory rows. This document describes only the shipped
-schema.
+`classification`. This document describes only the shipped schema.
 
-The future protected-content retention surface is frozen in
-[PROTECTED_RETENTION.md](PROTECTED_RETENTION.md), but it is not present in
-current output. When implemented, it must be an additive top-level projection,
-never aggregate rows disguised inside the historical `worktrees` array.
+The protected-content retention surface is frozen in
+[PROTECTED_RETENTION.md](PROTECTED_RETENTION.md). It ships as an additive
+read-only top-level `retention` object (see below) and is never an aggregate
+rows disguised inside the historical `worktrees` array.
 
 A complete scan keeps the established successful JSON shape below. If one or
 more providers fail while other results remain usable, the command adds
@@ -105,6 +103,33 @@ message. Unrelated successful providers still contribute items and summary
 counts. Cancellation is a hard failure: it does not emit a usable partial
 result.
 
+The top-level `retention` object is present on every scan:
+
+```json
+{
+  "retention": {
+    "buckets": [
+      {
+        "store_id": "codex-sessions",
+        "bucket_id": "2026-07",
+        "unit_count": 12,
+        "member_count": 12,
+        "apparent_bytes": 1048576,
+        "orphaned_count": 3,
+        "orphaned_bytes": 262144
+      }
+    ],
+    "partial": false,
+    "provider_errors": []
+  }
+}
+```
+
+`retention` is a non-authorizing read-only projection: its values never enter
+`summary`, `total_count`, or `total_size`, never create cleanup candidates, and
+a retention-local partial state (`retention.partial: true`) does not set the
+top-level `partial` flag or change the exit status.
+
 ## Fields
 
 ### `schema_version`
@@ -175,41 +200,44 @@ Orphaned Cursor entries are eligible for default cleanup without an age gate;
 ### Partial-scan fields
 
 | Field | Type | Description |
-|-------|------|-------------|
+| ----- | ---- | ----------- |
 | `partial` | boolean | Present and `true` only when at least one provider failed |
 | `provider_errors` | array | Failed provider names and related error messages; present only for partial scans |
 
 ### `by_category` / `by_tool` entries
 
 | Field | Type | Description |
-|-------|------|-------------|
+| ----- | ---- | ----------- |
 | `count` | integer | Number of items |
 | `size` | integer | Total size in bytes |
 
-## Future retention projection (contract only; unshipped)
+## Retention projection (read-only, shipped)
 
-No released `scan --json` output currently contains retention rows or the
-fields below. A future schema revision may add a top-level retention projection
-without changing the meaning of `worktrees` or existing `summary` values. That
-projection is non-additive physical accounting: one aggregate row exists per
-`(store_id, bucket_id)`, aggregate and manifest-member values are never summed,
-and each existing physical owner remains counted once.
-
-The minimum future aggregate fields are:
+The top-level `retention` object is always present. It is non-additive
+physical accounting: one aggregate row exists per `(store_id, bucket_id)`,
+aggregate values are never summed with `summary`, and each existing physical
+owner remains counted once. Aggregate rows are never executable `DebrisInfo`
+rows and never authorize cleanup.
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `store_id` | string | Exact registered retention store ID. |
+| `buckets` | array | One aggregate row per `(store_id, bucket_id)`, including protected open and `unknown` buckets, ordered by store ID then bucket ID. |
+| `partial` | boolean | `true` when a retention store could not be fully inventoried (permission or I/O failure inside the store, or provider misconfiguration). Retention partiality does not set the top-level `partial` flag. |
+| `provider_errors` | array | Path-free store-local diagnostics; present regardless of partiality. |
+
+### `retention.buckets[]` fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `store_id` | string | Exact registered retention store ID (`codex-sessions`). |
 | `bucket_id` | string | UTC month `YYYY-MM`, or visible protected `unknown`. |
 | `unit_count` | integer | Bounded retention units in the bucket. |
 | `member_count` | integer | Owned physical regular-file leaves in those units. |
 | `apparent_bytes` | integer | Deduplicated owned `Lstat.Size` bytes; not allocated or guaranteed freed bytes. |
-| `orphaned_count` | integer | Codex orphan-statistics subset; zero for stores without that contract. |
+| `orphaned_count` | integer | Codex orphan-statistics subset (proven-absent recorded cwd); zero for stores without that contract. |
 | `orphaned_bytes` | integer | Apparent bytes in the Codex orphan subset; never added to `apparent_bytes`. |
-| `selectable` | boolean | Whether the exact closed bucket may enter future manifest preparation. |
-| `blocked_reason` | string | Fail-closed reason when the bucket cannot be selected. |
 
-These aggregate rows will never be executable `DebrisInfo` rows. Only the
-future exact-member manifest and revalidation path defined by the canonical
-contract can prepare an explicitly selected closed bucket. The planned
-`--retention-bucket` spelling is likewise unshipped.
+No member path, session identifier, or transcript content appears in the
+projection or its diagnostics. The execution-layer selector, manifest, and
+`--retention-bucket` spelling remain parked (see
+[PROTECTED_RETENTION.md](PROTECTED_RETENTION.md)).

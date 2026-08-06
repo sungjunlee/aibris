@@ -31,7 +31,9 @@ while fully covering generic build debris that general-purpose cleaners already
 handle. The gap is provider coverage, not policy or rendering.
 
 - classify session-store entries whose recorded working directory is gone
-- discover session, transcript, and run-manifest stores as retention decisions
+- inventory session, transcript, and run-manifest stores as read-only UTC-month
+  retention aggregates (codex-sessions shipped); the retention execution layer
+  (selector, manifest, executor) stays parked per #139 re-scope
 - find worktree containers regardless of nesting depth and member layout
 - admit worktree units from any agent tool into guided review
 - cover agent byproduct stores

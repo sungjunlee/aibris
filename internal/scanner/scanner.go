@@ -12,18 +12,21 @@ import (
 	"sync"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
+	"github.com/sungjunlee/aibris/internal/retention"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
 var defaultProviders = adapter.DefaultProviders()
+var defaultRetentionProviders = retention.DefaultProviders()
 
-var DefaultScanner = New(defaultProviders)
+var DefaultScanner = NewWithRetentionProviders(defaultProviders, defaultRetentionProviders)
 
 const maxParallelProviders = 2
 
 type Scanner struct {
-	Providers   []adapter.DebrisProvider
-	ErrorWriter io.Writer
+	Providers          []adapter.DebrisProvider
+	RetentionProviders []types.RetentionProvider
+	ErrorWriter        io.Writer
 }
 
 func (s *Scanner) errw() io.Writer {
@@ -35,6 +38,19 @@ func (s *Scanner) errw() io.Writer {
 
 func New(providers []adapter.DebrisProvider) *Scanner {
 	return &Scanner{Providers: providers}
+}
+
+// NewWithRetentionProviders builds a scanner with the optional read-only
+// protected-content inventory. Retention providers never participate in
+// debris totals or cleanup authorization.
+func NewWithRetentionProviders(
+	providers []adapter.DebrisProvider,
+	retentionProviders []types.RetentionProvider,
+) *Scanner {
+	return &Scanner{
+		Providers:          providers,
+		RetentionProviders: retentionProviders,
+	}
 }
 
 func Scan(ctx context.Context) (*types.ScanResult, error) {
@@ -176,7 +192,71 @@ func (s *Scanner) ScanWithOptions(ctx context.Context, opts types.ScanOptions) (
 		return result.Worktrees[i].Size > result.Worktrees[j].Size
 	})
 
+	result.Retention = scanRetention(ctx, opts, s.RetentionProviders)
 	return result, nil
+}
+
+// scanRetention inventories protected-content stores after the debris scan.
+// Store-local failures degrade the retention projection to partial without
+// affecting debris results or cleanup authorization.
+func scanRetention(
+	ctx context.Context,
+	opts types.ScanOptions,
+	providers []types.RetentionProvider,
+) types.RetentionProjection {
+	projection := types.RetentionProjection{
+		Buckets:        []types.RetentionBucket{},
+		ProviderErrors: []types.RetentionProviderError{},
+	}
+	seen := make(map[string]bool)
+	for _, provider := range providers {
+		if err := ctx.Err(); err != nil {
+			break
+		}
+		providerProjection, err := provider.Scan(ctx, opts)
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				projection.Partial = true
+				break
+			}
+			projection.Partial = true
+			projection.ProviderErrors = append(projection.ProviderErrors, types.RetentionProviderError{
+				StoreID: provider.Name(),
+				Message: "provider failure",
+			})
+			continue
+		}
+		if providerProjection.Partial || len(providerProjection.ProviderErrors) > 0 {
+			projection.Partial = true
+		}
+		projection.ProviderErrors = append(projection.ProviderErrors, providerProjection.ProviderErrors...)
+		for _, bucket := range providerProjection.Buckets {
+			key := string(bucket.StoreID) + "\x00" + bucket.BucketID
+			if seen[key] {
+				projection.Partial = true
+				projection.ProviderErrors = append(projection.ProviderErrors, types.RetentionProviderError{
+					StoreID: provider.Name(),
+					Message: "duplicate retention bucket",
+				})
+				continue
+			}
+			seen[key] = true
+			projection.Buckets = append(projection.Buckets, bucket)
+		}
+	}
+	sort.Slice(projection.Buckets, func(i, j int) bool {
+		if projection.Buckets[i].StoreID == projection.Buckets[j].StoreID {
+			return projection.Buckets[i].BucketID < projection.Buckets[j].BucketID
+		}
+		return projection.Buckets[i].StoreID < projection.Buckets[j].StoreID
+	})
+	sort.Slice(projection.ProviderErrors, func(i, j int) bool {
+		if projection.ProviderErrors[i].StoreID == projection.ProviderErrors[j].StoreID {
+			return projection.ProviderErrors[i].Message < projection.ProviderErrors[j].Message
+		}
+		return projection.ProviderErrors[i].StoreID < projection.ProviderErrors[j].StoreID
+	})
+	return projection
 }
 
 type providerScanResult struct {

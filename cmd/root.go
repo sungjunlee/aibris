@@ -22,6 +22,7 @@ Scans for:
   - pip/uv caches
   - agent state (Claude, Cursor — orphaned only)
   - AI logs (Codex, Claude, Windsurf — requires --risky)
+  - protected Codex session retention aggregates (read-only inventory)
 
 Run "aibris scan" first to see what's taking space,
 then "aibris clean --dry-run" to preview deletions.`,

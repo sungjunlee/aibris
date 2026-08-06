@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
+	"github.com/sungjunlee/aibris/internal/retention"
 	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -41,11 +42,12 @@ func TestLastScanCacheRejectsPreWorktreeRegistryRevision(t *testing.T) {
 	}
 
 	if err := saveLastScanCache(lastScanCache{
-		SchemaVersion:    lastScanCacheSchemaVersion,
-		ProviderIdentity: adapter.DefaultProviderIdentity(),
-		CreatedAt:        time.Now(),
-		Roots:            roots,
-		Result:           types.ScanResult{},
+		SchemaVersion:             lastScanCacheSchemaVersion,
+		ProviderIdentity:          adapter.DefaultProviderIdentity(),
+		RetentionProviderIdentity: retention.DefaultProviderIdentity(),
+		CreatedAt:                 time.Now(),
+		Roots:                     roots,
+		Result:                    types.ScanResult{},
 	}); err != nil {
 		t.Fatal(err)
 	}

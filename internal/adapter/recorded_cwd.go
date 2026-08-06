@@ -20,6 +20,23 @@ type recordedCWDEvidence struct {
 
 type recordedCWDEvidenceGatherer func(context.Context, string) (recordedCWDEvidence, error)
 
+// ClassifyRecordedCWDs applies the shared proof-based recorded-cwd decision to
+// bounded metadata supplied by another read-only inventory. Callers must not
+// expose the returned reason because it can contain a raw cwd.
+func ClassifyRecordedCWDs(
+	ctx context.Context,
+	cwds []string,
+	evidenceComplete bool,
+) (types.EntryClass, error) {
+	evidence := recordedCWDEvidence{cwds: append([]string(nil), cwds...)}
+	if !evidenceComplete {
+		evidence.unverifiableRecords = 1
+		evidence.firstUnverifiableRecord = "bounded metadata"
+	}
+	classification, _, _, err := classifyRecordedCWDEvidence(ctx, evidence)
+	return classification, err
+}
+
 func classifyRecordedCWDEntry(
 	ctx context.Context,
 	entryPath string,

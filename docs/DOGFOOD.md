@@ -343,13 +343,25 @@ and rerun after the working set stabilizes rather than silently treating it as
 comparable. Stored counts and byte totals, like stored timings, are observations
 and never targets.
 
-Future issue #139 L2-L4 provider, planner, and executor work is governed by the
+Issue #139 L2 inventory work is governed by the
 [protected-content retention contract](PROTECTED_RETENTION.md). Every provider
 performance claim in those leaves must run this complete same-session
 paired-delta protocol, including immutable binaries, controlled cache state,
 alternating adjacent pairs, per-run scale, drift rejection, and
 change-minus-base reporting. A stored absolute timing, count, or byte value is
 never a substitute for the protocol or a regression target.
+
+The read-only Codex inventory is a point-in-time snapshot: a currently written
+rollout leaf may change between adjacent invocations, and that drift is
+expected and harmless because the inventory never mutates. Scale drift between
+pairs is recorded, not rejected; no quiescence probe or A-B stability gate is
+required. Explanations of drift must never log a private filename, session
+identifier, cwd, first-record value, or transcript line. Every accompanying
+real-home clean command remains `clean --dry-run --no-guide`.
+
+The L3-L4 execution layer (retention selector, exact-member manifest, planner,
+and executor) is parked with #139's re-scope and is not governed by any active
+provider claim here.
 
 No Make target is added by #146. A target that only alternates scans of a mutable
 real home would conceal cache-state and working-set controls while duplicating
