@@ -1,7 +1,7 @@
 ---
 id: AIB-143
 title: Reframe the documented product boundary around agent debris
-status: In Progress
+status: In Review
 labels:
   - documentation
   - docs

@@ -10,9 +10,11 @@ mutation is ever authorized and in what a timestamp can mean.
 
 1. **Agent state stores** — the product subject. Git worktrees, session and
    transcript stores, and recorded-cwd project stores created by AI coding
-   tools. Mutation is always evidence-based and never age-gated by default:
-   worktrees require validated `.git` health, and agent-state entries require
-   a recorded working directory proven absent (#138). Read-only retention
+   tools. Mutation is always evidence-based and never relies on age alone:
+   worktrees require validated `.git` health (classic cleanup still applies
+   its age/status filters; guided review applies its own locks and holds),
+   and agent-state entries require a recorded working directory proven absent
+   (#138), which replaces the age gate. Read-only retention
    inventory (codex-sessions) adds a non-authorizing UTC-month surface
    ([PROTECTED_RETENTION.md](PROTECTED_RETENTION.md)).
 2. **Generic build debris** — complementary coverage so `scan` is a complete
@@ -100,9 +102,8 @@ remain unshipped:
   eligibility.
 
 L2 and L3 are blocked, not locally implementable leaves. In addition to the
-
-# 139 gate for L3, each relevant upstream producer must first expose or document
-
+(no-longer-applicable) #139 L1 gate, each relevant upstream producer must
+first expose or document
 a producer-documented, versioned layout/identity contract plus a cooperative
 lock, lease, shutdown, or pause/fencing protocol honored by every writer. That
 is the unblock signal for the existing fail-closed proofs; aibris cannot

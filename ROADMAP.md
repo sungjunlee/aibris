@@ -40,20 +40,21 @@ The milestone is substantially covered. Shipped since the audit:
 - a read-only `codex-sessions` retention inventory with UTC-month buckets and
   orphan statistics (#139, re-scoped 2026-08-06; execution layer parked)
 
-Remaining work is either parked with the execution layer or blocked on upstream
-producer cooperation, not locally implementable leaves:
+Most remaining work is either parked with the execution layer or blocked on
+upstream producer cooperation:
 
 - inventory session, transcript, and run-manifest stores beyond codex-sessions
   (cursor chats, relay runs, gstack projects) — future provider leaves under
   the same root/unit/timestamp discipline
 - retention execution (selector, manifest, executor) stays parked per #139
   re-scope
-- find worktree containers regardless of nesting depth and member layout
-- admit worktree units from any agent tool into guided review
 - cover agent byproduct stores (#142 L2/L3; blocked on producer-documented
   versioned layouts and cooperative exclusion protocols)
-- state the product boundary honestly: complement general-purpose cleaners
-  rather than compete with them
+
+Locally implementable leaves remain:
+
+- find worktree containers regardless of nesting depth and member layout
+- admit worktree units from any agent tool into guided review
 
 Transcripts are user content. Surfacing them is in scope; reclaiming them by
 default is not.
