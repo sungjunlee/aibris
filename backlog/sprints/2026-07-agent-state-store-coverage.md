@@ -74,7 +74,9 @@ content that is surfaced rather than reclaimed.
 
 ### Batch 11 — Close capability scope
 
-- [ ] #137 [Epic] Cover the agent state store surface (~30min)
+- [x] #137 [Epic] Cover the agent state store surface — closed 2026-08-06 with
+      the actionable scope shipped (#138/#139-re-scoped/#140/#142-L1/#143
+      merged; #141 parked, #142 L2/L3 blocked upstream); re-audit deferred
 
 ## Running Context
 
