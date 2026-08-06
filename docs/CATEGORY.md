@@ -3,6 +3,38 @@
 `aibris` groups debris by category so users and agents can target one kind of
 AI-workflow artifact without broad filesystem cleanup.
 
+## Content Kinds
+
+Everything aibris touches falls into one of three kinds. They differ in what
+mutation is ever authorized and in what a timestamp can mean.
+
+1. **Agent state stores** — the product subject. Git worktrees, session and
+   transcript stores, and recorded-cwd project stores created by AI coding
+   tools. Mutation is always evidence-based and never age-gated by default:
+   worktrees require validated `.git` health, and agent-state entries require
+   a recorded working directory proven absent (#138). Read-only retention
+   inventory (codex-sessions) adds a non-authorizing UTC-month surface
+   ([PROTECTED_RETENTION.md](PROTECTED_RETENTION.md)).
+2. **Generic build debris** — complementary coverage so `scan` is a complete
+   picture of one home: `node_modules`, build caches, pip/uv caches. General-
+   purpose cleaners already handle these; aibris includes them but does not
+   compete on them (see [SPEC.md](SPEC.md) non-goals).
+3. **Installed content** — never debris: packages, plugins, extensions, and
+   application bundles. Excluded from every provider, inventory, and cleanup
+   surface ([Store-Nature Planning Taxonomy](#store-nature-planning-taxonomy-issue-142)).
+
+### Age-semantics asymmetry
+
+A modification time is only a meaningful signal for content whose mtime is
+stable. A session transcript's mtime is set once when the session closes and
+is immutable afterward, so UTC-month retention buckets and age presentation
+are meaningful there. A global cache directory's mtime tracks continuous use
+and can never satisfy a fixed age gate, so age-based cleanup is structurally
+weak for generic build debris. This asymmetry is why agent state never relies
+on age alone: proof-based recorded-cwd classification replaces the age gate
+for `agent-state`, and the retention inventory is a read-only mtime-based
+snapshot rather than an age-based deletion path.
+
 ## Categories
 
 | Category | Default clean | Risk | Description |
@@ -68,7 +100,9 @@ remain unshipped:
   eligibility.
 
 L2 and L3 are blocked, not locally implementable leaves. In addition to the
+
 # 139 gate for L3, each relevant upstream producer must first expose or document
+
 a producer-documented, versioned layout/identity contract plus a cooperative
 lock, lease, shutdown, or pause/fencing protocol honored by every writer. That
 is the unblock signal for the existing fail-closed proofs; aibris cannot

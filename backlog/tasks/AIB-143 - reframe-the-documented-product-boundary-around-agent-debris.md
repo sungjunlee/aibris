@@ -1,7 +1,7 @@
 ---
 id: AIB-143
 title: Reframe the documented product boundary around agent debris
-status: To Do
+status: In Progress
 labels:
   - documentation
   - docs
@@ -23,13 +23,14 @@ subject, and the docs present both as equally central.
 
 ## Acceptance criteria
 
-- [ ] README leads with agent state store cleanup; generic build debris is
+- [x] README leads with agent state store cleanup; generic build debris is
       described as complementary coverage that keeps `scan` a complete picture.
-- [ ] `docs/SPEC.md` non-goals state that competing with general-purpose cleaners
+- [x] `docs/SPEC.md` non-goals state that competing with general-purpose cleaners
       on global tool caches and `node_modules` is not an objective.
-- [ ] `docs/CATEGORY.md` distinguishes agent state stores, generic build debris,
+- [x] `docs/CATEGORY.md` distinguishes agent state stores, generic build debris,
       and installed content that is never debris.
-- [ ] The age-semantics asymmetry is documented — meaningful for transcripts whose
-      mtime is a fixed session end time, structurally broken for global caches.
-- [ ] `ROADMAP.md` reflects the coverage milestone.
-- [ ] No claim implies coverage the audit does not support.
+- [x] The age-semantics asymmetry is documented — meaningful for session
+      transcripts whose mtime is a fixed session end time, structurally broken
+      for global caches whose mtime tracks continuous use.
+- [x] `ROADMAP.md` reflects the coverage milestone.
+- [x] No claim implies coverage the audit does not support.

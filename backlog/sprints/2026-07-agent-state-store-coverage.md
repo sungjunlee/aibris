@@ -68,7 +68,9 @@ content that is surfaced rather than reclaimed.
 
 ### Batch 10 — State the boundary
 
-- [ ] #143 Reframe the documented product boundary around agent debris (~2h)
+- [~] #143 Reframe the documented product boundary around agent debris (~2h)
+      — README/SPEC/CATEGORY/ROADMAP reframed on
+      [branch:issue-143-product-boundary-reframe]; PR pending
 
 ### Batch 11 — Close capability scope
 
