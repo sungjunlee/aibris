@@ -31,6 +31,7 @@ var supportedCodexVersion = regexp.MustCompile(
 var (
 	errStoreRootSymlink      = errors.New("store root is a symlink")
 	errStoreRootNotDirectory = errors.New("store root is not a directory")
+	errStoreRootUnreadable   = errors.New("store root permission denied or unreadable")
 	errStoreReadFailed       = errors.New("permission denied or unreadable store subtree")
 )
 
@@ -42,12 +43,10 @@ var (
 // Traversal uses filepath.WalkDir, which does not follow directory symlinks;
 // symlinked or non-regular leaves and unrecognized layout entries are skipped
 // silently so the inventory reports only recognized regular rollout files.
-type CodexSessionsProvider struct {
-	now func() time.Time
-}
+type CodexSessionsProvider struct{}
 
 func NewCodexSessionsProvider() *CodexSessionsProvider {
-	return &CodexSessionsProvider{now: time.Now}
+	return &CodexSessionsProvider{}
 }
 
 func (p *CodexSessionsProvider) Name() types.RetentionStoreID {
@@ -77,7 +76,9 @@ func (p *CodexSessionsProvider) Scan(
 		if errors.Is(err, os.ErrNotExist) {
 			return projection, nil
 		}
-		addProviderError(&projection, "reading store root", err)
+		// Deliberately path-free: diagnostics must never carry the store root
+		// or any member path.
+		addProviderError(&projection, "reading store root", errStoreRootUnreadable)
 		return projection, nil
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
@@ -89,7 +90,7 @@ func (p *CodexSessionsProvider) Scan(
 		return projection, nil
 	}
 
-	state := newInventoryState(p.now, root)
+	state := newInventoryState(root)
 	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if err := ctx.Err(); err != nil {
 			return ctx.Err()
@@ -131,16 +132,14 @@ func codexSessionsRoot() (string, error) {
 }
 
 type inventoryState struct {
-	now     func() time.Time
 	root    string
 	buckets map[string]*types.RetentionBucket
 	errs    []types.RetentionProviderError
 	partial bool
 }
 
-func newInventoryState(now func() time.Time, root string) *inventoryState {
+func newInventoryState(root string) *inventoryState {
 	return &inventoryState{
-		now:     now,
 		root:    root,
 		buckets: make(map[string]*types.RetentionBucket),
 	}
@@ -192,7 +191,9 @@ func (s *inventoryState) addUnit(
 ) error {
 	info, err := entry.Info()
 	if err != nil {
-		s.fail("reading session leaf", err)
+		// Deliberately path-free: a concurrent-removal lstat failure must not
+		// surface the leaf path.
+		s.fail("reading session leaf", errStoreReadFailed)
 		return nil
 	}
 	bucket := s.ensureBucket(bucketFromModTime(info.ModTime()))
@@ -203,7 +204,8 @@ func (s *inventoryState) addUnit(
 	file, err := os.Open(path)
 	if err != nil {
 		if errors.Is(err, os.ErrPermission) {
-			s.fail("reading session metadata", err)
+			// Deliberately path-free: the raw open error embeds the member path.
+			s.fail("reading session metadata", errStoreReadFailed)
 		}
 		return nil
 	}

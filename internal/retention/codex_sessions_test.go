@@ -18,7 +18,7 @@ import (
 func TestCodexSessionsBucketsUseLeafModTimeUTCOnly(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	provider := testCodexProvider(time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC))
+	provider := testCodexProvider()
 	leaf := writeRetentionSession(t, home, "2020", "01", "02", "utc-boundary", validMetadata(filepath.Join(home, "live")), "")
 	modTime := time.Date(2026, 3, 1, 0, 30, 0, 0, time.FixedZone("east", 2*60*60))
 	if err := os.Chtimes(leaf, modTime, modTime); err != nil {
@@ -35,7 +35,7 @@ func TestCodexSessionsBucketsUseLeafModTimeUTCOnly(t *testing.T) {
 func TestCodexSessionsBucketAccountingAndOrdering(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	provider := testCodexProvider(time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC))
+	provider := testCodexProvider()
 
 	first := writeRetentionSession(t, home, "2026", "01", "01", "jan-a", validMetadata(liveCWD(t, home, "alpha")), "")
 	second := writeRetentionSession(t, home, "2026", "01", "01", "jan-b", validMetadata(liveCWD(t, home, "beta")), "")
@@ -73,7 +73,7 @@ func TestCodexSessionsBucketAccountingAndOrdering(t *testing.T) {
 func TestCodexSessionsOrphanAggregateRequiresProvenAbsentCWD(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	provider := testCodexProvider(time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC))
+	provider := testCodexProvider()
 
 	goneCWD := filepath.Join(home, "gone-project")
 	if err := os.MkdirAll(goneCWD, 0755); err != nil {
@@ -104,7 +104,7 @@ func TestCodexSessionsOrphanAggregateRequiresProvenAbsentCWD(t *testing.T) {
 func TestCodexSessionsUnsupportedProducerAndVersionDoNotCountOrphans(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	provider := testCodexProvider(time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC))
+	provider := testCodexProvider()
 
 	goneCWD := filepath.Join(home, "gone")
 	if err := os.MkdirAll(goneCWD, 0755); err != nil {
@@ -146,7 +146,7 @@ func TestCodexSessionsUnknownBucketFromUnusableModTime(t *testing.T) {
 func TestCodexSessionsSilentlySkipsUnsupportedEntries(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	provider := testCodexProvider(time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC))
+	provider := testCodexProvider()
 
 	day := filepath.Join(home, ".codex", "sessions", "2026", "04", "05")
 	if err := os.MkdirAll(day, 0755); err != nil {
@@ -171,7 +171,7 @@ func TestCodexSessionsSilentlySkipsUnsupportedEntries(t *testing.T) {
 func TestCodexSessionsHonorsSelectedRootsAndMissingRootIsCompleteEmpty(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	provider := testCodexProvider(time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC))
+	provider := testCodexProvider()
 
 	projection, err := provider.Scan(context.Background(), types.ScanOptions{Roots: []string{filepath.Join(home, "elsewhere")}})
 	if err != nil {
@@ -193,7 +193,7 @@ func TestCodexSessionsHonorsSelectedRootsAndMissingRootIsCompleteEmpty(t *testin
 func TestCodexSessionsCancellationIsHard(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	provider := testCodexProvider(time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC))
+	provider := testCodexProvider()
 	writeRetentionSession(t, home, "2026", "01", "01", "x", validMetadata("/tmp"), "")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -210,7 +210,7 @@ func TestCodexSessionsPermissionFailureIsPathFreePartial(t *testing.T) {
 	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	provider := testCodexProvider(time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC))
+	provider := testCodexProvider()
 	readable := writeRetentionSession(t, home, "2026", "01", "01", "a", validMetadata("/tmp"), "")
 	setModTime(t, readable, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
 	unreadable := writeRetentionSession(t, home, "2026", "01", "02", "b", validMetadata("/tmp"), "")
@@ -240,7 +240,7 @@ func TestCodexSessionsPermissionFailureIsPathFreePartial(t *testing.T) {
 func TestCodexSessionsDuplicateProviderRegistrationIsRejected(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	provider := testCodexProvider(time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC))
+	provider := testCodexProvider()
 	writeRetentionSession(t, home, "2026", "01", "01", "dup", validMetadata(filepath.Join(home, "live")), "")
 	projection := mergeRetention(t, []types.RetentionProvider{provider, provider})
 	if !projection.Partial {
@@ -254,6 +254,72 @@ func TestCodexSessionsDuplicateProviderRegistrationIsRejected(t *testing.T) {
 	}
 	if !foundDuplicate {
 		t.Fatalf("provider errors = %+v; want duplicate bucket diagnostic", projection.ProviderErrors)
+	}
+}
+
+func TestCodexSessionsLeafPermissionFailureIsPathFreePartial(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits are not enforced on windows")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	provider := testCodexProvider()
+	leaf := writeRetentionSession(t, home, "2026", "01", "01", "secret", validMetadata("/tmp"), "")
+	setModTime(t, leaf, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	if err := os.Chmod(leaf, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(leaf, 0600) })
+
+	projection := scanRetention(t, provider, home)
+	if !projection.Partial || len(projection.ProviderErrors) == 0 {
+		t.Fatalf("projection = %+v; want partial provider error", projection)
+	}
+	raw, err := json.Marshal(projection.ProviderErrors)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), home) || strings.Contains(string(raw), "secret") ||
+		strings.Contains(string(raw), ".jsonl") {
+		t.Fatalf("leaf permission diagnostics leaked member paths: %s", raw)
+	}
+	// The unreadable leaf still counts as a unit; only orphan classification
+	// is impossible for it.
+	if bucket := bucketByID(t, projection, "2026-01"); bucket.UnitCount != 1 {
+		t.Fatalf("2026-01 bucket = %+v; want 1 unit from the unreadable leaf", bucket)
+	}
+}
+
+func TestCodexSessionsRootPermissionFailureIsPathFreePartial(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits are not enforced on windows")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	provider := testCodexProvider()
+	codexDir := filepath.Join(home, ".codex")
+	if err := os.MkdirAll(filepath.Join(codexDir, "sessions"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(codexDir, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(codexDir, 0755) })
+
+	projection := scanRetention(t, provider, home)
+	if !projection.Partial || len(projection.ProviderErrors) == 0 {
+		t.Fatalf("projection = %+v; want partial provider error", projection)
+	}
+	raw, err := json.Marshal(projection.ProviderErrors)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The legitimate store ID "codex-sessions" contains "sessions"; only
+	// absolute store paths (home + ".codex/sessions") constitute a leak.
+	if strings.Contains(string(raw), home) ||
+		strings.Contains(string(raw), filepath.Join(home, ".codex")) ||
+		strings.Contains(string(raw), ".jsonl") {
+		t.Fatalf("root permission diagnostics leaked store paths: %s", raw)
 	}
 }
 
@@ -284,10 +350,8 @@ func mergeRetention(
 
 const noTrailingNewline = "\x00NO_TRAILING_NEWLINE\x00"
 
-func testCodexProvider(now time.Time) *CodexSessionsProvider {
-	provider := NewCodexSessionsProvider()
-	provider.now = func() time.Time { return now }
-	return provider
+func testCodexProvider() *CodexSessionsProvider {
+	return NewCodexSessionsProvider()
 }
 
 func writeRetentionSession(
@@ -457,7 +521,7 @@ func twoFileSizes(t *testing.T, first, second string) int64 {
 func TestCodexSessionsProjectionRoundTripsWithoutPrivateFields(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	provider := testCodexProvider(time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC))
+	provider := testCodexProvider()
 	writeRetentionSession(t, home, "2026", "05", "06", "roundtrip", validMetadata(filepath.Join(home, "gone")), "")
 
 	projection := scanRetention(t, provider, home)
