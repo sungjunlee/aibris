@@ -30,15 +30,31 @@ home and found aibris discovering about 15% of the agent-produced debris surface
 while fully covering generic build debris that general-purpose cleaners already
 handle. The gap is provider coverage, not policy or rendering.
 
-- classify session-store entries whose recorded working directory is gone
-- inventory session, transcript, and run-manifest stores as read-only UTC-month
-  retention aggregates (codex-sessions shipped); the retention execution layer
-  (selector, manifest, executor) stays parked per #139 re-scope
+The milestone is substantially covered. Shipped since the audit:
+
+- proof-based orphan cleanup for Claude and Cursor recorded-cwd project stores
+  (#138) — the first no-age-gate category
+- worktree container coverage from any agent tool via the finite exact registry
+  plus the bounded `$HOME` convention fallback (#140)
+- store-nature classification for the uncovered byproduct stores (#142 L1)
+- a read-only `codex-sessions` retention inventory with UTC-month buckets and
+  orphan statistics (#139, re-scoped 2026-08-06; execution layer parked)
+
+Most remaining work is either parked with the execution layer or blocked on
+upstream producer cooperation:
+
+- inventory session, transcript, and run-manifest stores beyond codex-sessions
+  (cursor chats, relay runs, gstack projects) — future provider leaves under
+  the same root/unit/timestamp discipline
+- retention execution (selector, manifest, executor) stays parked per #139
+  re-scope
+- cover agent byproduct stores (#142 L2/L3; blocked on producer-documented
+  versioned layouts and cooperative exclusion protocols)
+
+Locally implementable leaves remain:
+
 - find worktree containers regardless of nesting depth and member layout
 - admit worktree units from any agent tool into guided review
-- cover agent byproduct stores
-- state the product boundary honestly: complement general-purpose cleaners
-  rather than compete with them
 
 Transcripts are user content. Surfacing them is in scope; reclaiming them by
 default is not.

@@ -6,12 +6,16 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/sungjunlee/aibris)](https://goreportcard.com/report/github.com/sungjunlee/aibris)
 
 AI + debris. A small CLI for cleaning up the filesystem leftovers from AI
-coding sessions: worktrees, logs, `node_modules`, and build caches.
+coding agents: Git worktrees, agent session stores, logs, and recorded-cwd
+agent state — with generic build debris (`node_modules`, build caches) as
+complementary coverage so `scan` stays a complete picture of one home.
 
 AI tools are productive, but they shed a lot of temporary state while they
 branch, build, test, and retry. aibris scans the places that debris tends to
 collect, shows a readable cleanup plan, and only deletes after filters,
-confirmation, and path safety checks.
+confirmation, and path safety checks. Its subject is agent-produced state:
+worktrees, session transcripts, and recorded-cwd project stores. It
+complements general-purpose cleaners; it does not compete with them.
 
 ## Who is this for?
 
@@ -25,11 +29,16 @@ confirmation, and path safety checks.
 | Category | Examples | Default clean |
 | ---------- | ---------- | --------------- |
 | AI worktrees | Finite known containers plus `$HOME` conventions such as `.tool/worktrees` and project-local `worktrees` | Classic: orphaned; guided Codex: evidence-based |
+| Agent state | Claude and Cursor project stores | Orphaned only; no age gate |
+| AI logs | Codex, Claude, Windsurf logs | Only with `--risky` |
 | Dependencies | project `node_modules` directories | Yes |
 | Build caches | Go, npm, Gradle, Cargo, Xcode | Yes |
 | Python caches | pip and uv cache directories | Yes |
-| Agent state | Claude and Cursor project stores | Orphaned only; no age gate |
-| AI logs | Codex, Claude, Windsurf logs | Only with `--risky` |
+
+The first three rows are **agent-produced state** — aibris's subject. The last
+three are **generic build debris**: aibris covers them so `scan` reports a
+complete picture of a home, but general-purpose cleaners already handle them
+and winning on them is not an objective.
 
 Agent-state scan rows expose a `classification` of `live`, `orphaned`, or
 `undetermined`. This classification takes precedence over the classic age

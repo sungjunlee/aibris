@@ -20,6 +20,11 @@ confirmation path before deletion.
 - Deleting arbitrary user-provided paths.
 - Broad system cleanup outside development debris conventions.
 - Automatic inference that recent or ambiguous files are safe to delete.
+- Competing with general-purpose cleaners on global tool caches and
+  `node_modules`. aibris scans those so `scan` is a complete picture of one
+  home, but coverage there is complementary, not a product objective; the
+  product subject is agent-produced state (worktrees, session stores,
+  recorded-cwd agent state).
 
 ## Functional Requirements
 
