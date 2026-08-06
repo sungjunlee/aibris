@@ -1,7 +1,7 @@
 ---
 id: AIB-148
 title: Prepare v0.8.5 release (retention inventory, atomic cache, docs reframe)
-status: In Progress
+status: Done
 labels:
   - devops
   - documentation
@@ -11,6 +11,7 @@ labels:
 priority: medium
 milestone: '0.8.x Reliability & Trust'
 created_date: '2026-08-06'
+completed_date: '2026-08-06'
 ---
 ## Description
 
@@ -31,11 +32,15 @@ installer smoke test, and post-release read-only dogfood.
       `go vet ./...` pass.
 - [x] Real-home dogfood scan with the retention inventory is recorded (see
       Completion evidence).
-- [ ] Annotated tag `v0.8.5` and the release workflow publish the curated
-      notes, archives, and checksums.
-- [ ] `install.sh` is smoke-tested against the published assets and checksums.
-- [ ] Post-release scan/dry-run dogfood evidence is recorded without deleting
-      real user data.
+- [x] Annotated tag `v0.8.5` and release workflow `31107451585` published the
+      curated notes, six archives, and `checksums.txt`.
+- [x] `install.sh v0.8.5` smoke-tested: downloaded the public
+      `aibris_darwin_arm64.tar.gz`, verified the published checksum, installed
+      into an isolated prefix, and reported `aibris version 0.8.5`.
+- [x] Post-release dogfood recorded in `docs/DOGFOOD.md` without deleting any
+      real user data: scan (185 items, retention 12 buckets / 7,479 units /
+      14.24 GB / 272 orphaned) and `clean --dry-run --no-guide` ending with
+      `[DRY-RUN] No files were removed.`
 
 ## Completion evidence
 
