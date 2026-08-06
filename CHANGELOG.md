@@ -2,6 +2,41 @@
 
 ## Unreleased
 
+## [0.8.5] - 2026-08-06
+
+### Added
+
+- `aibris scan` now emits a **read-only protected-content retention
+  inventory**: protected Codex session files under `~/.codex/sessions` are
+  aggregated by UTC month into a top-level `retention` JSON object (also shown
+  in human output) with per-bucket unit/member counts, apparent bytes, and
+  orphan statistics derived from proven-absent recorded working directories.
+  The inventory is non-authorizing: it never creates cleanup candidates,
+  never selects or mutates members, and its partial state never blocks
+  ordinary clean. The execution layer (selector, manifest, executor) stays
+  parked. See `docs/PROTECTED_RETENTION.md` and `docs/JSON_SCHEMA.md`.
+
+### Changed
+
+- The last-scan cache is now written atomically (temp file + rename), so an
+  interrupted scan cannot leave a partially written cache that a later `clean`
+  would misread.
+- Agent-state overlap accounting now derives fingerprint roots from the
+  provider registry instead of a hardcoded list, keeping the containment
+  component consistent when the provider set changes.
+- Public docs reframe the product boundary: aibris's subject is agent state
+  stores (worktrees, session stores, recorded-cwd agent state); generic build
+  debris (`node_modules`, build caches) is complementary coverage that keeps
+  `scan` a complete picture. See the README, `docs/SPEC.md` non-goals,
+  `docs/CATEGORY.md` content kinds, and `ROADMAP.md`.
+
+### Safety
+
+- Retention inventory rows never enter `summary`, `total_*`, or cleanup
+  eligibility; no member path, session identifier, or transcript content
+  appears in the projection or its diagnostics; retention never authorizes
+  cleanup.
+
 ## [0.8.4] - 2026-08-04
 
 ### Added
