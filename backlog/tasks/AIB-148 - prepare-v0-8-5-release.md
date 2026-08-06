@@ -27,13 +27,20 @@ installer smoke test, and post-release read-only dogfood.
 - [x] CHANGELOG.md contains user-facing Added, Changed, and Safety notes.
 - [x] `.github/release-notes/v0.8.5.md` is curated (not a commit dump) and
       passes the Windows status validation.
-- [x] `go test -race -count=1 ./...`, `go build ./...`, and `go vet ./...`
-      pass.
-- [ ] Real-home dogfood scan with the retention inventory is recorded
-      (2026-08-06: 12 UTC-month buckets, 7,479 units, 14.24 GB, 272 orphaned
-      units; debris scan complete, no partial state).
+- [x] `go test -race -count=1 -cover ./...`, `go build ./...`, and
+      `go vet ./...` pass.
+- [x] Real-home dogfood scan with the retention inventory is recorded (see
+      Completion evidence).
 - [ ] Annotated tag `v0.8.5` and the release workflow publish the curated
       notes, archives, and checksums.
 - [ ] `install.sh` is smoke-tested against the published assets and checksums.
 - [ ] Post-release scan/dry-run dogfood evidence is recorded without deleting
       real user data.
+
+## Completion evidence
+
+- Real-home dogfood scan, 2026-08-06 (current `main`, `schema_version` 1):
+  12 UTC-month retention buckets (`2025-09` .. `2026-08`), 7,479 units,
+  14.24 GB, 272 orphaned units / 99.8 MB; `retention.partial` false, zero
+  provider errors; debris scan complete (184 items) with no top-level partial
+  state.
