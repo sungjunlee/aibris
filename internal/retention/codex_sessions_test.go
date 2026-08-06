@@ -238,10 +238,11 @@ func TestCodexSessionsPermissionFailureIsPathFreePartial(t *testing.T) {
 }
 
 func TestCodexSessionsDuplicateProviderRegistrationIsRejected(t *testing.T) {
-	projection := mergeRetention(t, []types.RetentionProvider{
-		NewCodexSessionsProvider(),
-		NewCodexSessionsProvider(),
-	})
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	provider := testCodexProvider(time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC))
+	writeRetentionSession(t, home, "2026", "01", "01", "dup", validMetadata(filepath.Join(home, "live")), "")
+	projection := mergeRetention(t, []types.RetentionProvider{provider, provider})
 	if !projection.Partial {
 		t.Fatalf("projection = %+v; duplicate buckets must degrade to partial", projection)
 	}
