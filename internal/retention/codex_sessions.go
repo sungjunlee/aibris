@@ -108,7 +108,11 @@ func (p *CodexSessionsProvider) Scan(
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return emptyProjection(), err
 	default:
-		state.fail("walking store", err)
+		// Unreachable today: the WalkDir callback only returns nil,
+		// fs.SkipDir, or ctx.Err() (handled above). Kept path-free so a
+		// future callback change can never surface a raw path-bearing
+		// error in diagnostics.
+		state.fail("walking store", errStoreReadFailed)
 	}
 
 	projection.Buckets = state.result()
