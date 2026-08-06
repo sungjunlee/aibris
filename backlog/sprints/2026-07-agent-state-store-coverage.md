@@ -54,9 +54,13 @@ content that is surfaced rather than reclaimed.
 
 ### Batch 8 — Cover the largest retention stores
 
-- [~] #139 L2 Codex sessions: aggregate counts and sizes by time bucket without parsing conversation bodies [branch:issue-139-codex-sessions-retention-inventory] — paused at `6b89b00`; DC19–21 await a quiet-home window
+- [~] #139 L2 (re-scoped to **read-only inventory**) Codex sessions: aggregate
+      counts, sizes, and orphan statistics by UTC month without parsing
+      conversation bodies [branch:issue-139-readonly-retention-inventory] —
+      implemented on a fresh branch from main; tests + docs green, PR pending
 - [ ] #139 L3 Cursor/Gstack/Claude: add coverage without duplicate rows or bytes
-- [ ] #139 L4 relay runs and end-to-end retention CLI contract
+      — parked with the execution layer; requires the parked selector/manifest
+      machinery or a future re-scope leaf
 
 ### Batch 9 — Open guided review to every tool
 
@@ -117,15 +121,15 @@ content that is surfaced rather than reclaimed.
 - Report provider performance as a same-session paired delta: build base and
   change together, alternate runs, and record cache condition and observed
   scale. Keep 19.2s only as a labelled historical observation.
-- #139 L2 is parked after implementation rather than weakened or merged without
-  evidence. Branch `issue-139-codex-sessions-retention-inventory` at `6b89b00`
-  passed independent local review, the full race/build/vet gate, and
-  Linux/Windows/Darwin builds. DC19–21 remain open: fourteen consecutive
-  aggregate-only probes observed the active Codex store changing, so no
-  drifted real-home result was accepted. Resume only in a quiet-home window,
-  run the prepared offline correctness/A-B and four-pair performance protocol,
-  then complete hardened review. L3/L4 remain dependent on L2 and must not
-  start from the unpublished branch.
+- #139 was re-scoped on 2026-08-06: the shipped surface is a **read-only
+  inventory** (codex-sessions UTC-month aggregates plus orphan statistics),
+  with the retention selector, exact-member manifest, planner, and executor
+  explicitly parked. Quiescence was a verification-protocol artifact (A-B scan
+  stability), not code, and is removed: drift is harmless for a point-in-time
+  read-only inventory, so the quiet-home window is no longer a gate. The
+  inventory never authorizes cleanup; #138's proof-based orphan eligibility
+  and #151 overlap hard locks are unchanged. L3/L4 (and #142 execution)
+  remain parked and must not start from the unpublished old branch.
 - #141 is likewise parked without weakening its hardened policy. Branch
   `issue-141-guided-review-all-worktree-tools` at `0a47323` is clean, pushed,
   current with `main`, and passes the exact-head race/build/vet gate plus

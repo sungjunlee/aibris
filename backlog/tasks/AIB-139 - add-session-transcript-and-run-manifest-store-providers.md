@@ -1,6 +1,6 @@
 ---
 id: AIB-139
-title: Add session, transcript, and run-manifest store providers with retention buckets
+title: Ship the read-only protected-content retention inventory (codex-sessions)
 status: In Progress
 labels:
   - enhancement
@@ -11,50 +11,81 @@ labels:
 priority: high
 milestone: 0.10.x Agent State Store Coverage
 created_date: '2026-07-26'
+updated_date: '2026-08-06'
 ---
 ## Description
+
 ## Goal
 
-Discover the agent session, transcript, and run-manifest stores and present them
-as retention decisions rather than safety decisions. This is the largest
+Surface the agent session, transcript, and run-manifest stores as a **read-only
+retention inventory** rather than as safety decisions. This is the largest
 uncovered area — `~/.codex/sessions` alone was 11 GB with 85% of its 6,711 files
-older than 30 days — and it is user content.
+older than 30 days — and it is user content: the obligation is to surface it,
+not to reclaim it.
 
-Also uncovered: `~/.relay/runs` 933 MB, `~/.cursor/chats` 674 MB,
-`~/.claude/projects` 502 MB, `~/.gstack/projects` 91 MB.
+Also measured in the 2026-07-26 audit: `~/.relay/runs` 933 MB,
+`~/.cursor/chats` 674 MB, `~/.claude/projects` 502 MB, `~/.gstack/projects`
+91 MB. Those stores are future provider work under the same
+root/unit/timestamp discipline; only `codex-sessions` ships in this leaf.
 
-## Frozen L1 contract
+## Re-scope (2026-08-06)
 
-L1 is complete as a Markdown-only contract:
-[Protected-Content Retention Contract](../../docs/PROTECTED_RETENTION.md).
-It freezes the bounded store registry, UTC-month projection, explicit selector,
-exact-member manifest, non-recursive execution, mutation-time revalidation,
-and #138/#151 precedence. The named providers, JSON projection,
-`--retention-bucket` flag, planner, and executor remain unshipped and belong to
-later leaves.
+# 139 was reduced from a full retention pipeline (provider + selector + exact
+manifest + executor) to a **read-only inventory**. The execution layer is
+explicitly parked: no retention selector, no `--retention-bucket` flag, no
+member manifest, no mutation path. Quiescence was a verification-protocol
+artifact (A-B scan stability), not code, and is removed — drift is harmless for
+a point-in-time read-only inventory, so no quiet-home window is required.
 
-No retention-only row authorizes default cleanup. Aggregate rows are
-non-additive inventory projections and never executable `DebrisInfo` rows.
-Installed content remains absent from every provider, inventory, manifest,
-selector, and cleanup surface. Codex SQLite and Cursor AI tracking remain
-inventory-only in planning until their separate producer-cooperation and
-atomic-family obligations are met.
+## Frozen contract
+
+The canonical contract lives in
+[docs/PROTECTED_RETENTION.md](../../docs/PROTECTED_RETENTION.md) and is now
+shipped (not merely planned): bounded store registry, UTC-month bucket identity,
+read-only aggregate projection, orphan statistics as evidence only, and
+absolute exclusions. The JSON surface is additive at the top level
+(`retention` object), documented in
+[docs/JSON_SCHEMA.md](../../docs/JSON_SCHEMA.md).
 
 ## Acceptance criteria
 
-- [ ] Providers discover codex sessions, cursor chats, claude projects, relay
-      runs, and gstack projects.
-- [ ] `~/.codex/sessions` orphaned-session detection lands here (moved from
-      AIB-138). Reuse the recorded-cwd classifier from AIB-138 L1 and report an
-      aggregate orphaned count and size per time bucket, not one item per file.
-- [ ] Size is reported per store and per time bucket, not as one opaque total.
-- [ ] Transcripts are never cleaned by default and not by `--risky` alone; an
-      explicit retention selector is required.
-- [ ] Age comes from the transcript's own timestamp. Document why age is
-      meaningful here and structurally broken for global caches, whose mtime
-      tracks continuous use and can never satisfy `--age 7d`.
-- [ ] Installed content is not misclassified as a store.
-- [ ] Full-home scan performance follows the same-session paired-delta protocol
-      in `docs/DOGFOOD.md`; report change-minus-base deltas with cache condition
-      and observed scale instead of comparing an absolute stored timing.
-- [ ] Tests cover bucket accounting and the default-protected contract.
+- [x] The `codex-sessions` provider inventories `~/.codex/sessions`
+      (`rollout-*.jsonl` leaves) without parsing conversation bodies, bucketed
+      by leaf UTC-month `Lstat.ModTime`.
+- [x] One aggregate row per `(store_id, bucket_id)` with `unit_count`,
+      `member_count`, `apparent_bytes`, `orphaned_count`, `orphaned_bytes`;
+      `unknown` bucket for unusable timestamps; missing store root is a
+      complete empty inventory, not a partial error.
+- [x] Orphan statistics reuse the recorded-cwd classifier (AIB-138 L1) on the
+      first metadata record only, gated by producer `codex_cli_rs` + supported
+      version + absolute non-NUL cwd. They are evidence only: they never emit
+      `EntryClassOrphaned`, never create cleanup candidates.
+- [x] Retention is additive and non-authorizing: rows never enter `summary`,
+      `total_count`/`total_size`, or cleanup eligibility; retention-local
+      partial state does not set top-level `partial` or change exit status.
+- [x] No member path, session identifier, or transcript content appears in the
+      projection or provider diagnostics (path-free errors).
+- [x] Installed content is not misclassified as a store; symlinked,
+      non-regular, non-rollout, and non-conforming entries are silently skipped.
+- [x] Last-scan cache identity includes the retention provider set
+      (`retention_provider_identity`).
+- [x] Human output renders a "retention (protected content, read-only)" section.
+- [x] Tests cover bucket accounting, orphan aggregation, `unknown` bucket,
+      missing-root empty-complete, cancellation, silent skips, permission
+      partiality, JSON shape invariance, and "inventory never creates cleanup
+      candidates".
+- [x] Real-home verification: full scan of the developer `$HOME` produced 12
+      UTC-month buckets (~11.8 GB) with orphan statistics and no debris or
+      retention partial state.
+- [x] Docs updated: PROTECTED_RETENTION.md (shipped read-only contract),
+      JSON_SCHEMA.md (additive `retention` object), SPEC.md, CATEGORY.md,
+      DOGFOOD.md (quiescence no longer required), README.md, ROADMAP.md.
+
+## Out of scope (parked)
+
+- Retention selector, exact-member manifest, planner, executor,
+  `--retention-bucket` flag.
+- Cursor/Gstack/Claude/relay-runs store providers (future leaves under the
+  same discipline).
+- Codex SQLite and Cursor `ai-tracking` (inventory-only absent separate
+  quiescence + atomic database-family contract).

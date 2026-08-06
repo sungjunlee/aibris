@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
+	"github.com/sungjunlee/aibris/internal/retention"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -19,12 +20,13 @@ const (
 )
 
 type lastScanCache struct {
-	SchemaVersion    int                               `json:"schema_version"`
-	ProviderIdentity string                            `json:"provider_identity"`
-	CreatedAt        time.Time                         `json:"created_at"`
-	Roots            []string                          `json:"roots"`
-	Result           types.ScanResult                  `json:"result"`
-	TargetEvidence   map[string]lastScanTargetEvidence `json:"target_evidence,omitempty"`
+	SchemaVersion             int                               `json:"schema_version"`
+	ProviderIdentity          string                            `json:"provider_identity"`
+	RetentionProviderIdentity string                            `json:"retention_provider_identity"`
+	CreatedAt                 time.Time                         `json:"created_at"`
+	Roots                     []string                          `json:"roots"`
+	Result                    types.ScanResult                  `json:"result"`
+	TargetEvidence            map[string]lastScanTargetEvidence `json:"target_evidence,omitempty"`
 }
 
 func writeLastScanCache(roots []string, result *types.ScanResult) {
@@ -41,12 +43,13 @@ func writeLastScanCache(roots []string, result *types.ScanResult) {
 		return
 	}
 	_ = saveLastScanCache(lastScanCache{
-		SchemaVersion:    lastScanCacheSchemaVersion,
-		ProviderIdentity: adapter.DefaultProviderIdentity(),
-		CreatedAt:        time.Now(),
-		Roots:            append([]string(nil), roots...),
-		Result:           *result,
-		TargetEvidence:   evidence,
+		SchemaVersion:             lastScanCacheSchemaVersion,
+		ProviderIdentity:          adapter.DefaultProviderIdentity(),
+		RetentionProviderIdentity: retention.DefaultProviderIdentity(),
+		CreatedAt:                 time.Now(),
+		Roots:                     append([]string(nil), roots...),
+		Result:                    *result,
+		TargetEvidence:            evidence,
 	})
 }
 
@@ -102,6 +105,10 @@ func readFreshLastScanCache(roots []string) (*types.ScanResult, time.Duration, b
 		return nil, age, false
 	}
 	if cache.ProviderIdentity == "" || cache.ProviderIdentity != adapter.DefaultProviderIdentity() {
+		return nil, age, false
+	}
+	if cache.RetentionProviderIdentity == "" ||
+		cache.RetentionProviderIdentity != retention.DefaultProviderIdentity() {
 		return nil, age, false
 	}
 	if !slices.Equal(cache.Roots, roots) {

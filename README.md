@@ -46,6 +46,16 @@ generated images, Codex SQLite, and Cursor AI tracking remain protected and
 cannot be unlocked by `--risky` alone. See
 [docs/CATEGORY.md](docs/CATEGORY.md) for the store-specific future constraints.
 
+`aibris scan` also emits a **read-only protected-content inventory**: protected
+Codex session files under `~/.codex/sessions` are aggregated by UTC month into
+a top-level `retention` JSON object (also shown in human output) with
+per-bucket unit/member counts, apparent bytes, and orphan statistics derived
+from proven-absent recorded working directories. The inventory is
+non-authorizing — it never creates cleanup candidates, never selects or mutates
+members, and its partial state never blocks ordinary clean. The execution
+layer (selector, manifest, executor) is deliberately parked; see
+[docs/PROTECTED_RETENTION.md](docs/PROTECTED_RETENTION.md).
+
 ### Install
 
 ```bash

@@ -16,6 +16,7 @@ import (
 
 	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/retention"
 	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -281,10 +282,11 @@ func saveCleanCacheFixture(t *testing.T, home string, items []types.DebrisInfo) 
 		t.Fatal(err)
 	}
 	if err := saveLastScanCache(lastScanCache{
-		SchemaVersion:    lastScanCacheSchemaVersion,
-		ProviderIdentity: adapter.DefaultProviderIdentity(),
-		CreatedAt:        time.Now(),
-		Roots:            []string{resolvedHome},
+		SchemaVersion:             lastScanCacheSchemaVersion,
+		ProviderIdentity:          adapter.DefaultProviderIdentity(),
+		RetentionProviderIdentity: retention.DefaultProviderIdentity(),
+		CreatedAt:                 time.Now(),
+		Roots:                     []string{resolvedHome},
 		Result: types.ScanResult{
 			Worktrees:  items,
 			TotalCount: len(items),

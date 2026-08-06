@@ -6,7 +6,7 @@ AI-workflow artifact without broad filesystem cleanup.
 ## Categories
 
 | Category | Default clean | Risk | Description |
-|----------|---------------|------|-------------|
+| ---------- | --------------- | ------ | ------------- |
 | `worktree` | classic: orphaned only; guided Codex: evidence-based | low | Temporary Git worktrees discovered under `$HOME` by worktree directory conventions and validated `.git` metadata. Classic filters exclude active worktrees unless `--include-active-worktrees` is set; guided Codex review may recommend safe linked units. |
 | `node_modules` | yes | medium | Project dependency folders under `$HOME` scan roots. They can be recreated with package managers. |
 | `build-cache` | yes | medium | Go, Xcode, Gradle, npm, and Cargo caches. They are usually safe but may slow the next build. |
@@ -20,13 +20,14 @@ rules.
 ## Protected Retention Is Not a Category
 
 The canonical [protected-content retention contract](PROTECTED_RETENTION.md)
-defines a separate, future authorization axis for session, transcript,
-run-manifest, and generated-image stores. Its UTC-month aggregates are
-non-additive inventory projections, never executable `DebrisInfo` rows.
-Nothing in that planned contract changes current category risk,
-`agent-state` classification, #138 proof-based orphan eligibility, or #151
-overlap hard locks. The planned retention selector and execution manifest are
-not shipped CLI or provider surfaces.
+defines a separate authorization axis for session, transcript, run-manifest,
+and generated-image stores. Its UTC-month aggregates are non-additive read-only
+inventory projections, never executable `DebrisInfo` rows. The shipped surface
+is the `codex-sessions` read-only inventory (top-level `retention` JSON object);
+the retention selector, exact-member manifest, planner, and executor are parked
+and remain unshipped CLI or provider surfaces. Nothing in the contract changes
+current category risk, `agent-state` classification, #138 proof-based orphan
+eligibility, or #151 overlap hard locks.
 
 ## Store-Nature Planning Taxonomy (Issue #142)
 
@@ -40,13 +41,15 @@ cannot settle a store's nature, the decision fails closed to protected content.
 | `~/.codex/packages` | `standalone` has an installer lock, versioned architecture releases, and a `current` symlink to the active release. | Installed content | Excluded from providers, inventory, and every cleanup surface. No provider is planned. |
 | `~/.codex/computer-use` | The directory contains the Codex Computer Use application bundle with bundle identity `com.openai.sky.CUAService`. | Installed content | Excluded from providers, inventory, and every cleanup surface. No provider is planned. |
 | `~/.codex/tmp` | In the 2026-07-31 observation, the literal `~/.codex/tmp/path/` directory contained direct `codex-arg*` directories with paired `applypatch` and `apply_patch` shims; no upstream contract established that `path/` is a stable name. | Regenerable residue | Currently undiscovered, unselectable, and ineligible. A future L2 may consider only direct children of the tmp root, and only after each child passes the ownership and active-use/TOCTOU contract below. A basename such as `path/` is evidence, not identity or an allowlist; L2 must never delete the whole tmp root. |
-| `~/.codex/generated_images` | ID directories contain generated PNG artifacts, which are user artifacts rather than a cache reconstruction input. | Protected content | Must not be default-clean or become deletable through `--risky` alone. It may be considered for explicit retention selection only after the #139 L1 semantics merge. |
+| `~/.codex/generated_images` | ID directories contain generated PNG artifacts, which are user artifacts rather than a cache reconstruction input. | Protected content | Must not be default-clean or become deletable through `--risky` alone. Explicit retention-selection machinery remains parked with #139's re-scope; the read-only inventory contract does not make it selectable. |
 | `~/.codex/sqlite` | Database filenames and schema names cover goals, threads, jobs, history snapshots, memories, logs, and state; live databases also have sidecar family members. | Protected content | Must not be default-clean or become deletable through `--risky` alone. A future provider is inventory-only unless it satisfies the fail-closed quiescence, family-registry, and atomic-manifest contract below. |
 | `~/.cursor/ai-tracking` | `ai-code-tracking.db` schema names cover tracked-file content, conversation summaries, scored commits, deleted files, and tracking state. | Protected content | Must not be default-clean or become deletable through `--risky` alone. A future provider is inventory-only unless it satisfies the fail-closed quiescence, family-registry, and atomic-manifest contract below. |
 
 This freezes the downstream split. The separate protected-content runtime
-model is now fixed in [PROTECTED_RETENTION.md](PROTECTED_RETENTION.md), but its
-providers, JSON projection, selector, planner, and executor remain unshipped:
+model is now fixed in [PROTECTED_RETENTION.md](PROTECTED_RETENTION.md); the
+shipped surface is the read-only `codex-sessions` inventory, and its
+providers, JSON projection, selector, planner, and executor for other stores
+remain unshipped:
 
 - L2 may add only direct child units of `~/.codex/tmp`. The observed `path/`
   child is one example, not a stable selector. Its `codex-arg*` descendants and
@@ -55,15 +58,17 @@ providers, JSON projection, selector, planner, and executor remain unshipped:
   versioned safety contract below, and surface an unsupported child as
   protected and ineligible rather than silently skipping it. L2 must never
   delete `~/.codex/tmp` itself.
-- L3 starts only after #139 L1 has merged. Generated images must follow that
-  explicit retention-selection contract; Codex SQLite and Cursor AI tracking
-  remain inventory-only absent the separate quiescence and atomic-family
-  contract below. The L1 document alone does not unblock #142 L2 or L3.
+- L3 (and the #142 execution layer generally) does not wait on #139: the
+  re-scoped #139 ships only the read-only inventory, with no retention
+  selection contract. Generated images, Codex SQLite, and Cursor AI tracking
+  therefore remain inventory-only and protected from every cleanup surface
+  until a future leaf ships that explicit selection machinery. The inventory
+  document alone does not unblock #142 L2 or L3 execution.
 - Installed content receives no provider. Uncertainty never widens cleanup
   eligibility.
 
 L2 and L3 are blocked, not locally implementable leaves. In addition to the
-#139 gate for L3, each relevant upstream producer must first expose or document
+# 139 gate for L3, each relevant upstream producer must first expose or document
 a producer-documented, versioned layout/identity contract plus a cooperative
 lock, lease, shutdown, or pause/fencing protocol honored by every writer. That
 is the unblock signal for the existing fail-closed proofs; aibris cannot
@@ -166,7 +171,7 @@ The `classification` field applies to `agent-state` entries and is omitted for
 other categories:
 
 | Classification | Meaning | Cleanup eligibility |
-|----------------|---------|---------------------|
+| ---------------- | --------- | --------------------- |
 | `live` | At least one recorded working directory still exists. | Protected |
 | `orphaned` | Every usable recorded working directory is proven absent. | Eligible without an age gate |
 | `undetermined` | Recorded working-directory evidence is missing, unreadable, ambiguous, or otherwise inconclusive. | Protected |
@@ -187,7 +192,7 @@ revalidation outcome.
 ## Tool Mapping
 
 | Tool | Category | Notes |
-|------|----------|-------|
+| ------ | ---------- | ------- |
 | `codex` | `worktree` | Path-derived source `.codex`. |
 | `claude` | `worktree` | Path-derived source `.claude`. |
 | `claude` | `agent-state` | `~/.claude/projects` entries classified from session `cwd` metadata. |
@@ -246,7 +251,7 @@ Roots must resolve under `$HOME`; `/`, `/tmp`, and symlink escapes are rejected.
 Supported command-backed cleanup:
 
 | Item | Command |
-|------|---------|
+| ------ | --------- |
 | `go-build` | `go clean -cache` |
 | `npm` | `npm cache clean --force` |
 | `uv` | `uv cache prune` |

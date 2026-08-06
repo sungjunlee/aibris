@@ -12,6 +12,7 @@ milestone: 0.10.x Agent State Store Coverage
 created_date: '2026-07-26'
 ---
 ## Description
+
 ## Goal
 
 Classify the uncovered stores first, add only safety-bounded regenerable
@@ -34,9 +35,10 @@ current categories, agent-state classifications, JSON fields, or CLI selectors.
       Enumerate every direct child, admit only versioned layouts that pass the
       ownership and active-use/TOCTOU contract below, surface unsupported
       children as protected and ineligible, and never delete the tmp root.
-- [ ] **L3 — protected inventory:** start only after #139 L1 merges, then follow
-      each protected store's policy below without making `--risky` a deletion
-      unlock.
+- [ ] **L3 — protected inventory:** does not wait on #139. The re-scoped #139
+      ships only a read-only inventory with no retention-selection contract, so
+      protected stores remain inventory-only and non-executable until a future
+      leaf ships the explicit selection machinery.
 
 ## Frozen store decisions
 
@@ -45,13 +47,14 @@ current categories, agent-state classifications, JSON fields, or CLI selectors.
 | `~/.codex/packages` | Installed content | No provider; excluded from inventory and every cleanup surface. |
 | `~/.codex/computer-use` | Installed content | No provider; excluded from inventory and every cleanup surface. |
 | `~/.codex/tmp` | Regenerable residue | Currently undiscovered, unselectable, and ineligible. Only direct children are future safety-bounded default-clean units. Their basenames do not establish identity; each whole child must pass the versioned contract below, and the root must never be deleted. |
-| `~/.codex/generated_images` | Protected content | Not default-clean and not deletable through `--risky` alone. Explicit retention selection may be considered only after #139 L1 merges. |
+| `~/.codex/generated_images` | Protected content | Not default-clean and not deletable through `--risky` alone. Explicit retention-selection machinery remains parked with #139's re-scope; the read-only inventory contract does not make it selectable. |
 | `~/.codex/sqlite` | Protected content | Inventory-only unless a separate future implementation satisfies the fail-closed quiescence, family-registry, and atomic-manifest contract below. |
 | `~/.cursor/ai-tracking` | Protected content | Inventory-only unless a separate future implementation satisfies the fail-closed quiescence, family-registry, and atomic-manifest contract below. |
 
 L2 and L3 are blocked, not locally implementable leaves. In addition to the
-#139 gate for L3, each relevant upstream producer must first expose or document
-a producer-documented, versioned layout/identity contract plus a cooperative
+(no-longer-applicable) #139 L1 gate, each relevant upstream producer must first
+expose or document a producer-documented, versioned layout/identity contract
+plus a cooperative
 lock, lease, shutdown, or pause/fencing protocol honored by every writer. That
 is the unblock signal for the existing fail-closed proofs; aibris cannot
 manufacture producer cooperation locally. If the signal never exists, affected
@@ -135,8 +138,9 @@ selector, retention bucket, or execution manifest reserved for #139.
 - [ ] L2 implements the versioned ownership, cooperative exclusion,
       revalidation, and race-test contract for each admitted direct-child
       layout before registering a tmp provider.
-- [ ] L3 waits for merged #139 L1 semantics and preserves each store-specific
-      consequence above.
+- [ ] L3 preserves each store-specific consequence above; it does not depend
+      on #139 (the re-scoped #139 ships only a read-only inventory, with the
+      retention selector/manifest/executor parked).
 - [ ] Provider changes preserve the existing cache, JSON, CLI, eligibility, and
       deletion-safety contracts.
 

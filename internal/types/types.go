@@ -1,6 +1,9 @@
 package types
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // Tool identifies the AI tool that created the debris.
 type Tool string
@@ -100,6 +103,9 @@ type ScanResult struct {
 	ByCategory     map[Category]CategorySummary
 	ByTool         map[Tool]ToolSummary
 	ProviderErrors []ScanProviderError
+	// Retention is a read-only protected-content inventory. It is never a
+	// cleanup candidate, is absent from totals, and carries no member paths.
+	Retention RetentionProjection
 }
 
 // Partial reports whether one or more providers failed while other usable
@@ -113,6 +119,50 @@ func (r *ScanResult) Partial() bool {
 type ScanProviderError struct {
 	Tool    Tool
 	Message string
+}
+
+// RetentionStoreID identifies one exact protected-content inventory root.
+// Retention store IDs are intentionally separate from cleanup tools and
+// categories.
+type RetentionStoreID string
+
+// RetentionStoreCodexSessions inventories regular rollout files under the
+// exact ~/.codex/sessions root as UTC-month aggregates.
+const RetentionStoreCodexSessions RetentionStoreID = "codex-sessions"
+
+// RetentionBucket is a read-only aggregate over protected content. It is
+// never a cleanup candidate and contains no member paths or private metadata.
+type RetentionBucket struct {
+	StoreID       RetentionStoreID `json:"store_id"`
+	BucketID      string           `json:"bucket_id"`
+	UnitCount     int              `json:"unit_count"`
+	MemberCount   int              `json:"member_count"`
+	ApparentBytes int64            `json:"apparent_bytes"`
+	OrphanedCount int              `json:"orphaned_count"`
+	OrphanedBytes int64            `json:"orphaned_bytes"`
+}
+
+// RetentionProjection is a read-only view that remains outside ordinary scan
+// totals and every cleanup authorization path.
+type RetentionProjection struct {
+	Buckets        []RetentionBucket        `json:"buckets"`
+	Partial        bool                     `json:"partial"`
+	ProviderErrors []RetentionProviderError `json:"provider_errors"`
+}
+
+// RetentionProvider inventories one exact protected-content store. Expected
+// store-local failures are represented in the returned projection; context
+// cancellation is returned as a hard error.
+type RetentionProvider interface {
+	Name() RetentionStoreID
+	Scan(ctx context.Context, opts ScanOptions) (RetentionProjection, error)
+}
+
+// RetentionProviderError records a path-free provider diagnostic. It is
+// separate from ordinary provider errors so it cannot disable ordinary clean.
+type RetentionProviderError struct {
+	StoreID RetentionStoreID `json:"store_id"`
+	Message string           `json:"message"`
 }
 
 // ScanOptions configures discovery scope for scan providers.
