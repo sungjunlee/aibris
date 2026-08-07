@@ -418,3 +418,72 @@ func guidedRouteWorktreeItem(worktree string, size int64, modTime time.Time) typ
 		Status:   types.WorktreeActive,
 	}
 }
+
+func TestCleanCmd_ReviewableGuidedWorktreeWithNestedClassicCandidateIsNotPromoted(t *testing.T) {
+	resetCleanFlags()
+	home, repository, worktree := newExecutorWorktree(t, "guided-kept-nested")
+	t.Setenv("HOME", home)
+	old := time.Now().Add(-8 * 24 * time.Hour)
+	item := executorWorktreeItem(worktree, 512*1024*1024)
+	item.ModTime = old
+	item.Project = "project"
+	item.Source = ".codex"
+	if err := os.Chtimes(worktree, old, old); err != nil {
+		t.Fatal(err)
+	}
+	runGitFixture(t, repository, "reflog", "expire", "--expire=now", "--all")
+	saveFreshCodexActivityCacheFixture(t)
+	saveCleanCacheFixture(t, home, []types.DebrisInfo{item})
+	modules := filepath.Join(worktree, "node_modules")
+	if err := os.MkdirAll(filepath.Join(modules, "pkg"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(modules, old, old); err != nil {
+		t.Fatal(err)
+	}
+	appendCleanCacheItem(t, types.DebrisInfo{
+		Tool:     types.ToolNodeModules,
+		Category: types.CategoryNodeModules,
+		ID:       "nested",
+		Path:     modules,
+		Size:     64 * 1024 * 1024,
+		ModTime:  old,
+	})
+	defer withStdin(t, "")()
+
+	// Plain clean with guided pressure (no --guide) keeps the classic
+	// category scope, so the nested node_modules reaches the unified plan.
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{"clean", "--dry-run"})
+		rootCmd.Execute()
+	})
+
+	for _, want := range []string{
+		"cleanup review",
+		"node_modules",
+		"[DRY-RUN] No files were removed.",
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("kept worktree with nested candidate output missing %q: %s", want, output)
+		}
+	}
+	// The reviewable worktree must stay unselected: it may never appear on a
+	// selected checkbox line, and the selected node_modules row must not be
+	// the worktree container. The nested candidate is selected on its own
+	// row.
+	selectedNodeModules := false
+	for _, line := range strings.Split(output, "\n") {
+		if strings.Contains(line, "[x]") && strings.Contains(line, "node_modules") {
+			selectedNodeModules = true
+		}
+		if strings.Contains(line, "[x]") && strings.Contains(line, filepath.Base(worktree)) {
+			t.Errorf("reviewable worktree promoted to selected: %s", line)
+		}
+	}
+	if !selectedNodeModules {
+		t.Errorf("nested node_modules is not selected on its own row: %s", output)
+	}
+	if _, err := os.Stat(worktree); err != nil {
+		t.Fatalf("dry-run removed kept worktree: %v", err)
+	}
+}

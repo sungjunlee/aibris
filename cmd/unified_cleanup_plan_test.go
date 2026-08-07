@@ -657,3 +657,37 @@ func cleanupPlanItemPaths(items []types.DebrisInfo) []string {
 	}
 	return paths
 }
+
+func TestUnselectedOwnerNeverPromotedByNestedSelectedRow(t *testing.T) {
+	worktreePath := filepath.Join(t.TempDir(), "kept-worktree")
+	modulesPath := filepath.Join(worktreePath, "node_modules")
+	plan, err := BuildUnifiedCleanupPlan(context.Background(), []CleanupPlanCandidate{
+		{
+			RowKey:    "guided:kept",
+			Item:      types.DebrisInfo{Category: types.CategoryWorktree, Status: types.WorktreeActive, Path: worktreePath, Size: 512},
+			Selection: CleanupPlanUnselected,
+			Reasons:   []CleanupPlanReason{{Code: CleanupPlanReasonWorktreePolicyDecision, Description: "retained per repository"}},
+		},
+		{
+			RowKey:    "classic:nested",
+			Item:      types.DebrisInfo{Category: types.CategoryNodeModules, Path: modulesPath, Size: 64},
+			Selection: CleanupPlanSelected,
+			Reasons:   []CleanupPlanReason{{Code: CleanupPlanReasonClassicEligible, Description: "eligible under classic cleanup filters"}},
+		},
+	}, CleanupPlanEvidence{ObservedAt: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	selected := plan.SelectedPhysicalTargets()
+	paths := cleanupPlanItemPaths(selected)
+	if len(paths) != 1 || paths[0] != modulesPath {
+		t.Fatalf("selected = %v; want only the nested node_modules, never the unselected owner worktree", paths)
+	}
+	for _, component := range plan.Components {
+		if component.CanonicalPath == worktreePath &&
+			component.Selection == CleanupPlanSelected {
+			t.Fatalf("unselected owner component promoted to selected: %+v", component)
+		}
+	}
+}
