@@ -29,7 +29,7 @@ type lastScanCache struct {
 	TargetEvidence            map[string]lastScanTargetEvidence `json:"target_evidence,omitempty"`
 }
 
-func writeLastScanCache(roots []string, result *types.ScanResult) {
+func writeLastScanCache(roots []string, identity string, result *types.ScanResult) {
 	if result == nil {
 		return
 	}
@@ -44,7 +44,7 @@ func writeLastScanCache(roots []string, result *types.ScanResult) {
 	}
 	_ = saveLastScanCache(lastScanCache{
 		SchemaVersion:             lastScanCacheSchemaVersion,
-		ProviderIdentity:          adapter.DefaultProviderIdentity(),
+		ProviderIdentity:          identity,
 		RetentionProviderIdentity: retention.DefaultProviderIdentity(),
 		CreatedAt:                 time.Now(),
 		Roots:                     append([]string(nil), roots...),

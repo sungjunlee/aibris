@@ -174,11 +174,11 @@ func TestScanCmd_WritesLastScanCache(t *testing.T) {
 func TestWriteLastScanCacheSkipsPartialResult(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	writeLastScanCache([]string{home}, &types.ScanResult{})
+	writeLastScanCache([]string{home}, scanner.DefaultScanner.ProviderIdentity(), &types.ScanResult{})
 	if _, ok := readLastScanCache(); !ok {
 		t.Fatal("complete scan cache fixture was not written")
 	}
-	writeLastScanCache([]string{home}, &types.ScanResult{
+	writeLastScanCache([]string{home}, scanner.DefaultScanner.ProviderIdentity(), &types.ScanResult{
 		ProviderErrors: []types.ScanProviderError{{Tool: types.ToolCodex, Message: "boom"}},
 	})
 	if _, ok := readLastScanCache(); ok {

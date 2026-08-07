@@ -40,6 +40,14 @@ func New(providers []adapter.DebrisProvider) *Scanner {
 	return &Scanner{Providers: providers}
 }
 
+// ProviderIdentity identifies the concrete provider membership this scanner was
+// built with. DefaultScanner reports the default registry identity; a scanner
+// built with custom providers reports theirs, so cache producers stamp the
+// identity of the exact provider set that produced the inventory.
+func (s *Scanner) ProviderIdentity() string {
+	return adapter.Identity(s.Providers)
+}
+
 // NewWithRetentionProviders builds a scanner with the optional read-only
 // protected-content inventory. Retention providers never participate in
 // debris totals or cleanup authorization.

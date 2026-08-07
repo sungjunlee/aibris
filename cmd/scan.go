@@ -43,12 +43,12 @@ var scanCmd = &cobra.Command{
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
 			}
-			result, err := scanner.ScanWithOptions(ctx, types.ScanOptions{Roots: roots})
+			result, err := scanner.DefaultScanner.ScanWithOptions(ctx, types.ScanOptions{Roots: roots})
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
 			}
-			writeLastScanCache(roots, result)
+			writeLastScanCache(roots, scanner.DefaultScanner.ProviderIdentity(), result)
 			printJSON(result)
 			if result.Partial() {
 				os.Exit(1)
@@ -64,7 +64,7 @@ var scanCmd = &cobra.Command{
 		printScanHeader(roots)
 
 		progress := newScanProgressPrinter(os.Stdout)
-		result, err := scanner.ScanWithOptions(ctx, types.ScanOptions{
+		result, err := scanner.DefaultScanner.ScanWithOptions(ctx, types.ScanOptions{
 			Roots:      roots,
 			OnProgress: progress.Handle,
 		})
@@ -74,7 +74,7 @@ var scanCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		writeLastScanCache(roots, result)
+		writeLastScanCache(roots, scanner.DefaultScanner.ProviderIdentity(), result)
 		printHumanScanResult(ctx, result)
 		if result.Partial() {
 			os.Exit(1)
