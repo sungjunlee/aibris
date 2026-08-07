@@ -142,7 +142,7 @@ func newGitFixtureRepo(t *testing.T) string {
 	return repo
 }
 
-func newGitFixtureRepoAt(t *testing.T, repo string) {
+func newGitFixtureRepoAt(t testing.TB, repo string) {
 	t.Helper()
 	root := filepath.Dir(repo)
 	if err := os.MkdirAll(root, 0755); err != nil {
@@ -158,7 +158,7 @@ func newGitFixtureRepoAt(t *testing.T, repo string) {
 	runGitFixture(t, repo, "push", "-u", "origin", "main")
 }
 
-func writeGitFixtureFile(t *testing.T, repo, name, content string) {
+func writeGitFixtureFile(t testing.TB, repo, name, content string) {
 	t.Helper()
 	path := filepath.Join(repo, filepath.FromSlash(name))
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
@@ -169,7 +169,7 @@ func writeGitFixtureFile(t *testing.T, repo, name, content string) {
 	}
 }
 
-func runGitFixture(t *testing.T, dir string, args ...string) {
+func runGitFixture(t testing.TB, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
