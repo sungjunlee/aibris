@@ -15,7 +15,7 @@ import (
 )
 
 func preparedExecutorTarget(
-	t *testing.T,
+	t testing.TB,
 	item types.DebrisInfo,
 	selected WorktreeCleanupUnit,
 ) preparedCleanTarget {
@@ -600,7 +600,7 @@ func executorWorktreeItem(path string, size int64) types.DebrisInfo {
 	}
 }
 
-func buildExecutorUnit(t *testing.T, item types.DebrisInfo) WorktreeCleanupUnit {
+func buildExecutorUnit(t testing.TB, item types.DebrisInfo) WorktreeCleanupUnit {
 	t.Helper()
 	units, err := BuildWorktreeCleanupUnits([]types.DebrisInfo{item})
 	if err != nil {
