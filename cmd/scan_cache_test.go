@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
+	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -148,6 +149,26 @@ func TestSaveLastScanCacheAtomicReplacement(t *testing.T) {
 	}
 	if _, ok := readLastScanCache(); !ok {
 		t.Fatal("final cache document must be readable")
+	}
+}
+
+func TestReadLastScanCacheRejectsForeignProviderIdentity(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	foreign := adapter.Identity([]adapter.DebrisProvider{adapter.NewWorktreeAdapter()})
+	if foreign == adapter.DefaultProviderIdentity() {
+		t.Fatal("fixture requires a provider set whose identity differs from the default registry")
+	}
+
+	writeLastScanCache([]string{home}, foreign, &types.ScanResult{TotalCount: 1})
+	if _, _, ok := readFreshLastScanCache([]string{home}); ok {
+		t.Fatal("readFreshLastScanCache accepted inventory produced by a foreign provider set; clean must fall back to a live scan")
+	}
+
+	writeLastScanCache([]string{home}, scanner.DefaultScanner.ProviderIdentity(), &types.ScanResult{TotalCount: 1})
+	if _, _, ok := readFreshLastScanCache([]string{home}); !ok {
+		t.Fatal("readFreshLastScanCache rejected inventory produced by the default provider set")
 	}
 }
 

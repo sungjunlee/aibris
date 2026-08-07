@@ -141,6 +141,12 @@ root-mismatched snapshots. This identity does not detect behavior changes
 inside an unchanged concrete provider. Maintainers must bump the explicit cache
 revision for those changes.
 
+Concrete provider identity is module-path scoped: each member is keyed by
+`reflect.Type.PkgPath()` plus its type name. Renaming or forking the module
+changes every identity derived from that provider set, which safely
+over-invalidates the cache — it forces a redundant live scan and never
+silently reuses inventory produced under a different module path.
+
 Compatibility is necessary but not sufficient to reuse a cached target. Every
 target must carry filesystem identity and type evidence captured by the scan.
 Cache loading revalidates that evidence; a missing, replaced, type-changed,

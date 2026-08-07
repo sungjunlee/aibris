@@ -505,6 +505,29 @@ func TestNew_NilProviders(t *testing.T) {
 	}
 }
 
+func TestScanner_ProviderIdentity(t *testing.T) {
+	t.Parallel()
+	if DefaultScanner.ProviderIdentity() != adapter.DefaultProviderIdentity() {
+		t.Errorf("DefaultScanner.ProviderIdentity() = %q; want %q",
+			DefaultScanner.ProviderIdentity(), adapter.DefaultProviderIdentity())
+	}
+
+	custom := New([]adapter.DebrisProvider{&mockProvider{name: types.ToolCodex}})
+	if custom.ProviderIdentity() == DefaultScanner.ProviderIdentity() {
+		t.Fatal("scanner built with a custom provider set must report a different identity")
+	}
+	if custom.ProviderIdentity() != adapter.Identity(custom.Providers) {
+		t.Errorf("ProviderIdentity() = %q; want %q",
+			custom.ProviderIdentity(), adapter.Identity(custom.Providers))
+	}
+
+	matching := New(adapter.DefaultProviders())
+	if matching.ProviderIdentity() != DefaultScanner.ProviderIdentity() {
+		t.Errorf("scanner built with the default provider set must report the default identity: got %q, want %q",
+			matching.ProviderIdentity(), DefaultScanner.ProviderIdentity())
+	}
+}
+
 func TestScanner_ErrorWriterDefault(t *testing.T) {
 	t.Parallel()
 	s := New([]adapter.DebrisProvider{})

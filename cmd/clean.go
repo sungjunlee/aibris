@@ -631,7 +631,7 @@ func scanForClean(ctx context.Context, roots []string) (*types.ScanResult, scanS
 	if err := requireCompleteScan(result); err != nil {
 		return nil, scanSource{}, err
 	}
-	writeLastScanCache(roots, result)
+	writeLastScanCache(roots, scanner.DefaultScanner.ProviderIdentity(), result)
 	return result, scanSource{Kind: scanSourceLive}, nil
 }
 

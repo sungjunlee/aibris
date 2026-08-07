@@ -77,7 +77,14 @@ func agentStateStoreRootFor(suffix string) (string, error) {
 // registry. Provider ordering does not affect the identity, while duplicate
 // concrete registrations remain distinct members.
 func DefaultProviderIdentity() string {
-	return providerIdentity(defaultProviders)
+	return Identity(defaultProviders)
+}
+
+// Identity identifies the concrete provider membership in the given registry.
+// Provider ordering does not affect the identity, while duplicate concrete
+// registrations remain distinct members.
+func Identity(providers []DebrisProvider) string {
+	return providerIdentity(providers)
 }
 
 func providerIdentity(providers []DebrisProvider) string {
