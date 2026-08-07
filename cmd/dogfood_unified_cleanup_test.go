@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/sungjunlee/aibris/internal/types"
 )
 
 // TestDogfoodUnifiedJourneyRepresentativeHome exercises the shipped unified
@@ -21,6 +19,7 @@ func TestDogfoodUnifiedJourneyRepresentativeHome(t *testing.T) {
 	resetCleanFlags()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	old := time.Now().Add(-8 * 24 * time.Hour)
 	aged := time.Now().Add(-30 * 24 * time.Hour)
 
@@ -62,34 +61,6 @@ func TestDogfoodUnifiedJourneyRepresentativeHome(t *testing.T) {
 	}
 
 	saveFreshCodexActivityCacheFixture(t)
-	saveCleanCacheFixture(t, home, []types.DebrisInfo{
-		{
-			Tool: types.ToolCodex, Category: types.CategoryWorktree,
-			ID: "orphaned-project", Project: "project", Source: ".codex",
-			Path: orphanedPath, Size: 128 * 1024 * 1024, ModTime: aged,
-			Status: types.WorktreeOrphaned,
-		},
-		{
-			Tool: types.ToolCodex, Category: types.CategoryWorktree,
-			ID: "safe-active-a", Project: "project", Source: ".codex",
-			Path: safePath, Size: 512 * 1024 * 1024, ModTime: old,
-			Status: types.WorktreeActive,
-		},
-		{
-			Tool: types.ToolCodex, Category: types.CategoryWorktree,
-			ID: "dirty-locked", Project: "project", Source: ".codex",
-			Path: lockedPath, Size: 512 * 1024 * 1024, ModTime: old,
-			Status: types.WorktreeActive,
-		},
-		{
-			Tool: types.ToolNodeModules, Category: types.CategoryNodeModules,
-			ID: "app", Path: modules, Size: 64 * 1024 * 1024, ModTime: old,
-		},
-		{
-			Tool: types.ToolBuildCache, Category: types.CategoryBuildCache,
-			ID: "go-build", Path: goBuild, Size: 256 * 1024 * 1024, ModTime: old,
-		},
-	})
 	defer withStdin(t, "")()
 
 	// scan --json records the found surface.
@@ -106,7 +77,7 @@ func TestDogfoodUnifiedJourneyRepresentativeHome(t *testing.T) {
 		t.Fatalf("scan --json output is not valid JSON: %v", err)
 	}
 	if scanEnvelope.Summary.TotalCount < 5 {
-		t.Errorf("scan found %d items; want the 5 fixture items plus any real-home noise", scanEnvelope.Summary.TotalCount)
+		t.Errorf("scan found %d items; want the 5 fixture items (4 worktrees + node_modules + go-build, minus active exclusions)", scanEnvelope.Summary.TotalCount)
 	}
 
 	// Plain clean --dry-run opens guided review (pressure from the active
@@ -156,6 +127,9 @@ func TestDogfoodUnifiedJourneyRepresentativeHome(t *testing.T) {
 	}
 	if !strings.Contains(protectedNames, "dirty-locked") {
 		t.Errorf("hard-locked unit missing from protected rows:\n%s", protectedNames)
+	}
+	if strings.Contains(protectedNames, "safe-active") {
+		t.Errorf("safe active unit unexpectedly protected:\n%s", protectedNames)
 	}
 
 	// AC4: guided selection is empty (safe units unselected, dirty locked),

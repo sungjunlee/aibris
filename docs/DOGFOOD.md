@@ -854,8 +854,15 @@ with 185 debris items / 37.82 GB and no top-level partial state; the
 `retention` projection reported 12 UTC-month buckets with no partial state.
 
 `clean --dry-run` (plain, no selectors) opened guided review and merged every
-category into one unified review: **found 14 items / 4.9 GB, selected 9**
-(four orphaned agent-state entries, the npm cache, and four `node_modules`
-directories), **reviewable 4** worktrees, **protected 1** (dirty locked
-worktree). The run ended with `[DRY-RUN] No files were removed.` No
+category into one unified review:
+
+| State | Count | Bytes |
+| --- | ---: | ---: |
+| found | 14 items | 4.9 GB |
+| eligible | 13 items | 4.9 GB |
+| selected | 9 items | 4.9 GB (four orphaned agent-state entries, the npm cache, four `node_modules`) |
+| reviewable | 4 items | 5.3 MB (retained worktrees) |
+| protected | 1 item | 1.8 MB (dirty locked worktree) |
+
+The run ended with `[DRY-RUN] No files were removed.` No
 deletion-mode `aibris clean` command was run.
