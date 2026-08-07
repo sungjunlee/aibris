@@ -87,7 +87,7 @@ func TestCleanCmd_GuidedRouteReachesLocalOnlyActiveWorktree(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	for _, want := range []string{"guided codex worktree cleanup", "selected   1 item", "clean plan", "[DRY-RUN] No files were removed."} {
+	for _, want := range []string{"guided codex worktree cleanup", "selected   1 item", "cleanup review", "[DRY-RUN] No files were removed."} {
 		if !strings.Contains(output, want) {
 			t.Errorf("guided Git-aware route missing %q; got: %s", want, output)
 		}
@@ -115,7 +115,8 @@ func TestCleanCmd_GuidedAgeFlagChangesOnlyMinimumIdleAge(t *testing.T) {
 		"policy     idle>1h, recent<6h locked, keep=3/repo, min-size=256.0 MB",
 		"locked",
 		"activity within recent safety window",
-		"No items selected.",
+		"cleanup review",
+		"[DRY-RUN] No files were removed.",
 	} {
 		if !strings.Contains(output, want) {
 			t.Errorf("guided --age output missing %q; got: %s", want, output)

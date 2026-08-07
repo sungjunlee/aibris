@@ -243,12 +243,11 @@ keep the classic cleanup audit/executor route, or `--guide` to force guided
 Codex review.
 
 When default guided review activates, it owns active Codex worktree decisions
-and then continues into the classic audit for orphaned worktrees, dependencies,
-caches, and other eligible categories. An empty guided selection therefore
-cannot hide classic candidates. In dry-run output, a classic target nested
-inside a selected guided cleanup unit is reported as covered by that parent and
-is not counted or previewed as a second physical target; its logical evidence
-remains visible.
+and merges them with the classic candidates into one unified cleanup review:
+selected guided parents and classic targets share one selection state, and a
+classic target nested inside a selected guided cleanup unit is reported as
+covered evidence rather than a second physical target. An empty guided
+selection therefore cannot hide classic candidates.
 
 Cleanup overlap accounting follows one containment component from plan through
 receipt:

@@ -138,26 +138,19 @@ review displays protected targets as locked rows.`,
 			IncludeActiveWorktrees: cleanIncludeActiveWorktrees,
 		}
 
-		var guidedPreviewTargets []types.DebrisInfo
-		var guidedComponents []cleanupOverlapComponent
-		var guidedSafetyProtections map[string]cleanAuditReason
-		guidedHadSelection := false
+		var guidedStatePtr *guidedCleanState
 		if experience == cleanExperienceGuided {
-			guidedOpts := opts
-			guidedOpts.Age = guidedAge
 			guidedState.Reason = reason
-			guidedResult, err := runGuidedCodexClean(ctx, guidedOpts, guidedState, overlapSafety)
+			final, aborted, err := promptGuidedCleanStateForFiles(os.Stdin, os.Stdout, guidedState)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
 			}
-			if guidedResult.Aborted {
+			if aborted {
 				return
 			}
-			guidedPreviewTargets = guidedResult.PreviewTargets
-			guidedComponents = guidedResult.Components
-			guidedSafetyProtections = guidedResult.SafetyProtections
-			guidedHadSelection = guidedResult.HadSelection
+			guidedState = final
+			guidedStatePtr = &guidedState
 			opts.IncludeActiveWorktrees = false
 		}
 
@@ -193,20 +186,28 @@ review displays protected targets as locked rows.`,
 		}
 		printOverlapSafetyRefusals(overlapSelection)
 		targets = overlapSelection.Targets
-		auditTargets := targets
-		if len(guidedPreviewTargets) > 0 {
-			targets, auditTargets = mergeGuidedPreviewWithClassicTargets(guidedPreviewTargets, targets)
+
+		if experience == cleanExperienceGuided {
+			runUnifiedGuidedClean(
+				ctx,
+				result,
+				source,
+				opts,
+				guidedStatePtr,
+				targets,
+				classicProtections,
+				overlapSafety,
+				os.Stdin,
+				os.Stdout,
+			)
+			return
 		}
-		overlapSelection.Targets = targets
+		auditTargets := targets
 		auditProtections := mergeCleanAuditProtections(
 			classicProtections,
 			overlapSelection.Protections,
-			guidedSafetyProtections,
 		)
-		auditComponents := mergeCleanupOverlapComponents(
-			guidedComponents,
-			overlapSelection.Components,
-		)
+		auditComponents := overlapSelection.Components
 		audit := buildPhysicalCleanAudit(
 			result.Worktrees,
 			auditComponents,
@@ -220,11 +221,7 @@ review displays protected targets as locked rows.`,
 		printCleanCandidateSummary(targets)
 
 		if len(targets) == 0 {
-			if guidedHadSelection {
-				fmt.Println("No additional classic items to clean.")
-			} else {
-				fmt.Println("No items to clean.")
-			}
+			fmt.Println("No items to clean.")
 			return
 		}
 

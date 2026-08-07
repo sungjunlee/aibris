@@ -641,14 +641,16 @@ func TestCleanCmd_DryRunDefaultsToGuidedWhenUsefulCodexReviewExists(t *testing.T
 		"guided codex worktree cleanup",
 		"reason     active Codex worktrees are the largest cleanup decision",
 		"selected   1 item",
-		"clean plan",
-		"mode     dry-run",
+		"cleanup review",
 		"[DRY-RUN] No files were removed.",
-		"scan summary",
-		"No additional classic items to clean.",
 	} {
 		if !strings.Contains(output, want) {
 			t.Errorf("output missing %q; got: %s", want, output)
+		}
+	}
+	for _, unwanted := range []string{"scan summary", "clean plan", "No additional classic items to clean."} {
+		if strings.Contains(output, unwanted) {
+			t.Errorf("guided dry-run should use the unified review, not %q: %s", unwanted, output)
 		}
 	}
 	if _, err := os.Stat(worktree); err != nil {
@@ -745,7 +747,7 @@ func TestCleanCmd_DefaultGuidedNonTTYCleanDoesNotBlockOrDelete(t *testing.T) {
 
 	for _, want := range []string{
 		"guided codex worktree cleanup",
-		"clean plan",
+		"cleanup review",
 		"No confirmation received; rerun with --dry-run to review or --force to delete selected targets.",
 	} {
 		if !strings.Contains(output, want) {

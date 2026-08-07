@@ -27,7 +27,11 @@ selector.
 
 ### Batch 3 — Cross one execution boundary
 
-- [ ] #115 Execute unified selections through one dry-run and confirmation contract (~3h)
+- [~] #115 Execute unified selections through one dry-run and confirmation
+      contract (~3h) — guided route now builds one unified plan (guided
+      selection + classic candidates), renders one review, validates evidence
+      before execution, and executes selected physical owners through the
+      existing Git-aware executor; PR pending
 
 ### Batch 4 — Prove the journey with representative evidence
 

@@ -442,7 +442,14 @@ func buildCleanupPhysicalComponents(
 			if previous.Key == target.Key {
 				break
 			}
-			if cleanTargetContains(previous.Key, target.Key) {
+			// A nested target is absorbed into an ancestor's component only
+			// when that ancestor is itself selected or locked. An unselected
+			// owner (for example a kept reviewable worktree) must never be
+			// promoted to selected by a nested selected row, and it must
+			// never become the execution owner of that row; the nested target
+			// stays its own physical owner instead.
+			if cleanTargetContains(previous.Key, target.Key) &&
+				previous.PolicySelection != CleanupPlanUnselected {
 				ownerKey = previous.OwnerKey
 				break
 			}

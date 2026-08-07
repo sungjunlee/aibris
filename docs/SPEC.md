@@ -110,15 +110,24 @@ Behavior:
    worktree health for ordinary debris, or classification for `agent-state`.
    Guided cleanup builds physical cleanup units, collects Git and activity
    evidence, and applies the hierarchical policy below.
-5. After guided active-worktree review, continue with the classic audit for
-   remaining categories. Normalize selected guided parents with classic
-   targets so nested paths are evidence rather than additional deletion targets.
-6. Print a cleanup audit with policy, scan source, physical-owner totals,
-   logical evidence counts, and skipped reasons.
+5. Guided cleanup merges the accepted worktree selection and the classic
+   candidates into one unified cleanup plan: rows, physical targets, and
+   containment components share a single selection state, hard-lock dominance
+   covers every category, and nested paths stay evidence rather than
+   additional deletion targets. A mixed selection (guided worktrees plus
+   classic candidates) gets one combined toggle review; a pure guided
+   selection is settled by the guided prompt.
+6. Print the unified cleanup review (guided route) or the classic audit
+   (classic route) with policy, scan source, physical totals, and skipped
+   reasons. Dry-run and execution render the same plan; only the explicit
+   execution gate differs.
 7. If no targets match, print `No items to clean.` and exit 0.
 8. If `--dry-run` is set, print targets and total candidate space without deleting.
 9. If `--interactive` is set, ask per item.
-10. If not forced, print the target plan and ask for one final confirmation.
+10. Before execution the unified plan validates its evidence: partial scan
+    evidence or an expired evidence window fails closed, and locked components
+    are never selected. If not forced, print the target plan and ask for one
+    final confirmation.
 11. Delete ordinary and orphaned targets through cleaner safety checks. Delete
     active worktree members through the Git-aware executor.
 12. Print a cleanup receipt with removed, partial, and failed unit counts,
@@ -206,9 +215,10 @@ Default guided Codex worktree cleanup:
 - `--guide` explicitly forces guided Codex worktree cleanup.
 - `recommended` rows start selected. `reviewable` rows are soft-policy holds and
   may be toggled. `locked` rows remain visible and cannot be selected.
-- Guided review owns active Codex worktree rows, then the classic audit exposes
-  remaining eligible categories. Blank input or non-TTY EOF accepts the guided
-  defaults in dry-run mode and continues; `q` aborts the whole cleanup flow.
+- Guided review owns active Codex worktree rows; when classic candidates also
+  exist, one unified review exposes every category together. Blank input or
+  non-TTY EOF accepts the current selection and continues; `q` aborts the whole
+  cleanup flow.
 - In deletion mode, declining or failing to provide the guided final
   confirmation aborts the whole command before classic targets can execute.
 - Dry-run target normalization treats selected guided cleanup units as parents,
