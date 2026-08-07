@@ -37,9 +37,9 @@ selector.
 
 ### Batch 4 — Prove the journey with representative evidence
 
-- [~] #116 Dogfood the unified cleanup journey on representative homes (~2h)
-      — representative fixture test + sanitized real-home scan/dry-run recorded
-      in `docs/DOGFOOD.md`; PR pending
+- [x] #116 Dogfood the unified cleanup journey on representative homes (~2h)
+      → PR #193 (merged `3190874`): representative fixture test + sanitized
+      real-home scan/dry-run recorded in `docs/DOGFOOD.md`; review pass
 
 ### Batch 5 — Close capability scope without forcing a release
 

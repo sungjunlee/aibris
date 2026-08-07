@@ -1,7 +1,7 @@
 ---
 id: AIB-116
 title: Dogfood the unified cleanup journey on representative homes
-status: In Progress
+status: Done
 labels:
   - documentation
   - cli
@@ -11,6 +11,7 @@ labels:
 priority: medium
 milestone: 0.9.x Unified Cleanup Experience
 created_date: '2026-07-22'
+completed_date: '2026-08-08'
 ---
 ## Description
 ## Goal
