@@ -822,3 +822,40 @@ candidate.
 The subsequent `clean --dry-run --no-guide` completed at
 `2026-08-06T22:49+09:00` and ended with `[DRY-RUN] No files were removed.`
 No deletion-mode `aibris clean` command was run.
+
+## 2026-08-08 unified cleanup journey dogfood (#116)
+
+The 0.9.x unified journey was dogfooded two ways: a deterministic
+representative-home fixture (covered by
+`cmd/dogfood_unified_cleanup_test.go`, run in CI) and a sanitized real-home
+read-only run with the current `main` binary (`/tmp/aibris-dogfood`).
+
+### Representative-home fixture
+
+One synthetic `$HOME` contained, together: a `node_modules` directory, a
+`go-build` cache, an orphaned worktree (`gitdir` → nonexistent parent), two
+clean active Codex worktrees (safe, reviewable) and one dirty active worktree
+(hard-locked). Plain `clean --dry-run` (guided pressure from the active units)
+rendered one unified review:
+
+- **selected** — orphaned worktree, `node_modules`, `go-build` (classic
+  candidates)
+- **reviewable** — the safe active units (retained per repository)
+- **protected** — the dirty unit (`[!]`, never selectable)
+
+Guided selection was empty, yet the default next command still produced a
+useful plan from the classic candidates (issue #116 AC4). No deletion
+occurred; every fixture artifact survived the dry-run.
+
+### Sanitized real-home run (read-only)
+
+`scan --json` on the developer `$HOME` completed at `2026-08-08T00:00+09:00`
+with 185 debris items / 37.82 GB and no top-level partial state; the
+`retention` projection reported 12 UTC-month buckets with no partial state.
+
+`clean --dry-run` (plain, no selectors) opened guided review and merged every
+category into one unified review: **found 14 items / 4.9 GB, selected 9**
+(four orphaned agent-state entries, the npm cache, and four `node_modules`
+directories), **reviewable 4** worktrees, **protected 1** (dirty locked
+worktree). The run ended with `[DRY-RUN] No files were removed.` No
+deletion-mode `aibris clean` command was run.
