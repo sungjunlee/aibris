@@ -129,19 +129,18 @@ func TestCleanCmd_ProtectedOnlyPressureOpensGuidedDryRun(t *testing.T) {
 	for _, want := range []string{
 		"guided codex worktree cleanup",
 		"selected   0 items",
-		"No items selected.",
-		"scan summary",
+		"cleanup review",
 		"node_modules",
-		"matched  1 candidate",
-		"clean plan",
+		"selected   1 item",
+		"[DRY-RUN] No files were removed.",
 	} {
 		if !strings.Contains(output, want) {
 			t.Errorf("protected-only guided output missing %q; got: %s", want, output)
 		}
 	}
-	for _, unwanted := range []string{"[DRY-RUN] Preview complete."} {
+	for _, unwanted := range []string{"[DRY-RUN] Preview complete.", "scan summary", "matched  1 candidate", "clean plan"} {
 		if strings.Contains(output, unwanted) {
-			t.Errorf("zero selection should not emit %q; got: %s", unwanted, output)
+			t.Errorf("protected-only guided output should not emit %q; got: %s", unwanted, output)
 		}
 	}
 	if _, err := os.Stat(worktree); err != nil {
@@ -168,8 +167,7 @@ func TestCleanCmd_ProtectedOnlyEnterDoesNotPreviewOrDelete(t *testing.T) {
 	for _, want := range []string{
 		"guided codex worktree cleanup",
 		"selected   0 items",
-		"No items selected.",
-		"scan summary",
+		"cleanup review",
 		"No items to clean.",
 	} {
 		if !strings.Contains(output, want) {
@@ -199,7 +197,7 @@ func TestCleanCmd_ProtectedOnlyNonTTYReturnsWithoutDeleting(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	for _, want := range []string{"guided codex worktree cleanup", "No items selected.", "scan summary", "No items to clean."} {
+	for _, want := range []string{"guided codex worktree cleanup", "cleanup review", "No items to clean."} {
 		if !strings.Contains(output, want) {
 			t.Errorf("non-TTY protected-only output missing %q; got: %s", want, output)
 		}
@@ -240,17 +238,17 @@ func TestCleanCmd_GuidedDryRunContinuesWithMixedCategoryCandidates(t *testing.T)
 	for _, want := range []string{
 		"guided codex worktree cleanup",
 		"selected   1 item",
-		"scan summary",
+		"cleanup review",
 		"node_modules",
-		"matched  1 candidate",
-		filepath.Join("workspace", "app", "node_modules"),
+		"app",
+		"[DRY-RUN] No files were removed.",
 	} {
 		if !strings.Contains(output, want) {
 			t.Errorf("mixed guided output missing %q: %s", want, output)
 		}
 	}
-	if strings.Count(output, "clean plan") != 2 {
-		t.Errorf("mixed guided dry-run should preview guided and classic phases: %s", output)
+	if strings.Contains(output, "scan summary") {
+		t.Errorf("mixed guided dry-run should use the unified review, not the classic audit: %s", output)
 	}
 	if _, err := os.Stat(worktree); err != nil {
 		t.Fatalf("dry-run removed guided worktree: %v", err)
@@ -288,13 +286,13 @@ func TestCleanCmd_GuidedDryRunNormalizesNestedClassicCandidate(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	for _, want := range []string{"selected   1 item", "covered by selected parent", "matched  0 candidates", "No additional classic items to clean."} {
+	for _, want := range []string{"selected   1 item", "cleanup review", "nested evidence", "[DRY-RUN] No files were removed."} {
 		if !strings.Contains(output, want) {
 			t.Errorf("nested guided output missing %q: %s", want, output)
 		}
 	}
-	if strings.Count(output, "clean plan") != 1 {
-		t.Errorf("nested candidate should not create a second clean plan: %s", output)
+	if strings.Contains(output, "clean plan") {
+		t.Errorf("nested candidate should render through the unified review: %s", output)
 	}
 	if _, err := os.Stat(modules); err != nil {
 		t.Fatalf("dry-run removed nested candidate: %v", err)

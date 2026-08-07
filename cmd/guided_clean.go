@@ -53,14 +53,6 @@ type guidedCleanState struct {
 	CanReplan  bool
 }
 
-type guidedCleanRunResult struct {
-	PreviewTargets    []types.DebrisInfo
-	Components        []cleanupOverlapComponent
-	SafetyProtections map[string]cleanAuditReason
-	Aborted           bool
-	HadSelection      bool
-}
-
 func buildGuidedCleanState(ctx context.Context, result *types.ScanResult, source scanSource, minIdleAge time.Duration, reason string) (guidedCleanState, error) {
 	items := activeCodexWorktrees(result.Worktrees)
 	units, err := buildWorktreeCleanupUnits(ctx, items)
@@ -192,92 +184,6 @@ func guidedMemberReason(unit WorktreeCleanupUnit, member GitWorktreeMember, reas
 	return reason
 }
 
-func runGuidedCodexClean(
-	ctx context.Context,
-	opts types.PruneOptions,
-	state guidedCleanState,
-	overlapSafety cleanupOverlapSafetyRuntime,
-) (guidedCleanRunResult, error) {
-	targets, aborted, err := promptGuidedCleanForFiles(os.Stdin, os.Stdout, state)
-	if err != nil || aborted {
-		return guidedCleanRunResult{Aborted: aborted}, err
-	}
-	if len(targets) == 0 {
-		fmt.Fprintln(os.Stdout, "No items selected.")
-		return guidedCleanRunResult{}, nil
-	}
-	logicalInputs := cleanupOverlapLogicalInputsForAudit(state.Inventory, opts, nil)
-	logicalInputs = applyGuidedPolicyReasons(logicalInputs, state)
-	overlapSelection, err := applyCleanupOverlapSafetyWithRows(
-		ctx,
-		overlapSafety,
-		targets,
-		logicalInputs,
-	)
-	if err != nil {
-		return guidedCleanRunResult{}, fmt.Errorf("preparing guided overlap safety: %w", err)
-	}
-	printOverlapSafetyRefusals(overlapSelection)
-	targets = overlapSelection.Targets
-	if len(targets) == 0 {
-		fmt.Fprintln(os.Stdout, "No selected items passed overlap safety.")
-		return guidedCleanRunResult{
-			Components:        overlapSelection.Components,
-			SafetyProtections: overlapSelection.Protections,
-			HadSelection:      true,
-		}, nil
-	}
-
-	printCleanPlanWithComponents(targets, overlapSelection.Components, cleanPlanModeDryRun)
-	fmt.Fprintln(os.Stdout, "[DRY-RUN] Preview complete.")
-	if opts.DryRun {
-		fmt.Fprintln(os.Stdout, "[DRY-RUN] No files were removed.")
-		return guidedCleanRunResult{
-			PreviewTargets:    targets,
-			Components:        overlapSelection.Components,
-			SafetyProtections: overlapSelection.Protections,
-			HadSelection:      true,
-		}, nil
-	}
-	prepared := prepareCleanExecutionWithOptions(ctx, overlapSelection, overlapSafety, opts)
-
-	if opts.Interactive {
-		receipt, err := interactiveClean(ctx, prepared)
-		printWorktreeExecutionReceipts(receipt)
-		printGuidedCleanupReceipt(len(targets), receipt)
-		return guidedCleanRunResult{
-			Components:        overlapSelection.Components,
-			SafetyProtections: overlapSelection.Protections,
-			HadSelection:      true,
-		}, err
-	}
-	if !opts.Force {
-		if !confirmCleanExecution() {
-			return guidedCleanRunResult{
-				Components:        overlapSelection.Components,
-				SafetyProtections: overlapSelection.Protections,
-				Aborted:           true,
-				HadSelection:      true,
-			}, nil
-		}
-	}
-	receipt, err := executePreparedCleanTargets(ctx, prepared, defaultActiveWorktreeExecutionOptions())
-	printWorktreeExecutionReceipts(receipt)
-	printGuidedCleanupReceipt(len(targets), receipt)
-	if err != nil {
-		return guidedCleanRunResult{
-			Components:        overlapSelection.Components,
-			SafetyProtections: overlapSelection.Protections,
-			HadSelection:      true,
-		}, err
-	}
-	return guidedCleanRunResult{
-		Components:        overlapSelection.Components,
-		SafetyProtections: overlapSelection.Protections,
-		HadSelection:      true,
-	}, nil
-}
-
 func applyGuidedPolicyReasons(
 	inputs []cleanupOverlapLogicalInput,
 	state guidedCleanState,
@@ -311,11 +217,31 @@ func promptGuidedCleanForFiles(input *os.File, output *os.File, state guidedClea
 	return promptGuidedClean(input, output, state)
 }
 
+// promptGuidedCleanStateForFiles returns the accepted selection state so the
+// unified cleanup plan can reuse the same policy decisions and toggles.
+func promptGuidedCleanStateForFiles(input *os.File, output *os.File, state guidedCleanState) (guidedCleanState, bool, error) {
+	if isTerminal(input) && isTerminal(output) {
+		return promptGuidedCleanStateWithMode(input, output, state, guidedCleanPromptTTY)
+	}
+	return promptGuidedCleanStateWithMode(input, output, state, guidedCleanPromptText)
+}
+
 func promptGuidedClean(input io.Reader, output io.Writer, state guidedCleanState) ([]types.DebrisInfo, bool, error) {
 	return promptGuidedCleanWithMode(input, output, state, guidedCleanPromptText)
 }
 
 func promptGuidedCleanWithMode(input io.Reader, output io.Writer, state guidedCleanState, mode guidedCleanPromptMode) ([]types.DebrisInfo, bool, error) {
+	final, aborted, err := promptGuidedCleanStateWithMode(input, output, state, mode)
+	if err != nil || aborted {
+		return nil, aborted, err
+	}
+	return selectedGuidedCleanTargets(final), false, nil
+}
+
+// promptGuidedCleanStateWithMode returns the accepted selection state so the
+// unified cleanup plan can reuse the same policy decisions and toggles across
+// every category instead of a separate guided-then-classic handoff.
+func promptGuidedCleanStateWithMode(input io.Reader, output io.Writer, state guidedCleanState, mode guidedCleanPromptMode) (guidedCleanState, bool, error) {
 	scanner := bufio.NewScanner(input)
 	status := ""
 	for {
@@ -323,17 +249,17 @@ func promptGuidedCleanWithMode(input io.Reader, output io.Writer, state guidedCl
 		status = ""
 		if !scanner.Scan() {
 			if err := scanner.Err(); err != nil {
-				return nil, false, err
+				return guidedCleanState{}, false, err
 			}
-			return selectedGuidedCleanTargets(state), false, nil
+			return state, false, nil
 		}
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
-			return selectedGuidedCleanTargets(state), false, nil
+			return state, false, nil
 		}
 		if strings.EqualFold(line, "q") {
 			fmt.Fprintln(output, "Aborted.")
-			return nil, true, nil
+			return guidedCleanState{}, true, nil
 		}
 		if next, message, ok := applyGuidedCleanCommand(state, line); ok {
 			state = next
