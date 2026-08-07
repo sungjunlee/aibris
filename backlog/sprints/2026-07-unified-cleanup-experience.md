@@ -27,11 +27,13 @@ selector.
 
 ### Batch 3 — Cross one execution boundary
 
-- [~] #115 Execute unified selections through one dry-run and confirmation
-      contract (~3h) — guided route now builds one unified plan (guided
-      selection + classic candidates), renders one review, validates evidence
-      before execution, and executes selected physical owners through the
-      existing Git-aware executor; PR pending
+- [x] #115 Execute unified selections through one dry-run and confirmation
+      contract (~3h) → PR #192 (merged `36a4921`): guided route builds one
+      unified plan (guided selection + classic candidates), one review,
+      execution-boundary validation (partial/stale evidence fails closed),
+      and the existing Git-aware executor; independent review round 1 found a
+      safety blocker (unselected guided owner promoted by a nested classic
+      row) which was fixed with regression tests; round 2 pass
 
 ### Batch 4 — Prove the journey with representative evidence
 

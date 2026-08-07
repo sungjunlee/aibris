@@ -1,7 +1,7 @@
 ---
 id: AIB-115
 title: Execute unified selections through one dry-run and confirmation contract
-status: In Progress
+status: Done
 labels:
   - cli
   - safety
@@ -9,6 +9,7 @@ labels:
 priority: high
 milestone: 0.9.x Unified Cleanup Experience
 created_date: '2026-07-22'
+completed_date: '2026-08-07'
 ---
 ## Description
 ## Goal
