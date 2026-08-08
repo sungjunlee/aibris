@@ -11,12 +11,14 @@ import (
 )
 
 // cleanupPlanEvidence derives the execution-evidence window from the scan that
-// produced the inventory. Cached scans carry the cache freshness as the max
-// age; live scans carry no expiry. Partial scan evidence is carried through so
-// ValidateForExecution can reject it at the execution boundary.
+// produced the inventory. Cached scans preserve the cache creation time and
+// carry the cache freshness as the max age; live scans carry no expiry. Partial
+// scan evidence is carried through so ValidateForExecution can reject it at
+// the execution boundary.
 func cleanupPlanEvidence(result *types.ScanResult, source scanSource, observedAt time.Time) CleanupPlanEvidence {
 	evidence := CleanupPlanEvidence{ObservedAt: observedAt}
 	if source.Kind == scanSourceCached {
+		evidence.ObservedAt = source.ObservedAt
 		evidence.MaxAge = lastScanCacheMaxAge
 	}
 	if result != nil && result.Partial() {
@@ -85,10 +87,32 @@ func validateAndSelectForExecution(
 	plan UnifiedCleanupPlan,
 	now time.Time,
 ) ([]types.DebrisInfo, error) {
-	if err := plan.ValidateForExecution(ctx, now); err != nil {
-		return nil, fmt.Errorf("cleanup plan not ready for execution: %w", err)
+	if err := validateUnifiedCleanupPlanForMutation(ctx, plan, now); err != nil {
+		return nil, err
 	}
 	return plan.SelectedPhysicalTargets(), nil
+}
+
+func validateUnifiedCleanupPlanForMutation(ctx context.Context, plan UnifiedCleanupPlan, now time.Time) error {
+	if err := plan.ValidateForExecution(ctx, now); err != nil {
+		return fmt.Errorf("cleanup plan not ready for execution: %w", err)
+	}
+	return nil
+}
+
+func executeUnifiedPreparedCleanTargets(
+	ctx context.Context,
+	plan UnifiedCleanupPlan,
+	targets []preparedCleanTarget,
+) (cleanExecutionReceipt, error) {
+	if err := validateUnifiedCleanupPlanForMutation(ctx, plan, time.Now()); err != nil {
+		result := cleanExecutionReceipt{Units: make([]cleanUnitExecutionReceipt, 0, len(targets))}
+		for _, target := range targets {
+			result.Units = append(result.Units, failedPreparedCleanUnitReceipt(target, err))
+		}
+		return result, err
+	}
+	return executePreparedCleanTargets(ctx, targets, defaultActiveWorktreeExecutionOptions())
 }
 
 // runUnifiedGuidedClean executes the guided experience through the unified
@@ -179,7 +203,9 @@ func runUnifiedGuidedClean(
 
 	prepared := prepareCleanExecutionWithOptions(ctx, selection, overlapSafety, opts)
 	if opts.Interactive {
-		receipt, interactiveErr := interactiveClean(ctx, prepared)
+		receipt, interactiveErr := interactiveCleanWithValidation(ctx, prepared, func(ctx context.Context) error {
+			return validateUnifiedCleanupPlanForMutation(ctx, plan, time.Now())
+		})
 		printWorktreeExecutionReceipts(receipt)
 		printCleanupReceipt(len(selected), receipt, audit)
 		if interactiveErr != nil {
@@ -193,7 +219,7 @@ func runUnifiedGuidedClean(
 			return
 		}
 	}
-	receipt, executeErr := executePreparedCleanTargets(ctx, prepared, defaultActiveWorktreeExecutionOptions())
+	receipt, executeErr := executeUnifiedPreparedCleanTargets(ctx, plan, prepared)
 	printWorktreeExecutionReceipts(receipt)
 	printCleanupReceipt(len(selected), receipt, audit)
 	if executeErr != nil {

@@ -19,8 +19,9 @@ const (
 )
 
 type scanSource struct {
-	Kind scanSourceKind
-	Age  time.Duration
+	Kind       scanSourceKind
+	Age        time.Duration
+	ObservedAt time.Time
 }
 
 type cleanAudit struct {

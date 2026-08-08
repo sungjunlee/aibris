@@ -3,6 +3,8 @@ package cmd
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -25,12 +27,116 @@ func TestCleanupPlanEvidenceCarriesPartialScanAndCacheFreshness(t *testing.T) {
 	if cached.MaxAge != lastScanCacheMaxAge {
 		t.Fatalf("cached evidence max age = %v; want %v", cached.MaxAge, lastScanCacheMaxAge)
 	}
+	if err := (UnifiedCleanupPlan{Evidence: cached}).ValidateForExecution(context.Background(), now); !errors.Is(err, errStaleCleanupPlanEvidence) {
+		t.Fatalf("cached evidence without observed time error = %v; want fail-closed stale evidence", err)
+	}
 
 	partial := cleanupPlanEvidence(&types.ScanResult{
 		ProviderErrors: []types.ScanProviderError{{Tool: "codex", Message: "boom"}},
 	}, scanSource{Kind: scanSourceLive}, now)
 	if len(partial.ProviderErrors) != 1 {
 		t.Fatalf("partial evidence provider errors = %+v; want the scan failure carried through", partial.ProviderErrors)
+	}
+}
+
+func TestCleanupPlanEvidencePreservesCachedSourceAge(t *testing.T) {
+	cacheReadAt := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
+	cacheAge := 4*time.Minute + 30*time.Second
+	cacheCreatedAt := cacheReadAt.Add(-cacheAge)
+	planCreatedAt := cacheReadAt.Add(90 * time.Second)
+	evidence := cleanupPlanEvidence(
+		&types.ScanResult{},
+		scanSource{Kind: scanSourceCached, Age: cacheAge, ObservedAt: cacheCreatedAt},
+		planCreatedAt,
+	)
+
+	if !evidence.ObservedAt.Equal(cacheCreatedAt) {
+		t.Fatalf("cached evidence observed at = %v; want cache creation time %v", evidence.ObservedAt, cacheCreatedAt)
+	}
+	plan := UnifiedCleanupPlan{Evidence: evidence}
+	if err := plan.ValidateForExecution(context.Background(), planCreatedAt); !errors.Is(err, errStaleCleanupPlanEvidence) {
+		t.Fatalf("cached evidence validation error = %v; want stale after prompt exceeds original freshness window", err)
+	}
+}
+
+func TestInteractiveCleanWithValidationRunsAfterApprovalAndStopsMutation(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	paths := []string{
+		filepath.Join(home, "one", "node_modules"),
+		filepath.Join(home, "two", "node_modules"),
+	}
+	items := make([]types.DebrisInfo, 0, len(paths))
+	for _, path := range paths {
+		if err := os.MkdirAll(path, 0755); err != nil {
+			t.Fatal(err)
+		}
+		items = append(items, types.DebrisInfo{
+			Path:     path,
+			Category: types.CategoryNodeModules,
+		})
+	}
+	runtime := staticOverlapSafetyRuntime(nil, nil)
+	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	targets := prepareCleanExecutionWithSafety(context.Background(), selection, runtime)
+	defer withStdin(t, "y\ny\n")()
+
+	validationErr := errors.New("expired after prompt")
+	validationCalls := 0
+	receipt, err := interactiveCleanWithValidation(context.Background(), targets, func(context.Context) error {
+		validationCalls++
+		return validationErr
+	})
+	if !errors.Is(err, validationErr) {
+		t.Fatalf("interactive validation error = %v; want %v", err, validationErr)
+	}
+	if validationCalls != 1 {
+		t.Fatalf("validation calls = %d; want one call after first approval", validationCalls)
+	}
+	if len(receipt.Units) != len(targets) {
+		t.Fatalf("failed receipt units = %d; want current and remaining %d", len(receipt.Units), len(targets))
+	}
+	for _, path := range paths {
+		if _, statErr := os.Stat(path); statErr != nil {
+			t.Fatalf("validation failure mutated %q: %v", path, statErr)
+		}
+	}
+}
+
+func TestExecuteUnifiedPreparedCleanTargetsRejectsStalePlan(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	targetPath := filepath.Join(home, "workspace", "node_modules")
+	if err := os.MkdirAll(targetPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	plan := UnifiedCleanupPlan{Evidence: CleanupPlanEvidence{
+		ObservedAt: time.Now().Add(-time.Hour),
+		MaxAge:     time.Minute,
+	}}
+	item := types.DebrisInfo{
+		Path:     targetPath,
+		Category: types.CategoryNodeModules,
+	}
+	runtime := staticOverlapSafetyRuntime(nil, nil)
+	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{item})
+	if err != nil {
+		t.Fatal(err)
+	}
+	targets := prepareCleanExecutionWithSafety(context.Background(), selection, runtime)
+
+	receipt, err := executeUnifiedPreparedCleanTargets(context.Background(), plan, targets)
+	if !errors.Is(err, errStaleCleanupPlanEvidence) {
+		t.Fatalf("execution-boundary error = %v; want stale evidence", err)
+	}
+	if len(receipt.Units) != 1 {
+		t.Fatalf("failed receipt units = %d; want 1", len(receipt.Units))
+	}
+	if _, statErr := os.Stat(targetPath); statErr != nil {
+		t.Fatalf("stale plan mutated target: %v", statErr)
 	}
 }
 

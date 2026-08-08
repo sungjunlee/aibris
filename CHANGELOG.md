@@ -2,6 +2,54 @@
 
 ## Unreleased
 
+## [0.9.0] - 2026-08-08
+
+### Added
+
+- The default guided cleanup route now presents guided Codex worktree choices
+  and eligible classic categories in one unified cleanup review. Mixed plans
+  share one selection state, one overlap-normalized set of physical targets,
+  and one dry-run, validation, confirmation, execution, and receipt contract.
+
+### Changed
+
+- Guided cleanup no longer completes a worktree review and then hands its
+  selection to a separate classic audit. Selected guided parents and classic
+  candidates are merged before the combined review; nested candidates covered
+  by a selected parent remain visible as evidence but are neither counted nor
+  scheduled as a second physical mutation.
+- Compatibility routes are unchanged: `--no-guide` and explicit cleanup
+  selectors keep the classic audit/executor contract, non-TTY input accepts the
+  current defaults, and `q` still aborts the whole guided flow.
+
+### Fixed
+
+- Scan-cache writes now record the identity of the concrete scanner provider
+  set that produced the inventory. Results from a custom provider registry can
+  no longer be stamped with the default registry identity and later reused as
+  default cleanup authority; identity mismatches safely fall back to a live
+  scan.
+- Cached unified plans now preserve the cache's original evidence timestamp
+  through review and confirmation, and revalidate it after final or per-item
+  prompts. A cache that expires while the user is reviewing can no longer
+  authorize a later mutation.
+
+### Safety
+
+- A reviewable, unselected worktree is never promoted to selected merely
+  because it contains a selected classic candidate such as `node_modules`.
+  The worktree remains retained and the nested candidate is treated as its own
+  physical owner.
+- Protected/locked rows remain unselectable and hard-lock their physical
+  component. Before mutation, unified plans reject partial or expired scan
+  evidence, then use the existing overlap checks, Git-aware worktree preflight,
+  mutation-time revalidation, and receipt accounting. `--force` still skips
+  only the final confirmation and never bypasses a hard safety check.
+- Representative-home and sanitized real-home dogfood exercised mixed caches,
+  dependencies, orphaned and active worktrees, and agent state through the
+  unified dry-run path. Both runs completed without deleting user data; see
+  `docs/DOGFOOD.md`.
+
 ## [0.8.5] - 2026-08-06
 
 ### Added
