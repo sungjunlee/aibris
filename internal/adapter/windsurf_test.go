@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -19,7 +20,7 @@ func TestWindsurfAdapter_Name(t *testing.T) {
 
 func TestWindsurfAdapter_NoBaseDir(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	a := &WindsurfAdapter{}
 	results, err := a.Scan(context.Background(), types.ScanOptions{})
@@ -33,7 +34,7 @@ func TestWindsurfAdapter_NoBaseDir(t *testing.T) {
 
 func TestWindsurfAdapter_EmptyDir(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	os.MkdirAll(filepath.Join(home, ".codeium", "windsurf"), 0755)
 
 	a := &WindsurfAdapter{}
@@ -48,7 +49,7 @@ func TestWindsurfAdapter_EmptyDir(t *testing.T) {
 
 func TestWindsurfAdapter_SingleProject(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	projDir := filepath.Join(home, ".codeium", "windsurf", "my-project")
 	os.MkdirAll(filepath.Join(projDir, "logs"), 0755)
 	os.WriteFile(filepath.Join(projDir, "logs", "session.log"), []byte("data"), 0644)
@@ -74,7 +75,7 @@ func TestWindsurfAdapter_SingleProject(t *testing.T) {
 
 func TestWindsurfAdapter_MultipleProjects(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	base := filepath.Join(home, ".codeium", "windsurf")
 	os.MkdirAll(filepath.Join(base, "proj1", "logs"), 0755)
 	os.MkdirAll(filepath.Join(base, "proj2", "logs"), 0755)
@@ -98,7 +99,7 @@ func TestWindsurfAdapter_MultipleProjects(t *testing.T) {
 
 func TestWindsurfAdapter_ReadDirError(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	base := filepath.Join(home, ".codeium", "windsurf")
 	os.MkdirAll(filepath.Dir(base), 0755)
 	os.WriteFile(base, []byte("not a dir"), 0644)
@@ -112,7 +113,7 @@ func TestWindsurfAdapter_ReadDirError(t *testing.T) {
 
 func TestWindsurfAdapter_ContextCancellation(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	os.MkdirAll(filepath.Join(home, ".codeium", "windsurf", "proj1", "logs"), 0755)
 
 	ctx, cancel := context.WithCancel(context.Background())

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -61,7 +62,7 @@ func TestCleanupPlanEvidencePreservesCachedSourceAge(t *testing.T) {
 
 func TestInteractiveCleanWithValidationRunsAfterApprovalAndStopsMutation(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	paths := []string{
 		filepath.Join(home, "one", "node_modules"),
 		filepath.Join(home, "two", "node_modules"),
@@ -108,7 +109,7 @@ func TestInteractiveCleanWithValidationRunsAfterApprovalAndStopsMutation(t *test
 
 func TestExecuteUnifiedPreparedCleanTargetsRejectsStalePlan(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	targetPath := filepath.Join(home, "workspace", "node_modules")
 	if err := os.MkdirAll(targetPath, 0755); err != nil {
 		t.Fatal(err)

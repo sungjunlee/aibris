@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -19,7 +20,7 @@ func TestAILogsAdapter_Name(t *testing.T) {
 
 func TestAILogsAdapter_NoFiles(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	a := &AILogsAdapter{}
 	results, err := a.Scan(context.Background(), types.ScanOptions{})
@@ -33,7 +34,7 @@ func TestAILogsAdapter_NoFiles(t *testing.T) {
 
 func TestAILogsAdapter_CodexLogs(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	codexDir := filepath.Join(home, ".codex")
 	os.MkdirAll(codexDir, 0755)
 	os.WriteFile(filepath.Join(codexDir, "logs_2.sqlite"), make([]byte, 100), 0644)
@@ -59,7 +60,7 @@ func TestAILogsAdapter_CodexLogs(t *testing.T) {
 
 func TestAILogsAdapter_ClaudeCommandLog(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	claudeDir := filepath.Join(home, ".claude")
 	os.MkdirAll(claudeDir, 0755)
 	os.WriteFile(filepath.Join(claudeDir, "command-audit.log"), make([]byte, 50), 0644)
@@ -79,7 +80,7 @@ func TestAILogsAdapter_ClaudeCommandLog(t *testing.T) {
 
 func TestAILogsAdapter_Multiple(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	os.MkdirAll(filepath.Join(home, ".codex"), 0755)
 	os.WriteFile(filepath.Join(home, ".codex", "logs_2.sqlite"), make([]byte, 100), 0644)
@@ -107,7 +108,7 @@ func TestAILogsAdapter_Multiple(t *testing.T) {
 
 func TestAILogsAdapter_ContextCancellation(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

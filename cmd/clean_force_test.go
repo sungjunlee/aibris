@@ -4,12 +4,14 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sungjunlee/aibris/internal/testutil"
 )
 
 func TestCleanCmd_ForceKeepsClassicRoute(t *testing.T) {
 	resetCleanFlags()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	saveUsefulGuidedCleanFixture(t, home, "hash-force-classic", time.Now().Add(-48*time.Hour))
 	defer withStdin(t, "")()
 
@@ -29,7 +31,7 @@ func TestCleanCmd_ForceKeepsClassicRoute(t *testing.T) {
 func TestCleanCmd_GuideOverridesForceSelector(t *testing.T) {
 	resetCleanFlags()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	saveUsefulGuidedCleanFixture(t, home, "hash-guide-force-override", time.Now().Add(-48*time.Hour))
 	defer withStdin(t, "\n")()
 

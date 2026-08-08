@@ -14,6 +14,7 @@ import (
 	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/scanner"
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -39,7 +40,7 @@ func (p *overlapSafetyScanProvider) Scan(
 
 func TestDefaultCleanupOverlapSafetyRuntimeScansFullHomeForInitialAndRefresh(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	liveCWD := filepath.Join(home, "workspace", "live")
 	if err := os.MkdirAll(liveCWD, 0o755); err != nil {
@@ -130,7 +131,7 @@ func TestCleanupOverlapSafetyRuntimePreservesProviderErrorsAndFailsClosed(t *tes
 
 	t.Run("refresh", func(t *testing.T) {
 		home := t.TempDir()
-		t.Setenv("HOME", home)
+		testutil.SetHome(t, home)
 		calls := 0
 		provider := &overlapSafetyScanProvider{
 			tool: types.ToolCursor,
@@ -196,7 +197,7 @@ func assertOverlapSafetyEvidenceContains(
 
 func TestExecuteCleanTargetsRefusesGenericParentContainingLiveAgentState(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	outer := filepath.Join(home, ".cache", "generic-parent")
 	protected := filepath.Join(outer, ".cursor", "projects", "live-entry")
@@ -285,7 +286,7 @@ func TestOverlapSafetyPreparationRefusesProtectedShapesBeforeExecution(t *testin
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			home := t.TempDir()
-			t.Setenv("HOME", home)
+			testutil.SetHome(t, home)
 			base := filepath.Join(home, ".cache", tt.name)
 			targetPath := filepath.Join(base, tt.targetRelative)
 			entryPath := filepath.Join(base, tt.entryRelative)
@@ -323,7 +324,7 @@ func TestOverlapSafetyPreparationRefusesProtectedShapesBeforeExecution(t *testin
 
 func TestExecuteOverlapSafetyRevalidatesNestedOrphanBeforeRemovingOuterTarget(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	outer := filepath.Join(home, ".cache", "orphan-success")
 	entry := filepath.Join(outer, "nested", "orphan")
 	sentinel := filepath.Join(entry, "sentinel")
@@ -371,7 +372,7 @@ func TestExecuteOverlapSafetyRevalidatesNestedOrphanBeforeRemovingOuterTarget(t 
 
 func TestExecuteOverlapSafetyLateObligationFailureIsAtomicAndUnrelatedTargetContinues(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	blocked := filepath.Join(home, ".cache", "blocked-component")
 	first := filepath.Join(blocked, "agent", "first")
 	second := filepath.Join(blocked, "agent", "second")
@@ -481,7 +482,7 @@ func TestExecuteOverlapSafetyRefreshCatchesClassificationDriftAndNewEntries(t *t
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			home := t.TempDir()
-			t.Setenv("HOME", home)
+			testutil.SetHome(t, home)
 			outer := filepath.Join(home, ".cache", strings.ReplaceAll(tt.name, " ", "-"))
 			entry := filepath.Join(outer, "new-agent-entry")
 			sentinel := filepath.Join(entry, "sentinel")
@@ -539,7 +540,7 @@ func TestExecuteOverlapSafetyRefreshCatchesClassificationDriftAndNewEntries(t *t
 func TestExecuteOverlapSafetyRefusesSymlinkRetargetAndIncompleteRefresh(t *testing.T) {
 	t.Run("canonicalization error fails closed during preparation", func(t *testing.T) {
 		home := t.TempDir()
-		t.Setenv("HOME", home)
+		testutil.SetHome(t, home)
 		target := filepath.Join(home, ".cache", "canonicalization-error")
 		sentinel := filepath.Join(target, "sentinel")
 		if err := os.MkdirAll(target, 0o755); err != nil {
@@ -579,7 +580,7 @@ func TestExecuteOverlapSafetyRefusesSymlinkRetargetAndIncompleteRefresh(t *testi
 
 	t.Run("unresolvable path below intermediate symlink", func(t *testing.T) {
 		home := t.TempDir()
-		t.Setenv("HOME", home)
+		testutil.SetHome(t, home)
 		target := filepath.Join(home, ".cache", "real")
 		sentinel := filepath.Join(target, "sentinel")
 		if err := os.MkdirAll(target, 0o755); err != nil {
@@ -616,7 +617,7 @@ func TestExecuteOverlapSafetyRefusesSymlinkRetargetAndIncompleteRefresh(t *testi
 
 	t.Run("symlink retarget", func(t *testing.T) {
 		home := t.TempDir()
-		t.Setenv("HOME", home)
+		testutil.SetHome(t, home)
 		first := filepath.Join(home, ".cache", "first")
 		second := filepath.Join(home, ".cache", "second")
 		for _, path := range []string{first, second} {
@@ -656,7 +657,7 @@ func TestExecuteOverlapSafetyRefusesSymlinkRetargetAndIncompleteRefresh(t *testi
 
 	t.Run("incomplete refresh", func(t *testing.T) {
 		home := t.TempDir()
-		t.Setenv("HOME", home)
+		testutil.SetHome(t, home)
 		target := filepath.Join(home, ".cache", "partial-refresh")
 		sentinel := filepath.Join(target, "sentinel")
 		if err := os.MkdirAll(target, 0o755); err != nil {
@@ -692,7 +693,7 @@ func TestExecuteOverlapSafetyRefusesSymlinkRetargetAndIncompleteRefresh(t *testi
 
 func TestExecuteOverlapSafetyRefusesCommandBeforeExecutionAndMissingFallback(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	target := filepath.Join(home, ".cache", "command-overlap")
 	entry := filepath.Join(target, "agent")
 	sentinel := filepath.Join(entry, "sentinel")
@@ -756,7 +757,7 @@ func TestOverlapSafetyRefusesMissingOrAmbiguousRevalidatorBeforeExecution(t *tes
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			home := t.TempDir()
-			t.Setenv("HOME", home)
+			testutil.SetHome(t, home)
 			target := filepath.Join(home, ".cache", "registration-"+tt.name)
 			entry := filepath.Join(target, "orphan")
 			sentinel := filepath.Join(entry, "sentinel")
@@ -787,7 +788,7 @@ func TestOverlapSafetyRefusesMissingOrAmbiguousRevalidatorBeforeExecution(t *tes
 
 func TestExecuteOverlapSafetyRefreshBlocksNewCommandOverlapBeforeCommandRuns(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	target := filepath.Join(home, ".cache", "command-refresh")
 	entry := filepath.Join(target, "agent")
 	sentinel := filepath.Join(entry, "sentinel")
@@ -833,7 +834,7 @@ func TestExecuteOverlapSafetyRefreshBlocksNewCommandOverlapBeforeCommandRuns(t *
 
 func TestOverlapSafetySurvivesSelectorAndForceFiltering(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	targetPath := filepath.Join(home, ".cache", "selector-force")
 	entryPath := filepath.Join(targetPath, "agent")
 	sentinel := filepath.Join(entryPath, "sentinel")
@@ -872,7 +873,7 @@ func TestOverlapSafetySurvivesSelectorAndForceFiltering(t *testing.T) {
 
 func TestOverlapSafetyAuditReasonsNeverFallBackToMissingPath(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	targetPath := filepath.Join(home, ".cache", "audit-overlap")
 	entryPath := filepath.Join(targetPath, "agent")
 	if err := os.MkdirAll(entryPath, 0o755); err != nil {
@@ -926,7 +927,7 @@ func TestOverlapSafetyAuditReasonsNeverFallBackToMissingPath(t *testing.T) {
 func TestExecuteOverlapSafetyCancellationAndInteractiveConfirmationStayPreMutation(t *testing.T) {
 	t.Run("cancellation", func(t *testing.T) {
 		home := t.TempDir()
-		t.Setenv("HOME", home)
+		testutil.SetHome(t, home)
 		target := filepath.Join(home, ".cache", "cancelled")
 		sentinel := filepath.Join(target, "sentinel")
 		if err := os.MkdirAll(target, 0o755); err != nil {
@@ -953,7 +954,7 @@ func TestExecuteOverlapSafetyCancellationAndInteractiveConfirmationStayPreMutati
 
 	t.Run("interactive refresh after yes", func(t *testing.T) {
 		home := t.TempDir()
-		t.Setenv("HOME", home)
+		testutil.SetHome(t, home)
 		target := filepath.Join(home, ".cache", "interactive")
 		entry := filepath.Join(target, "new-agent")
 		sentinel := filepath.Join(entry, "sentinel")
@@ -1006,7 +1007,7 @@ func TestExecuteOverlapSafetyCancellationAndInteractiveConfirmationStayPreMutati
 
 func TestExecuteActiveWorktreeOverlapBarrierRunsBeforeGitMutation(t *testing.T) {
 	home, repository, worktree := newExecutorWorktree(t, "nested-agent-state")
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	entry := filepath.Dir(worktree)
 	sentinel := filepath.Join(entry, "safety-sentinel")
 	if err := os.WriteFile(sentinel, []byte("survive"), 0o644); err != nil {
@@ -1192,7 +1193,7 @@ func TestRefreshMemoInvalidatesOnFingerprintChangeAndDoesNotCacheErrors(t *testi
 // new entry is discovered and refuses the later mutation.
 func TestExecuteOverlapSafetyMemoInvalidatesOnNewEntryAcrossBatch(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	// Two independent cache targets in one batch; batch-a sorts before batch-b.
 	outerA := filepath.Join(home, ".cache", "batch-a")
@@ -1276,7 +1277,7 @@ func TestExecuteOverlapSafetyMemoInvalidatesOnNewEntryAcrossBatch(t *testing.T) 
 
 func TestAgentStateEntryFingerprintTracksEntrySet(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	ctx := context.Background()
 
 	claudeRoot := filepath.Join(home, ".claude", "projects")
@@ -1331,7 +1332,7 @@ func TestAgentStateEntryFingerprintTracksEntrySet(t *testing.T) {
 	// The key is injective in entry names: a single directory named "a,b" must
 	// not alias two directories named "a" and "b".
 	home2 := t.TempDir()
-	t.Setenv("HOME", home2)
+	testutil.SetHome(t, home2)
 	root2 := filepath.Join(home2, ".claude", "projects")
 	if err := os.MkdirAll(filepath.Join(root2, "a,b"), 0o755); err != nil {
 		t.Fatal(err)
@@ -1360,7 +1361,7 @@ func TestAgentStateEntryFingerprintTracksEntrySet(t *testing.T) {
 
 func TestAgentStateEntryFingerprintEnumeratesAgentStateRoots(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	ctx := context.Background()
 
 	roots, err := adapter.AgentStateStoreRoots()
@@ -1404,7 +1405,7 @@ func TestAgentStateEntryFingerprintEnumeratesAgentStateRoots(t *testing.T) {
 
 	// Creating a previously absent root changes the key.
 	home2 := t.TempDir()
-	t.Setenv("HOME", home2)
+	testutil.SetHome(t, home2)
 	roots2, err := adapter.AgentStateStoreRoots()
 	if err != nil {
 		t.Fatal(err)
@@ -1430,7 +1431,7 @@ func TestAgentStateEntryFingerprintEnumeratesAgentStateRoots(t *testing.T) {
 
 func TestAgentStateEntryFingerprintCoversProviderRoots(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	ctx := context.Background()
 
 	roots, err := adapter.AgentStateStoreRoots()

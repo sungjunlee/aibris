@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -24,7 +25,7 @@ func TestClaudeProjectAdapter_NameAndCategory(t *testing.T) {
 
 func TestClaudeProjectAdapter_ClassifiesLiveOrphanedAndUndetermined(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	base := filepath.Join(home, ".claude", "projects")
 
 	liveCWD := filepath.Join(home, "workspace", "active", "project.live")
@@ -86,7 +87,7 @@ func TestClaudeProjectAdapter_ClassifiesLiveOrphanedAndUndetermined(t *testing.T
 
 func TestClaudeProjectAdapter_LossyEncodedNameUsesRecordedCWD(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	recordedCWD := filepath.Join(home, ".codex", "worktrees", "1bbd-hash", "tamgu_note")
 	if err := os.MkdirAll(recordedCWD, 0755); err != nil {
 		t.Fatal(err)
@@ -117,7 +118,7 @@ func TestClaudeProjectAdapter_LossyEncodedNameUsesRecordedCWD(t *testing.T) {
 
 func TestClaudeProjectAdapter_DivergentRecordedCWDsClassifyLive(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	entryPath := filepath.Join(home, ".claude", "projects", "divergent")
 	absentCWD := filepath.Join(home, "workspace", "removed")
 	liveCWD := filepath.Join(home, "workspace", "active")
@@ -152,7 +153,7 @@ func TestClaudeProjectAdapter_DivergentRecordedCWDsClassifyLive(t *testing.T) {
 
 func TestClaudeProjectAdapter_AbsentCWDAndUnreadableSessionAreUndetermined(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	entryPath := filepath.Join(home, ".claude", "projects", "unreadable-after-absence")
 	absentCWD := filepath.Join(home, "workspace", "removed")
 	writeClaudeProjectSession(t, filepath.Join(entryPath, "a-absent.jsonl"),
@@ -202,7 +203,7 @@ func TestRecordedCWDsFromClaudeProject_CwdlessFileIsNotUnverifiable(t *testing.T
 
 func TestClaudeProjectAdapter_AbsentCWDAndCwdlessFileAreOrphaned(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	entryPath := filepath.Join(home, ".claude", "projects", "cwdless-after-absence")
 	absentCWD := filepath.Join(home, "workspace", "removed")
 	writeClaudeProjectSession(t, filepath.Join(entryPath, "s1.jsonl"),
@@ -225,7 +226,7 @@ func TestClaudeProjectAdapter_AbsentCWDAndCwdlessFileAreOrphaned(t *testing.T) {
 
 func TestClaudeProjectAdapter_AggregatesEveryRecordedCWDInOneSession(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	liveCWD := filepath.Join(home, "workspace", "active")
 	if err := os.MkdirAll(liveCWD, 0755); err != nil {
 		t.Fatal(err)
@@ -249,7 +250,7 @@ func TestClaudeProjectAdapter_AggregatesEveryRecordedCWDInOneSession(t *testing.
 
 func TestClaudeProjectAdapter_AbsentCWDAndMalformedRecordAreUndetermined(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	absentCWD := filepath.Join(home, "workspace", "removed", "orphan-label")
 	sessionPath := filepath.Join(home, ".claude", "projects", "mixed-records", "session.jsonl")
 	writeClaudeProjectSession(t, sessionPath,
@@ -274,7 +275,7 @@ func TestClaudeProjectAdapter_AbsentCWDAndMalformedRecordAreUndetermined(t *test
 
 func TestClaudeProjectAdapter_TruncatedRecordAfterRecordedCWDIsUndetermined(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	absentCWD := filepath.Join(home, "workspace", "removed", "metadata-only")
 	sessionPath := filepath.Join(home, ".claude", "projects", "early-cwd", "session.jsonl")
 	writeClaudeProjectSession(t, sessionPath,
@@ -297,7 +298,7 @@ func TestClaudeProjectAdapter_TruncatedRecordAfterRecordedCWDIsUndetermined(t *t
 
 func TestClaudeProjectAdapter_UnmountedVolumeAncestorBarrierIsUndetermined(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	recordedCWD := filepath.Join(
 		string(filepath.Separator),
 		"Volumes",
@@ -325,7 +326,7 @@ func TestClaudeProjectAdapter_UnmountedVolumeAncestorBarrierIsUndetermined(t *te
 
 func TestClaudeProjectAdapter_BrokenSymlinkAncestorBarrierIsUndetermined(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	share := filepath.Join(home, "share")
 	if err := os.Symlink(filepath.Join(home, "nonexistent-share-target"), share); err != nil {
 		t.Skipf("symlink unavailable: %v", err)
@@ -353,7 +354,7 @@ func TestClaudeProjectAdapter_BrokenSymlinkAncestorBarrierIsUndetermined(t *test
 
 func TestClaudeProjectAdapter_BrokenSymlinkRecordedCWDIsUndetermined(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	recordedCWD := filepath.Join(home, "project-link")
 	if err := os.Symlink(filepath.Join(home, "nonexistent-project-target"), recordedCWD); err != nil {
 		t.Skipf("symlink unavailable: %v", err)
@@ -380,7 +381,7 @@ func TestClaudeProjectAdapter_BrokenSymlinkRecordedCWDIsUndetermined(t *testing.
 
 func TestClaudeProjectAdapter_ReachableSymlinkAncestorStillClassifiesOrphaned(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	target := filepath.Join(home, "share-target")
 	if err := os.MkdirAll(target, 0755); err != nil {
 		t.Fatal(err)
@@ -405,7 +406,7 @@ func TestClaudeProjectAdapter_ReachableSymlinkAncestorStillClassifiesOrphaned(t 
 
 func TestClaudeProjectAdapter_MissingParentWithExistingAncestorClassifiesOrphaned(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	grandparent := filepath.Join(home, "workspace")
 	if err := os.MkdirAll(grandparent, 0755); err != nil {
 		t.Fatal(err)
@@ -426,7 +427,7 @@ func TestClaudeProjectAdapter_MissingParentWithExistingAncestorClassifiesOrphane
 
 func TestClaudeProjectAdapter_ProjectLabelsComeFromRecordedCWDBasenames(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	base := filepath.Join(home, ".claude", "projects")
 	writeClaudeProjectSession(t,
 		filepath.Join(base, "baby-entry", "session.jsonl"),
@@ -480,7 +481,7 @@ func TestClaudeProjectAdapter_AllFilesCwdlessAreUndetermined(t *testing.T) {
 
 func TestClaudeProjectAdapter_CWDlessAndUnreadableEntriesAreUndetermined(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	base := filepath.Join(home, ".claude", "projects")
 	writeClaudeProjectSession(t, filepath.Join(base, "cwdless", "session.jsonl"),
 		"{\"message\":\"metadata unavailable\"}\n")
@@ -512,7 +513,7 @@ func TestClaudeProjectAdapter_CWDlessAndUnreadableEntriesAreUndetermined(t *test
 
 func TestClaudeProjectAdapter_DoesNotReportInstalledClaudeContent(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	if err := os.MkdirAll(filepath.Join(home, ".claude", "skills", "installed-skill"), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -531,7 +532,7 @@ func TestClaudeProjectAdapter_DoesNotReportInstalledClaudeContent(t *testing.T) 
 
 func TestClaudeProjectAdapter_ContextCancellation(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	writeClaudeProjectSession(t, filepath.Join(home, ".claude", "projects", "entry", "session.jsonl"),
 		"{\"message\":\"no cwd\"}\n")
 

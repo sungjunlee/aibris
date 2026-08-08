@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sungjunlee/aibris/internal/testutil"
 )
 
 // TestDogfoodUnifiedJourneyRepresentativeHome exercises the shipped unified
@@ -18,7 +20,7 @@ import (
 func TestDogfoodUnifiedJourneyRepresentativeHome(t *testing.T) {
 	resetCleanFlags()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	old := time.Now().Add(-8 * 24 * time.Hour)
 	aged := time.Now().Add(-30 * 24 * time.Hour)

@@ -12,12 +12,13 @@ import (
 	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/retention"
 	"github.com/sungjunlee/aibris/internal/scanner"
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
 func TestLastScanCacheRejectsPreWorktreeRegistryRevision(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	roots, err := scanner.NormalizeRoots([]string{home})
 	if err != nil {
 		t.Fatal(err)

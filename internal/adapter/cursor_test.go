@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -23,7 +24,7 @@ func TestCursorAdapter_Name(t *testing.T) {
 
 func TestCursorAdapter_NoProjectsDir(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	a := &CursorAdapter{}
 	results, err := a.Scan(context.Background(), types.ScanOptions{})
@@ -37,7 +38,7 @@ func TestCursorAdapter_NoProjectsDir(t *testing.T) {
 
 func TestCursorAdapter_EmptyProjects(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	os.MkdirAll(filepath.Join(home, ".cursor", "projects"), 0755)
 
 	a := &CursorAdapter{}
@@ -52,7 +53,7 @@ func TestCursorAdapter_EmptyProjects(t *testing.T) {
 
 func TestCursorAdapter_SingleProject(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	projDir := filepath.Join(home, ".cursor", "projects", "my-project")
 	os.MkdirAll(filepath.Join(projDir, "mcps", "plugin"), 0755)
 	os.WriteFile(filepath.Join(projDir, "mcps", "plugin", "config.json"), []byte("{}"), 0644)
@@ -81,7 +82,7 @@ func TestCursorAdapter_SingleProject(t *testing.T) {
 
 func TestCursorAdapter_ClassifiesLiveOrphanedAndUndetermined(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	base := filepath.Join(home, ".cursor", "projects")
 	liveCWD := filepath.Join(home, "workspace", "active", "live-project")
 	if err := os.MkdirAll(liveCWD, 0755); err != nil {
@@ -146,7 +147,7 @@ func TestCursorAdapter_ClassifiesLiveOrphanedAndUndetermined(t *testing.T) {
 
 func TestCursorAdapter_WorkspacePathWhitespace(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	base := filepath.Join(home, ".cursor", "projects")
 
 	t.Run("existing path with spaces is live", func(t *testing.T) {
@@ -203,7 +204,7 @@ func TestCursorAdapter_WorkspacePathWhitespace(t *testing.T) {
 
 func TestCursorAdapter_UnterminatedWorkspacePath(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	base := filepath.Join(home, ".cursor", "projects")
 	truncatedCWD := filepath.Join(home, "workspace", "partially-written")
 
@@ -245,7 +246,7 @@ func TestCursorAdapter_UnterminatedWorkspacePath(t *testing.T) {
 
 func TestCursorAdapter_AnyLiveWorkspacePathWins(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	entryPath := filepath.Join(home, ".cursor", "projects", "moved-workspace")
 	absentCWD := filepath.Join(home, "workspace", "removed-project")
 	liveCWD := filepath.Join(home, "workspace", "live-project")
@@ -275,7 +276,7 @@ func TestCursorAdapter_AnyLiveWorkspacePathWins(t *testing.T) {
 
 func TestCursorAdapter_NoWorkspacePathDoesNotFallBackToToolchainPath(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	entryPath := filepath.Join(home, ".cursor", "projects", "toolchain-only")
 	toolchainPath := filepath.Join(home, "toolchain", "bin", "npx")
 	if err := os.MkdirAll(filepath.Dir(toolchainPath), 0755); err != nil {
@@ -302,7 +303,7 @@ func TestCursorAdapter_NoWorkspacePathDoesNotFallBackToToolchainPath(t *testing.
 
 func TestCursorAdapter_OnlyCursorWorkspacePathsAreUndetermined(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	entryPath := filepath.Join(home, ".cursor", "projects", "cursor-only")
 	writeCursorWorkerLog(t, entryPath,
 		"[info] workspacePath="+filepath.Join(home, ".cursor", "projects", "another-entry")+"\n")
@@ -318,7 +319,7 @@ func TestCursorAdapter_OnlyCursorWorkspacePathsAreUndetermined(t *testing.T) {
 
 func TestCursorAdapter_RepoJSONAndDirectoryNameAreNotPathFallbacks(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	key := "Users-sjlee-relay-worktrees-71f21a78-dear-scene-ai-gat-7bf2787"
 	entryPath := filepath.Join(home, ".cursor", "projects", key)
 	if err := os.MkdirAll(entryPath, 0755); err != nil {
@@ -350,7 +351,7 @@ func TestCursorAdapter_RepoJSONAndDirectoryNameAreNotPathFallbacks(t *testing.T)
 
 func TestCursorAdapter_UnreadableWorkerLogIsUndetermined(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	entryPath := filepath.Join(home, ".cursor", "projects", "unreadable-worker")
 	if err := os.MkdirAll(entryPath, 0755); err != nil {
 		t.Fatal(err)
@@ -376,7 +377,7 @@ func TestCursorAdapter_UnreadableWorkerLogIsUndetermined(t *testing.T) {
 
 func TestCursorAdapter_UnavailableRecordedCWDAncestorIsUndetermined(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	entryPath := filepath.Join(home, ".cursor", "projects", "unmounted-volume")
 	recordedCWD := filepath.Join(
 		string(filepath.Separator),
@@ -400,7 +401,7 @@ func TestCursorAdapter_UnavailableRecordedCWDAncestorIsUndetermined(t *testing.T
 
 func TestCursorAdapter_MultipleProjects(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	base := filepath.Join(home, ".cursor", "projects")
 	os.MkdirAll(filepath.Join(base, "proj1", "mcps"), 0755)
 	os.MkdirAll(filepath.Join(base, "proj2", "mcps"), 0755)
@@ -424,7 +425,7 @@ func TestCursorAdapter_MultipleProjects(t *testing.T) {
 
 func TestCursorAdapter_ReadDirError(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	base := filepath.Join(home, ".cursor", "projects")
 	os.MkdirAll(filepath.Dir(base), 0755)
 	os.WriteFile(base, []byte("not a dir"), 0644)
@@ -438,7 +439,7 @@ func TestCursorAdapter_ReadDirError(t *testing.T) {
 
 func TestCursorAdapter_ContextCancellation(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	os.MkdirAll(filepath.Join(home, ".cursor", "projects", "proj1", "mcps"), 0755)
 
 	ctx, cancel := context.WithCancel(context.Background())

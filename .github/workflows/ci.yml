@@ -51,6 +51,17 @@ jobs:
           New-Item -ItemType Directory -Force -Path $env:LOCALAPPDATA, $env:TEMP |
             Out-Null
 
+          @(
+            "USERPROFILE=$env:USERPROFILE"
+            "HOME=$env:HOME"
+            "HOMEDRIVE=$env:HOMEDRIVE"
+            "HOMEPATH=$env:HOMEPATH"
+            "LOCALAPPDATA=$env:LOCALAPPDATA"
+            "XDG_CACHE_HOME=$env:XDG_CACHE_HOME"
+            "TEMP=$env:TEMP"
+            "TMP=$env:TMP"
+          ) | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
           .\aibris.exe --version
           .\aibris.exe --help | Out-Null
           .\aibris.exe scan --json |
@@ -66,6 +77,13 @@ jobs:
         run: go test -race -count=1 -cover . -run '^(TestCLIContractInvalidFlag|TestCLIContractCleanHelpMatchesPolicyVocabulary)$'
       - name: Test platform-safe command and cleanup identity behavior
         run: go test -race -count=1 -cover ./cmd -run '^(TestWindowsCleanupPathIdentityRejectsReparsePoint|TestCleanCmd_NegativeAge|TestCleanCmd_GuideNoGuideErrors|TestParseAge|TestCleanCmd_InvalidSelector|TestParseCleanSelectorsTrimAndDeduplicate)$'
+      - name: Test HOME hermeticity under isolated profile
+        run: |
+          go test -race -count=1 -cover ./internal/testutil -run '^(TestSetHomeRedirectsUserHomeDir|TestSetHomeRedirectsUserCacheDir|TestSetHomePreservesVolumeShape)$'
+          go test -race -count=1 -cover ./cmd -run '^TestAgentStateEntryFingerprintTracksEntrySet$'
+          go test -race -count=1 -cover ./internal/scanner -run '^(TestScan_Default|TestNormalizeRoots_DefaultHome)$'
+      - name: Test nested perfharness module environment
+        run: go -C tools/perfharness test -race -count=1 -cover ./...
       - run: go vet ./...
 
   release-build:

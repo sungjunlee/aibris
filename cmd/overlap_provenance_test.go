@@ -10,12 +10,13 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
 func TestOverlapProvenanceCarriesRowsAndSuccessfulObligationsToReceipt(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	outer := filepath.Join(home, ".cache", "provenance-success")
 	claudeEntry := filepath.Join(outer, "agent", "claude")
 	cursorEntry := filepath.Join(outer, "agent", "cursor")
@@ -148,7 +149,7 @@ func TestOverlapProvenanceCarriesRowsAndSuccessfulObligationsToReceipt(t *testin
 func TestOverlapProvenanceFailureAndCancellationPreserveCompleteComponent(t *testing.T) {
 	t.Run("one child fails after another passes", func(t *testing.T) {
 		home := t.TempDir()
-		t.Setenv("HOME", home)
+		testutil.SetHome(t, home)
 		outer := filepath.Join(home, ".cache", "provenance-failure")
 		first := filepath.Join(outer, "agent", "a-first")
 		second := filepath.Join(outer, "agent", "b-second")
@@ -199,7 +200,7 @@ func TestOverlapProvenanceFailureAndCancellationPreserveCompleteComponent(t *tes
 
 	t.Run("component cancellation leaves obligations not attempted", func(t *testing.T) {
 		home := t.TempDir()
-		t.Setenv("HOME", home)
+		testutil.SetHome(t, home)
 		outer := filepath.Join(home, ".cache", "provenance-cancel")
 		entry := filepath.Join(outer, "agent", "orphan")
 		if err := os.MkdirAll(entry, 0o755); err != nil {
@@ -254,7 +255,7 @@ func TestOverlapProvenanceFailureAndCancellationPreserveCompleteComponent(t *tes
 	} {
 		t.Run("classification drift "+string(classification), func(t *testing.T) {
 			home := t.TempDir()
-			t.Setenv("HOME", home)
+			testutil.SetHome(t, home)
 			outer := filepath.Join(home, ".cache", "provenance-drift-"+string(classification))
 			entry := filepath.Join(outer, "agent", "orphan")
 			if err := os.MkdirAll(entry, 0o755); err != nil {
@@ -310,7 +311,7 @@ func TestOverlapProvenanceFailureAndCancellationPreserveCompleteComponent(t *tes
 
 	t.Run("new orphan with missing revalidator", func(t *testing.T) {
 		home := t.TempDir()
-		t.Setenv("HOME", home)
+		testutil.SetHome(t, home)
 		outer := filepath.Join(home, ".cache", "provenance-missing")
 		entry := filepath.Join(outer, "agent", "new-orphan")
 		if err := os.MkdirAll(entry, 0o755); err != nil {
@@ -427,7 +428,7 @@ func TestOverlapProvenanceProtectedAncestorAndDescendantKeepOwnerAccounting(t *t
 
 func TestOverlapProvenancePlanningRefusalKeepsLineageWithoutReceipt(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	outer := filepath.Join(home, ".cache", "missing-revalidator")
 	entry := filepath.Join(outer, "agent", "orphan")
 	if err := os.MkdirAll(entry, 0o755); err != nil {
@@ -489,7 +490,7 @@ func TestOverlapProvenancePlanningRefusalKeepsLineageWithoutReceipt(t *testing.T
 
 func TestOverlapProvenanceRetainsAmbiguousLogicalEvidence(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	outer := filepath.Join(home, ".cache", "ambiguous-lineage")
 	if err := os.MkdirAll(outer, 0o755); err != nil {
 		t.Fatal(err)
@@ -538,7 +539,7 @@ func TestOverlapProvenanceRetainsAmbiguousLogicalEvidence(t *testing.T) {
 
 func TestPhysicalCleanAuditUsesOwnerBytesAndLogicalEvidence(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	outer := filepath.Join(home, ".cache", "audit-owner")
 	entry := filepath.Join(outer, "agent", "orphan")
 	if err := os.MkdirAll(entry, 0o755); err != nil {

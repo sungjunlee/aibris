@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -316,7 +317,7 @@ func TestBuildUnifiedCleanupPlanIsDeterministic(t *testing.T) {
 
 func TestUnifiedCleanupPlanBuildsDeterministicContainmentComponent(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("HOME", root)
+	testutil.SetHome(t, root)
 	outer := filepath.Join(root, ".cache", "owner")
 	nested := filepath.Join(outer, "project", "node_modules")
 	if err := os.MkdirAll(nested, 0o755); err != nil {
@@ -475,7 +476,7 @@ func TestUnifiedCleanupPlanBuildsDeterministicContainmentComponent(t *testing.T)
 
 func TestSymlinkAliasExecutionDoesNotClaimCanonicalOwnerBytes(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	outer := filepath.Join(home, ".cache", "owner")
 	if err := os.MkdirAll(outer, 0o755); err != nil {
 		t.Fatal(err)
