@@ -83,6 +83,7 @@ func resetScanFlags() {
 	scanJSON = false
 	scanDiagnostics = false
 	scanRoots = nil
+	scanExcludes = nil
 }
 
 func TestScanCmd_NoWorktrees(t *testing.T) {
@@ -276,13 +277,14 @@ func resetCleanFlags() {
 	cleanGuide = false
 	cleanNoGuide = false
 	cleanRoots = nil
+	cleanExcludes = nil
 	cleanIncludeActiveWorktrees = false
 	cleanAgentStateGrace = "24h"
 	cleanReceiptFile = ""
-	for _, name := range []string{"age", "category", "tool", "dry-run", "json", "include-paths", "interactive", "risky", "force", "guide", "no-guide", "root", "include-active-worktrees", "agent-state-grace", "receipt-file", "help"} {
+	for _, name := range []string{"age", "category", "tool", "dry-run", "json", "include-paths", "interactive", "risky", "force", "guide", "no-guide", "root", "exclude", "include-active-worktrees", "agent-state-grace", "receipt-file", "help"} {
 		if flag := cleanCmd.Flags().Lookup(name); flag != nil {
 			flag.Changed = false
-			if name != "root" {
+			if name != "root" && name != "exclude" {
 				_ = flag.Value.Set(flag.DefValue)
 			}
 		}
@@ -883,7 +885,7 @@ func TestCleanCmd_ReusesFreshCurrentSchemaLastScanCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, source, err := scanForClean(context.Background(), resolvedRoots); err != nil {
+	if _, source, err := scanForClean(context.Background(), resolvedRoots, nil); err != nil {
 		t.Fatal(err)
 	} else if source.Kind != scanSourceCached {
 		t.Fatalf("scan source = %q; want cached", source.Kind)
