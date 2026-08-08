@@ -168,8 +168,10 @@ const (
 )
 
 type cleanupOverlapLogicalInput struct {
-	Item         types.DebrisInfo
-	PolicyReason string
+	Item           types.DebrisInfo
+	PolicyReason   string
+	PolicyDecision string
+	ReasonCodes    []string
 }
 
 type cleanupOverlapLogicalRow struct {
@@ -178,6 +180,8 @@ type cleanupOverlapLogicalRow struct {
 	CanonicalPath        string
 	Relation             cleanupOverlapRelation
 	PolicyReason         string
+	PolicyDecision       string
+	ReasonCodes          []string
 	L1Reason             string
 	RevalidationRequired bool
 	PhysicalBytes        int64
@@ -331,6 +335,8 @@ func buildCleanupOverlapComponents(
 				CanonicalPath:        path,
 				Relation:             relation,
 				PolicyReason:         cleanupLogicalPolicyReason(input),
+				PolicyDecision:       input.PolicyDecision,
+				ReasonCodes:          append([]string(nil), input.ReasonCodes...),
 				L1Reason:             cleanupLogicalL1Reason(safety, input.Item, path),
 				RevalidationRequired: cleanupLogicalRevalidationRequired(safety, input.Item, path),
 			})

@@ -39,15 +39,32 @@ func guidedCleanupPlanCandidates(state guidedCleanState) []CleanupPlanCandidate 
 		} else if row.Selected {
 			selection = CleanupPlanSelected
 		}
-		reasons := []CleanupPlanReason{{
-			Code:        CleanupPlanReasonWorktreePolicyDecision,
-			Description: row.Row.Reason,
-		}}
+		reasons := make([]CleanupPlanReason, 0, len(row.ReasonCodes)+1)
+		for reasonIndex, code := range row.ReasonCodes {
+			description := ""
+			if reasonIndex == 0 {
+				// Row.Reason is already the aggregated human explanation for
+				// this guided decision. Attach it once while retaining every
+				// stable machine-readable reason code.
+				description = row.Row.Reason
+			}
+			reasons = append(reasons, CleanupPlanReason{
+				Code:        CleanupPlanReasonCode(code),
+				Description: description,
+			})
+		}
+		if len(reasons) == 0 {
+			reasons = append(reasons, CleanupPlanReason{
+				Code:        CleanupPlanReasonWorktreePolicyDecision,
+				Description: row.Row.Reason,
+			})
+		}
 		candidates = append(candidates, CleanupPlanCandidate{
-			RowKey:    "guided:" + row.Key,
-			Item:      row.Row.Item,
-			Selection: selection,
-			Reasons:   reasons,
+			RowKey:         "guided:" + row.Key,
+			Item:           row.Row.Item,
+			PolicyDecision: cleanupPlanPolicyDecisionForClass(DecisionClass(row.Policy)),
+			Selection:      selection,
+			Reasons:        reasons,
 		})
 	}
 	return candidates
