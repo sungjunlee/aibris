@@ -204,6 +204,21 @@ Orphaned Cursor entries are eligible for default cleanup without an age gate;
 | `partial` | boolean | Present and `true` only when at least one provider failed |
 | `provider_errors` | array | Failed provider names and related error messages; present only for partial scans |
 
+### `exclusions` object
+
+Present only when user exclusions (`--exclude` flags, the per-user
+`$XDG_CONFIG_HOME/aibris/ignore` file, or repo-local `.aibris-ignore` files)
+were honored or rejected:
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `excluded_count` | integer | Discovered items removed from `items` by honored exclusions |
+| `scopes` | array | Honored exclusion patterns with their canonical path, `source` (`flag` or `ignore-file`), and the number of items each hid |
+| `rejected` | array | Patterns not honored because they could not be scoped inside the approved scan roots, each with a `reason` |
+
+Exclusions affect discovery only: excluded items are absent from `items` and
+`summary`, and exclusions never add targets or broaden cleanup authorization.
+
 ### `by_category` / `by_tool` entries
 
 | Field | Type | Description |

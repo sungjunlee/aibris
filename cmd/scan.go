@@ -20,8 +20,9 @@ import (
 )
 
 var (
-	scanJSON  bool
-	scanRoots []string
+	scanJSON     bool
+	scanRoots    []string
+	scanExcludes []string
 )
 
 // scanJSONSchemaVersion is the version of the top-level `scan --json`
@@ -43,7 +44,7 @@ var scanCmd = &cobra.Command{
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
 			}
-			result, err := scanner.DefaultScanner.ScanWithOptions(ctx, types.ScanOptions{Roots: roots})
+			result, err := scanner.DefaultScanner.ScanWithOptions(ctx, types.ScanOptions{Roots: roots, Excludes: scanExcludes})
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
@@ -66,6 +67,7 @@ var scanCmd = &cobra.Command{
 		progress := newScanProgressPrinter(os.Stdout)
 		result, err := scanner.DefaultScanner.ScanWithOptions(ctx, types.ScanOptions{
 			Roots:      roots,
+			Excludes:   scanExcludes,
 			OnProgress: progress.Handle,
 		})
 		progress.Stop()
@@ -137,12 +139,32 @@ type jsonRetention struct {
 	ProviderErrors []jsonRetentionProviderError `json:"provider_errors"`
 }
 
+type jsonExcludedScope struct {
+	Pattern  string `json:"pattern"`
+	Resolved string `json:"resolved"`
+	Source   string `json:"source"`
+	Count    int    `json:"count"`
+}
+
+type jsonRejectedExclude struct {
+	Pattern string `json:"pattern"`
+	Source  string `json:"source"`
+	Reason  string `json:"reason"`
+}
+
+type jsonExclusions struct {
+	ExcludedCount int                   `json:"excluded_count"`
+	Scopes        []jsonExcludedScope   `json:"scopes"`
+	Rejected      []jsonRejectedExclude `json:"rejected"`
+}
+
 type jsonOutput struct {
 	SchemaVersion  int                 `json:"schema_version"`
 	Items          []jsonWorktree      `json:"items"`
 	Worktrees      []jsonWorktree      `json:"worktrees"`
 	Summary        jsonSummary         `json:"summary"`
 	Retention      jsonRetention       `json:"retention"`
+	Exclusions     *jsonExclusions     `json:"exclusions,omitempty"`
 	Partial        bool                `json:"partial,omitempty"`
 	ProviderErrors []jsonProviderError `json:"provider_errors,omitempty"`
 }
@@ -171,6 +193,28 @@ func printJSON(r *types.ScanResult) {
 			Tool:    string(providerErr.Tool),
 			Message: providerErr.Message,
 		})
+	}
+	if r.ExcludedByUser > 0 || len(r.ExcludedScopes) > 0 || len(r.RejectedExcludes) > 0 {
+		out.Exclusions = &jsonExclusions{
+			ExcludedCount: r.ExcludedByUser,
+			Scopes:        make([]jsonExcludedScope, 0, len(r.ExcludedScopes)),
+			Rejected:      make([]jsonRejectedExclude, 0, len(r.RejectedExcludes)),
+		}
+		for _, scope := range r.ExcludedScopes {
+			out.Exclusions.Scopes = append(out.Exclusions.Scopes, jsonExcludedScope{
+				Pattern:  scope.Pattern,
+				Resolved: scope.Resolved,
+				Source:   string(scope.Source),
+				Count:    scope.Count,
+			})
+		}
+		for _, rejected := range r.RejectedExcludes {
+			out.Exclusions.Rejected = append(out.Exclusions.Rejected, jsonRejectedExclude{
+				Pattern: rejected.Pattern,
+				Source:  string(rejected.Source),
+				Reason:  rejected.Reason,
+			})
+		}
 	}
 	for i, w := range r.Worktrees {
 		cleanupCommand := append([]string(nil), w.CleanupCommand...)
@@ -397,6 +441,7 @@ func printHumanScanResult(ctx context.Context, r *types.ScanResult) {
 		printCleanupDiagnostics(diagnostics, defaultPolicy)
 	}
 
+	printExclusionDiagnostics(r)
 	printCategorySummary(r.ByCategory)
 	printLargestItems(r.Worktrees)
 	printRetentionProjection(r.Retention)
@@ -409,6 +454,52 @@ func printHumanScanResult(ctx context.Context, r *types.ScanResult) {
 		fmt.Println("  aibris clean --dry-run")
 	}
 	fmt.Println("  aibris scan --json")
+}
+
+func printExclusionDiagnostics(r *types.ScanResult) {
+	if r.ExcludedByUser == 0 && len(r.ExcludedScopes) == 0 && len(r.RejectedExcludes) == 0 {
+		return
+	}
+
+	flagPatterns, filePatterns := excludeSourceCounts(r)
+	fmt.Println("\nexclusions (discovery only)")
+	fmt.Printf("  patterns  %d flag, %d ignore-file\n", flagPatterns, filePatterns)
+	if r.ExcludedByUser > 0 {
+		fmt.Printf("  excluded  %d %s hidden from discovery\n", r.ExcludedByUser, itemNoun(r.ExcludedByUser))
+	}
+
+	home := ""
+	if userHome, err := os.UserHomeDir(); err == nil {
+		home = resolvedDisplayHome(userHome)
+	}
+	for _, scope := range r.ExcludedScopes {
+		display := scope.Resolved
+		if home != "" {
+			display = displayHomePath(home, scope.Resolved)
+		}
+		fmt.Printf("  scope     %-11s %s  %d %s\n", scope.Source, display, scope.Count, itemNoun(scope.Count))
+	}
+	for _, rejected := range r.RejectedExcludes {
+		fmt.Printf("  rejected  %-11s %s  %s\n", rejected.Source, rejected.Pattern, rejected.Reason)
+	}
+}
+
+func excludeSourceCounts(r *types.ScanResult) (flagPatterns, filePatterns int) {
+	for _, scope := range r.ExcludedScopes {
+		if scope.Source == types.ExcludeSourceFlag {
+			flagPatterns++
+		} else {
+			filePatterns++
+		}
+	}
+	for _, rejected := range r.RejectedExcludes {
+		if rejected.Source == types.ExcludeSourceFlag {
+			flagPatterns++
+		} else {
+			filePatterns++
+		}
+	}
+	return flagPatterns, filePatterns
 }
 
 func printRetentionProjection(projection types.RetentionProjection) {
@@ -768,4 +859,5 @@ func ageString(d time.Duration) string {
 func init() {
 	scanCmd.Flags().BoolVar(&scanJSON, "json", false, "Output as JSON")
 	scanCmd.Flags().StringArrayVar(&scanRoots, "root", nil, "Scan root under $HOME (repeatable)")
+	scanCmd.Flags().StringArrayVar(&scanExcludes, "exclude", nil, "Exclude a path or glob pattern under scan roots from discovery (repeatable)")
 }

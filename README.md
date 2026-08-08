@@ -125,6 +125,28 @@ aibris clean --force           # skip confirmation prompt
 See [docs/DOGFOOD.md](docs/DOGFOOD.md) for real local scan transcripts used to
 validate release behavior.
 
+### Exclusions
+
+`scan` and `clean` accept repeatable `--exclude` paths or glob patterns to
+hide private, slow, or intentionally retained trees from discovery:
+
+```bash
+aibris scan --exclude ~/work/secret-project
+aibris clean --exclude ~/worktrees/keep-me --dry-run
+```
+
+An exclusion pattern is only honored when it resolves inside the approved
+scan roots; patterns that escape the roots (absolute paths elsewhere, `..`
+traversal, or symlinks pointing outside) are rejected and reported.
+Exclusions affect discovery only: they remove paths from scan results and can
+never make a path cleanable.
+
+Persistent exclusions live in `$XDG_CONFIG_HOME/aibris/ignore` (falling back
+to `~/.config/aibris/ignore`), one pattern per line with `#` comments. A
+repo-local `.aibris-ignore` file directly under a scan root works the same
+way. Flag and ignore-file patterns are merged; without any of them, defaults
+are unchanged.
+
 ### Example
 
 ```text

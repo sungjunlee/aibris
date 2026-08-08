@@ -103,6 +103,12 @@ type ScanResult struct {
 	ByCategory     map[Category]CategorySummary
 	ByTool         map[Tool]ToolSummary
 	ProviderErrors []ScanProviderError
+	// ExcludedByUser counts discovered items removed from results by user
+	// exclusions. Exclusions affect discovery only and never broaden deletion
+	// authority.
+	ExcludedByUser   int               `json:"excluded_by_user,omitempty"`
+	ExcludedScopes   []ExcludedScope   `json:"excluded_scopes,omitempty"`
+	RejectedExcludes []RejectedExclude `json:"rejected_excludes,omitempty"`
 	// Retention is a read-only protected-content inventory. It is never a
 	// cleanup candidate, is absent from totals, and carries no member paths.
 	Retention RetentionProjection
@@ -167,8 +173,37 @@ type RetentionProviderError struct {
 
 // ScanOptions configures discovery scope for scan providers.
 type ScanOptions struct {
-	Roots      []string
+	Roots []string
+	// Excludes holds user exclusion patterns (--exclude flags). Exclusions
+	// only remove discovered paths from results; they never broaden deletion
+	// authority.
+	Excludes   []string
 	OnProgress func(ScanProgressEvent)
+}
+
+// ExcludeSource identifies where an exclusion pattern came from.
+type ExcludeSource string
+
+const (
+	ExcludeSourceFlag       ExcludeSource = "flag"
+	ExcludeSourceIgnoreFile ExcludeSource = "ignore-file"
+)
+
+// ExcludedScope describes one honored user exclusion pattern. Exclusions
+// affect discovery only and never broaden deletion authority.
+type ExcludedScope struct {
+	Pattern  string        `json:"pattern"`
+	Resolved string        `json:"resolved"`
+	Source   ExcludeSource `json:"source"`
+	Count    int           `json:"count"`
+}
+
+// RejectedExclude describes an exclusion pattern that was not honored because
+// it could not be scoped inside the approved scan roots.
+type RejectedExclude struct {
+	Pattern string        `json:"pattern"`
+	Source  ExcludeSource `json:"source"`
+	Reason  string        `json:"reason"`
 }
 
 // ScanProgressState describes the lifecycle point for a scan provider.

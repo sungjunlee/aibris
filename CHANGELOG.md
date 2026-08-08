@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Added
+
+- `scan` and `clean` accept repeatable `--exclude` paths or glob patterns that
+  hide private, slow, or intentionally retained trees from discovery. Patterns
+  are only honored when they resolve inside the approved scan roots; escaping
+  patterns (`..` traversal, absolute paths elsewhere, symlinks pointing
+  outside) are rejected and reported. Persistent exclusions live in
+  `$XDG_CONFIG_HOME/aibris/ignore` (falling back to `~/.config/aibris/ignore`)
+  and in repo-local `.aibris-ignore` files directly under scan roots.
+  Exclusions affect discovery only: they remove items from scan results and
+  diagnostics (`excluded_by_user`, `excluded_scopes`, `rejected_excludes` in
+  the JSON output) and never broaden cleanup authorization. Defaults are
+  unchanged without exclusion configuration.
+
 ## [0.9.0] - 2026-08-08
 
 ### Added
