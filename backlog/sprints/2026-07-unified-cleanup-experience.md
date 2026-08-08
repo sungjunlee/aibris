@@ -1,6 +1,6 @@
 ---
 milestone: 0.9.x Unified Cleanup Experience
-status: paused
+status: complete
 started: 2026-07-23
 due: TBD
 objectives: []
@@ -43,7 +43,9 @@ selector.
 
 ### Batch 5 — Close capability scope without forcing a release
 
-- [ ] #112 [Epic] Build one coherent cleanup journey (~30min)
+- [x] #112 [Epic] Build one coherent cleanup journey — closed 2026-08-08 with
+      the journey shipped (#113/#114/#115/#116 merged) and dogfooded; #117
+      remains the open maintainer-approval release gate
 
 ## Deferred Release Gate
 
