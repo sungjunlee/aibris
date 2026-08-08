@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -43,7 +44,7 @@ func preparedExecutorTarget(
 
 func TestCaptureCleanupTargetSnapshotReportsAgeChangeSinceScan(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	targetPath := filepath.Join(home, ".cache", "recent-target")
 	if err := os.MkdirAll(targetPath, 0755); err != nil {
 		t.Fatal(err)
@@ -67,7 +68,7 @@ func TestCaptureCleanupTargetSnapshotReportsAgeChangeSinceScan(t *testing.T) {
 
 func TestExecuteActiveWorktreePreservesAttachedLocalOnlyBranch(t *testing.T) {
 	home, repository, worktree := newExecutorWorktree(t, "local-only")
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	writeGitFixtureFile(t, worktree, "local-only.txt", "local-only commit\n")
 	runGitFixture(t, worktree, "add", "local-only.txt")
 	runGitFixture(t, worktree, "commit", "-m", "local-only commit")
@@ -90,7 +91,7 @@ func TestExecuteActiveWorktreePreservesAttachedLocalOnlyBranch(t *testing.T) {
 
 func TestExecuteActiveWorktreeKeepsReferencedDetachedCommitReachable(t *testing.T) {
 	home, repository, worktree := newExecutorWorktree(t, "detached-referenced")
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	writeGitFixtureFile(t, worktree, "detached.txt", "referenced commit\n")
 	runGitFixture(t, worktree, "add", "detached.txt")
 	runGitFixture(t, worktree, "commit", "-m", "referenced detached commit")
@@ -116,7 +117,7 @@ func TestExecuteActiveWorktreeKeepsReferencedDetachedCommitReachable(t *testing.
 
 func TestExecuteActiveWorktreePreflightsEveryMemberBeforeRemovingAny(t *testing.T) {
 	home, repository, target, first, second := newExecutorMultiMemberUnit(t)
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	item := executorWorktreeItem(target, 900)
 	selected := buildExecutorUnit(t, item)
 	writeGitFixtureFile(t, second, "became-dirty.txt", "changed after selection\n")
@@ -143,7 +144,7 @@ func TestExecuteActiveWorktreePreflightsEveryMemberBeforeRemovingAny(t *testing.
 
 func TestExecuteActiveWorktreePreflightRejectsChangedHeadAtomically(t *testing.T) {
 	home, repository, target, first, second := newExecutorMultiMemberUnit(t)
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	item := executorWorktreeItem(target, 901)
 	selected := buildExecutorUnit(t, item)
 	writeGitFixtureFile(t, second, "new-head.txt", "new HEAD after selection\n")
@@ -166,7 +167,7 @@ func TestExecuteActiveWorktreePreflightRejectsChangedHeadAtomically(t *testing.T
 
 func TestExecuteActiveWorktreePreflightCancellationRecordsComponentBlocker(t *testing.T) {
 	home, _, worktree := newExecutorWorktree(t, "preflight-cancelled")
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	item := executorWorktreeItem(worktree, 902)
 	selected := buildExecutorUnit(t, item)
 	obligationPath := filepath.Join(worktree, "agent-state")
@@ -210,7 +211,7 @@ func TestExecuteActiveWorktreePreflightCancellationRecordsComponentBlocker(t *te
 
 func TestExecuteActiveWorktreeMissingUnitPreservesComponentLineage(t *testing.T) {
 	home, _, worktree := newExecutorWorktree(t, "missing-unit")
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	item := executorWorktreeItem(worktree, 903)
 	selected := buildExecutorUnit(t, item)
 	target := preparedExecutorTarget(t, item, selected)
@@ -251,7 +252,7 @@ func TestExecuteActiveWorktreeMissingUnitPreservesComponentLineage(t *testing.T)
 
 func TestExecuteActiveWorktreeCommandFailureNeverFallsBackToPathRemoval(t *testing.T) {
 	home, repository, worktree := newExecutorWorktree(t, "command-failure")
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	item := executorWorktreeItem(worktree, 444)
 	selected := buildExecutorUnit(t, item)
 	opts := defaultActiveWorktreeExecutionOptions()
@@ -278,7 +279,7 @@ func TestExecuteActiveWorktreeCommandFailureNeverFallsBackToPathRemoval(t *testi
 
 func TestExecuteActiveWorktreeReportsPartialMultiMemberResultWithoutFreedBytes(t *testing.T) {
 	home, repository, target, first, second := newExecutorMultiMemberUnit(t)
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	item := executorWorktreeItem(target, 1024)
 	selected := buildExecutorUnit(t, item)
 	opts := defaultActiveWorktreeExecutionOptions()
@@ -332,7 +333,7 @@ func TestGitWorktreeRemoveArgsNeverIncludeForce(t *testing.T) {
 
 func TestExecuteOrphanedWorktreeKeepsRawPathCleanup(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	target := filepath.Join(home, ".codex", "worktrees", "orphaned")
 	if err := os.MkdirAll(target, 0755); err != nil {
 		t.Fatal(err)
@@ -369,7 +370,7 @@ func TestExecuteOrphanedWorktreeKeepsRawPathCleanup(t *testing.T) {
 
 func TestExecutePreparedPathCleanupRejectsTargetChangedAfterSelection(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	targetPath := filepath.Join(home, ".cache", "changed-after-selection")
 	sentinel := filepath.Join(targetPath, "sentinel")
 	if err := os.MkdirAll(targetPath, 0o755); err != nil {
@@ -425,7 +426,7 @@ func TestExecutePreparedPathCleanupRejectsTargetChangedAfterSelection(t *testing
 
 func TestExecutePreparedPathCleanupRevalidatesSnapshotAfterOverlapRefresh(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	targetPath := filepath.Join(home, ".cache", "changed-during-overlap-refresh")
 	sentinel := filepath.Join(targetPath, "sentinel")
 	if err := os.MkdirAll(targetPath, 0755); err != nil {
@@ -486,7 +487,7 @@ func TestExecutePreparedPathCleanupRevalidatesSnapshotAfterOverlapRefresh(t *tes
 
 func TestPreparePathCleanupRejectsReplacementAfterScanEvidenceValidation(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	targetPath := filepath.Join(home, ".cache", "replaced-after-scan")
 	if err := os.MkdirAll(targetPath, 0755); err != nil {
 		t.Fatal(err)

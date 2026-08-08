@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/sungjunlee/aibris/internal/testutil"
 )
 
 // BenchmarkExecutePreparedCleanTargets measures the wall-clock cost of
@@ -23,7 +25,7 @@ func BenchmarkExecutePreparedCleanTargets(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
 		home, worktrees := newBenchmarkExecutorWorktrees(b, targetCount)
-		b.Setenv("HOME", home)
+		testutil.SetHome(b, home)
 		targets := make([]preparedCleanTarget, 0, len(worktrees))
 		for _, worktree := range worktrees {
 			item := executorWorktreeItem(worktree, 321)

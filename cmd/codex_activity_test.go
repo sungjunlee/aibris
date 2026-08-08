@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -45,7 +46,7 @@ func TestCodexActivityRecommendationsProtectActiveWorktreesWhenIndexUnavailable(
 
 func TestPrintHumanScanResultReportsActivityUnavailableProtection(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
 	result := &types.ScanResult{

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -129,11 +130,9 @@ func TestIsSafeTarget_RejectsPlainWorktreeAndSymlinkEscape(t *testing.T) {
 	}
 }
 
-func TestIsSafePath_RealHome(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Fatal(err)
-	}
+func TestIsSafePath_HomeBoundaries(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
 
 	t.Run("temp dir under home is unsafe", func(t *testing.T) {
 		dir := t.TempDir()
@@ -155,7 +154,7 @@ func TestIsSafePath_RealHome(t *testing.T) {
 
 func TestExecute_NodeModulesUnderWorkspace(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	depsPath := filepath.Join(home, "workspace", "active", "app", "node_modules")
 	os.MkdirAll(depsPath, 0755)
 	os.WriteFile(filepath.Join(depsPath, "pkg.js"), []byte("data"), 0644)
@@ -184,7 +183,7 @@ func TestExecute_NodeModulesUnderWorkspace(t *testing.T) {
 
 func TestExecute_GenericWorktreeUnderHome(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	worktreePath := filepath.Join(home, ".somename", "worktrees", "hash1")
 	os.MkdirAll(worktreePath, 0755)
 	os.WriteFile(filepath.Join(worktreePath, "file.txt"), []byte("data"), 0644)
@@ -212,7 +211,7 @@ func TestExecute_RejectsReviewOnlyWorktreeStatuses(t *testing.T) {
 	for _, status := range []types.WorktreeStatus{types.WorktreePlain, "", "future-status"} {
 		t.Run(string(status), func(t *testing.T) {
 			home := t.TempDir()
-			t.Setenv("HOME", home)
+			testutil.SetHome(t, home)
 			target := filepath.Join(home, ".codex", "worktrees", "review-only")
 			if err := os.MkdirAll(target, 0755); err != nil {
 				t.Fatal(err)
@@ -236,7 +235,7 @@ func TestExecute_RejectsReviewOnlyWorktreeStatuses(t *testing.T) {
 
 func TestExecute_RejectsRawActiveWorktreeRemoval(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	worktreePath := filepath.Join(home, ".codex", "worktrees", "active")
 	if err := os.MkdirAll(worktreePath, 0755); err != nil {
 		t.Fatal(err)
@@ -561,7 +560,7 @@ func (p *testRevalidatingProvider) RevalidateAgentState(
 
 func TestExecute(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	wtPath := filepath.Join(home, ".codex", "worktrees", "hash1")
 	os.MkdirAll(wtPath, 0755)
 	os.WriteFile(filepath.Join(wtPath, "file.txt"), []byte("data"), 0644)
@@ -590,7 +589,7 @@ func TestExecute(t *testing.T) {
 
 func TestExecute_UnsafePath(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	wtPath := filepath.Join(home, "wt1")
 	os.MkdirAll(wtPath, 0755)
 
@@ -612,7 +611,7 @@ func TestExecute_UnsafePath(t *testing.T) {
 
 func TestExecute_NonExistent(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	worktrees := []types.DebrisInfo{
 		{ID: "ghost", Path: filepath.Join(home, ".codex", "worktrees", "ghost"), Size: 100},
 	}
@@ -628,7 +627,7 @@ func TestExecute_NonExistent(t *testing.T) {
 
 func TestExecute_RefusesAgentStateWithoutRegisteredRevalidatorAndContinues(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	const syntheticTool types.Tool = "synthetic-agent"
 	protectedPath := filepath.Join(home, ".cursor", "projects", "unregistered")
 	removablePath := filepath.Join(home, "workspace", "app", "node_modules")
@@ -693,7 +692,7 @@ func TestExecute_DeletesRevalidatedOrphanedAgentState(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			home := t.TempDir()
-			t.Setenv("HOME", home)
+			testutil.SetHome(t, home)
 			entryPath := filepath.Join(home, "."+string(tt.tool), "projects", "orphaned")
 			recordedCWD := filepath.Join(home, "workspace", "gone")
 			if err := os.MkdirAll(entryPath, 0755); err != nil {
@@ -753,7 +752,7 @@ func TestExecute_DeletesRevalidatedOrphanedAgentState(t *testing.T) {
 
 func TestExecute_RefusesAgentStateRevalidationError(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	entryPath := filepath.Join(home, ".claude", "projects", "revalidation-error")
 	if err := os.MkdirAll(entryPath, 0755); err != nil {
 		t.Fatal(err)
@@ -793,7 +792,7 @@ func TestExecute_RefusesAgentStateRevalidationError(t *testing.T) {
 
 func TestExecute_RevalidatesOrphanedAgentStateBeforeDelete(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	entryPath := filepath.Join(home, ".claude", "projects", "recreated-cwd")
 	recordedCWD := filepath.Join(home, "workspace", "recreated")
 	if err := os.MkdirAll(entryPath, 0755); err != nil {
@@ -842,7 +841,7 @@ func TestExecute_RevalidatesOrphanedAgentStateBeforeDelete(t *testing.T) {
 
 func TestExecute_RevalidatesOrphanedCursorAgentStateBeforeDelete(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	entryPath := filepath.Join(home, ".cursor", "projects", "recreated-cwd")
 	recordedCWD := filepath.Join(home, "workspace", "recreated-cursor")
 	if err := os.MkdirAll(entryPath, 0755); err != nil {
@@ -886,7 +885,7 @@ func TestExecute_RevalidatesOrphanedCursorAgentStateBeforeDelete(t *testing.T) {
 
 func TestExecute_RevalidationRejectsBrokenSymlinkAncestor(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	entryPath := filepath.Join(home, ".claude", "projects", "broken-share")
 	recordedCWD := filepath.Join(home, "share", "project")
 	if err := os.MkdirAll(entryPath, 0755); err != nil {
@@ -938,7 +937,7 @@ func TestExecute_RevalidationRejectsBrokenSymlinkAncestor(t *testing.T) {
 
 func TestExecute_RevalidationRejectsBrokenSymlinkRecordedCWD(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	entryPath := filepath.Join(home, ".claude", "projects", "broken-project-link")
 	recordedCWD := filepath.Join(home, "project-link")
 	if err := os.MkdirAll(entryPath, 0755); err != nil {
@@ -987,7 +986,7 @@ func TestExecute_RevalidationRejectsBrokenSymlinkRecordedCWD(t *testing.T) {
 
 func TestExecute_Multiple(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	wt1 := filepath.Join(home, ".codex", "worktrees", "wt1")
 	wt2 := filepath.Join(home, ".claude", "worktrees", "wt2")
 	os.MkdirAll(wt1, 0755)
@@ -1017,7 +1016,7 @@ func TestExecute_Multiple(t *testing.T) {
 
 func TestExecute_CommandCleanupSuccess(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	binDir := t.TempDir()
 	writeExecutable(t, filepath.Join(binDir, "fake-clean"), "#!/bin/sh\nexit 0\n")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -1052,7 +1051,7 @@ func TestExecute_CommandCleanupSuccess(t *testing.T) {
 
 func TestExecute_CommandMissingFallsBackToPathRemoval(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	path := filepath.Join(home, ".cache", "uv")
 	os.MkdirAll(path, 0755)
 	os.WriteFile(filepath.Join(path, "file"), []byte("data"), 0644)
@@ -1078,7 +1077,7 @@ func TestExecute_CommandMissingFallsBackToPathRemoval(t *testing.T) {
 
 func TestExecute_CommandFailureDoesNotFallback(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	binDir := t.TempDir()
 	writeExecutable(t, filepath.Join(binDir, "fake-fail"), "#!/bin/sh\necho nope\nexit 2\n")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -1106,7 +1105,7 @@ func TestExecute_CommandFailureDoesNotFallback(t *testing.T) {
 
 func TestExecute_CommandCancellation(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	binDir := t.TempDir()
 	writeExecutable(t, filepath.Join(binDir, "fake-sleep"), "#!/bin/sh\nsleep 2\n")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))

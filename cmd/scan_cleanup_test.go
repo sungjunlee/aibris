@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -168,7 +169,7 @@ func TestScanDefaultCleanEstimateMatchesCleanDryRunForNestedTargets(t *testing.T
 	resetScanFlags()
 	resetCleanFlags()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	entry := filepath.Join(home, "proj", "worktrees", "entry")
 	nodeModules := filepath.Join(entry, "node_modules")

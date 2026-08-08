@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -80,7 +81,7 @@ func TestScan_WorktreeMetadataIOFailureProducesPartialEvidence(t *testing.T) {
 		t.Skip("POSIX file mode fixture")
 	}
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	marker := filepath.Join(home, ".config", "superpowers", "worktrees", "owner", ".git")
 	if err := os.MkdirAll(filepath.Dir(marker), 0755); err != nil {
 		t.Fatal(err)
@@ -386,7 +387,7 @@ func TestScan_ProviderContextCancel(t *testing.T) {
 }
 
 func TestScan_Default(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 
 	result, err := Scan(context.Background())
 	if err != nil {
@@ -399,7 +400,7 @@ func TestScan_Default(t *testing.T) {
 
 func TestScanWithOptions_PassesNormalizedRootsToProvider(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	root := filepath.Join(home, "workspace")
 	if err := os.MkdirAll(root, 0755); err != nil {
 		t.Fatal(err)
@@ -423,7 +424,7 @@ func TestScanWithOptions_PassesNormalizedRootsToProvider(t *testing.T) {
 
 func TestNormalizeRoots_DefaultHome(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	roots, err := NormalizeRoots(nil)
 	if err != nil {
@@ -440,7 +441,7 @@ func TestNormalizeRoots_DefaultHome(t *testing.T) {
 
 func TestNormalizeRoots_TildeAndNestedDedup(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	workspace := filepath.Join(home, "workspace")
 	if err := os.MkdirAll(workspace, 0755); err != nil {
 		t.Fatal(err)
@@ -465,7 +466,7 @@ func TestNormalizeRoots_RejectsOutsideHome(t *testing.T) {
 	outside := filepath.Join(parent, "outside")
 	os.MkdirAll(home, 0755)
 	os.MkdirAll(outside, 0755)
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	_, err := NormalizeRoots([]string{outside})
 	if err == nil {
@@ -486,7 +487,7 @@ func TestNormalizeRoots_RejectsSymlinkEscape(t *testing.T) {
 	if err := os.Symlink(outside, link); err != nil {
 		t.Skipf("symlink not supported: %v", err)
 	}
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	_, err := NormalizeRoots([]string{link})
 	if err == nil {

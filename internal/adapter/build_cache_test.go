@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -19,7 +20,7 @@ func TestBuildCacheAdapter_Name(t *testing.T) {
 
 func TestBuildCacheAdapter_NoCacheDirs(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	a := &BuildCacheAdapter{}
 	results, err := a.Scan(context.Background(), types.ScanOptions{})
@@ -33,7 +34,7 @@ func TestBuildCacheAdapter_NoCacheDirs(t *testing.T) {
 
 func TestBuildCacheAdapter_GoBuild(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	goBuild := filepath.Join(home, ".cache", "go-build")
 	os.MkdirAll(filepath.Join(goBuild, "cache-entry"), 0755)
 	os.WriteFile(filepath.Join(goBuild, "cache-entry", "a.out"), []byte("binary"), 0644)
@@ -68,7 +69,7 @@ func TestBuildCacheAdapter_GoBuild(t *testing.T) {
 
 func TestBuildCacheAdapter_FileNotDir(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	os.MkdirAll(filepath.Join(home, ".cache"), 0755)
 	os.WriteFile(filepath.Join(home, ".cache", "go-build"), []byte("not-a-dir"), 0644)
 
@@ -84,7 +85,7 @@ func TestBuildCacheAdapter_FileNotDir(t *testing.T) {
 
 func TestBuildCacheAdapter_Gradle(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	gradleDir := filepath.Join(home, ".gradle", "caches")
 	os.MkdirAll(filepath.Join(gradleDir, "8.14", "some-cache"), 0755)
 	os.WriteFile(filepath.Join(gradleDir, "8.14", "some-cache", "artifact.bin"), make([]byte, 200), 0644)
@@ -110,7 +111,7 @@ func TestBuildCacheAdapter_Gradle(t *testing.T) {
 
 func TestBuildCacheAdapter_Npm(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	npmDir := filepath.Join(home, ".npm", "_cacache")
 	os.MkdirAll(filepath.Join(npmDir, "content"), 0755)
 	os.WriteFile(filepath.Join(npmDir, "content", "pkg.tgz"), make([]byte, 100), 0644)
@@ -142,7 +143,7 @@ func TestBuildCacheAdapter_Npm(t *testing.T) {
 
 func TestBuildCacheAdapter_Cargo(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	cargoDir := filepath.Join(home, ".cargo", "registry")
 	os.MkdirAll(filepath.Join(cargoDir, "src"), 0755)
 	os.WriteFile(filepath.Join(cargoDir, "src", "crate.tar.gz"), make([]byte, 150), 0644)
@@ -168,7 +169,7 @@ func TestBuildCacheAdapter_Cargo(t *testing.T) {
 
 func TestBuildCacheAdapter_Multiple(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	os.MkdirAll(filepath.Join(home, ".cache", "go-build", "e1"), 0755)
 	os.WriteFile(filepath.Join(home, ".cache", "go-build", "e1", "a.out"), make([]byte, 10), 0644)
 	os.MkdirAll(filepath.Join(home, ".gradle", "caches", "8.14"), 0755)
@@ -198,7 +199,7 @@ func TestBuildCacheAdapter_Multiple(t *testing.T) {
 
 func TestBuildCacheAdapter_ContextCancellation(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

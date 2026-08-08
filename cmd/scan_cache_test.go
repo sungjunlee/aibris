@@ -13,12 +13,13 @@ import (
 
 	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/scanner"
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
 func TestSaveLastScanCacheAtomicReplacement(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	seed := lastScanCache{
 		SchemaVersion:    lastScanCacheSchemaVersion,
@@ -154,7 +155,7 @@ func TestSaveLastScanCacheAtomicReplacement(t *testing.T) {
 
 func TestReadLastScanCacheRejectsForeignProviderIdentity(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	foreign := adapter.Identity([]adapter.DebrisProvider{adapter.NewWorktreeAdapter()})
 	if foreign == adapter.DefaultProviderIdentity() {
@@ -174,7 +175,7 @@ func TestReadLastScanCacheRejectsForeignProviderIdentity(t *testing.T) {
 
 func TestReadLastScanCacheRejectsMalformedPayload(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	path, err := lastScanCachePath()
 	if err != nil {
 		t.Fatal(err)

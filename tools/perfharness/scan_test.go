@@ -3,9 +3,61 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
+
+func TestControlledEnvIsolatesHomeCacheAndTemp(t *testing.T) {
+	home := t.TempDir()
+	tmpDir := t.TempDir()
+	env := controlledEnv(home, tmpDir)
+
+	values := make(map[string]string, len(env))
+	for _, entry := range env {
+		key, value, ok := strings.Cut(entry, "=")
+		if !ok {
+			t.Fatalf("controlled environment entry %q has no separator", entry)
+		}
+		if _, exists := values[key]; exists {
+			t.Fatalf("controlled environment repeats %q: %v", key, env)
+		}
+		values[key] = value
+	}
+
+	homeDrive := filepath.VolumeName(home)
+	want := map[string]string{
+		"HOME":           home,
+		"USERPROFILE":    home,
+		"HOMEDRIVE":      homeDrive,
+		"HOMEPATH":       strings.TrimPrefix(home, homeDrive),
+		"XDG_CACHE_HOME": filepath.Join(home, ".cache"),
+		"LOCALAPPDATA":   filepath.Join(home, ".cache"),
+		"TMPDIR":         tmpDir,
+		"TEMP":           tmpDir,
+		"TMP":            tmpDir,
+	}
+	for key, wantValue := range want {
+		if got := values[key]; got != wantValue {
+			t.Errorf("controlledEnv %s = %q; want %q", key, got, wantValue)
+		}
+	}
+
+	for key, value := range values {
+		t.Setenv(key, value)
+	}
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	relative, err := filepath.Rel(home, cacheDir)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
+		t.Fatalf("os.UserCacheDir() = %q; want a path inside fixture home %q", cacheDir, home)
+	}
+	if got := os.TempDir(); got != tmpDir {
+		t.Fatalf("os.TempDir() = %q; want isolated temp %q", got, tmpDir)
+	}
+}
 
 func writeFile(t *testing.T, path, content string, mt time.Time) {
 	t.Helper()

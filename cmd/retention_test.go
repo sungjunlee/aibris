@@ -12,6 +12,7 @@ import (
 	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/retention"
 	"github.com/sungjunlee/aibris/internal/scanner"
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -110,7 +111,7 @@ func TestPrintHumanRetentionProjectionPartialIsPathFree(t *testing.T) {
 
 func TestRetentionInventoryNeverCreatesCleanupCandidates(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	store := filepath.Join(home, ".codex", "sessions", "2026", "01", "01")
 	if err := os.MkdirAll(store, 0755); err != nil {
 		t.Fatal(err)
@@ -156,7 +157,7 @@ func TestRetentionInventoryNeverCreatesCleanupCandidates(t *testing.T) {
 
 func TestRetentionPartialDoesNotBlockOrdinaryCleanPrerequisite(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	resolvedHome, err := filepath.EvalSymlinks(home)
 	if err != nil {
 		t.Fatal(err)

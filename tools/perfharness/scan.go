@@ -161,11 +161,24 @@ type scanObservation struct {
 
 // controlledEnv returns the minimal, deterministic environment the protocol
 // fixes for every measured invocation (mirrors the DOGFOOD `env -i` contract).
+// It includes both Unix and Windows home/cache/temp conventions because the
+// measured aibris binary must resolve all of them inside the fixture. The
+// platform may choose a cache subdirectory below the supplied home.
 func controlledEnv(home, tmpDir string) []string {
+	homeDrive := filepath.VolumeName(home)
+	homePath := strings.TrimPrefix(home, homeDrive)
+	cacheHome := filepath.Join(home, ".cache")
 	return []string{
 		"HOME=" + home,
+		"USERPROFILE=" + home,
+		"HOMEDRIVE=" + homeDrive,
+		"HOMEPATH=" + homePath,
+		"XDG_CACHE_HOME=" + cacheHome,
+		"LOCALAPPDATA=" + cacheHome,
 		"PATH=/usr/bin:/bin:/usr/sbin:/sbin",
 		"TMPDIR=" + tmpDir,
+		"TEMP=" + tmpDir,
+		"TMP=" + tmpDir,
 		"LANG=C",
 		"LC_ALL=C",
 	}

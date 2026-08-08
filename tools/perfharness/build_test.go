@@ -78,8 +78,9 @@ func TestBuildBinaryIntegration(t *testing.T) {
 
 	// The built binary must scan an empty home and emit parseable JSON, exit 0.
 	home := t.TempDir()
+	tmpDir := t.TempDir()
 	cmd := exec.Command(bin.Path, "scan", "--json")
-	cmd.Env = append(os.Environ(), "HOME="+home)
+	cmd.Env = controlledEnv(home, tmpDir)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

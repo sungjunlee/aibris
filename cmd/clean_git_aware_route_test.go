@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -42,7 +43,7 @@ func TestCleanCmd_ClassicRouteReachesGitAwareActiveWorktrees(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			resetCleanFlags()
 			home, item := tt.setup(t)
-			t.Setenv("HOME", home)
+			testutil.SetHome(t, home)
 			item.ModTime = time.Now().Add(-48 * time.Hour)
 			item.Project = "project"
 			item.Source = ".codex"
@@ -68,7 +69,7 @@ func TestCleanCmd_ClassicRouteReachesGitAwareActiveWorktrees(t *testing.T) {
 func TestCleanCmd_GuidedRouteReachesLocalOnlyActiveWorktree(t *testing.T) {
 	resetCleanFlags()
 	home, repository, worktree := newExecutorWorktree(t, "guided-local-only")
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	old := time.Now().Add(-48 * time.Hour)
 	item := executorWorktreeItem(worktree, 512*1024*1024)
 	item.ModTime = old
@@ -97,7 +98,7 @@ func TestCleanCmd_GuidedRouteReachesLocalOnlyActiveWorktree(t *testing.T) {
 func TestCleanCmd_GuidedAgeFlagChangesOnlyMinimumIdleAge(t *testing.T) {
 	resetCleanFlags()
 	home, _, worktree := newExecutorWorktree(t, "guided-recent")
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	item := executorWorktreeItem(worktree, 512*1024*1024)
 	item.ModTime = time.Now().Add(-7 * 24 * time.Hour)
 	item.Project = "project"

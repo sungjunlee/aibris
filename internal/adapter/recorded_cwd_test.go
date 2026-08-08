@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -56,7 +57,7 @@ func TestAgentStateStoreClassifiersRouteThroughSharedRecordedCWDDecision(t *test
 
 func TestAgentStateStoreClassifiersRecordedCWDAncestorAvailability(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	type storeClassifier struct {
 		name     string

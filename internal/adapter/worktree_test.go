@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -30,7 +31,7 @@ func TestWorktreeAdapter_Category(t *testing.T) {
 
 func TestWorktreeAdapter_NoMatches(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	a := &WorktreeAdapter{}
 	results, err := a.Scan(context.Background(), types.ScanOptions{})
@@ -44,7 +45,7 @@ func TestWorktreeAdapter_NoMatches(t *testing.T) {
 
 func TestWorktreeAdapter_CustomRootLimitsResults(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	root := filepath.Join(home, "workspace")
 	inRoot := filepath.Join(root, "repo", "worktrees", "feature-a")
 	outRoot := filepath.Join(home, "other", "repo", "worktrees", "feature-b")
@@ -66,7 +67,7 @@ func TestWorktreeAdapter_CustomRootLimitsResults(t *testing.T) {
 
 func TestWorktreeAdapter_ProjectRootFindsDirectClaudeWorktrees(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	project := filepath.Join(home, "my-project")
 	worktreePath := filepath.Join(project, ".claude", "worktrees", "session-1")
 	createWorktreeGit(t, worktreePath, filepath.Join(home, "main-repo"), "session-1")
@@ -89,7 +90,7 @@ func TestWorktreeAdapter_ProjectRootFindsDirectClaudeWorktrees(t *testing.T) {
 
 func TestWorktreeAdapter_CodexRootFindsCodexWorktrees(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	codexRoot := filepath.Join(home, ".codex")
 	worktreeProject := filepath.Join(codexRoot, "worktrees", "hash1", "proj")
 	createWorktreeGit(t, worktreeProject, filepath.Join(home, "main-repo"), "hash1")
@@ -125,7 +126,7 @@ func createWorktreeGit(t *testing.T, worktreeDir, parentRepoDir, worktreeName st
 
 func TestWorktreeAdapter_CodexStyle_Active(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	worktreeHash := filepath.Join(home, ".codex", "worktrees", "abc123")
 	worktreeProject := filepath.Join(worktreeHash, "my-project")
@@ -163,7 +164,7 @@ func TestWorktreeAdapter_CodexStyle_Active(t *testing.T) {
 
 func TestWorktreeAdapter_CodexStyle_Orphaned(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	worktreeHash := filepath.Join(home, ".codex", "worktrees", "orphaned123")
 	worktreeProject := filepath.Join(worktreeHash, "my-project")
@@ -190,7 +191,7 @@ func TestWorktreeAdapter_CodexStyle_Orphaned(t *testing.T) {
 
 func TestWorktreeAdapter_ClaudeStyle_Active(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	worktreePath := filepath.Join(home, "my-project", ".claude", "worktrees", "session-1")
 	createWorktreeGit(t, worktreePath, filepath.Join(home, "main-repo"), "session-1")
@@ -221,7 +222,7 @@ func TestWorktreeAdapter_ClaudeStyle_Active(t *testing.T) {
 
 func TestWorktreeAdapter_ClaudeStyle_NoDotGit(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	worktreePath := filepath.Join(home, "my-project", ".claude", "worktrees", "session-1")
 	os.MkdirAll(worktreePath, 0755)
@@ -244,7 +245,7 @@ func TestWorktreeAdapter_ClaudeStyle_NoDotGit(t *testing.T) {
 
 func TestWorktreeAdapter_Generic_HiddenDir(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	// ~/.relay/worktrees/<hash>/<dispatch>/.git
 	worktreeHash := filepath.Join(home, ".relay", "worktrees", "deadbeef")
@@ -280,7 +281,7 @@ func TestWorktreeAdapter_Generic_HiddenDir(t *testing.T) {
 
 func TestWorktreeAdapter_DeepHiddenOwnerWorktrees(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	worktreeHash := filepath.Join(home, "deep", "path", ".somename", "worktrees", "abc123")
 	projectDir := filepath.Join(worktreeHash, "my-app")
@@ -312,7 +313,7 @@ func TestWorktreeAdapter_DeepHiddenOwnerWorktrees(t *testing.T) {
 
 func TestWorktreeAdapter_IgnoresHiddenOwnerBeyondContainerDepth(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	worktreeHash := filepath.Join(home, "a", "b", "c", "d", "e", ".somename", "worktrees", "abc123")
 	projectDir := filepath.Join(worktreeHash, "my-app")
@@ -330,7 +331,7 @@ func TestWorktreeAdapter_IgnoresHiddenOwnerBeyondContainerDepth(t *testing.T) {
 
 func TestWorktreeAdapter_PrunesSystemLikeDirectories(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	projectDir := filepath.Join(home, "Library", "SomeApp", ".tool", "worktrees", "abc123", "my-app")
 	createWorktreeGit(t, projectDir, filepath.Join(home, "main-repo"), "abc123")
@@ -347,7 +348,7 @@ func TestWorktreeAdapter_PrunesSystemLikeDirectories(t *testing.T) {
 
 func TestWorktreeAdapter_Generic_ProjectLocal(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	// ~/my-project/worktrees/feature-xyz/.git
 	worktreeDir := filepath.Join(home, "my-project", "worktrees", "feature-xyz")
@@ -382,7 +383,7 @@ func TestWorktreeAdapter_Generic_ProjectLocal(t *testing.T) {
 
 func TestWorktreeAdapter_Generic_SubdirStyle(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	// ~/projectA/worktrees/hash123/projname/.git (codex-like, but under project dir)
 	hashDir := filepath.Join(home, "projectA", "worktrees", "hash123")
@@ -409,7 +410,7 @@ func TestWorktreeAdapter_Generic_SubdirStyle(t *testing.T) {
 
 func TestWorktreeAdapter_Generic_Orphaned(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	// ~/some-project/worktrees/stale-session/.git → broken parent
 	worktreeDir := filepath.Join(home, "some-project", "worktrees", "stale-session")
@@ -434,7 +435,7 @@ func TestWorktreeAdapter_Generic_Orphaned(t *testing.T) {
 
 func TestWorktreeAdapter_Generic_WorktreePrefixName(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	// ~/repo/worktree-foo/bar/.git (alt naming: "worktree-" prefix)
 	worktreeDir := filepath.Join(home, "repo", "worktree-foo", "bar")
@@ -465,7 +466,7 @@ func TestWorktreeAdapter_Generic_WorktreePrefixName(t *testing.T) {
 
 func TestWorktreeAdapter_GenericSkipsKnownPaths(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	// codex worktree — matched by both .codex/worktrees/* (known) and */worktree*/* (generic)
 	hashDir := filepath.Join(home, ".codex", "worktrees", "dupe-hash")
@@ -489,7 +490,7 @@ func TestWorktreeAdapter_GenericSkipsKnownPaths(t *testing.T) {
 
 func TestWorktreeAdapter_ClaudeNotDeduplicatedByGeneric(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	// claude worktree at ~/project/.claude/worktrees/name
 	// This is matched by */.claude/worktrees/* (known source).
@@ -527,7 +528,7 @@ func TestWorktreeAdapter_ClaudeNotDeduplicatedByGeneric(t *testing.T) {
 
 func TestWorktreeAdapter_ReportsPlainDir(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	// Plain directory without .git remains visible for review.
 	plainDir := filepath.Join(home, ".codex", "worktrees", "plain-hash")
@@ -559,7 +560,7 @@ func TestWorktreeAdapter_ReportsPlainDir(t *testing.T) {
 
 func TestWorktreeAdapter_EmptyWorktreeDir(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	// Empty directory under .codex/worktrees is visible but review-only.
 	os.MkdirAll(filepath.Join(home, ".codex", "worktrees", "empty-hash"), 0755)
@@ -579,7 +580,7 @@ func TestWorktreeAdapter_EmptyWorktreeDir(t *testing.T) {
 
 func TestWorktreeAdapter_BrokenSymlink(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	broken := filepath.Join(home, ".codex", "worktrees", "broken-hash")
 	os.MkdirAll(filepath.Dir(broken), 0755)
@@ -597,7 +598,7 @@ func TestWorktreeAdapter_BrokenSymlink(t *testing.T) {
 
 func TestWorktreeAdapter_MultipleSubdirsInOneEntry(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	// One entry with multiple project subdirs each having .git
 	entry := filepath.Join(home, ".relay", "worktrees", "multi-hash")
@@ -633,7 +634,7 @@ func TestWorktreeAdapter_MultipleSubdirsInOneEntry(t *testing.T) {
 
 func TestWorktreeAdapter_RegisteredContainers(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	tests := []struct {
 		relativePath string
@@ -677,7 +678,7 @@ func TestWorktreeAdapter_RegisteredContainers(t *testing.T) {
 
 func TestWorktreeAdapter_SuperpowersFullHomeAndScopedL2(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	container := filepath.Join(home, ".config", "superpowers", "worktrees")
 	unit := filepath.Join(container, "physical-owner")
@@ -729,7 +730,7 @@ func TestWorktreeAdapter_SuperpowersFullHomeAndScopedL2(t *testing.T) {
 
 func TestWorktreeAdapter_RegisteredLookupRespectsDisjointRoot(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	superpowersUnit := filepath.Join(home, ".config", "superpowers", "worktrees", "outside")
 	createWorktreeGit(t, superpowersUnit, filepath.Join(home, "parent"), "outside")
@@ -749,7 +750,7 @@ func TestWorktreeAdapter_RegisteredLookupRespectsDisjointRoot(t *testing.T) {
 
 func TestWorktreeAdapter_RootAliasesAndRegistryFallbackDeduplicateDeterministically(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	project := filepath.Join(home, "project")
 	unit := filepath.Join(project, "worktrees", "unit")
@@ -792,7 +793,7 @@ func TestWorktreeAdapter_RootAliasesAndRegistryFallbackDeduplicateDeterministica
 
 func TestWorktreeAdapter_RegisteredLookupDoesNotFanOutConfig(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	superpowers := filepath.Join(home, ".config", "superpowers", "worktrees", "known")
 	createWorktreeGit(t, superpowers, filepath.Join(home, "known-parent"), "known")
@@ -812,7 +813,7 @@ func TestWorktreeAdapter_RegisteredLookupDoesNotFanOutConfig(t *testing.T) {
 
 func TestWorktreeAdapter_RegisteredSymlinkEscapeIsNotCleanable(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	outside := t.TempDir()
 
 	outsideContainer := filepath.Join(outside, "worktrees")
@@ -839,7 +840,7 @@ func TestWorktreeAdapter_RegisteredSymlinkEscapeIsNotCleanable(t *testing.T) {
 
 func TestWorktreeAdapter_RegisteredInHomeSymlinkIsNotReintroducedByFallback(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	actualContainer := filepath.Join(home, "actual", "worktrees")
 	actualUnit := filepath.Join(actualContainer, "alias-target")
@@ -865,7 +866,7 @@ func TestWorktreeAdapter_RegisteredInHomeSymlinkIsNotReintroducedByFallback(t *t
 
 func TestWorktreeAdapter_InvalidMarkersAreReviewOnly(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	container := filepath.Join(home, ".config", "superpowers", "worktrees")
 
 	fixtures := []struct {
@@ -983,7 +984,7 @@ func TestWorktreeAdapter_MixedValidAndInvalidNestedMarkersProtectOwner(t *testin
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			home := t.TempDir()
-			t.Setenv("HOME", home)
+			testutil.SetHome(t, home)
 			unit := filepath.Join(home, ".config", "superpowers", "worktrees", "owner")
 			createWorktreeGit(t, filepath.Join(unit, "valid"), filepath.Join(home, "parent"), "valid")
 			if err := tt.create(filepath.Join(unit, "invalid")); err != nil {
@@ -1007,7 +1008,7 @@ func TestWorktreeAdapter_MixedValidAndInvalidNestedMarkersProtectOwner(t *testin
 
 func TestWorktreeAdapter_InvalidReasonsAreSortedAndMemberTraversalStopsAtOneLevel(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	unit := filepath.Join(home, ".config", "superpowers", "worktrees", "owner")
 	createWorktreeGit(t, filepath.Join(unit, "valid"), filepath.Join(home, "parent"), "valid")
 	for _, name := range []string{"z-invalid", "a-invalid"} {
@@ -1040,7 +1041,7 @@ func TestWorktreeAdapter_UnreadableMarkerIsProviderError(t *testing.T) {
 		t.Skip("POSIX file mode fixture")
 	}
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	marker := filepath.Join(home, ".config", "superpowers", "worktrees", "owner", ".git")
 	if err := os.MkdirAll(filepath.Dir(marker), 0755); err != nil {
 		t.Fatal(err)
@@ -1064,7 +1065,7 @@ func TestWorktreeAdapter_UnreadableMarkerIsProviderError(t *testing.T) {
 
 func TestWorktreeAdapter_ContextCancellation(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	cw := filepath.Join(home, ".codex", "worktrees", "some-hash", "proj")
 	createWorktreeGit(t, cw, filepath.Join(home, "main-repo"), "some-hash")
@@ -1084,7 +1085,7 @@ func TestWorktreeAdapter_ContextCancellation(t *testing.T) {
 
 func TestWorktreeAdapter_ScanWorktreeRootPropagatesCancellation(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	worktreeRoot := filepath.Join(home, ".codex", "worktrees")
 	worktreeProject := filepath.Join(worktreeRoot, "some-hash", "proj")

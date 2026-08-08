@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -101,7 +102,7 @@ func TestGuidedCodexCleanupPressureIgnoresEmptyAndUnvalidatedTargets(t *testing.
 func TestCleanCmd_ProtectedOnlyPressureOpensGuidedDryRun(t *testing.T) {
 	resetCleanFlags()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	worktree, item := newProtectedGuidedRouteFixture(t, home, "hash-protected")
 	modules := filepath.Join(home, "workspace", "app", "node_modules")
 	if err := os.MkdirAll(filepath.Join(modules, "pkg"), 0755); err != nil {
@@ -154,7 +155,7 @@ func TestCleanCmd_ProtectedOnlyPressureOpensGuidedDryRun(t *testing.T) {
 func TestCleanCmd_ProtectedOnlyEnterDoesNotPreviewOrDelete(t *testing.T) {
 	resetCleanFlags()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	worktree, item := newProtectedGuidedRouteFixture(t, home, "zero-selection-enter")
 	saveCleanCacheFixture(t, home, []types.DebrisInfo{item})
 	defer withStdin(t, "\n")()
@@ -187,7 +188,7 @@ func TestCleanCmd_ProtectedOnlyEnterDoesNotPreviewOrDelete(t *testing.T) {
 func TestCleanCmd_ProtectedOnlyNonTTYReturnsWithoutDeleting(t *testing.T) {
 	resetCleanFlags()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	worktree, item := newProtectedGuidedRouteFixture(t, home, "protected-non-tty")
 	saveCleanCacheFixture(t, home, []types.DebrisInfo{item})
 	defer withStdin(t, "")()
@@ -210,7 +211,7 @@ func TestCleanCmd_ProtectedOnlyNonTTYReturnsWithoutDeleting(t *testing.T) {
 func TestCleanCmd_GuidedDryRunContinuesWithMixedCategoryCandidates(t *testing.T) {
 	resetCleanFlags()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	worktree := saveUsefulGuidedCleanFixture(t, home, "mixed-guided", time.Now().Add(-8*24*time.Hour))
 	modules := filepath.Join(home, "workspace", "app", "node_modules")
 	if err := os.MkdirAll(filepath.Join(modules, "pkg"), 0755); err != nil {
@@ -261,7 +262,7 @@ func TestCleanCmd_GuidedDryRunContinuesWithMixedCategoryCandidates(t *testing.T)
 func TestCleanCmd_GuidedDryRunNormalizesNestedClassicCandidate(t *testing.T) {
 	resetCleanFlags()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	worktree := saveUsefulGuidedCleanFixture(t, home, "nested-guided", time.Now().Add(-8*24*time.Hour))
 	modules := filepath.Join(worktree, "node_modules")
 	if err := os.MkdirAll(filepath.Join(modules, "pkg"), 0755); err != nil {
@@ -367,7 +368,7 @@ func TestCleanCmd_ProtectedOnlyPressureRespectsClassicOverrides(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			resetCleanFlags()
 			home := t.TempDir()
-			t.Setenv("HOME", home)
+			testutil.SetHome(t, home)
 			worktree, item := newProtectedGuidedRouteFixture(t, home, "classic-"+strings.ReplaceAll(tt.name, " ", "-"))
 			saveCleanCacheFixture(t, home, []types.DebrisInfo{item})
 			defer withStdin(t, "")()
@@ -422,7 +423,7 @@ func guidedRouteWorktreeItem(worktree string, size int64, modTime time.Time) typ
 func TestCleanCmd_ReviewableGuidedWorktreeWithNestedClassicCandidateIsNotPromoted(t *testing.T) {
 	resetCleanFlags()
 	home, repository, worktree := newExecutorWorktree(t, "guided-kept-nested")
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	old := time.Now().Add(-8 * 24 * time.Hour)
 	item := executorWorktreeItem(worktree, 512*1024*1024)
 	item.ModTime = old
