@@ -243,7 +243,6 @@ func printJSON(r *types.ScanResult) {
 			})
 		}
 	}
-	}
 	for i, w := range r.Worktrees {
 		cleanupCommand := append([]string(nil), w.CleanupCommand...)
 		if cleanupCommand == nil {

@@ -223,12 +223,19 @@ func isWithin(parent, child string) bool {
 
 // UserIgnoreFile returns the documented per-user ignore file location:
 // $XDG_CONFIG_HOME/aibris/ignore, falling back to ~/.config/aibris/ignore.
+// It reads XDG_CONFIG_HOME explicitly rather than via os.UserConfigDir, which
+// on macOS ignores XDG_CONFIG_HOME and returns $HOME/Library/Application
+// Support — diverging from the documented Linux/XDG path the ignore file is
+// written to.
 func UserIgnoreFile() string {
-	configDir, err := os.UserConfigDir()
-	if err != nil {
+	if dir := os.Getenv("XDG_CONFIG_HOME"); dir != "" {
+		return filepath.Join(dir, "aibris", "ignore")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
 		return ""
 	}
-	return filepath.Join(configDir, "aibris", "ignore")
+	return filepath.Join(home, ".config", "aibris", "ignore")
 }
 
 // RootIgnoreFile returns the repo-local ignore file location directly under
