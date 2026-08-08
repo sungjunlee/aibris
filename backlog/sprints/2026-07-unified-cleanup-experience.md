@@ -44,14 +44,19 @@ selector.
 ### Batch 5 — Close capability scope without forcing a release
 
 - [x] #112 [Epic] Build one coherent cleanup journey — closed 2026-08-08 with
-      the journey shipped (#113/#114/#115/#116 merged) and dogfooded; #117
-      remains the open maintainer-approval release gate
+      the journey shipped (#113/#114/#115/#116 merged) and dogfooded; at epic
+      close, #117 remained the open maintainer-approval release gate
+- [x] #117 Prepare a 0.9.x unified-cleanup release — maintainer approved
+      v0.9.0; PR #195, annotated tag `v0.9.0`, release workflow `31250841468`,
+      published-asset installer smoke, and post-release read-only dogfood
+      completed 2026-08-08
 
-## Deferred Release Gate
+## Release Gate
 
-- #117 Prepare a 0.9.x unified-cleanup release remains an explicit
-  maintainer-approval gate. Add it to execution only after the experience is
-  accepted; otherwise keep it open without a tag or date.
+- #117 completed after explicit maintainer approval. The gate published
+  v0.9.0 only after the unified journey, compatibility notes, full CI and race
+  gates, four rounds of independent safety review, installer smoke, and
+  read-only post-release dogfood passed.
 
 ## Running Context
 
@@ -66,8 +71,8 @@ selector.
   targets so totals and receipts never double count nested or duplicate paths.
 - Partial scans cannot authorize cleanup. Cancellation and stale evidence must
   be explicit model states rather than renderer-specific behavior.
-- The project remains in 0.x. Milestone #7 has no due date, and #117 cannot be
-  completed without explicit maintainer approval.
+- The project remains in 0.x. Milestone #7 shipped as v0.9.0 only after
+  explicit maintainer approval; the release does not imply a v1 schedule.
 
 ## Progress
 
@@ -99,3 +104,11 @@ selector.
   likely mean reopening it. #115, #116, #112, and the #117 release gate stay
   open and unchanged; the #113 plan model is kept. Resume after #138 shows
   whether the model absorbs a category with no age gate.
+- 2026-08-08: Maintainer approved the v0.9.0 release gate. PR #195's fresh
+  reviews found three cached-evidence expiry blockers in sequence: freshness
+  restarting at plan creation, prompt delay moving the reconstructed timestamp,
+  and expiry after final confirmation. Absolute evidence timestamps plus
+  mutation-boundary revalidation closed all three; review round 4 passed.
+  CI, release workflow `31250841468`, six published archives and checksums,
+  isolated `install.sh 0.9.0` smoke, and published-binary real-home scan plus
+  unified dry-run all passed without deletion.

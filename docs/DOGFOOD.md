@@ -866,3 +866,32 @@ category into one unified review:
 
 The run ended with `[DRY-RUN] No files were removed.` No
 deletion-mode `aibris clean` command was run.
+
+## 2026-08-08 v0.9.0 published-binary unified-cleanup dogfood
+
+Release workflow `31250841468` published annotated tag `v0.9.0` from merge
+`03a108d`. The public release contains six Darwin/Linux/Windows archives plus
+`checksums.txt`. `install.sh 0.9.0` downloaded the public Darwin arm64 archive,
+verified its published checksum, installed into an isolated temporary prefix,
+and reported `aibris version 0.9.0`; no existing installation was replaced.
+
+The installed public binary ran against the real home with its scan cache
+isolated under `/tmp`. `scan --json` completed with schema version 1, 183
+debris items / 40,677,784,978 bytes, no top-level partial state, and zero
+provider errors. The read-only retention projection reported 12 UTC-month
+buckets (`2025-09` .. `2026-08`), 7,502 units / 14,257,485,808 apparent bytes,
+272 orphaned units / 99,815,151 bytes, `retention.partial` false, and zero
+retention provider errors.
+
+Plain `clean --dry-run` exercised the default unified route and reported:
+
+| State | Count | Bytes |
+| --- | ---: | ---: |
+| found | 18 items | 7.6 GB |
+| eligible | 13 items | 4.9 GB |
+| selected | 9 items | 4.9 GB |
+| reviewable | 4 items | 5.3 MB |
+| protected | 5 items | 2.7 GB |
+
+The published binary ended with `[DRY-RUN] No files were removed.` No
+deletion-mode command was run.
