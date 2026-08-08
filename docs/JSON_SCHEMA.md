@@ -352,13 +352,18 @@ contains the physical target owner (for example, a protected active worktree
 parent containing a selected `node_modules` owner). All arrays, including empty
 arrays, are emitted as `[]`.
 
-`decision` is the final physical decision: `selected`, `reviewable`,
-`protected`, or `skipped`. `policy_decision` records the source policy:
+`rows[].decision` mirrors the final decision of the referenced
+`physical_target_id`; it is not a second logical-row action decision.
+`policy_decision` classifies the logical row's source policy:
 classic eligible rows use `eligible`, guided recommendations use
 `recommended`, guided soft holds use `reviewable`, hard locks and safety
 protections use `protected`, and filtered/noncandidate inventory uses
 `skipped`. `reason_codes` contains stable machine-readable codes only; human
-reason descriptions are not part of this contract.
+reason descriptions are not part of this contract. Only `physical_targets` are
+action rows. An `ancestor` row is evidence attached to the selected physical
+owner; its ancestor path is never an additional action target. A selected
+target may therefore carry protected or reviewable evidence with a
+`protected_overlap` reason code without becoming locked.
 
 `policy.minimum_age` is always the classic filter age actually passed in
 `opts.Age`, including on the mixed auto-guided route. When guided state exists,
@@ -371,7 +376,15 @@ uses `3d` for both values.
 The byte accounting invariants are:
 
 - bytes are owned by `physical_targets`; rows do not carry sizes;
+- `physical_bytes` includes every emitted containment-disjoint physical target,
+  including skipped and protected inventory;
+- `selected_bytes` is the actionable subset of `physical_bytes`;
 - `selected + reviewable + protected + skipped` equals `physical_targets`;
 - the corresponding byte totals sum to `physical_bytes`;
 - changing exact or nested logical row counts does not inflate physical counts
   or bytes.
+
+The human cleanup review uses evaluated policy descriptions, not machine reason
+codes. Guided rows keep their aggregate explanation once; reason entries with
+empty descriptions are omitted from human text, while all stable codes remain
+available in the JSON plan.

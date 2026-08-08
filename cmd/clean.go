@@ -675,6 +675,8 @@ func scanForCleanWithProgress(ctx context.Context, roots []string, showProgress 
 	return result, scanSource{Kind: scanSourceLive}, nil
 }
 
+var errIncompleteCleanupScan = errors.New("cleanup requires a complete scan")
+
 func requireCompleteScan(result *types.ScanResult) error {
 	if result == nil || !result.Partial() {
 		return nil
@@ -683,7 +685,7 @@ func requireCompleteScan(result *types.ScanResult) error {
 	for _, providerErr := range result.ProviderErrors {
 		providers = append(providers, string(providerErr.Tool))
 	}
-	return fmt.Errorf("cleanup requires a complete scan; failed providers: %s", strings.Join(providers, ", "))
+	return fmt.Errorf("%w; failed providers: %s", errIncompleteCleanupScan, strings.Join(providers, ", "))
 }
 
 func shortDurationString(d time.Duration) string {

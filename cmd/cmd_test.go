@@ -2212,6 +2212,9 @@ func TestRequireCompleteScanRejectsPartialResult(t *testing.T) {
 	if err == nil {
 		t.Fatal("requireCompleteScan() error = nil")
 	}
+	if !errors.Is(err, errIncompleteCleanupScan) {
+		t.Fatalf("requireCompleteScan() error = %v; want incomplete-scan sentinel", err)
+	}
 	if !strings.Contains(err.Error(), "failed providers: codex, claude") {
 		t.Errorf("requireCompleteScan() error = %q", err)
 	}

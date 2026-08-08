@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -85,6 +86,34 @@ func TestBuildCleanJSONPlanCountsExactAndNestedRowsOnce(t *testing.T) {
 	if document.Totals.Selected != 1 || document.Totals.Reviewable != 0 ||
 		document.Totals.Protected != 0 || document.Totals.Skipped != 0 {
 		t.Fatalf("decisions = %+v; want one selected physical target", document.Totals)
+	}
+}
+
+func TestCleanJSONRowIdentityKeyCanonicalizesAliasesWithRawFallback(t *testing.T) {
+	root := t.TempDir()
+	targetPath := filepath.Join(root, "target")
+	aliasPath := filepath.Join(root, "alias")
+	if err := os.MkdirAll(targetPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(targetPath, aliasPath); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	target := types.DebrisInfo{
+		Tool:     types.ToolNodeModules,
+		Category: types.CategoryNodeModules,
+		ID:       "same-row",
+		Path:     targetPath,
+	}
+	alias := target
+	alias.Path = aliasPath
+	if cleanJSONRowIdentityKey(target) != cleanJSONRowIdentityKey(alias) {
+		t.Fatalf("canonical row identity differs for aliases: %q != %q", cleanJSONRowIdentityKey(target), cleanJSONRowIdentityKey(alias))
+	}
+	invalid := target
+	invalid.Path = "   "
+	if got := cleanJSONRowIdentityKey(invalid); got == "" {
+		t.Fatal("invalid-path row identity is empty")
 	}
 }
 
@@ -292,6 +321,151 @@ func TestBuildCleanJSONPlanRejectsPartialScanBeforeEmission(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "complete scan") {
 		t.Fatalf("partial build error = %v; want complete-scan refusal", err)
 	}
+}
+
+func TestBuildCleanJSONPlanDefensiveInventoryPreservesProtection(t *testing.T) {
+	root := t.TempDir()
+	item := types.DebrisInfo{
+		Tool:     types.ToolClaude,
+		Category: types.CategoryAgentState,
+		ID:       "protected-inventory",
+		Path:     filepath.Join(root, "agent-state"),
+		Size:     64,
+	}
+	if err := os.MkdirAll(item.Path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	protections := map[string]cleanAuditReason{
+		cleanAuditItemKey(item): cleanReasonAgentStateLive,
+	}
+
+	components := buildCleanJSONSnapshotComponents(
+		UnifiedCleanupPlan{},
+		nil,
+		[]types.DebrisInfo{item},
+		protections,
+	)
+	if len(components) != 1 || components[0].Decision != cleanJSONDecisionProtected {
+		t.Fatalf("fallback protected component = %+v; want one protected target", components)
+	}
+	if len(components[0].Rows) != 1 || components[0].Rows[0].PolicyDecision != cleanJSONPolicyProtected ||
+		!slices.Contains(components[0].Rows[0].ReasonCodes, "agent_state_live") {
+		t.Fatalf("fallback protected row = %+v; want stable protected reason", components[0].Rows)
+	}
+}
+
+func TestCleanJSONSelectedTargetMarksReviewableOverlapEvidence(t *testing.T) {
+	root := t.TempDir()
+	owner := types.DebrisInfo{Path: filepath.Join(root, "cache"), Size: 64}
+	evidence := owner
+	evidence.Path = filepath.Join(owner.Path, "nested")
+	component := &cleanJSONSnapshotComponent{
+		Owner:    owner,
+		Decision: cleanJSONDecisionSelected,
+	}
+	auditComponent := cleanupOverlapComponent{CanonicalPath: owner.Path, Owner: owner}
+	appendCleanJSONAuditRow(component, cleanupOverlapLogicalRow{
+		Item:           evidence,
+		Relation:       cleanupOverlapDescendant,
+		PolicyDecision: cleanJSONPolicyReviewable,
+		ReasonCodes:    []string{"minimum_age"},
+	}, auditComponent, nil)
+	if len(component.Rows) != 1 || !slices.Contains(component.Rows[0].ReasonCodes, "protected_overlap") {
+		t.Fatalf("selected reviewable evidence row = %+v; want symmetric overlap marker", component.Rows)
+	}
+}
+
+func TestCleanJSONPolicyDecisionFallbackUsesPropagatedSelectionOnly(t *testing.T) {
+	row := CleanupPlanRow{
+		PolicySelection: CleanupPlanSelected,
+		Reasons: []CleanupPlanReason{{
+			Code:        CleanupPlanReasonCode(DecisionReasonRepositoryRetention),
+			Description: "legacy reason must not re-evaluate policy",
+		}},
+	}
+	if got := cleanJSONPolicyDecisionForPlanRow(row); got != cleanJSONPolicyEligible {
+		t.Fatalf("legacy policy fallback = %q; want %q from selected state", got, cleanJSONPolicyEligible)
+	}
+}
+
+func TestCleanJSONReasonCodeAllowListPreservesKnownCodes(t *testing.T) {
+	decisionCodes := []DecisionReasonCode{
+		DecisionReasonCurrentWorkingDirectory,
+		DecisionReasonDirtyWorktree,
+		DecisionReasonGitEvidenceUnavailable,
+		DecisionReasonDetachedUnreferenced,
+		DecisionReasonActivityUnavailable,
+		DecisionReasonRecentActivity,
+		DecisionReasonRepositoryRetention,
+		DecisionReasonMinimumIdleAge,
+		DecisionReasonMinimumSize,
+		DecisionReasonEligible,
+	}
+	gitEvidenceCodes := []GitEvidenceReasonCode{
+		GitReasonEvidenceUnavailable,
+		GitReasonDirtyWorktree,
+		GitReasonAttachedBranch,
+		GitReasonDetachedHeadReachable,
+		GitReasonDetachedHeadUnreferenced,
+	}
+	for _, code := range append(
+		append([]string(nil), decisionReasonStrings(decisionCodes)...),
+		gitEvidenceReasonStrings(gitEvidenceCodes)...,
+	) {
+		if got := cleanJSONReasonCode(code); got != code {
+			t.Errorf("known reason code %q normalized to %q", code, got)
+		}
+	}
+
+	auditReasons := []struct {
+		reason cleanAuditReason
+		code   string
+	}{
+		{cleanReasonFiltered, "filtered"},
+		{cleanReasonRisky, "risky_requires_opt_in"},
+		{cleanReasonActiveWorktree, "active_worktree"},
+		{cleanReasonAge, "minimum_age"},
+		{cleanReasonAgentStateLive, "agent_state_live"},
+		{cleanReasonAgentStateUndetermined, "agent_state_undetermined"},
+		{cleanReasonMissingPath, "missing_path"},
+		{cleanReasonDuplicatePath, "duplicate_path"},
+		{cleanReasonNestedTarget, "nested_target"},
+		{cleanReasonOverlapTarget, "overlap_target"},
+		{cleanReasonProtectedAgentStateAncestor, "protected_agent_state_ancestor"},
+		{cleanReasonProtectedAgentStateDescendant, "protected_agent_state_descendant"},
+		{cleanReasonAmbiguousOverlapIdentity, "ambiguous_overlap_identity"},
+		{cleanReasonCommandOverlap, "command_overlap"},
+		{cleanReasonNestedRevalidation, "nested_revalidation"},
+		{cleanReasonNestedRevalidationRequired, "nested_revalidation_required"},
+		{cleanReasonScanEvidenceUnavailable, "scan_evidence_unavailable"},
+		{cleanReasonEligible, "eligible"},
+		{cleanAuditReason(gitProtectionDirtyFiles), "git_dirty_files"},
+		{cleanAuditReason(gitProtectionGitStatusUnavailable), "git_evidence_unavailable"},
+		{cleanAuditReason(gitProtectionUpstreamComparisonUnavailable), "git_upstream_unavailable"},
+		{cleanAuditReason(gitProtectionUnpushedCommits), "git_unpushed_commits"},
+	}
+	for _, tt := range auditReasons {
+		code := cleanJSONReasonCodeForAuditReason(tt.reason)
+		if code != tt.code || cleanJSONReasonCode(code) != tt.code {
+			t.Errorf("audit reason %q mapped to %q; want preserved %q", tt.reason, code, tt.code)
+		}
+	}
+}
+
+func decisionReasonStrings(codes []DecisionReasonCode) []string {
+	strings := make([]string, 0, len(codes))
+	for _, code := range codes {
+		strings = append(strings, string(code))
+	}
+	return strings
+}
+
+func gitEvidenceReasonStrings(codes []GitEvidenceReasonCode) []string {
+	strings := make([]string, 0, len(codes))
+	for _, code := range codes {
+		strings = append(strings, string(code))
+	}
+	return strings
 }
 
 func TestAssignCleanJSONAccountingBytesGivesFullyCoveredParentZeroBytes(t *testing.T) {
@@ -681,11 +855,101 @@ func TestCleanJSONCLIContractPreservesProtectedWorktreeRowWithoutLockingNestedNo
 		!slices.Contains(parent.ReasonCodes, "active_worktree") {
 		t.Fatalf("active worktree row = %+v; want protected policy preserved beside selected child", *parent)
 	}
+	if !slices.Contains(parent.ReasonCodes, "protected_overlap") {
+		t.Fatalf("active worktree row = %+v; want protected-overlap marker on selected physical target", *parent)
+	}
 	if parent.Relation != string(CleanupPlanRelationAncestor) {
 		t.Fatalf("active worktree relation = %q; want ancestor", parent.Relation)
 	}
 	if child == nil || child.Relation != string(CleanupPlanRelationOwner) || child.Decision != cleanJSONDecisionSelected {
 		t.Fatalf("selected nested node_modules row = %+v; want selected owner row", child)
+	}
+}
+
+func TestCleanJSONCLIContractCanonicalizesRowsUnderSymlinkedHome(t *testing.T) {
+	binary := buildCLIContractBinary(t)
+	realParent := t.TempDir()
+	realHome := filepath.Join(realParent, "symlink-json-secret-real-home")
+	if err := os.MkdirAll(realHome, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	linkParent := t.TempDir()
+	linkHome := filepath.Join(linkParent, "symlink-json-secret-home-link")
+	if err := os.Symlink(realHome, linkHome); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	testutil.SetHome(t, linkHome)
+	saveUsefulGuidedCleanFixture(t, linkHome, "json-symlinked-home", time.Now().Add(-8*24*time.Hour))
+
+	stdout, stderr, err := runCleanJSONProcess(t, binary, linkHome, "clean", "--dry-run", "--json")
+	if err != nil {
+		t.Fatalf("symlinked-home clean JSON failed: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("symlinked-home clean JSON stderr = %q", stderr)
+	}
+	for _, secret := range []string{realHome, linkHome, "symlink-json-secret"} {
+		if strings.Contains(stdout, secret) {
+			t.Fatalf("symlinked-home clean JSON leaked %q:\n%s", secret, stdout)
+		}
+	}
+
+	var document cleanJSONPlan
+	if err := json.Unmarshal([]byte(stdout), &document); err != nil {
+		t.Fatalf("symlinked-home clean JSON is invalid: %v\n%s", err, stdout)
+	}
+	if document.Totals.VisibleRows != 4 || len(document.Rows) != 4 || len(document.PhysicalTargets) != 4 {
+		t.Fatalf("symlinked-home accounting = totals=%+v targets=%d rows=%d; want four physical and visible rows", document.Totals, len(document.PhysicalTargets), len(document.Rows))
+	}
+	targets := make(map[string]cleanJSONPhysicalTarget, len(document.PhysicalTargets))
+	for _, target := range document.PhysicalTargets {
+		targets[target.ID] = target
+	}
+	rowsByTarget := make(map[string][]cleanJSONRow)
+	for _, row := range document.Rows {
+		rowsByTarget[row.PhysicalTargetID] = append(rowsByTarget[row.PhysicalTargetID], row)
+	}
+	for targetID, rows := range rowsByTarget {
+		if len(rows) != 1 || rows[0].Relation != string(CleanupPlanRelationOwner) {
+			t.Fatalf("target %q rows = %+v; want exactly one owner row", targetID, rows)
+		}
+		if target, ok := targets[targetID]; !ok || rows[0].Decision != target.Decision {
+			t.Fatalf("target %q row/target decisions disagree: row=%+v target=%+v", targetID, rows[0], target)
+		}
+		if rows[0].PolicyDecision == "" {
+			t.Fatalf("target %q has empty policy decision: %+v", targetID, rows[0])
+		}
+	}
+	if len(rowsByTarget) != len(document.PhysicalTargets) {
+		t.Fatalf("row target coverage = %d; want %d", len(rowsByTarget), len(document.PhysicalTargets))
+	}
+}
+
+func TestCleanJSONCLIContractRejectsIncompleteScanWithDistinctError(t *testing.T) {
+	const envName = "GO_TEST_CLEAN_JSON_INCOMPLETE_SUBPROCESS"
+	if os.Getenv(envName) == "1" {
+		resetCleanFlags()
+		home := t.TempDir()
+		testutil.SetHome(t, home)
+		failing := scanner.New(nil)
+		failing.Providers = append(failing.Providers, failingScanProvider{})
+		scanner.DefaultScanner = failing
+		rootCmd.SetArgs([]string{"clean", "--dry-run", "--json", "--no-guide"})
+		_ = rootCmd.Execute()
+		return
+	}
+
+	command := exec.Command(os.Args[0], "-test.run=TestCleanJSONCLIContractRejectsIncompleteScanWithDistinctError$")
+	command.Env = append(os.Environ(), envName+"=1")
+	var stdout, stderr bytes.Buffer
+	command.Stdout = &stdout
+	command.Stderr = &stderr
+	if err := command.Run(); err == nil {
+		t.Fatalf("incomplete clean JSON unexpectedly succeeded: stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "error: cleanup requires a complete scan") ||
+		strings.Contains(stderr.String(), "cleanup scan failed") {
+		t.Fatalf("incomplete clean JSON error contract: stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 }
 

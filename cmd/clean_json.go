@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -152,6 +153,9 @@ func runCleanJSON(cmd *cobra.Command) {
 	}
 	result, source, err := scanForCleanQuiet(ctx, roots)
 	if err != nil {
+		if errors.Is(err, errIncompleteCleanupScan) {
+			failCleanJSON("cleanup requires a complete scan")
+		}
 		failCleanJSON("cleanup scan failed")
 	}
 	refreshCleanupInventoryMetadata(result.Worktrees)
@@ -418,13 +422,20 @@ func buildCleanJSONSnapshotComponents(
 
 	planRowsRemaining := make(map[string]int, len(plan.Rows))
 	for _, row := range plan.Rows {
-		planRowsRemaining[cleanAuditItemKey(row.Item)]++
+		planRowsRemaining[cleanJSONRowIdentityKey(row.Item)]++
 		componentIndex, ok := componentIndexes[row.OwnerKey]
 		if !ok {
 			continue
 		}
 		policyDecision := cleanJSONPolicyDecisionForPlanRow(row)
 		reasons := cleanJSONPlanRowReasonCodes(row)
+		if cleanJSONNeedsProtectedOverlapMarker(
+			components[componentIndex].Decision,
+			policyDecision,
+			string(row.Relation),
+		) {
+			reasons = append(reasons, "protected_overlap")
+		}
 		components[componentIndex].Rows = append(components[componentIndex].Rows, cleanJSONSnapshotRow{
 			Item:           row.Item,
 			Relation:       string(row.Relation),
@@ -439,7 +450,7 @@ func buildCleanJSONSnapshotComponents(
 		componentIndex, matched := cleanJSONPlanComponentForPath(auditComponent.CanonicalPath, plan.Components)
 		if matched {
 			for _, row := range auditComponent.LogicalRows {
-				key := cleanAuditItemKey(row.Item)
+				key := cleanJSONRowIdentityKey(row.Item)
 				if planRowsRemaining[key] > 0 {
 					planRowsRemaining[key]--
 					continue
@@ -461,7 +472,7 @@ func buildCleanJSONSnapshotComponents(
 			Rows:     []cleanJSONSnapshotRow{},
 		}
 		for _, row := range auditComponent.LogicalRows {
-			key := cleanAuditItemKey(row.Item)
+			key := cleanJSONRowIdentityKey(row.Item)
 			if planRowsRemaining[key] > 0 {
 				planRowsRemaining[key]--
 				continue
@@ -481,12 +492,12 @@ func buildCleanJSONSnapshotComponents(
 	assigned := make(map[string]int)
 	for _, component := range components {
 		for _, row := range component.Rows {
-			assigned[cleanAuditItemKey(row.Item)]++
+			assigned[cleanJSONRowIdentityKey(row.Item)]++
 		}
 	}
 	unassigned := make([]types.DebrisInfo, 0)
 	for _, item := range inventory {
-		key := cleanAuditItemKey(item)
+		key := cleanJSONRowIdentityKey(item)
 		if assigned[key] >= 1 {
 			assigned[key]--
 			continue
@@ -496,6 +507,7 @@ func buildCleanJSONSnapshotComponents(
 			appendCleanJSONInventoryRow(
 				&components[componentIndex],
 				item,
+				protections,
 			)
 			continue
 		}
@@ -507,7 +519,7 @@ func buildCleanJSONSnapshotComponents(
 			component := cleanJSONSnapshotComponent{
 				Key:      fallback.CanonicalPath,
 				Owner:    fallback.Owner,
-				Decision: cleanJSONDecisionSkipped,
+				Decision: cleanJSONDecisionForAuditComponent(fallback, protections),
 				Rows:     []cleanJSONSnapshotRow{},
 			}
 			for _, row := range fallback.LogicalRows {
@@ -648,7 +660,7 @@ func appendCleanJSONAuditRow(
 	info := cleanJSONPolicyForAuditRow(row, auditComponent, protections)
 	relation := cleanJSONRelationForAuditRow(row, component.Owner)
 	reasons := append([]string(nil), info.ReasonCodes...)
-	if component.Decision == cleanJSONDecisionProtected && info.Decision != cleanJSONPolicyProtected {
+	if cleanJSONNeedsProtectedOverlapMarker(component.Decision, info.Decision, relation) {
 		reasons = append(reasons, "protected_overlap")
 	}
 	component.Rows = append(component.Rows, cleanJSONSnapshotRow{
@@ -664,11 +676,12 @@ func appendCleanJSONAuditRow(
 func appendCleanJSONInventoryRow(
 	component *cleanJSONSnapshotComponent,
 	item types.DebrisInfo,
+	protections map[string]cleanAuditReason,
 ) {
-	info := cleanJSONPolicyInfo{Decision: cleanJSONPolicySkipped, ReasonCodes: []string{"policy_decision"}}
+	info := cleanJSONPolicyForInventoryItem(item, protections)
 	relation := cleanJSONRelationForInventoryItem(item, component)
 	reasons := append([]string(nil), info.ReasonCodes...)
-	if component.Decision == cleanJSONDecisionProtected && info.Decision != cleanJSONPolicyProtected {
+	if cleanJSONNeedsProtectedOverlapMarker(component.Decision, info.Decision, relation) {
 		reasons = append(reasons, "protected_overlap")
 	}
 	component.Rows = append(component.Rows, cleanJSONSnapshotRow{
@@ -679,6 +692,33 @@ func appendCleanJSONInventoryRow(
 		ReasonCodes:    uniqueCleanJSONReasonCodes(reasons),
 		SortKey:        cleanJSONSnapshotRowSortKey(item, relation, len(component.Rows)),
 	})
+}
+
+func cleanJSONNeedsProtectedOverlapMarker(componentDecision, policyDecision, relation string) bool {
+	if relation == string(CleanupPlanRelationOwner) {
+		return false
+	}
+	if componentDecision == cleanJSONDecisionProtected && policyDecision != cleanJSONPolicyProtected {
+		return true
+	}
+	return componentDecision == cleanJSONDecisionSelected &&
+		(policyDecision == cleanJSONPolicyProtected || policyDecision == cleanJSONPolicyReviewable)
+}
+
+func cleanJSONPolicyForInventoryItem(
+	item types.DebrisInfo,
+	protections map[string]cleanAuditReason,
+) cleanJSONPolicyInfo {
+	if reason := protections[cleanAuditItemKey(item)]; reason != "" {
+		return cleanJSONPolicyInfo{
+			Decision:    cleanJSONPolicyProtected,
+			ReasonCodes: []string{cleanJSONReasonCodeForAuditReason(reason)},
+		}
+	}
+	return cleanJSONPolicyInfo{
+		Decision:    cleanJSONPolicySkipped,
+		ReasonCodes: []string{"policy_decision"},
+	}
 }
 
 func cleanJSONPolicyForAuditRow(
@@ -803,28 +843,13 @@ func cleanJSONPolicyDecisionForPlanRow(row CleanupPlanRow) string {
 	if row.PolicyDecision != "" {
 		return string(row.PolicyDecision)
 	}
-	switch row.PolicySelection {
+	selection := row.PolicySelection
+	if selection == "" {
+		selection = row.Selection
+	}
+	switch selection {
 	case CleanupPlanLocked:
 		return cleanJSONPolicyProtected
-	}
-	for _, reason := range row.Reasons {
-		switch reason.Code {
-		case CleanupPlanReasonCode(DecisionReasonEligible):
-			return cleanJSONPolicyRecommended
-		case CleanupPlanReasonCode(DecisionReasonRepositoryRetention),
-			CleanupPlanReasonCode(DecisionReasonMinimumIdleAge),
-			CleanupPlanReasonCode(DecisionReasonMinimumSize):
-			return cleanJSONPolicyReviewable
-		case CleanupPlanReasonCode(DecisionReasonCurrentWorkingDirectory),
-			CleanupPlanReasonCode(DecisionReasonDirtyWorktree),
-			CleanupPlanReasonCode(DecisionReasonGitEvidenceUnavailable),
-			CleanupPlanReasonCode(DecisionReasonDetachedUnreferenced),
-			CleanupPlanReasonCode(DecisionReasonRecentActivity),
-			CleanupPlanReasonCode(DecisionReasonActivityUnavailable):
-			return cleanJSONPolicyProtected
-		}
-	}
-	switch row.PolicySelection {
 	case CleanupPlanSelected:
 		return cleanJSONPolicyEligible
 	default:
@@ -983,6 +1008,26 @@ func cleanJSONReasonCode(code string) string {
 	default:
 		return "policy_decision"
 	}
+}
+
+// cleanJSONRowIdentityKey identifies one logical JSON evidence row by its
+// stable fields and canonical path. When canonicalization cannot resolve a
+// path, its cleaned raw spelling remains a safe, deterministic fallback.
+func cleanJSONRowIdentityKey(item types.DebrisInfo) string {
+	pathKey := strings.TrimSpace(item.Path)
+	if canonical, ok := cleanTargetPathKey(item.Path); ok {
+		pathKey = canonical
+	} else if pathKey != "" {
+		pathKey = cleanTargetRawPathKey(pathKey)
+	} else {
+		pathKey = "<empty-path>"
+	}
+	return strings.Join([]string{
+		string(item.Category),
+		string(item.Tool),
+		item.ID,
+		pathKey,
+	}, "\x00")
 }
 
 func uniqueCleanJSONReasonCodes(codes []string) []string {

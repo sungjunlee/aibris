@@ -155,6 +155,11 @@ func TestRenderUnifiedCleanupReviewRendersAggregatedGuidedReasonOnce(t *testing.
 	if !strings.Contains(output.String(), "no upstream configured") {
 		t.Fatalf("human output lost later guided reason:\n%s", output.String())
 	}
+	for _, code := range []string{"cleanup_recommended", "git_attached_local_branch", "git_detached_head_reachable"} {
+		if strings.Contains(output.String(), code) {
+			t.Fatalf("human output rendered raw machine reason code %q:\n%s", code, output.String())
+		}
+	}
 }
 
 func cleanupReviewTestPlan(t *testing.T) UnifiedCleanupPlan {
