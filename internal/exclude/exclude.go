@@ -182,11 +182,14 @@ func (m *Matcher) Match(path string) bool {
 		return false
 	}
 	clean := filepath.Clean(path)
+	// canonicalize resolves symlinks — including the deepest existing ancestor
+	// when the candidate itself does not exist (e.g. a non-existent descendant
+	// under a symlinked prefix). This keeps candidate comparison consistent
+	// with the canonical (resolved) scope paths, matching on macOS/Linux where
+	// /tmp, /var/folders, etc. are symlinks.
 	candidates := []string{clean}
-	if resolved, err := filepath.EvalSymlinks(clean); err == nil {
-		if resolved = filepath.Clean(resolved); resolved != clean {
-			candidates = append(candidates, resolved)
-		}
+	if canon := canonicalize(clean); canon != clean {
+		candidates = append(candidates, canon)
 	}
 	for _, candidate := range candidates {
 		for _, scope := range m.scopes {

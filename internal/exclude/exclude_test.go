@@ -169,8 +169,11 @@ func TestMatcher_MissingPathFallsBackToLexicalCleaning(t *testing.T) {
 	m := New([]Pattern{{Raw: missing, Source: types.ExcludeSourceFlag}}, []string{evalPath(t, root)})
 
 	scopes := m.Scopes()
-	if len(scopes) != 1 || scopes[0].Resolved != filepath.Clean(missing) {
-		t.Fatalf("scopes = %+v; want nonexistent pattern honored lexically", scopes)
+	// A nonexistent pattern falls back to lexical cleaning, but the deepest
+	// existing ancestor is still symlink-resolved (e.g. /var -> /private/var on
+	// macOS temp dirs), so the expected form matches canonicalize(missing).
+	if len(scopes) != 1 || scopes[0].Resolved != canonicalize(missing) {
+		t.Fatalf("scopes = %+v; want nonexistent pattern honored lexically (resolved %q)", scopes, canonicalize(missing))
 	}
 	if !m.Match(filepath.Join(missing, "deep")) {
 		t.Error("nonexistent exclude scope should still cover discovered descendants")
