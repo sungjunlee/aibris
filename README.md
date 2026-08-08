@@ -107,6 +107,8 @@ aibris scan --json             # machine-readable output (see docs/JSON_SCHEMA.m
 aibris scan --root ~/.codex    # narrow scan to a home subdirectory
 
 aibris clean --dry-run         # preview without deleting
+aibris clean --dry-run --json  # redacted machine-readable cleanup plan
+aibris clean --dry-run --json --include-paths  # opt in to plan paths
 aibris clean --no-guide --dry-run # force classic cleanup audit
 aibris clean                   # delete with confirmation
 aibris clean --root ~/.codex --dry-run
@@ -198,6 +200,23 @@ targets
 
 [DRY-RUN] No files were removed.
 ```
+
+For automation, use the phase-1 dry-run plan:
+
+```bash
+aibris clean --dry-run --json
+aibris clean --no-guide --dry-run --json --include-paths
+```
+
+The default JSON output is one path-redacted `clean_plan` document on stdout
+with empty stderr. It uses deterministic document-local `target-1` and
+`row-1` IDs, keeps bytes only on containment-normalized physical targets, and
+keeps exact/nested discoveries as zero-byte logical rows. Guided JSON mode
+accepts the normal deterministic defaults without prompting. `--include-paths`
+opts in to explicit target paths, logical paths/projects, and cleanup commands.
+Execution JSON receipts, replayable manifests, cancellation receipts, and
+receipt files are not shipped yet; `clean --json` without `--dry-run` fails
+with that phase-2 status.
 
 When active Codex worktrees are the useful cleanup decision and no classic
 cleanup selector is supplied, `aibris clean --dry-run` opens guided Codex

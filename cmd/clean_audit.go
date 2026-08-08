@@ -35,6 +35,10 @@ type cleanAudit struct {
 	TotalBlockedCount  int
 	TotalBlockedSize   int64
 	Categories         []cleanAuditCategory
+	// Components is the route-neutral physical inventory projection used by
+	// machine-readable dry-run output. It is deliberately not rendered by the
+	// human audit.
+	Components []cleanupOverlapComponent
 }
 
 type cleanAuditCategory struct {
@@ -85,6 +89,7 @@ func cleanupOverlapLogicalInputsForAudit(
 	observedAt := time.Now()
 	inputs := make([]cleanupOverlapLogicalInput, 0, len(items))
 	for _, item := range items {
+		decision, codes := cleanJSONPolicyForAuditItem(item, opts, protectedTargets, observedAt)
 		reason := item.Reason
 		if protected := protectedTargets[cleanAuditItemKey(item)]; protected != "" {
 			reason = cleanAuditReasonText(protected, opts)
@@ -97,11 +102,44 @@ func cleanupOverlapLogicalInputsForAudit(
 			reason = string(cleaner.EligibilityReasonEligible)
 		}
 		inputs = append(inputs, cleanupOverlapLogicalInput{
-			Item:         item,
-			PolicyReason: reason,
+			Item:           item,
+			PolicyReason:   reason,
+			PolicyDecision: decision,
+			ReasonCodes:    codes,
 		})
 	}
 	return inputs
+}
+
+// cleanJSONPolicyForAuditItem is the classic policy boundary for the JSON
+// projection. It runs alongside the human audit, while all of the original
+// safety inputs are still available. JSON rendering must only carry this
+// recorded decision forward; it must not re-stat paths or re-evaluate age or
+// filters later in the run.
+func cleanJSONPolicyForAuditItem(
+	item types.DebrisInfo,
+	opts types.PruneOptions,
+	protectedTargets map[string]cleanAuditReason,
+	observedAt time.Time,
+) (string, []string) {
+	if protected := protectedTargets[cleanAuditItemKey(item)]; protected != "" {
+		return cleanJSONPolicyProtected, []string{cleanJSONReasonCodeForAuditReason(protected)}
+	}
+	eligible, reason := cleaner.EvaluateEligibility(item, opts, observedAt)
+	if eligible {
+		if item.Category == types.CategoryAgentState && item.Classification == types.EntryClassOrphaned {
+			return cleanJSONPolicyEligible, []string{"agent_state_orphaned"}
+		}
+		return cleanJSONPolicyEligible, []string{"classic_eligible"}
+	}
+	switch reason {
+	case cleaner.EligibilityReasonActiveWorktree,
+		cleaner.EligibilityReasonAgentStateLive,
+		cleaner.EligibilityReasonAgentStateUndetermined:
+		return cleanJSONPolicyProtected, []string{cleanJSONReasonCodeForEligibility(reason)}
+	default:
+		return cleanJSONPolicySkipped, []string{cleanJSONReasonCodeForEligibility(reason)}
+	}
 }
 
 func buildCleanAudit(items, targets []types.DebrisInfo, opts types.PruneOptions, scannedSources int, source scanSource, protectedTargets map[string]cleanAuditReason) cleanAudit {
@@ -170,13 +208,39 @@ func buildPhysicalCleanAudit(
 	source scanSource,
 	protectedTargets map[string]cleanAuditReason,
 ) cleanAudit {
+	logicalInputs := cleanupOverlapLogicalInputsForAudit(items, opts, protectedTargets)
+	return buildPhysicalCleanAuditWithLogicalInputs(
+		items,
+		components,
+		targets,
+		opts,
+		scannedSources,
+		source,
+		protectedTargets,
+		logicalInputs,
+	)
+}
+
+func buildPhysicalCleanAuditWithLogicalInputs(
+	items []types.DebrisInfo,
+	components []cleanupOverlapComponent,
+	targets []types.DebrisInfo,
+	opts types.PruneOptions,
+	scannedSources int,
+	source scanSource,
+	protectedTargets map[string]cleanAuditReason,
+	logicalInputs []cleanupOverlapLogicalInput,
+) cleanAudit {
 	observedAt := time.Now()
 	targetSet := newCleanAuditTargetSet(targets)
 	byCategory := make(map[types.Category]*cleanAuditCategory)
 	reasonsByCategory := make(map[types.Category]map[cleanAuditReason]cleanAuditReasonStat)
-	audit := cleanAudit{Source: source, ScannedSources: scannedSources}
-
-	physicalComponents, attached := cleanAuditPhysicalComponents(items, components)
+	physicalComponents, attached := cleanAuditPhysicalComponentsWithLogicalInputs(items, components, logicalInputs)
+	audit := cleanAudit{
+		Source:         source,
+		ScannedSources: scannedSources,
+		Components:     physicalComponents,
+	}
 	for _, component := range physicalComponents {
 		owner := component.Owner
 		row := cleanAuditCategoryFor(byCategory, owner.Category)
@@ -280,6 +344,14 @@ func cleanAuditPhysicalComponents(
 	items []types.DebrisInfo,
 	planned []cleanupOverlapComponent,
 ) ([]cleanupOverlapComponent, map[int]bool) {
+	return cleanAuditPhysicalComponentsWithLogicalInputs(items, planned, nil)
+}
+
+func cleanAuditPhysicalComponentsWithLogicalInputs(
+	items []types.DebrisInfo,
+	planned []cleanupOverlapComponent,
+	logicalInputs []cleanupOverlapLogicalInput,
+) ([]cleanupOverlapComponent, map[int]bool) {
 	components := append([]cleanupOverlapComponent(nil), planned...)
 	attached := make(map[int]bool, len(items))
 	for i, item := range items {
@@ -309,15 +381,23 @@ func cleanAuditPhysicalComponents(
 		}
 	}
 
+	inputsByItemKey := make(map[string][]cleanupOverlapLogicalInput, len(logicalInputs))
+	for _, input := range logicalInputs {
+		key := cleanAuditItemKey(input.Item)
+		inputsByItemKey[key] = append(inputsByItemKey[key], input)
+	}
 	var remaining []cleanupOverlapLogicalInput
 	for i, item := range items {
 		if attached[i] {
 			continue
 		}
-		remaining = append(remaining, cleanupOverlapLogicalInput{
-			Item:         item,
-			PolicyReason: item.Reason,
-		})
+		key := cleanAuditItemKey(item)
+		if inputs := inputsByItemKey[key]; len(inputs) > 0 {
+			remaining = append(remaining, inputs[0])
+			inputsByItemKey[key] = inputs[1:]
+			continue
+		}
+		remaining = append(remaining, cleanupOverlapLogicalInput{Item: item, PolicyReason: item.Reason})
 	}
 	standaloneOwners := normalizeCleanTargets(cleanupLogicalItems(remaining))
 	for _, owner := range standaloneOwners {
@@ -337,10 +417,12 @@ func cleanAuditPhysicalComponents(
 				continue
 			}
 			component.LogicalRows = append(component.LogicalRows, cleanupOverlapLogicalRow{
-				Item:          input.Item,
-				CanonicalPath: rowPath,
-				Relation:      relation,
-				PolicyReason:  cleanupLogicalPolicyReason(input),
+				Item:           input.Item,
+				CanonicalPath:  rowPath,
+				Relation:       relation,
+				PolicyReason:   cleanupLogicalPolicyReason(input),
+				PolicyDecision: input.PolicyDecision,
+				ReasonCodes:    append([]string(nil), input.ReasonCodes...),
 			})
 			for itemIndex, item := range items {
 				if attached[itemIndex] {

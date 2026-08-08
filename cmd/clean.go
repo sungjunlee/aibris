@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -25,6 +26,8 @@ var (
 	cleanCategory               string
 	cleanTools                  string
 	cleanDryRun                 bool
+	cleanJSON                   bool
+	cleanIncludePaths           bool
 	cleanInteractive            bool
 	cleanRisky                  bool
 	cleanForce                  bool
@@ -49,11 +52,24 @@ Across both routes, selected targets enter the cleanup plan, reviewable targets
 require explicit selection, and protected targets never enter the plan. Guided
 review displays protected targets as locked rows.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		if cleanIncludePaths && !cleanJSON {
+			fmt.Fprintln(os.Stderr, "error: --include-paths requires --json")
+			os.Exit(1)
+		}
 		if cleanGuide && cleanNoGuide {
 			fmt.Fprintln(os.Stderr, "error: cannot use --guide with --no-guide")
 			os.Exit(1)
 		}
-
+		if cleanJSON {
+			if cleanInteractive {
+				failCleanJSON("--interactive cannot be used with --json")
+			}
+			if !cleanDryRun {
+				failCleanJSON("execution receipts are not yet supported; use --dry-run")
+			}
+			runCleanJSON(cmd)
+			return
+		}
 		age, err := parseAge(cleanAge)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "invalid age '%s': expected duration like 7d, 2w, 1mo, 1y, or 24h\n", cleanAge)
@@ -208,7 +224,7 @@ review displays protected targets as locked rows.`,
 			overlapSelection.Protections,
 		)
 		auditComponents := overlapSelection.Components
-		audit := buildPhysicalCleanAudit(
+		audit := buildPhysicalCleanAuditWithLogicalInputs(
 			result.Worktrees,
 			auditComponents,
 			auditTargets,
@@ -216,6 +232,7 @@ review displays protected targets as locked rows.`,
 			len(scanner.DefaultScanner.Providers),
 			source,
 			auditProtections,
+			logicalInputs,
 		)
 		printCleanAudit(audit, opts)
 		printCleanCandidateSummary(targets)
@@ -431,6 +448,8 @@ func init() {
 		"Comma-separated tools ("+strings.Join(toolStrings(validCleanTools), ",")+")",
 	)
 	cleanCmd.Flags().BoolVar(&cleanDryRun, "dry-run", false, "Preview without deleting")
+	cleanCmd.Flags().BoolVar(&cleanJSON, "json", false, "Emit a machine-readable cleanup plan")
+	cleanCmd.Flags().BoolVar(&cleanIncludePaths, "include-paths", false, "Include paths and cleanup commands in JSON output")
 	cleanCmd.Flags().BoolVarP(&cleanInteractive, "interactive", "i", false, "Confirm each deletion")
 	cleanCmd.Flags().BoolVar(&cleanRisky, "risky", false, "Include risky categories (ai-logs)")
 	cleanCmd.Flags().BoolVarP(&cleanForce, "force", "f", false, "Skip confirmation prompt")
@@ -609,6 +628,14 @@ func printCleanHeader(roots []string) {
 }
 
 func scanForClean(ctx context.Context, roots []string) (*types.ScanResult, scanSource, error) {
+	return scanForCleanWithProgress(ctx, roots, true)
+}
+
+func scanForCleanQuiet(ctx context.Context, roots []string) (*types.ScanResult, scanSource, error) {
+	return scanForCleanWithProgress(ctx, roots, false)
+}
+
+func scanForCleanWithProgress(ctx context.Context, roots []string, showProgress bool) (*types.ScanResult, scanSource, error) {
 	cacheReadAt := time.Now()
 	if result, age, ok := readFreshLastScanCache(roots); ok {
 		if err := requireCompleteScan(result); err != nil {
@@ -621,12 +648,23 @@ func scanForClean(ctx context.Context, roots []string) (*types.ScanResult, scanS
 		}, nil
 	}
 
-	progress := newScanProgressPrinter(os.Stdout)
-	result, err := scanner.ScanWithOptions(ctx, types.ScanOptions{
-		Roots:      roots,
-		OnProgress: progress.Handle,
-	})
-	progress.Stop()
+	var result *types.ScanResult
+	var err error
+	if showProgress {
+		progress := newScanProgressPrinter(os.Stdout)
+		result, err = scanner.ScanWithOptions(ctx, types.ScanOptions{
+			Roots:      roots,
+			OnProgress: progress.Handle,
+		})
+		progress.Stop()
+	} else {
+		quietScanner := scanner.NewWithRetentionProviders(
+			scanner.DefaultScanner.Providers,
+			scanner.DefaultScanner.RetentionProviders,
+		)
+		quietScanner.ErrorWriter = io.Discard
+		result, err = quietScanner.ScanWithOptions(ctx, types.ScanOptions{Roots: roots})
+	}
 	if err != nil {
 		return nil, scanSource{}, err
 	}

@@ -39,10 +39,19 @@ func guidedCleanupPlanCandidates(state guidedCleanState) []CleanupPlanCandidate 
 		} else if row.Selected {
 			selection = CleanupPlanSelected
 		}
-		reasons := []CleanupPlanReason{{
-			Code:        CleanupPlanReasonWorktreePolicyDecision,
-			Description: row.Row.Reason,
-		}}
+		reasons := make([]CleanupPlanReason, 0, len(row.ReasonCodes)+1)
+		for _, code := range row.ReasonCodes {
+			reasons = append(reasons, CleanupPlanReason{
+				Code:        CleanupPlanReasonCode(code),
+				Description: row.Row.Reason,
+			})
+		}
+		if len(reasons) == 0 {
+			reasons = append(reasons, CleanupPlanReason{
+				Code:        CleanupPlanReasonWorktreePolicyDecision,
+				Description: row.Row.Reason,
+			})
+		}
 		candidates = append(candidates, CleanupPlanCandidate{
 			RowKey:    "guided:" + row.Key,
 			Item:      row.Row.Item,
