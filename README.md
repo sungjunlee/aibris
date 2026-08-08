@@ -211,9 +211,13 @@ aibris clean --no-guide --dry-run --json --include-paths
 The default JSON output is one path-redacted `clean_plan` document on stdout
 with empty stderr. It uses deterministic document-local `target-1` and
 `row-1` IDs, keeps bytes only on containment-normalized physical targets, and
-keeps exact/nested discoveries as zero-byte logical rows. Guided JSON mode
+keeps exact/nested/ancestor discoveries as zero-byte logical rows. Guided JSON mode
 accepts the normal deterministic defaults without prompting. `--include-paths`
 opts in to explicit target paths, logical paths/projects, and cleanup commands.
+Phase-1 clean fails closed before emitting this document if any scan provider
+failed, so an emitted plan always has `evidence.complete: true`. In mixed
+auto-guided output, `policy.minimum_age` remains the classic `7d` filter while
+the optional guided minimum idle age is reported separately as `3d`.
 Execution JSON receipts, replayable manifests, cancellation receipts, and
 receipt files are not shipped yet; `clean --json` without `--dry-run` fails
 with that phase-2 status.

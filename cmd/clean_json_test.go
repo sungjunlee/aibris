@@ -88,6 +88,81 @@ func TestBuildCleanJSONPlanCountsExactAndNestedRowsOnce(t *testing.T) {
 	}
 }
 
+func TestBuildCleanJSONPlanPreservesGuidedRecommendedAndClassicEligiblePolicyDecisions(t *testing.T) {
+	t.Cleanup(resetCleanFlags)
+	resetCleanFlags()
+	root := t.TempDir()
+	guidedItem := types.DebrisInfo{
+		Tool:     types.ToolCodex,
+		Category: types.CategoryWorktree,
+		ID:       "guided",
+		Path:     filepath.Join(root, ".codex", "worktrees", "guided"),
+		Size:     100,
+		ModTime:  time.Now().Add(-48 * time.Hour),
+	}
+	classicItem := types.DebrisInfo{
+		Tool:     types.ToolNodeModules,
+		Category: types.CategoryNodeModules,
+		ID:       "classic",
+		Path:     filepath.Join(root, "project", "node_modules"),
+		Size:     200,
+		ModTime:  guidedItem.ModTime,
+	}
+	state := &guidedCleanState{Rows: []guidedCleanRow{{
+		Key:         "guided",
+		Policy:      guidedCleanPolicyRecommended,
+		Selected:    true,
+		ReasonCodes: []DecisionReasonCode{DecisionReasonEligible},
+		Row: guidedCodexWorktreeRow{
+			Item:   guidedItem,
+			Reason: "eligible for cleanup recommendation",
+		},
+	}}}
+	physical, _ := cleanAuditPhysicalComponents([]types.DebrisInfo{guidedItem, classicItem}, nil)
+
+	document, err := buildCleanJSONPlan(
+		context.Background(),
+		&types.ScanResult{Worktrees: []types.DebrisInfo{guidedItem, classicItem}},
+		scanSource{Kind: scanSourceLive, ObservedAt: time.Now()},
+		types.PruneOptions{Age: 7 * 24 * time.Hour},
+		state,
+		[]types.DebrisInfo{classicItem},
+		nil,
+		cleanAudit{Components: physical},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !document.Evidence.Complete {
+		t.Fatalf("emitted clean plan evidence = %+v; want complete", document.Evidence)
+	}
+
+	byCategory := make(map[string]cleanJSONRow, len(document.Rows))
+	for _, row := range document.Rows {
+		byCategory[row.Category] = row
+	}
+	guidedRow, ok := byCategory[string(types.CategoryWorktree)]
+	if !ok {
+		t.Fatalf("guided row missing: %+v", document.Rows)
+	}
+	if guidedRow.PolicyDecision != cleanJSONPolicyRecommended {
+		t.Fatalf("guided policy decision = %q; want %q", guidedRow.PolicyDecision, cleanJSONPolicyRecommended)
+	}
+	if !slices.Contains(guidedRow.ReasonCodes, string(DecisionReasonEligible)) {
+		t.Fatalf("guided reason codes = %v; want stable cleanup_recommended", guidedRow.ReasonCodes)
+	}
+	classicRow, ok := byCategory[string(types.CategoryNodeModules)]
+	if !ok {
+		t.Fatalf("classic row missing: %+v", document.Rows)
+	}
+	if classicRow.PolicyDecision != cleanJSONPolicyEligible {
+		t.Fatalf("classic policy decision = %q; want %q", classicRow.PolicyDecision, cleanJSONPolicyEligible)
+	}
+	if !slices.Contains(classicRow.ReasonCodes, "classic_eligible") {
+		t.Fatalf("classic reason codes = %v; want stable classic_eligible", classicRow.ReasonCodes)
+	}
+}
+
 func TestBuildCleanJSONPlanKeepsB1ActionOwnersButCountsTheirBytesOnce(t *testing.T) {
 	t.Cleanup(resetCleanFlags)
 	resetCleanFlags()
@@ -164,6 +239,58 @@ func TestBuildCleanJSONPlanKeepsB1ActionOwnersButCountsTheirBytesOnce(t *testing
 		default:
 			t.Fatalf("unexpected B1 target decision: %+v", target)
 		}
+	}
+}
+
+func TestCleanJSONInventoryRelationRecognizesContainingOwner(t *testing.T) {
+	root := t.TempDir()
+	owner := types.DebrisInfo{Path: filepath.Join(root, "project", "node_modules")}
+	containing := types.DebrisInfo{Path: filepath.Join(root, "project")}
+	component := &cleanJSONSnapshotComponent{
+		Owner: owner,
+		Rows:  []cleanJSONSnapshotRow{{Item: owner, Relation: string(CleanupPlanRelationOwner)}},
+	}
+	if got := cleanJSONRelationForInventoryItem(containing, component); got != string(CleanupPlanRelationAncestor) {
+		t.Fatalf("containing inventory relation = %q; want %q", got, CleanupPlanRelationAncestor)
+	}
+}
+
+func TestCleanJSONPolicySeparatesClassicAndGuidedAge(t *testing.T) {
+	classicAge := 7 * 24 * time.Hour
+	guidedAge := 3 * 24 * time.Hour
+	guided := cleanJSONPolicyFor(
+		types.PruneOptions{Age: classicAge},
+		&guidedCleanState{Policy: CleanupPolicy{MinIdleAge: guidedAge}},
+	)
+	if guided.MinimumAge != "7d" {
+		t.Fatalf("auto-guided minimum_age = %q; want classic opts age 7d", guided.MinimumAge)
+	}
+	if guided.GuidedMinIdleAge != "3d" {
+		t.Fatalf("auto-guided guided_min_idle_age = %q; want 3d", guided.GuidedMinIdleAge)
+	}
+	classic := cleanJSONPolicyFor(types.PruneOptions{Age: classicAge}, nil)
+	if classic.GuidedMinIdleAge != "" {
+		t.Fatalf("classic guided_min_idle_age = %q; want omitted", classic.GuidedMinIdleAge)
+	}
+}
+
+func TestBuildCleanJSONPlanRejectsPartialScanBeforeEmission(t *testing.T) {
+	result := &types.ScanResult{ProviderErrors: []types.ScanProviderError{{
+		Tool:    types.ToolCodex,
+		Message: "provider unavailable",
+	}}}
+	_, err := buildCleanJSONPlan(
+		context.Background(),
+		result,
+		scanSource{Kind: scanSourceLive, ObservedAt: time.Now()},
+		types.PruneOptions{Age: time.Hour},
+		nil,
+		nil,
+		nil,
+		cleanAudit{},
+	)
+	if err == nil || !strings.Contains(err.Error(), "complete scan") {
+		t.Fatalf("partial build error = %v; want complete-scan refusal", err)
 	}
 }
 
@@ -294,6 +421,69 @@ func TestBuildCleanJSONPlanMarksOverlapRefusalProtectedWithStableReason(t *testi
 	if protectedAgent == nil || protectedAgent.PolicyDecision != cleanJSONPolicyProtected ||
 		!slices.Contains(protectedAgent.ReasonCodes, "protected_agent_state_descendant") {
 		t.Fatalf("refused agent-state row = %+v; want protected descendant reason", protectedAgent)
+	}
+	if document.Totals.Selected != 0 || document.Totals.Reviewable != 0 || document.Totals.Protected != 1 {
+		t.Fatalf("refused plan totals = %+v; want no executable or reviewable target", document.Totals)
+	}
+}
+
+func TestCleanJSONRouteProjectsRealOverlapRefusalAsProtected(t *testing.T) {
+	root := t.TempDir()
+	targetPath := filepath.Join(root, "cache")
+	entryPath := filepath.Join(targetPath, "agent-state", "live")
+	if err := os.MkdirAll(entryPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	target := overlapCmdTarget(targetPath, 64)
+	entry := overlapCmdAgentStateItem(entryPath, types.EntryClassLive)
+	inputs := []cleanupOverlapLogicalInput{
+		{Item: target, PolicyReason: "classic eligible", PolicyDecision: cleanJSONPolicyEligible, ReasonCodes: []string{"classic_eligible"}},
+		{Item: entry, PolicyReason: "active agent-state", PolicyDecision: cleanJSONPolicyProtected, ReasonCodes: []string{"active_worktree"}},
+	}
+	selection, err := applyCleanupOverlapSafetyWithRows(
+		context.Background(),
+		staticOverlapSafetyRuntime([]types.DebrisInfo{entry}, nil),
+		[]types.DebrisInfo{target},
+		inputs,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(selection.Components) != 1 || selection.Components[0].Refusal == nil {
+		t.Fatalf("overlap selection = %+v; want one refused component", selection)
+	}
+	protections := overlapSafetyAuditProtections(selection.Plan)
+	source := scanSource{Kind: scanSourceLive, ObservedAt: time.Now()}
+	audit := buildPhysicalCleanAuditWithLogicalInputs(
+		[]types.DebrisInfo{target, entry},
+		selection.Components,
+		selection.Targets,
+		types.PruneOptions{Age: time.Hour},
+		1,
+		source,
+		protections,
+		inputs,
+	)
+	document, err := buildCleanJSONPlan(
+		context.Background(),
+		&types.ScanResult{Worktrees: []types.DebrisInfo{target, entry}},
+		source,
+		types.PruneOptions{Age: time.Hour},
+		nil,
+		nil,
+		protections,
+		audit,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(document.PhysicalTargets) != 1 || document.PhysicalTargets[0].Decision != cleanJSONDecisionProtected || document.Totals.Selected != 0 {
+		t.Fatalf("route refusal plan = totals=%+v targets=%+v; want protected only", document.Totals, document.PhysicalTargets)
+	}
+	for _, row := range document.Rows {
+		if row.PolicyDecision != cleanJSONPolicyProtected || row.Decision != cleanJSONDecisionProtected {
+			t.Fatalf("route refusal row = %+v; want protected policy and decision", row)
+		}
 	}
 }
 
@@ -474,11 +664,14 @@ func TestCleanJSONCLIContractPreservesProtectedWorktreeRowWithoutLockingNestedNo
 		t.Fatalf("protected parent must not lock selected nested target: totals=%+v targets=%+v", document.Totals, document.PhysicalTargets)
 	}
 	var parent *cleanJSONRow
+	var child *cleanJSONRow
 	for i := range document.Rows {
 		row := &document.Rows[i]
 		if row.Category == string(types.CategoryWorktree) {
 			parent = row
-			break
+		}
+		if row.Category == string(types.CategoryNodeModules) {
+			child = row
 		}
 	}
 	if parent == nil {
@@ -487,6 +680,12 @@ func TestCleanJSONCLIContractPreservesProtectedWorktreeRowWithoutLockingNestedNo
 	if parent.PolicyDecision != cleanJSONPolicyProtected || parent.Decision != cleanJSONDecisionSelected ||
 		!slices.Contains(parent.ReasonCodes, "active_worktree") {
 		t.Fatalf("active worktree row = %+v; want protected policy preserved beside selected child", *parent)
+	}
+	if parent.Relation != string(CleanupPlanRelationAncestor) {
+		t.Fatalf("active worktree relation = %q; want ancestor", parent.Relation)
+	}
+	if child == nil || child.Relation != string(CleanupPlanRelationOwner) || child.Decision != cleanJSONDecisionSelected {
+		t.Fatalf("selected nested node_modules row = %+v; want selected owner row", child)
 	}
 }
 
@@ -512,6 +711,24 @@ func TestCleanJSONCLIContractGuidedDefaultsDoNotPrompt(t *testing.T) {
 	}
 	if document.Totals.Selected == 0 {
 		t.Fatalf("guided deterministic defaults selected no worktree: %+v", document.Totals)
+	}
+	if document.Policy.MinimumAge != "7d" || document.Policy.GuidedMinIdleAge != "3d" {
+		t.Fatalf("auto-guided policy ages = %+v; want classic 7d and guided 3d", document.Policy)
+	}
+
+	stdout, stderr, err = runCleanJSONProcess(t, binary, home, "clean", "--guide", "--dry-run", "--json")
+	if err != nil {
+		t.Fatalf("explicit guided clean JSON failed: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("explicit guided clean JSON stderr = %q", stderr)
+	}
+	var explicit cleanJSONPlan
+	if err := json.Unmarshal([]byte(stdout), &explicit); err != nil {
+		t.Fatalf("explicit guided clean JSON is invalid: %v\n%s", err, stdout)
+	}
+	if explicit.Policy.MinimumAge != "3d" || explicit.Policy.GuidedMinIdleAge != "3d" {
+		t.Fatalf("explicit guided policy ages = %+v; want 3d for both", explicit.Policy)
 	}
 }
 

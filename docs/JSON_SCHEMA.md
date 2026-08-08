@@ -25,6 +25,11 @@ cancellation receipts, replayable manifests, and receipt files remain future
 work. `aibris clean --json` without `--dry-run` therefore fails clearly rather
 than attempting execution.
 
+Phase-1 cleanup fails closed before encoding a `clean_plan` when the scan is
+partial. Consequently, every emitted `clean_plan` has `evidence.complete: true`;
+the partial-scan JSON described above applies to `scan --json`, not to a
+cleanup plan.
+
 The protected-content retention surface is frozen in
 [PROTECTED_RETENTION.md](PROTECTED_RETENTION.md). It ships as an additive
 read-only top-level `retention` object (see below) and is never an aggregate
@@ -337,10 +342,15 @@ preserve cleanup safety; their `bytes` values are nevertheless containment-
 disjoint. Descendant components receive their claimed size first in canonical
 path order and each parent receives its remaining exclusive share. If children
 consume the parent estimate, that parent deterministically has `bytes: 0` but
-retains its decision and action identity.
+retains its decision and action identity. A descendant's claimed accounting is
+also capped by the remaining budget of its containing owner, so nested size
+estimates cannot make a containment tree exceed its outer owner budget.
 `rows` is the visible logical evidence list. Rows have no size field and use
-`owner`, `exact`, or `nested` relations; every row references exactly one
-`physical_target_id`. All arrays, including empty arrays, are emitted as `[]`.
+`owner`, `exact`, `nested`, or `ancestor` relations; every row references
+exactly one `physical_target_id`. `ancestor` means the row's discovered path
+contains the physical target owner (for example, a protected active worktree
+parent containing a selected `node_modules` owner). All arrays, including empty
+arrays, are emitted as `[]`.
 
 `decision` is the final physical decision: `selected`, `reviewable`,
 `protected`, or `skipped`. `policy_decision` records the source policy:
@@ -349,6 +359,14 @@ classic eligible rows use `eligible`, guided recommendations use
 protections use `protected`, and filtered/noncandidate inventory uses
 `skipped`. `reason_codes` contains stable machine-readable codes only; human
 reason descriptions are not part of this contract.
+
+`policy.minimum_age` is always the classic filter age actually passed in
+`opts.Age`, including on the mixed auto-guided route. When guided state exists,
+`policy.guided_min_idle_age` is additionally emitted with the guided policy's
+minimum idle age. It is omitted for classic-only plans. Thus the default
+auto-guided route reports `minimum_age: "7d"` and
+`guided_min_idle_age: "3d"`; an explicit guided route with its omitted age
+uses `3d` for both values.
 
 The byte accounting invariants are:
 

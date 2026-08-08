@@ -206,6 +206,11 @@ inventory surface, and `clean --dry-run --json` is the shipped machine-readable
 cleanup-plan surface. Execution JSON receipts, cancellation semantics,
 replayable manifests, and receipt files remain future phase-2 work.
 
+The phase-1 JSON cleanup route also fails closed before emitting `clean_plan`
+when the scan is partial. Therefore an emitted cleanup plan always reports
+`evidence.complete: true`; partial scan documents remain a `scan --json`
+surface, not cleanup authorization.
+
 Default guided Codex worktree cleanup:
 
 - Plain `clean` and `clean --dry-run` build a guided plan when no classic

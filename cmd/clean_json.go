@@ -54,6 +54,7 @@ type cleanJSONEvidence struct {
 
 type cleanJSONPolicy struct {
 	MinimumAge             string   `json:"minimum_age"`
+	GuidedMinIdleAge       string   `json:"guided_min_idle_age,omitempty"`
 	Categories             []string `json:"categories"`
 	Tools                  []string `json:"tools"`
 	Risky                  bool     `json:"risky"`
@@ -269,6 +270,9 @@ func buildCleanJSONPlan(
 ) (cleanJSONPlan, error) {
 	if result == nil {
 		return cleanJSONPlan{}, fmt.Errorf("nil cleanup scan result")
+	}
+	if err := requireCompleteScan(result); err != nil {
+		return cleanJSONPlan{}, err
 	}
 	observedAt := source.ObservedAt
 	if observedAt.IsZero() {
@@ -730,8 +734,15 @@ func cleanJSONDecisionForAuditComponent(
 }
 
 func cleanJSONRelationForAuditRow(row cleanupOverlapLogicalRow, owner types.DebrisInfo) string {
-	if row.Relation == cleanupOverlapOwner {
+	switch row.Relation {
+	case cleanupOverlapOwner:
 		return string(CleanupPlanRelationOwner)
+	case cleanupOverlapAncestor:
+		return string(CleanupPlanRelationAncestor)
+	case cleanupOverlapExact:
+		return string(CleanupPlanRelationExact)
+	case cleanupOverlapDescendant:
+		return string(CleanupPlanRelationNested)
 	}
 	ownerPath, ownerOK := cleanTargetPathKey(owner.Path)
 	rowPath, rowOK := cleanTargetPathKey(row.Item.Path)
@@ -742,13 +753,23 @@ func cleanJSONRelationForAuditRow(row cleanupOverlapLogicalRow, owner types.Debr
 }
 
 func cleanJSONRelationForInventoryItem(item types.DebrisInfo, component *cleanJSONSnapshotComponent) string {
-	if len(component.Rows) == 0 {
-		return string(CleanupPlanRelationOwner)
-	}
 	ownerPath, ownerOK := cleanTargetPathKey(component.Owner.Path)
 	itemPath, itemOK := cleanTargetPathKey(item.Path)
-	if ownerOK && itemOK && ownerPath == itemPath {
-		return string(CleanupPlanRelationExact)
+	if ownerOK && itemOK {
+		switch {
+		case ownerPath == itemPath:
+			if len(component.Rows) == 0 {
+				return string(CleanupPlanRelationOwner)
+			}
+			return string(CleanupPlanRelationExact)
+		case cleanTargetContains(itemPath, ownerPath):
+			return string(CleanupPlanRelationAncestor)
+		case cleanTargetContains(ownerPath, itemPath):
+			return string(CleanupPlanRelationNested)
+		}
+	}
+	if len(component.Rows) == 0 {
+		return string(CleanupPlanRelationOwner)
 	}
 	return string(CleanupPlanRelationNested)
 }
@@ -779,11 +800,33 @@ func cleanJSONDecisionForPlanSelection(selection CleanupPlanSelection) string {
 }
 
 func cleanJSONPolicyDecisionForPlanRow(row CleanupPlanRow) string {
+	if row.PolicyDecision != "" {
+		return string(row.PolicyDecision)
+	}
+	switch row.PolicySelection {
+	case CleanupPlanLocked:
+		return cleanJSONPolicyProtected
+	}
+	for _, reason := range row.Reasons {
+		switch reason.Code {
+		case CleanupPlanReasonCode(DecisionReasonEligible):
+			return cleanJSONPolicyRecommended
+		case CleanupPlanReasonCode(DecisionReasonRepositoryRetention),
+			CleanupPlanReasonCode(DecisionReasonMinimumIdleAge),
+			CleanupPlanReasonCode(DecisionReasonMinimumSize):
+			return cleanJSONPolicyReviewable
+		case CleanupPlanReasonCode(DecisionReasonCurrentWorkingDirectory),
+			CleanupPlanReasonCode(DecisionReasonDirtyWorktree),
+			CleanupPlanReasonCode(DecisionReasonGitEvidenceUnavailable),
+			CleanupPlanReasonCode(DecisionReasonDetachedUnreferenced),
+			CleanupPlanReasonCode(DecisionReasonRecentActivity),
+			CleanupPlanReasonCode(DecisionReasonActivityUnavailable):
+			return cleanJSONPolicyProtected
+		}
+	}
 	switch row.PolicySelection {
 	case CleanupPlanSelected:
 		return cleanJSONPolicyEligible
-	case CleanupPlanLocked:
-		return cleanJSONPolicyProtected
 	default:
 		return cleanJSONPolicyReviewable
 	}
@@ -829,10 +872,6 @@ func cleanJSONEvidenceFor(source scanSource, evidence CleanupPlanEvidence) clean
 }
 
 func cleanJSONPolicyFor(opts types.PruneOptions, guidedState *guidedCleanState) cleanJSONPolicy {
-	minimumAge := opts.Age
-	if guidedState != nil {
-		minimumAge = fillCleanupPolicy(guidedState.Policy).MinIdleAge
-	}
 	categories := make([]string, 0, len(opts.Categories))
 	for _, category := range opts.Categories {
 		categories = append(categories, string(category))
@@ -843,13 +882,17 @@ func cleanJSONPolicyFor(opts types.PruneOptions, guidedState *guidedCleanState) 
 	}
 	sort.Strings(categories)
 	sort.Strings(tools)
-	return cleanJSONPolicy{
-		MinimumAge:             cleanAgeDisplay(minimumAge),
+	policy := cleanJSONPolicy{
+		MinimumAge:             cleanAgeDisplay(opts.Age),
 		Categories:             categories,
 		Tools:                  tools,
 		Risky:                  opts.Risky,
 		IncludeActiveWorktrees: opts.IncludeActiveWorktrees,
 	}
+	if guidedState != nil {
+		policy.GuidedMinIdleAge = cleanAgeDisplay(fillCleanupPolicy(guidedState.Policy).MinIdleAge)
+	}
+	return policy
 }
 
 func cleanJSONTotalsFor(components []cleanJSONSnapshotComponent) cleanJSONTotals {
