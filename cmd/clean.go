@@ -40,7 +40,7 @@ var cleanCmd = &cobra.Command{
 	Long: `Clean up old AI tool debris.
 
 With no classic cleanup filters, clean uses guided Codex worktree review by default when useful.
-After guided worktree review, clean continues with the classic all-category audit.
+Guided worktree choices and classic candidates merge into one unified review and execution plan.
 Use --no-guide, or pass an explicit classic selector such as --category, --tool,
 --risky, --force, --include-active-worktrees, or --interactive to keep the
 classic cleanup audit and executor route.
@@ -609,11 +609,16 @@ func printCleanHeader(roots []string) {
 }
 
 func scanForClean(ctx context.Context, roots []string) (*types.ScanResult, scanSource, error) {
+	cacheReadAt := time.Now()
 	if result, age, ok := readFreshLastScanCache(roots); ok {
 		if err := requireCompleteScan(result); err != nil {
 			return nil, scanSource{}, err
 		}
-		return result, scanSource{Kind: scanSourceCached, Age: age}, nil
+		return result, scanSource{
+			Kind:       scanSourceCached,
+			Age:        age,
+			ObservedAt: cacheReadAt.Add(-age),
+		}, nil
 	}
 
 	progress := newScanProgressPrinter(os.Stdout)
@@ -955,6 +960,14 @@ func cleanTargetContains(parent, child string) bool {
 }
 
 func interactiveClean(ctx context.Context, targets []preparedCleanTarget) (cleanExecutionReceipt, error) {
+	return interactiveCleanWithValidation(ctx, targets, nil)
+}
+
+func interactiveCleanWithValidation(
+	ctx context.Context,
+	targets []preparedCleanTarget,
+	validate func(context.Context) error,
+) (cleanExecutionReceipt, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return cleanExecutionReceipt{}, fmt.Errorf("getting home dir: %w", err)
@@ -964,7 +977,7 @@ func interactiveClean(ctx context.Context, targets []preparedCleanTarget) (clean
 	var result cleanExecutionReceipt
 	var errs []error
 	scanner := bufio.NewScanner(os.Stdin)
-	for _, target := range targets {
+	for i, target := range targets {
 		w := target.Item
 		if !cleaner.IsSafeTarget(home, w) {
 			err := fmt.Errorf("unsafe path %q rejected", w.Path)
@@ -981,6 +994,14 @@ func interactiveClean(ctx context.Context, targets []preparedCleanTarget) (clean
 		}
 		response := strings.TrimSpace(strings.ToLower(scanner.Text()))
 		if response == "y" || response == "yes" {
+			if validate != nil {
+				if err := validate(ctx); err != nil {
+					for _, remaining := range targets[i:] {
+						result.Units = append(result.Units, failedPreparedCleanUnitReceipt(remaining, err))
+					}
+					return result, err
+				}
+			}
 			receipt, err := executePreparedCleanTargets(ctx, []preparedCleanTarget{target}, defaultActiveWorktreeExecutionOptions())
 			result.Units = append(result.Units, receipt.Units...)
 			result.FreedBytes += receipt.FreedBytes

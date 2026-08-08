@@ -771,6 +771,7 @@ func TestCleanCmd_HelpDocumentsDefaultGuidedCleanAndNoGuide(t *testing.T) {
 
 	for _, want := range []string{
 		"With no classic cleanup filters, clean uses guided Codex worktree review by default when useful.",
+		"Guided worktree choices and classic candidates merge into one unified review and execution plan.",
 		"selected targets enter the cleanup plan",
 		"reviewable targets",
 		"protected targets",
@@ -782,6 +783,9 @@ func TestCleanCmd_HelpDocumentsDefaultGuidedCleanAndNoGuide(t *testing.T) {
 		if !strings.Contains(output, want) {
 			t.Errorf("help output missing %q; got: %s", want, output)
 		}
+	}
+	if strings.Contains(output, "After guided worktree review, clean continues with the classic all-category audit.") {
+		t.Errorf("help output retains obsolete sequential guided/classic contract: %s", output)
 	}
 	for _, tool := range toolStrings(validCleanTools) {
 		if !strings.Contains(output, tool) {
@@ -852,6 +856,17 @@ func TestCleanCmd_ReusesFreshCurrentSchemaLastScanCache(t *testing.T) {
 	}
 	if cache.ProviderIdentity != adapter.DefaultProviderIdentity() {
 		t.Fatalf("cache ProviderIdentity = %q; want %q", cache.ProviderIdentity, adapter.DefaultProviderIdentity())
+	}
+	resolvedRoots, err := scanner.NormalizeRoots([]string{workspace})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, source, err := scanForClean(context.Background(), resolvedRoots); err != nil {
+		t.Fatal(err)
+	} else if source.Kind != scanSourceCached {
+		t.Fatalf("scan source = %q; want cached", source.Kind)
+	} else if source.ObservedAt.IsZero() || source.ObservedAt.After(cache.CreatedAt) {
+		t.Fatalf("cached source observed at = %v; want conservative timestamp at or before %v", source.ObservedAt, cache.CreatedAt)
 	}
 
 	resetCleanFlags()
