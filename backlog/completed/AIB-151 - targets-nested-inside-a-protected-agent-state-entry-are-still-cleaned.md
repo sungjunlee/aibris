@@ -1,7 +1,7 @@
 ---
 id: AIB-151
 title: Targets nested inside a protected agent-state entry are still cleaned
-status: In Progress
+status: Done
 labels:
   - bug
   - cli
@@ -20,7 +20,7 @@ still planned for deletion by default `clean`.
 
 Measured on a real home:
 
-```
+```text
 node_modules 126,976 B inside agent-state(live)         Users-sjlee-workspace-active-harness-stack-dev-relay
 node_modules 126,976 B inside agent-state(undetermined) Users-sjlee-workspace-active-finance-stack-knestfin
 node_modules 126,976 B inside agent-state(undetermined) empty-window

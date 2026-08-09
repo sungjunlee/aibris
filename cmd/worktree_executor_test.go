@@ -115,6 +115,40 @@ func TestExecuteActiveWorktreeKeepsReferencedDetachedCommitReachable(t *testing.
 	}
 }
 
+func TestExecuteActiveWorktreeRemovesMultiMemberUnitWithDefaultAge(t *testing.T) {
+	home, repository, target, first, second := newExecutorMultiMemberUnit(t)
+	testutil.SetHome(t, home)
+	item := executorWorktreeItem(target, 900)
+	selected := buildExecutorUnit(t, item)
+
+	receipt, err := executePreparedCleanTargets(
+		context.Background(),
+		[]preparedCleanTarget{preparedExecutorTarget(t, item, selected)},
+		defaultActiveWorktreeExecutionOptions(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unit := singleExecutionUnit(t, receipt)
+	if unit.State != cleanExecutionRemoved || !unit.PhysicalRemoved || unit.FreedBytes != item.Size || receipt.FreedBytes != item.Size {
+		t.Fatalf("unit = %+v, total freed=%d; want multi-member removal with default age", unit, receipt.FreedBytes)
+	}
+	if len(unit.Members) != 2 {
+		t.Fatalf("member receipts = %+v; want two members", unit.Members)
+	}
+	for _, member := range unit.Members {
+		if !member.Removed || member.Error != "" {
+			t.Errorf("member receipt = %+v; want removed", member)
+		}
+	}
+	for _, worktree := range []string{first, second} {
+		if !pathDoesNotExist(worktree) {
+			t.Errorf("worktree %q still exists", worktree)
+		}
+		assertRepositoryDoesNotListWorktree(t, repository, worktree)
+	}
+}
+
 func TestExecuteActiveWorktreePreflightsEveryMemberBeforeRemovingAny(t *testing.T) {
 	home, repository, target, first, second := newExecutorMultiMemberUnit(t)
 	testutil.SetHome(t, home)

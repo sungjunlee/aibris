@@ -1,7 +1,7 @@
 ---
 id: AIB-139
 title: Ship the read-only protected-content retention inventory (codex-sessions)
-status: In Progress
+status: Done
 labels:
   - enhancement
   - cli
@@ -30,7 +30,7 @@ root/unit/timestamp discipline; only `codex-sessions` ships in this leaf.
 
 ## Re-scope (2026-08-06)
 
-# 139 was reduced from a full retention pipeline (provider + selector + exact
+Issue #139 was reduced from a full retention pipeline (provider + selector + exact
 manifest + executor) to a **read-only inventory**. The execution layer is
 explicitly parked: no retention selector, no `--retention-bucket` flag, no
 member manifest, no mutation path. Quiescence was a verification-protocol

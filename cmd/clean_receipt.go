@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -78,6 +80,10 @@ func executeCleanJSONReceipt(
 	if err != nil {
 		return finishCleanJSONReceipt(receipt, err)
 	}
+	prepared, err = orderCleanJSONReceiptPreparedTargets(prepared, targetIDs)
+	if err != nil {
+		return finishCleanJSONReceipt(receipt, err)
+	}
 
 	selectedIDs := make([]string, 0, len(plan.SelectedPhysicalTargets()))
 	selectedSet := make(map[string]bool)
@@ -100,10 +106,10 @@ func executeCleanJSONReceipt(
 	// protected/reviewable/skipped plan targets non-requested.
 	for id := range selectedSet {
 		if !containsPreparedCleanJSONTarget(targetIDs, id) {
-			markCleanJSONReceiptTarget(receipt, id, cleanJSONReceiptFailed, true, "safety_refused")
+			markCleanJSONReceiptTarget(&receipt, id, cleanJSONReceiptFailed, true, "safety_refused")
 		}
 	}
-	if err := rejectCleanJSONReceiptTargetSetMismatch(receipt, selectedSet, targetIDs); err != nil {
+	if err := rejectCleanJSONReceiptTargetSetMismatch(&receipt, selectedSet, targetIDs); err != nil {
 		return finishCleanJSONReceipt(receipt, err)
 	}
 
@@ -121,7 +127,7 @@ func executeCleanJSONReceipt(
 		approved, cancelled := readCleanJSONConfirmation(ctx, bufio.NewScanner(os.Stdin))
 		if !approved {
 			for _, id := range selectedIDs {
-				markCleanJSONReceiptTarget(receipt, id, cleanJSONReceiptCancelled, true, "confirmation_cancelled")
+				markCleanJSONReceiptTarget(&receipt, id, cleanJSONReceiptCancelled, true, "confirmation_cancelled")
 			}
 			if cancelled {
 				return finishCleanJSONReceipt(receipt, context.Canceled)
@@ -138,7 +144,7 @@ func executeCleanJSONReceipt(
 			code = "cancelled_before_execution"
 		}
 		for _, id := range selectedIDs {
-			markCleanJSONReceiptTarget(receipt, id, state, true, code)
+			markCleanJSONReceiptTarget(&receipt, id, state, true, code)
 		}
 		return finishCleanJSONReceipt(receipt, err)
 	}
@@ -148,7 +154,7 @@ func executeCleanJSONReceipt(
 		prepared,
 		quietActiveWorktreeExecutionOptions(),
 	)
-	applyErr := applyCleanJSONExecutionReceipt(receipt, targetIDs, execution)
+	applyErr := applyCleanJSONExecutionReceipt(&receipt, targetIDs, execution)
 	return finishCleanJSONReceipt(receipt, errors.Join(executionErr, applyErr))
 }
 
@@ -171,11 +177,33 @@ func cleanJSONReceiptTargetIDsForPrepared(
 	return targetIDs, nil
 }
 
+func orderCleanJSONReceiptPreparedTargets(
+	prepared []preparedCleanTarget,
+	targetIDs map[string]string,
+) ([]preparedCleanTarget, error) {
+	ordered := append([]preparedCleanTarget(nil), prepared...)
+	orders := make(map[string]int, len(targetIDs))
+	for key, id := range targetIDs {
+		if !strings.HasPrefix(id, "target-") {
+			return nil, fmt.Errorf("execution receipt invariant: invalid physical target ID %q", id)
+		}
+		order, err := strconv.Atoi(strings.TrimPrefix(id, "target-"))
+		if err != nil || order <= 0 {
+			return nil, fmt.Errorf("execution receipt invariant: invalid physical target ID %q", id)
+		}
+		orders[key] = order
+	}
+	sort.SliceStable(ordered, func(i, j int) bool {
+		return orders[cleanJSONReceiptItemKey(ordered[i].Item)] < orders[cleanJSONReceiptItemKey(ordered[j].Item)]
+	})
+	return ordered, nil
+}
+
 // rejectCleanJSONReceiptTargetSetMismatch fails closed before consuming a
 // confirmation. A deletion-time safety refusal can shrink the prepared set;
 // continuing would shift interactive stdin answers onto different targets.
 func rejectCleanJSONReceiptTargetSetMismatch(
-	receipt cleanJSONReceipt,
+	receipt *cleanJSONReceipt,
 	selectedIDs map[string]bool,
 	preparedTargetIDs map[string]string,
 ) error {
@@ -228,19 +256,19 @@ func executeInteractiveCleanJSONReceipt(
 	for i, target := range prepared {
 		id := targetIDs[cleanJSONReceiptItemKey(target.Item)]
 		if err := ctx.Err(); err != nil {
-			markCleanJSONReceiptTarget(receipt, id, cleanJSONReceiptCancelled, true, "cancelled_during_confirmation")
-			markPreparedCleanJSONReceiptTargets(receipt, prepared[i+1:], targetIDs, cleanJSONReceiptCancelled, true, "cancelled_during_confirmation")
+			markCleanJSONReceiptTarget(&receipt, id, cleanJSONReceiptCancelled, true, "cancelled_during_confirmation")
+			markPreparedCleanJSONReceiptTargets(&receipt, prepared[i+1:], targetIDs, cleanJSONReceiptCancelled, true, "cancelled_during_confirmation")
 			return finishCleanJSONReceipt(receipt, err)
 		}
 		line, ok, cancelled := scanCleanJSONInput(ctx, scanner)
 		if cancelled {
-			markCleanJSONReceiptTarget(receipt, id, cleanJSONReceiptCancelled, true, "cancelled_during_confirmation")
-			markPreparedCleanJSONReceiptTargets(receipt, prepared[i+1:], targetIDs, cleanJSONReceiptCancelled, true, "cancelled_during_confirmation")
+			markCleanJSONReceiptTarget(&receipt, id, cleanJSONReceiptCancelled, true, "cancelled_during_confirmation")
+			markPreparedCleanJSONReceiptTargets(&receipt, prepared[i+1:], targetIDs, cleanJSONReceiptCancelled, true, "cancelled_during_confirmation")
 			return finishCleanJSONReceipt(receipt, ctx.Err())
 		}
 		if !ok {
-			markCleanJSONReceiptTarget(receipt, id, cleanJSONReceiptCancelled, true, "confirmation_cancelled")
-			markPreparedCleanJSONReceiptTargets(receipt, prepared[i+1:], targetIDs, cleanJSONReceiptCancelled, true, "confirmation_cancelled")
+			markCleanJSONReceiptTarget(&receipt, id, cleanJSONReceiptCancelled, true, "confirmation_cancelled")
+			markPreparedCleanJSONReceiptTargets(&receipt, prepared[i+1:], targetIDs, cleanJSONReceiptCancelled, true, "confirmation_cancelled")
 			return finishCleanJSONReceipt(receipt, context.Canceled)
 		}
 		response := strings.ToLower(strings.TrimSpace(line))
@@ -253,8 +281,8 @@ func executeInteractiveCleanJSONReceipt(
 					state = cleanJSONReceiptCancelled
 					code = "cancelled_after_confirmation"
 				}
-				markCleanJSONReceiptTarget(receipt, id, state, true, code)
-				markPreparedCleanJSONReceiptTargets(receipt, prepared[i+1:], targetIDs, cleanJSONReceiptCancelled, true, "cancelled_after_confirmation")
+				markCleanJSONReceiptTarget(&receipt, id, state, true, code)
+				markPreparedCleanJSONReceiptTargets(&receipt, prepared[i+1:], targetIDs, cleanJSONReceiptCancelled, true, "cancelled_after_confirmation")
 				return finishCleanJSONReceipt(receipt, err)
 			}
 			execution, err := executePreparedCleanTargets(
@@ -262,7 +290,7 @@ func executeInteractiveCleanJSONReceipt(
 				[]preparedCleanTarget{target},
 				quietActiveWorktreeExecutionOptions(),
 			)
-			applyErr := applyCleanJSONExecutionReceipt(receipt, targetIDs, execution)
+			applyErr := applyCleanJSONExecutionReceipt(&receipt, targetIDs, execution)
 			if executionErr == nil && err != nil {
 				executionErr = err
 			}
@@ -270,14 +298,14 @@ func executeInteractiveCleanJSONReceipt(
 				executionErr = applyErr
 			}
 			if err != nil && errors.Is(err, context.Canceled) {
-				markPreparedCleanJSONReceiptTargets(receipt, prepared[i+1:], targetIDs, cleanJSONReceiptCancelled, true, "cancelled_after_execution")
+				markPreparedCleanJSONReceiptTargets(&receipt, prepared[i+1:], targetIDs, cleanJSONReceiptCancelled, true, "cancelled_after_execution")
 				return finishCleanJSONReceipt(receipt, errors.Join(err, applyErr))
 			}
 		case "n", "no":
-			markCleanJSONReceiptTarget(receipt, id, cleanJSONReceiptSkipped, false, "not_confirmed")
+			markCleanJSONReceiptTarget(&receipt, id, cleanJSONReceiptSkipped, false, "not_confirmed")
 		default:
-			markCleanJSONReceiptTarget(receipt, id, cleanJSONReceiptCancelled, true, "invalid_confirmation")
-			markPreparedCleanJSONReceiptTargets(receipt, prepared[i+1:], targetIDs, cleanJSONReceiptCancelled, true, "invalid_confirmation")
+			markCleanJSONReceiptTarget(&receipt, id, cleanJSONReceiptCancelled, true, "invalid_confirmation")
+			markPreparedCleanJSONReceiptTargets(&receipt, prepared[i+1:], targetIDs, cleanJSONReceiptCancelled, true, "invalid_confirmation")
 			return finishCleanJSONReceipt(receipt, errors.New("cleanup confirmation cancelled"))
 		}
 	}
@@ -326,6 +354,8 @@ func scanCleanJSONInput(ctx context.Context, scanner *bufio.Scanner) (line strin
 	}()
 	select {
 	case <-ctx.Done():
+		// A scanner read may still be running in the goroutine; callers must
+		// return after cancelled=true and never reuse this scanner.
 		return "", false, true
 	case value := <-result:
 		return value.line, value.ok, false
@@ -411,7 +441,7 @@ func containsPreparedCleanJSONTarget(targetIDs map[string]string, id string) boo
 }
 
 func markPreparedCleanJSONReceiptTargets(
-	receipt cleanJSONReceipt,
+	receipt *cleanJSONReceipt,
 	prepared []preparedCleanTarget,
 	targetIDs map[string]string,
 	state string,
@@ -425,7 +455,7 @@ func markPreparedCleanJSONReceiptTargets(
 }
 
 func markCleanJSONReceiptTarget(
-	receipt cleanJSONReceipt,
+	receipt *cleanJSONReceipt,
 	id string,
 	state string,
 	requested bool,
@@ -448,7 +478,7 @@ func markCleanJSONReceiptTarget(
 }
 
 func applyCleanJSONExecutionReceipt(
-	receipt cleanJSONReceipt,
+	receipt *cleanJSONReceipt,
 	targetIDs map[string]string,
 	execution cleanExecutionReceipt,
 ) error {
@@ -520,7 +550,7 @@ func finalizeCleanJSONReceipt(receipt cleanJSONReceipt) (cleanJSONReceipt, error
 		if receipt.PhysicalTargets[i].State != cleanJSONReceiptPending {
 			continue
 		}
-		markCleanJSONReceiptTarget(receipt, receipt.PhysicalTargets[i].ID, cleanJSONReceiptFailed, true, "execution_not_recorded")
+		markCleanJSONReceiptTarget(&receipt, receipt.PhysicalTargets[i].ID, cleanJSONReceiptFailed, true, "execution_not_recorded")
 	}
 	totals := cleanJSONReceiptTotals{}
 	for _, target := range receipt.PhysicalTargets {

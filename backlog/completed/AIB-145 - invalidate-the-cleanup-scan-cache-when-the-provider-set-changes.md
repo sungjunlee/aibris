@@ -1,7 +1,7 @@
 ---
 id: AIB-145
 title: Invalidate the cleanup scan cache when the provider set changes
-status: To Do
+status: Done
 labels:
   - bug
   - cli
@@ -21,7 +21,7 @@ Make the `scan` cleanup cache invalid when the producing binary's provider set d
 
 Found while dogfooding #138. A build with the new `agent-state` provider reused a cache written moments earlier by a build without it:
 
-```
+```console
 $ aibris-new clean --no-guide --category agent-state --dry-run
   scan    cached, 18s old
   scanned    8 sources   159 items   21.0 GB
@@ -50,4 +50,3 @@ Epic #137 widens it considerably: it adds four to five providers across #138, #1
 
 - Changing the 5-minute freshness bound or the roots-matching rule.
 - The versioned scan JSON schema, which is #124.
-

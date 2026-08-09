@@ -3,6 +3,8 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -366,7 +368,7 @@ func TestCleanJSONReceiptCommandSuccessDoesNotInventFreedBytes(t *testing.T) {
 func TestApplyCleanJSONExecutionReceiptUsesCapturedTargetIDsAfterDeletion(t *testing.T) {
 	item := types.DebrisInfo{ID: "deleted", Path: filepath.Join(t.TempDir(), "gone")}
 	receipt := cleanJSONReceipt{PhysicalTargets: []cleanJSONReceiptPhysicalTarget{{ID: "target-1", State: cleanJSONReceiptPending}}}
-	err := applyCleanJSONExecutionReceipt(receipt, map[string]string{cleanJSONReceiptItemKey(item): "target-1"}, cleanExecutionReceipt{
+	err := applyCleanJSONExecutionReceipt(&receipt, map[string]string{cleanJSONReceiptItemKey(item): "target-1"}, cleanExecutionReceipt{
 		Units: []cleanUnitExecutionReceipt{{Target: item, State: cleanExecutionRemoved, PhysicalRemoved: true, FreedBytes: 10}},
 	})
 	if err != nil {
@@ -377,10 +379,30 @@ func TestApplyCleanJSONExecutionReceiptUsesCapturedTargetIDsAfterDeletion(t *tes
 	}
 }
 
+func TestOrderCleanJSONReceiptPreparedTargetsUsesPlanTargetOrderWithoutMutatingInput(t *testing.T) {
+	first := types.DebrisInfo{ID: "first", Path: filepath.Join(t.TempDir(), "first")}
+	second := types.DebrisInfo{ID: "second", Path: filepath.Join(t.TempDir(), "second")}
+	prepared := []preparedCleanTarget{{Item: second}, {Item: first}}
+	ids := map[string]string{
+		cleanJSONReceiptItemKey(first):  "target-1",
+		cleanJSONReceiptItemKey(second): "target-2",
+	}
+	ordered, err := orderCleanJSONReceiptPreparedTargets(prepared, ids)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ordered[0].Item.ID != "first" || ordered[1].Item.ID != "second" {
+		t.Fatalf("ordered prepared targets = %+v", ordered)
+	}
+	if prepared[0].Item.ID != "second" || prepared[1].Item.ID != "first" {
+		t.Fatalf("ordering mutated caller slice: %+v", prepared)
+	}
+}
+
 func TestApplyCleanJSONExecutionReceiptIDMissFailsReceiptInvariant(t *testing.T) {
 	item := types.DebrisInfo{ID: "unknown", Path: filepath.Join(t.TempDir(), "unknown")}
 	receipt := cleanJSONReceipt{PhysicalTargets: []cleanJSONReceiptPhysicalTarget{{ID: "target-1", State: cleanJSONReceiptPending}}}
-	applyErr := applyCleanJSONExecutionReceipt(receipt, nil, cleanExecutionReceipt{
+	applyErr := applyCleanJSONExecutionReceipt(&receipt, nil, cleanExecutionReceipt{
 		Units: []cleanUnitExecutionReceipt{{Target: item, State: cleanExecutionRemoved, PhysicalRemoved: true, FreedBytes: 10}},
 	})
 	if applyErr == nil || !strings.Contains(applyErr.Error(), "execution receipt invariant") {
@@ -490,16 +512,33 @@ func runCleanJSONProcessWithInput(t *testing.T, binary, home, input string, args
 
 func decodeJSONReceiptDocument(t *testing.T, output string) map[string]any {
 	t.Helper()
+	document, err := decodeOneJSONReceiptDocument(output)
+	if err != nil {
+		t.Fatalf("receipt stdout is not one JSON document: %v\n%s", err, output)
+	}
+	return document
+}
+
+func decodeOneJSONReceiptDocument(output string) (map[string]any, error) {
 	var document map[string]any
 	decoder := json.NewDecoder(strings.NewReader(output))
 	if err := decoder.Decode(&document); err != nil {
-		t.Fatalf("receipt stdout is not one JSON document: %v\n%s", err, output)
+		return nil, err
 	}
 	var extra any
-	if err := decoder.Decode(&extra); err == nil {
-		t.Fatalf("receipt stdout contains more than one JSON document: %s", output)
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return nil, fmt.Errorf("multiple JSON documents")
+		}
+		return nil, fmt.Errorf("trailing JSON data: %w", err)
 	}
-	return document
+	return document, nil
+}
+
+func TestDecodeOneJSONReceiptDocumentRejectsMalformedTrailingText(t *testing.T) {
+	if _, err := decodeOneJSONReceiptDocument(`{"document_type":"clean_receipt"} trailing`); err == nil {
+		t.Fatal("malformed trailing text was accepted")
+	}
 }
 
 func jsonReceiptObject(t *testing.T, document map[string]any, key string) map[string]any {
