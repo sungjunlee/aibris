@@ -424,6 +424,7 @@ func executeActiveWorktreeUnit(
 			return receipt, err
 		}
 		fmt.Fprintf(opts.output, "removing worktree member %d/%d: %s ...\n", i+1, len(refreshed.Members), member.WorktreePath)
+		receipt.MutationAttempted = true
 		if err := opts.removeWorktree(ctx, member.RepositoryID, member.WorktreePath); err != nil {
 			removed, verificationErr := verifyRemovedWorktreeMember(ctx, member)
 			receipt.Members[i].Removed = removed
@@ -483,6 +484,7 @@ func executeActiveWorktreeUnit(
 			setActiveReceiptPhysicalState(&receipt, selected)
 			return receipt, err
 		}
+		receipt.MutationAttempted = true
 		if err := opts.removeAll(selected.TargetPath); err != nil {
 			receipt.Error = fmt.Sprintf("removing cleanup unit container %q: %v", selected.TargetPath, err)
 			setActiveReceiptPhysicalState(&receipt, selected)
@@ -714,7 +716,7 @@ func sharesGitRef(before, after []string) bool {
 
 func setActiveReceiptPhysicalState(receipt *cleanUnitExecutionReceipt, selected WorktreeCleanupUnit) {
 	receipt.PhysicalRemoved = pathDoesNotExist(selected.TargetPath)
-	if receipt.PhysicalRemoved {
+	if receipt.PhysicalRemoved && receipt.MutationAttempted {
 		receipt.FreedBytes = selected.Size
 	}
 	removedMembers := 0
@@ -723,7 +725,7 @@ func setActiveReceiptPhysicalState(receipt *cleanUnitExecutionReceipt, selected 
 			removedMembers++
 		}
 	}
-	if removedMembers > 0 || receipt.PhysicalRemoved {
+	if removedMembers > 0 || (receipt.PhysicalRemoved && receipt.MutationAttempted) {
 		receipt.State = cleanExecutionPartial
 	} else {
 		receipt.State = cleanExecutionFailed

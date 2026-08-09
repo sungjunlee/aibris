@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added
+
+- A documented [0.x compatibility and deprecation policy](docs/COMPATIBILITY.md)
+  now defines stable CLI and JSON surfaces, migration-note requirements,
+  schema-version behavior, and the minimum support window for deprecated
+  aliases without implying a v1.0 schedule.
+
 ## [0.9.0] - 2026-08-08
 
 ### Added

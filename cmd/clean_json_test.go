@@ -999,6 +999,96 @@ func TestCleanJSONCLIContractGuidedDefaultsDoNotPrompt(t *testing.T) {
 	}
 }
 
+func TestCleanJSONCLIContractExecutionRejectsExplicitGuideBeforeScan(t *testing.T) {
+	binary := buildCLIContractBinary(t)
+	home := t.TempDir()
+	marker := filepath.Base(home)
+	modules := filepath.Join(home, "workspace", "guide-rejected", "node_modules")
+	if err := os.MkdirAll(modules, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, args := range [][]string{
+		{"clean", "--json", "--guide", "--root", "/"},
+		{"clean", "--json", "--guide", "--force", "--root", "/"},
+		{"clean", "--json", "--guide", "--interactive", "--root", "/"},
+	} {
+		stdout, stderr, err := runCleanJSONProcess(t, binary, home, args...)
+		if err == nil {
+			t.Fatalf("explicit guided JSON execution unexpectedly succeeded: stdout=%q stderr=%q", stdout, stderr)
+		}
+		if stdout != "" || stderr != "error: non-dry-run --json cannot use --guide\n" || strings.Contains(stderr, marker) {
+			t.Fatalf("explicit guided JSON execution error = stdout=%q stderr=%q", stdout, stderr)
+		}
+		if _, statErr := os.Stat(modules); statErr != nil {
+			t.Fatalf("explicit guided JSON execution mutated before rejection: %v", statErr)
+		}
+	}
+}
+
+func TestCleanJSONCLIContractExecutionUsesClassicRouteUnderGuidedPressure(t *testing.T) {
+	binary := buildCLIContractBinary(t)
+	for _, tt := range []struct {
+		name  string
+		input string
+		args  []string
+	}{
+		{name: "force", args: []string{"clean", "--json", "--force"}},
+		{name: "interactive", input: "y\n", args: []string{"clean", "--json", "--interactive"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			testutil.SetHome(t, home)
+			saveUsefulGuidedCleanFixture(t, home, "json-execution-classic-"+tt.name, time.Now().Add(-8*24*time.Hour))
+			modules := filepath.Join(home, "workspace", "classic-"+tt.name, "node_modules")
+			if err := os.MkdirAll(filepath.Join(modules, "pkg"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(modules, "pkg", "fixture"), []byte("fixture"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			old := time.Now().Add(-8 * 24 * time.Hour)
+			if err := os.Chtimes(modules, old, old); err != nil {
+				t.Fatal(err)
+			}
+			appendCleanCacheItem(t, types.DebrisInfo{
+				Tool:     types.ToolNodeModules,
+				Category: types.CategoryNodeModules,
+				ID:       "classic-" + tt.name,
+				Path:     modules,
+				Size:     7,
+				ModTime:  old,
+			})
+
+			var stdout, stderr string
+			var err error
+			if tt.input == "" {
+				stdout, stderr, err = runCleanJSONProcess(t, binary, home, tt.args...)
+			} else {
+				stdout, stderr, err = runCleanJSONProcessWithInput(t, binary, home, tt.input, tt.args...)
+			}
+			if err != nil || stderr != "" {
+				t.Fatalf("classic JSON execution = err %v stderr %q stdout %s", err, stderr, stdout)
+			}
+			if strings.Contains(stdout, home) || strings.Contains(stdout, "classic-"+tt.name) {
+				t.Fatalf("classic JSON receipt leaked fixture path: %s", stdout)
+			}
+			receipt := decodeJSONReceiptDocument(t, stdout)
+			plan := jsonReceiptObject(t, receipt, "plan")
+			policy := jsonReceiptObject(t, plan, "policy")
+			if _, guided := policy["guided_min_idle_age"]; guided {
+				t.Fatalf("execution route retained guided policy under pressure: %+v", policy)
+			}
+			if receipt["status"] != cleanJSONReceiptSucceeded {
+				t.Fatalf("classic JSON execution status = %v; want succeeded", receipt["status"])
+			}
+			if _, statErr := os.Stat(modules); !os.IsNotExist(statErr) {
+				t.Fatalf("classic JSON execution did not remove selected node_modules: %v receipt=%+v", statErr, receipt)
+			}
+		})
+	}
+}
+
 func TestCleanJSONFlagFailuresArePathFree(t *testing.T) {
 	binary := buildCLIContractBinary(t)
 	home := t.TempDir()

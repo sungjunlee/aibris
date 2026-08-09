@@ -619,6 +619,79 @@ func TestExecuteActiveWorktreePreservesPartialReceiptWhenBarrierFailsBetweenMemb
 	assertRepositoryListsWorktree(t, repository, second)
 }
 
+func TestExecuteActiveWorktreeOwnerRemovedBeforeFirstMemberMutationDoesNotCreditBytes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("external worktree-container removal fixture is not portable to Windows")
+	}
+	home, repository, target, _, _ := newExecutorMultiMemberUnit(t)
+	testutil.SetHome(t, home)
+	item := executorWorktreeItem(target, 1024)
+	selected := buildExecutorUnit(t, item)
+	prepared := preparedExecutorTarget(t, item, selected)
+	refreshCalls := 0
+	prepared.MutationSafety.runtime.Refresh = func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
+		refreshCalls++
+		if refreshCalls == 2 {
+			if err := os.RemoveAll(target); err != nil {
+				t.Fatalf("removing owner before first member mutation: %v", err)
+			}
+		}
+		return cleaner.OverlapSafetyEvidence{Complete: true}, nil
+	}
+	removeCalls := 0
+	opts := defaultActiveWorktreeExecutionOptions()
+	opts.removeWorktree = func(context.Context, string, string) error {
+		removeCalls++
+		return errors.New("unexpected worktree mutation")
+	}
+
+	receipt, err := executePreparedCleanTargets(context.Background(), []preparedCleanTarget{prepared}, opts)
+	if err == nil || !strings.Contains(err.Error(), "pre-mutation safety barrier") {
+		t.Fatalf("pre-mutation disappearance error = %v", err)
+	}
+	unit := singleExecutionUnit(t, receipt)
+	if removeCalls != 0 || unit.State != cleanExecutionFailed || !unit.PhysicalRemoved ||
+		unit.MutationAttempted || unit.FreedBytes != 0 || receipt.FreedBytes != 0 {
+		t.Fatalf("pre-mutation disappearance receipt = %+v, calls=%d, total freed=%d; want failed observation with no mutation attribution", unit, removeCalls, receipt.FreedBytes)
+	}
+	assertRepositoryListsWorktree(t, repository, selected.Members[0].WorktreePath)
+}
+
+func TestExecuteActiveWorktreeCreditsVerifiedOwnerAbsenceAfterMemberMutation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("external worktree-container removal fixture is not portable to Windows")
+	}
+	home, _, target, first, _ := newExecutorMultiMemberUnit(t)
+	testutil.SetHome(t, home)
+	item := executorWorktreeItem(target, 1024)
+	selected := buildExecutorUnit(t, item)
+	opts := defaultActiveWorktreeExecutionOptions()
+	realRemove := opts.removeWorktree
+	opts.removeWorktree = func(ctx context.Context, repositoryID, worktreePath string) error {
+		if err := realRemove(ctx, repositoryID, worktreePath); err != nil {
+			return err
+		}
+		return os.RemoveAll(target)
+	}
+
+	receipt, err := executePreparedCleanTargets(
+		context.Background(),
+		[]preparedCleanTarget{preparedExecutorTarget(t, item, selected)},
+		opts,
+	)
+	if err == nil || !strings.Contains(err.Error(), "disappeared before removing remaining worktree members") {
+		t.Fatalf("post-mutation disappearance error = %v", err)
+	}
+	unit := singleExecutionUnit(t, receipt)
+	if unit.State != cleanExecutionPartial || !unit.PhysicalRemoved || !unit.MutationAttempted ||
+		unit.FreedBytes != item.Size || receipt.FreedBytes != item.Size {
+		t.Fatalf("post-mutation disappearance receipt = %+v, total freed=%d; want attributed partial removal", unit, receipt.FreedBytes)
+	}
+	if len(unit.Members) != 2 || !unit.Members[0].Removed || unit.Members[1].Removed || !pathDoesNotExist(first) {
+		t.Fatalf("post-mutation member receipt = %+v", unit.Members)
+	}
+}
+
 func TestGitWorktreeRemoveArgsNeverIncludeForce(t *testing.T) {
 	args := gitWorktreeRemoveArgs("/repo/.git", "/worktree")
 	got := strings.Join(args, " ")

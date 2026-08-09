@@ -125,6 +125,9 @@ type cleanJSONPolicyInfo struct {
 }
 
 func runCleanJSON(cmd *cobra.Command) {
+	if !cleanDryRun && cleanGuide {
+		failCleanJSON("non-dry-run --json cannot use --guide")
+	}
 	age, err := parseAge(cleanAge)
 	if err != nil {
 		failCleanJSON("invalid --age value")
@@ -166,20 +169,24 @@ func runCleanJSON(cmd *cobra.Command) {
 		failCleanJSON("cleanup safety preparation failed")
 	}
 
+	experience := cleanExperienceClassic
 	var guidedState guidedCleanState
-	usefulGuidedCodexReview := false
-	if shouldPrepareGuidedClean(cmd) {
-		usefulGuidedCodexReview = hasGuidedCodexCleanupPressure(ctx, result.Worktrees)
-	}
-	if cleanGuide || usefulGuidedCodexReview {
-		guidedState, err = buildGuidedCleanState(ctx, result, source, guidedAge, "")
-		if err != nil {
-			failCleanJSON("guided cleanup planning failed")
+	var reason string
+	if cleanDryRun {
+		usefulGuidedCodexReview := false
+		if shouldPrepareGuidedClean(cmd) {
+			usefulGuidedCodexReview = hasGuidedCodexCleanupPressure(ctx, result.Worktrees)
 		}
-	}
-	experience, reason, err := chooseCleanExperience(cleanExperienceInputFromCommand(cmd, usefulGuidedCodexReview))
-	if err != nil {
-		failCleanJSON("invalid cleanup route")
+		if cleanGuide || usefulGuidedCodexReview {
+			guidedState, err = buildGuidedCleanState(ctx, result, source, guidedAge, "")
+			if err != nil {
+				failCleanJSON("guided cleanup planning failed")
+			}
+		}
+		experience, reason, err = chooseCleanExperience(cleanExperienceInputFromCommand(cmd, usefulGuidedCodexReview))
+		if err != nil {
+			failCleanJSON("invalid cleanup route")
+		}
 	}
 
 	opts := types.PruneOptions{

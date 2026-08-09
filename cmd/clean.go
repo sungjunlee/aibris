@@ -46,7 +46,8 @@ With no classic cleanup filters, clean uses guided Codex worktree review by defa
 Guided worktree choices and classic candidates merge into one unified review and execution plan.
 Use --no-guide, or pass an explicit classic selector such as --category, --tool,
 --risky, --force, --include-active-worktrees, or --interactive to keep the
-classic cleanup audit and executor route.
+classic cleanup audit and executor route. JSON execution is always classic;
+--guide is available with JSON only for --dry-run plans.
 
 Across both routes, selected targets enter the cleanup plan, reviewable targets
 require explicit selection, and protected targets never enter the plan. Guided
@@ -61,6 +62,10 @@ review displays protected targets as locked rows.`,
 			os.Exit(1)
 		}
 		if cleanJSON {
+			if !cleanDryRun && cleanGuide {
+				fmt.Fprintln(os.Stderr, "error: non-dry-run --json cannot use --guide")
+				os.Exit(1)
+			}
 			if !cleanDryRun && !cleanForce && !cleanInteractive {
 				fmt.Fprintln(os.Stderr, "error: non-dry-run --json requires --force or --interactive")
 				os.Exit(1)
@@ -446,7 +451,7 @@ func init() {
 		"Comma-separated tools ("+strings.Join(toolStrings(validCleanTools), ",")+")",
 	)
 	cleanCmd.Flags().BoolVar(&cleanDryRun, "dry-run", false, "Preview without deleting")
-	cleanCmd.Flags().BoolVar(&cleanJSON, "json", false, "Emit a machine-readable cleanup plan or execution receipt")
+	cleanCmd.Flags().BoolVar(&cleanJSON, "json", false, "Emit a machine-readable cleanup plan or classic execution receipt")
 	cleanCmd.Flags().BoolVar(&cleanIncludePaths, "include-paths", false, "Include paths and cleanup commands in JSON output")
 	cleanCmd.Flags().BoolVarP(&cleanInteractive, "interactive", "i", false, "Confirm each deletion")
 	cleanCmd.Flags().BoolVar(&cleanRisky, "risky", false, "Include risky categories (ai-logs)")
