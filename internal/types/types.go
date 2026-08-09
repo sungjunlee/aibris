@@ -103,6 +103,9 @@ type ScanResult struct {
 	ByCategory     map[Category]CategorySummary
 	ByTool         map[Tool]ToolSummary
 	ProviderErrors []ScanProviderError
+	// Diagnostics is opt-in per-provider timing and accounting
+	// (ScanOptions.Diagnostics). It stays nil when not collected.
+	Diagnostics []ProviderDiagnostic
 	// Retention is a read-only protected-content inventory. It is never a
 	// cleanup candidate, is absent from totals, and carries no member paths.
 	Retention RetentionProjection
@@ -119,6 +122,18 @@ func (r *ScanResult) Partial() bool {
 type ScanProviderError struct {
 	Tool    Tool
 	Message string
+}
+
+// ProviderDiagnostic is an opt-in per-provider scan diagnostic. It carries
+// only aggregate accounting (count/bytes/duration/error) and never item
+// paths or content.
+type ProviderDiagnostic struct {
+	Tool     Tool
+	State    ScanProgressState
+	Count    int
+	Bytes    int64
+	Duration time.Duration
+	Err      string
 }
 
 // RetentionStoreID identifies one exact protected-content inventory root.
@@ -167,8 +182,9 @@ type RetentionProviderError struct {
 
 // ScanOptions configures discovery scope for scan providers.
 type ScanOptions struct {
-	Roots      []string
-	OnProgress func(ScanProgressEvent)
+	Roots       []string
+	Diagnostics bool
+	OnProgress  func(ScanProgressEvent)
 }
 
 // ScanProgressState describes the lifecycle point for a scan provider.

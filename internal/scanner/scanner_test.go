@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -546,5 +547,116 @@ func TestScanner_ErrorWriterOverride(t *testing.T) {
 	_ = discardWriter
 	if s.errw() != s.ErrorWriter {
 		t.Error("errw() should return ErrorWriter when set")
+	}
+}
+
+func TestScanWithOptions_DiagnosticsRecordProviderTiming(t *testing.T) {
+	t.Parallel()
+	current := time.Unix(1700000000, 0)
+	s := New([]adapter.DebrisProvider{
+		&mockProvider{
+			name: types.ToolCodex,
+			worktrees: []types.DebrisInfo{
+				{ID: "a", Size: 100},
+				{ID: "b", Size: 200},
+			},
+		},
+	})
+	s.Now = func() time.Time {
+		current = current.Add(150 * time.Millisecond)
+		return current
+	}
+
+	result, err := s.ScanWithOptions(context.Background(), types.ScanOptions{Diagnostics: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []types.ProviderDiagnostic{{
+		Tool:     types.ToolCodex,
+		State:    types.ScanProgressDone,
+		Count:    2,
+		Bytes:    300,
+		Duration: 150 * time.Millisecond,
+	}}
+	if !reflect.DeepEqual(result.Diagnostics, want) {
+		t.Errorf("Diagnostics = %+v; want %+v", result.Diagnostics, want)
+	}
+}
+
+func TestScanWithOptions_DiagnosticsRecordProviderError(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	current := time.Unix(1700000000, 0)
+	s := New([]adapter.DebrisProvider{
+		&mockProvider{name: types.ToolCodex, err: errors.New("permission denied")},
+	})
+	s.ErrorWriter = &buf
+	s.Now = func() time.Time {
+		current = current.Add(40 * time.Millisecond)
+		return current
+	}
+
+	result, err := s.ScanWithOptions(context.Background(), types.ScanOptions{Diagnostics: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []types.ProviderDiagnostic{{
+		Tool:     types.ToolCodex,
+		State:    types.ScanProgressError,
+		Duration: 40 * time.Millisecond,
+		Err:      "permission denied",
+	}}
+	if !reflect.DeepEqual(result.Diagnostics, want) {
+		t.Errorf("Diagnostics = %+v; want %+v", result.Diagnostics, want)
+	}
+	wantErrors := []types.ScanProviderError{{Tool: types.ToolCodex, Message: "permission denied"}}
+	if !reflect.DeepEqual(result.ProviderErrors, wantErrors) {
+		t.Errorf("ProviderErrors = %+v; want %+v", result.ProviderErrors, wantErrors)
+	}
+}
+
+func TestScanWithOptions_DiagnosticsRequireOptIn(t *testing.T) {
+	t.Parallel()
+	s := New([]adapter.DebrisProvider{
+		&mockProvider{
+			name:      types.ToolCodex,
+			worktrees: []types.DebrisInfo{{ID: "a", Size: 100}},
+		},
+	})
+
+	result, err := s.ScanWithOptions(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Diagnostics) != 0 {
+		t.Errorf("Diagnostics = %+v; want none without opt-in", result.Diagnostics)
+	}
+}
+
+func TestScanWithOptions_DiagnosticsSortedByTool(t *testing.T) {
+	t.Parallel()
+	var mu sync.Mutex
+	current := time.Unix(1700000000, 0)
+	s := New([]adapter.DebrisProvider{
+		&mockProvider{name: types.ToolCodex, worktrees: []types.DebrisInfo{{ID: "a", Size: 100}}},
+		&mockProvider{name: types.ToolClaude, worktrees: []types.DebrisInfo{{ID: "b", Size: 50}}},
+	})
+	s.Now = func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		current = current.Add(10 * time.Millisecond)
+		return current
+	}
+
+	result, err := s.ScanWithOptions(context.Background(), types.ScanOptions{Diagnostics: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Diagnostics) != 2 {
+		t.Fatalf("Diagnostics = %+v; want 2 entries", result.Diagnostics)
+	}
+	if result.Diagnostics[0].Tool != types.ToolClaude || result.Diagnostics[1].Tool != types.ToolCodex {
+		t.Errorf("Diagnostics order = [%s %s]; want [claude codex]",
+			result.Diagnostics[0].Tool, result.Diagnostics[1].Tool)
 	}
 }
