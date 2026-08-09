@@ -28,6 +28,9 @@
 - PR #204 made JSON execution unambiguously classic, rejects execution-time
   `--guide` before scan, requires mutation-attempt evidence for active-worktree
   byte credit, and established `docs/COMPATIBILITY.md` as the 0.x contract.
+- v0.10.0 published the versioned cleanup plan/receipt contract with six
+  platform archives, checksums, install smoke, and path-free published-binary
+  dogfood recorded in `docs/DOGFOOD.md`.
 - The 0.10.x agent-state coverage sprint closed with its actionable scope
   shipped. #142 L2/L3 remain externally blocked on producer identity and
   all-writer fencing; do not manufacture a local cleanup proof. #141 remains

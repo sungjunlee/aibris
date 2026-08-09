@@ -895,3 +895,29 @@ Plain `clean --dry-run` exercised the default unified route and reported:
 
 The published binary ended with `[DRY-RUN] No files were removed.` No
 deletion-mode command was run.
+
+## 2026-08-09 v0.10.0 published-binary automation-contract dogfood
+
+Release workflow `31316128073` completed successfully in 57 seconds and
+published seven assets: six Darwin/Linux/Windows archives plus
+`checksums.txt`. `install.sh 0.10.0` downloaded the public Darwin arm64
+archive, verified it against the published checksums, and installed it into a
+fresh temporary prefix. The installed binary reported exactly `aibris version
+0.10.0` through the supported `--version` flag; the unsupported `version`
+subcommand was not treated as a release requirement.
+
+That published binary then ran against an isolated temporary home containing
+one old 4,096-byte `node_modules` target. The path-redacted dry-run emitted one
+`clean_plan` schema version 1 document with complete live evidence, no provider
+errors, `target-1`, and 4,096 selected bytes; stderr was empty, no paths were
+included, and the fixture remained intact. The subsequent classic execution
+with `--no-guide --json --force` emitted one successful `clean_receipt` schema
+version 1 document, reused `target-1`, reported one requested and removed
+target with 4,096 freed bytes, and deleted only that fixture target. Both
+sentinels outside the target remained intact.
+
+Execution with `--json --guide --force --root /` was rejected before scanning
+with exit status 1, empty stdout, and the stable route error. No real-home
+deletion was attempted, and no local paths were recorded; the pre-tag
+real-home evidence remains the read-only evidence captured in the release
+notes.
