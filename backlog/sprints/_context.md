@@ -22,9 +22,9 @@
 - `Evidence-Based Worktree Reclamation` milestone #5 is complete. It shipped
   v0.8.0 with cleanup-unit identity, ref reachability, per-repository retention,
   unified activity evidence, and Git-aware active removal.
-- v0.9.0 shipped the unified cleanup experience. PR #198 subsequently added the
-  versioned, path-redacted `clean --dry-run --json` plan contract; #125 remains
-  open for real-execution receipts and exit/status agreement.
+- v0.9.0 shipped the unified cleanup experience. PR #198 added the versioned,
+  path-redacted `clean --dry-run --json` plan contract, and PR #201 completed
+  #125 with current-process execution receipts and exit/status agreement.
 - The 0.10.x agent-state coverage sprint closed with its actionable scope
   shipped. #142 L2/L3 remain externally blocked on producer identity and
   all-writer fencing; do not manufacture a local cleanup proof. #141 remains
