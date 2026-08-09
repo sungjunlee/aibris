@@ -25,6 +25,9 @@
 - v0.9.0 shipped the unified cleanup experience. PR #198 added the versioned,
   path-redacted `clean --dry-run --json` plan contract, and PR #201 completed
   #125 with current-process execution receipts and exit/status agreement.
+- PR #204 made JSON execution unambiguously classic, rejects execution-time
+  `--guide` before scan, requires mutation-attempt evidence for active-worktree
+  byte credit, and established `docs/COMPATIBILITY.md` as the 0.x contract.
 - The 0.10.x agent-state coverage sprint closed with its actionable scope
   shipped. #142 L2/L3 remain externally blocked on producer identity and
   all-writer fencing; do not manufacture a local cleanup proof. #141 remains
