@@ -13,6 +13,10 @@ created_date: '2026-07-26'
 ---
 ## Description
 
+> **Mirror disposition:** `Done` records only this sprint's completed
+> classification boundary. Canonical GitHub issue #142 remains open and blocked;
+> its L2/L3 delivery acceptance criteria below are unmet.
+
 ## Goal
 
 Classify the uncovered stores first, add only safety-bounded regenerable

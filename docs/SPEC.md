@@ -84,7 +84,7 @@ Flags:
 | `--tool`, `-t` | empty | Comma-separated tool filter. Empty means all tools. |
 | `--root` | `$HOME` | Repeatable scan root. Each root must resolve under `$HOME`. |
 | `--dry-run` | `false` | Preview targets without deleting. |
-| `--json` | `false` | With `--dry-run`, emit the versioned path-redacted `clean_plan` JSON document. Non-dry-run JSON emits a versioned path-redacted `clean_receipt` for the plan executed in the same process; it never accepts a replayed plan or receipt. |
+| `--json` | `false` | With `--dry-run`, emit the versioned path-redacted `clean_plan` JSON document. Non-dry-run JSON requires `--force` or `--interactive` and emits a versioned path-redacted `clean_receipt` for the plan executed in the same process; it never accepts a replayed plan or receipt. |
 | `--include-paths` | `false` | With `--json`, opt in to explicit target/logical paths, projects, and cleanup commands. |
 | `--interactive`, `-i` | `false` | Confirm each item before deleting. |
 | `--risky` | `false` | Include risky categories such as AI logs. |

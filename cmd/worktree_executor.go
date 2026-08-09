@@ -332,6 +332,10 @@ func executePathCleanupTarget(
 	}
 	receipt.PhysicalRemoved = pathDoesNotExist(physicalOwnerPath)
 	if err != nil {
+		if receipt.PhysicalRemoved {
+			receipt.State = cleanExecutionPartial
+			receipt.FreedBytes = target.Size
+		}
 		if receipt.BlockingPath == "" {
 			receipt.BlockingPath = target.Path
 			receipt.BlockingReason = err.Error()

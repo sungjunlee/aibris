@@ -186,7 +186,7 @@ func runCleanJSON(cmd *cobra.Command) {
 		Age:                    age,
 		Categories:             categories,
 		Tools:                  tools,
-		DryRun:                 true,
+		DryRun:                 cleanDryRun,
 		Risky:                  cleanRisky,
 		Force:                  cleanForce,
 		IncludeActiveWorktrees: cleanIncludeActiveWorktrees,

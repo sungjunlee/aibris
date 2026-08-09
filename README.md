@@ -220,23 +220,23 @@ Phase-1 clean fails closed before emitting this document if any scan provider
 failed, so an emitted plan always has `evidence.complete: true`. In mixed
 auto-guided output, `policy.minimum_age` remains the classic `7d` filter while
 the optional guided minimum idle age is reported separately as `3d`.
-Non-dry-run JSON with `--force` or `--interactive` takes the classic route and executes
-the plan built in the current process and emits one versioned `clean_receipt`
-document. The receipt embeds the accepted redacted plan, uses the same
-document-local physical target IDs, and exits zero only for a `succeeded`
-status. `--include-paths` opts in to the same path, project, and cleanup
-command fields as the dry-run plan.
+Non-dry-run JSON requires `--force` or `--interactive`; either takes the
+classic route and executes the plan built in the current process and emits one
+versioned `clean_receipt` document. The receipt embeds the accepted redacted
+plan, uses the same document-local physical target IDs, and exits zero only
+for a `succeeded` status. `--include-paths` opts in to the same path, project,
+and cleanup command fields as the dry-run plan.
 
 JSON execution never writes prompts or progress text to stdout. For a classic
 `--force` or `--interactive` execution, use the same selectors for preview
 and execution (for example,
 `clean --no-guide --dry-run --json` followed by
 `clean --no-guide --json --force`), changing only `--dry-run`. With
-`--force`, all selected physical targets are attempted. Without it, stdin must
-contain `y`/`yes`; any other response or end-of-input emits a nonzero
-`cancelled` receipt. `--interactive --json` reads one silent confirmation line
-per selected target in embedded `plan.physical_targets` order: `y`/`yes` executes, `n`/`no` records a non-requested
-`skipped` target, and invalid or missing input cancels the remaining requests.
+`--force`, all selected physical targets are attempted. `--interactive --json`
+reads one silent confirmation line per selected target in embedded
+`plan.physical_targets` order: `y`/`yes` executes, `n`/`no` records a
+non-requested `skipped` target, and invalid or missing input cancels the
+remaining requests.
 If deletion-time safety changes the selected physical-target set, JSON fails
 closed before consuming any confirmation input.
 `requested` always equals `removed + partial + failed + cancelled`; protected,

@@ -126,8 +126,12 @@ func executeCleanJSONReceipt(
 	if !force {
 		approved, cancelled := readCleanJSONConfirmation(ctx, bufio.NewScanner(os.Stdin))
 		if !approved {
+			code := "confirmation_cancelled"
+			if cancelled {
+				code = "cancelled_during_confirmation"
+			}
 			for _, id := range selectedIDs {
-				markCleanJSONReceiptTarget(&receipt, id, cleanJSONReceiptCancelled, true, "confirmation_cancelled")
+				markCleanJSONReceiptTarget(&receipt, id, cleanJSONReceiptCancelled, true, code)
 			}
 			if cancelled {
 				return finishCleanJSONReceipt(receipt, context.Canceled)

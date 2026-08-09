@@ -201,6 +201,110 @@ func TestExecutePreparedCommandCancellationAfterStartRemainsFailed(t *testing.T)
 	assertPathExists(t, targetPath)
 }
 
+func TestExecutePreparedCommandRemovingOwnerThenFailingIsPartial(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell command fixture is Unix-specific")
+	}
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	targetPath := filepath.Join(home, ".cache", "command-removes-owner")
+	if err := os.MkdirAll(targetPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	command := filepath.Join(t.TempDir(), "remove-then-fail")
+	writeJSONReceiptExecutable(t, command, "#!/bin/sh\nrm -rf \"$1\"\nexit 7\n")
+	target := types.DebrisInfo{
+		ID:             "command-removes-owner",
+		Tool:           types.ToolBuildCache,
+		Category:       types.CategoryBuildCache,
+		Path:           targetPath,
+		Size:           29,
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{command, targetPath},
+	}
+	runtime := staticOverlapSafetyRuntime(nil, nil)
+	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetIDKey := cleanJSONReceiptItemKey(target)
+	execution, err := executePreparedCleanTargets(
+		context.Background(),
+		prepareCleanExecutionWithSafety(context.Background(), selection, runtime),
+		quietActiveWorktreeExecutionOptions(),
+	)
+	if err == nil {
+		t.Fatal("command failure unexpectedly succeeded")
+	}
+	unit := singleExecutionUnit(t, execution)
+	if unit.State != cleanExecutionPartial || !unit.PhysicalRemoved || unit.FreedBytes != target.Size {
+		t.Fatalf("owner-removed command failure = %+v; want partial physical removal", unit)
+	}
+	jsonReceipt := cleanJSONReceipt{PhysicalTargets: []cleanJSONReceiptPhysicalTarget{{
+		ID: "target-1", State: cleanJSONReceiptPending, Bytes: target.Size,
+	}}}
+	if err := applyCleanJSONExecutionReceipt(&jsonReceipt, map[string]string{targetIDKey: "target-1"}, execution); err != nil {
+		t.Fatal(err)
+	}
+	finalized, finalizeErr := finishCleanJSONReceipt(jsonReceipt, err)
+	if finalizeErr == nil || finalized.Status != cleanJSONReceiptPartialFailure || finalized.Totals.Requested != 1 ||
+		finalized.Totals.Partial != 1 || finalized.Totals.FreedBytes != target.Size {
+		t.Fatalf("owner-removed JSON receipt = %+v error=%v", finalized, finalizeErr)
+	}
+}
+
+func TestExecutePreparedCommandRemovingOwnerThenCancelledIsPartial(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell command fixture is Unix-specific")
+	}
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	targetPath := filepath.Join(home, ".cache", "command-removes-then-cancels")
+	if err := os.MkdirAll(targetPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(home, "command-owner-removed")
+	command := filepath.Join(t.TempDir(), "remove-then-wait")
+	writeJSONReceiptExecutable(t, command, "#!/bin/sh\nrm -rf \"$1\"\ntouch \"$2\"\nsleep 5\n")
+	target := types.DebrisInfo{
+		ID:             "command-removes-then-cancels",
+		Tool:           types.ToolBuildCache,
+		Category:       types.CategoryBuildCache,
+		Path:           targetPath,
+		Size:           31,
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{command, targetPath, marker},
+	}
+	runtime := staticOverlapSafetyRuntime(nil, nil)
+	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		for {
+			if _, err := os.Lstat(marker); err == nil {
+				cancel()
+				return
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}()
+	execution, err := executePreparedCleanTargets(
+		ctx,
+		prepareCleanExecutionWithSafety(context.Background(), selection, runtime),
+		quietActiveWorktreeExecutionOptions(),
+	)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("execution error = %v; want context cancellation", err)
+	}
+	unit := singleExecutionUnit(t, execution)
+	if unit.State != cleanExecutionPartial || !unit.PhysicalRemoved || unit.FreedBytes != target.Size {
+		t.Fatalf("owner-removed command cancellation = %+v; want partial physical removal", unit)
+	}
+}
+
 func TestExecutePreparedMissingCommandRecordsFallbackPathRemoval(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)

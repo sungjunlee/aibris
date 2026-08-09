@@ -271,19 +271,18 @@ path, or internal canonical key. `--include-paths` opts in to explicit
 `path`, `project`, and `cleanup_command` fields on logical rows and `path` on
 physical targets. It never includes external command output.
 
-`--include-paths` without `--json` fails. Non-dry-run `clean --json` with
-`--force` or `--interactive` takes the classic route; use the same classic
-selectors for preview and execution (for example, `clean --no-guide --dry-run --json` and then
-`clean --no-guide --json --force`), changing only `--dry-run`. JSON mode never writes prompts or
-progress text to stdout: guided cleanup uses the existing deterministic
+`--include-paths` without `--json` fails. Non-dry-run `clean --json` requires
+either `--force` or `--interactive`; either takes the classic route. Use the
+same classic selectors for preview and execution (for example,
+`clean --no-guide --dry-run --json` and then
+`clean --no-guide --json --force`), changing only `--dry-run`. JSON mode never
+writes prompts or progress text to stdout: guided cleanup uses the existing deterministic
 defaults (recommended rows selected, reviewable rows held, and locked rows
 protected). Non-dry-run JSON uses the same redaction contract as the plan.
 
-Without `--force`, non-interactive JSON execution reads one confirmation line
-from stdin. `y`/`yes` approves the complete selected set; any other response
-or end-of-input emits a nonzero `cancelled` receipt without mutating a target.
-`--interactive --json` reads one silent line per selected physical target in
-embedded `plan.physical_targets` order:
+`--force --json` attempts the complete selected set without a confirmation
+read. `--interactive --json` reads one silent line per selected physical target
+in embedded `plan.physical_targets` order:
 `y`/`yes` executes that target, `n`/`no` records it as non-requested
 `skipped`, and invalid or missing input cancels that target and the remaining
 requests. If deletion-time safety changes the selected physical-target set,

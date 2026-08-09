@@ -61,6 +61,10 @@ review displays protected targets as locked rows.`,
 			os.Exit(1)
 		}
 		if cleanJSON {
+			if !cleanDryRun && !cleanForce && !cleanInteractive {
+				fmt.Fprintln(os.Stderr, "error: non-dry-run --json requires --force or --interactive")
+				os.Exit(1)
+			}
 			runCleanJSON(cmd)
 			return
 		}

@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -167,63 +168,45 @@ func TestCleanJSONReceiptIncludePathsMatchesPlanRedactionOptIn(t *testing.T) {
 	}
 }
 
-func TestCleanJSONReceiptConfirmationCancellationIsNonZeroAndPathFree(t *testing.T) {
+func TestCleanJSONReceiptBareExecutionRequiresExplicitMode(t *testing.T) {
 	binary := buildCLIContractBinary(t)
 	home := t.TempDir()
-	modules := filepath.Join(home, "workspace", "cancel-project", "node_modules")
-	writeJSONReceiptFixture(t, modules, "cancel")
-
-	stdout, stderr, err := runCleanJSONProcessWithInput(
-		t,
-		binary,
-		home,
-		"n\n",
-		"clean", "--json", "--no-guide", "--age=1h", "--category=node_modules",
-	)
-	if err == nil {
-		t.Fatalf("confirmation cancellation unexpectedly succeeded: stdout=%s stderr=%s", stdout, stderr)
-	}
-	if strings.Contains(stderr, home) || strings.Contains(stderr, modules) {
-		t.Fatalf("cancellation stderr leaked path: %q", stderr)
-	}
-	document := decodeJSONReceiptDocument(t, stdout)
-	if document["status"] != "cancelled" {
-		t.Fatalf("cancelled receipt status = %v; want cancelled", document["status"])
-	}
-	totals := jsonReceiptObject(t, document, "totals")
-	if jsonReceiptInt(totals, "requested") != 1 || jsonReceiptInt(totals, "cancelled") != 1 ||
-		jsonReceiptInt(totals, "removed") != 0 || jsonReceiptInt64(totals, "freed_bytes") != 0 {
-		t.Fatalf("cancelled receipt totals = %+v; want one cancelled request and zero freed", totals)
-	}
-	if _, err := os.Lstat(modules); err != nil {
-		t.Fatalf("cancelled cleanup changed target: %v", err)
+	stdout, stderr, err := runCleanJSONProcess(t, binary, home, "clean", "--json", "--no-guide")
+	if err == nil || stdout != "" || !strings.Contains(stderr, "requires --force or --interactive") || strings.Contains(stderr, home) {
+		t.Fatalf("bare JSON execution = err %v stdout %q stderr %q", err, stdout, stderr)
 	}
 }
 
-func TestCleanJSONReceiptNonInteractiveEOFIsCancelledWithoutMutation(t *testing.T) {
-	binary := buildCLIContractBinary(t)
-	home := t.TempDir()
-	modules := filepath.Join(home, "workspace", "eof-project", "node_modules")
-	writeJSONReceiptFixture(t, modules, "eof")
-
-	stdout, stderr, err := runCleanJSONProcessWithInput(
-		t, binary, home, "",
-		"clean", "--json", "--no-guide", "--age=1h", "--category=node_modules",
+func TestCleanJSONReceiptBatchConfirmationContextCancellationUsesStableReason(t *testing.T) {
+	target := types.DebrisInfo{ID: "cancelled-confirmation", Path: filepath.Join(t.TempDir(), "target"), Size: 13}
+	if err := os.MkdirAll(target.Path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	key, ok := cleanTargetPathKey(target.Path)
+	if !ok {
+		t.Fatal("target path did not canonicalize")
+	}
+	input, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer input.Close()
+	defer writer.Close()
+	previousStdin := os.Stdin
+	os.Stdin = input
+	defer func() { os.Stdin = previousStdin }()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	receipt, executionErr := executeCleanJSONReceipt(
+		ctx,
+		cleanJSONPlan{PhysicalTargets: []cleanJSONPhysicalTarget{{ID: "target-1", Decision: cleanJSONDecisionSelected, Bytes: target.Size}}},
+		[]cleanJSONSnapshotComponent{{Key: key, Owner: target}},
+		UnifiedCleanupPlan{Components: []CleanupPhysicalComponent{{Owner: target, Selection: CleanupPlanSelected}}},
+		[]preparedCleanTarget{{Item: target}}, false, false,
 	)
-	if err == nil || strings.Contains(stderr, home) {
-		t.Fatalf("noninteractive EOF = err %v stderr %q stdout %s", err, stderr, stdout)
-	}
-	document := decodeJSONReceiptDocument(t, stdout)
-	if document["status"] != cleanJSONReceiptCancelled {
-		t.Fatalf("EOF receipt status = %v; want cancelled", document["status"])
-	}
-	totals := jsonReceiptObject(t, document, "totals")
-	if jsonReceiptInt(totals, "requested") != 1 || jsonReceiptInt(totals, "cancelled") != 1 ||
-		jsonReceiptInt64(totals, "freed_bytes") != 0 {
-		t.Fatalf("EOF receipt totals = %+v", totals)
-	}
-	if _, statErr := os.Lstat(modules); statErr != nil {
-		t.Fatalf("EOF confirmation mutated target: %v", statErr)
+	if !errors.Is(executionErr, context.Canceled) || receipt.Status != cleanJSONReceiptCancelled ||
+		!slices.Contains(receipt.PhysicalTargets[0].ReasonCodes, "cancelled_during_confirmation") {
+		t.Fatalf("batch confirmation cancellation receipt = %+v error=%v", receipt, executionErr)
 	}
 }
 
