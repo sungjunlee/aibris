@@ -1,6 +1,6 @@
 ---
 milestone: 0.x Automation & Schema
-status: active
+status: completed
 started: 2026-08-09
 due: TBD
 scope: ["cmd/**", "internal/cleaner/**", "README.md", "docs/**"]
@@ -15,9 +15,9 @@ attributable mutations, and the public 0.x compatibility boundary is documented.
 
 ## Plan
 
-- [~] #202 Make JSON execution route semantics explicit [PR:#204]
-- [~] #203 Require mutation-attempt evidence for active-worktree byte credit [PR:#204]
-- [~] #127 Document 0.x compatibility and deprecation policy [PR:#204]
+- [x] #202 Make JSON execution route semantics explicit [PR:#204]
+- [x] #203 Require mutation-attempt evidence for active-worktree byte credit [PR:#204]
+- [x] #127 Document 0.x compatibility and deprecation policy [PR:#204]
 
 ## Running Context
 
@@ -36,4 +36,7 @@ attributable mutations, and the public 0.x compatibility boundary is documented.
   ahead of #127.
 - 2026-08-09: Implemented #202/#203 in parallel, then documented the resulting
   stable surface for #127. PR #204 is under independent exact-head review.
+- 2026-08-09: PR #204 merged after Opus 5 and fresh-context Sol high exact-head
+  PASS reviews and all platform CI. #202, #203, and #127 closed.
   
+- 2026-08-09: Sprint closed. 3/3 tasks completed.
