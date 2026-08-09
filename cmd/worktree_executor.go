@@ -41,6 +41,7 @@ type cleanUnitExecutionReceipt struct {
 	Obligations                []cleaner.AgentStateRevalidationOutcome
 	BlockingPath               string
 	BlockingReason             string
+	MutationAttempted          bool
 	CommandFallbackPathRemoval bool
 	Error                      string
 }
@@ -316,7 +317,8 @@ func executePathCleanupTarget(
 		output,
 		errorOutput,
 		func(outcome cleaner.CleanupMutationOutcome) {
-			receipt.CommandFallbackPathRemoval = outcome.CommandFallbackPathRemoval
+			receipt.MutationAttempted = receipt.MutationAttempted || outcome.MutationAttempted
+			receipt.CommandFallbackPathRemoval = receipt.CommandFallbackPathRemoval || outcome.CommandFallbackPathRemoval
 		},
 	)
 	if validated {
@@ -332,7 +334,7 @@ func executePathCleanupTarget(
 	}
 	receipt.PhysicalRemoved = pathDoesNotExist(physicalOwnerPath)
 	if err != nil {
-		if receipt.PhysicalRemoved {
+		if receipt.PhysicalRemoved && receipt.MutationAttempted {
 			receipt.State = cleanExecutionPartial
 			receipt.FreedBytes = target.Size
 		}

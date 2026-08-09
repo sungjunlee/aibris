@@ -237,7 +237,7 @@ func TestExecutePreparedCommandRemovingOwnerThenFailingIsPartial(t *testing.T) {
 		t.Fatal("command failure unexpectedly succeeded")
 	}
 	unit := singleExecutionUnit(t, execution)
-	if unit.State != cleanExecutionPartial || !unit.PhysicalRemoved || unit.FreedBytes != target.Size {
+	if unit.State != cleanExecutionPartial || !unit.PhysicalRemoved || !unit.MutationAttempted || unit.FreedBytes != target.Size {
 		t.Fatalf("owner-removed command failure = %+v; want partial physical removal", unit)
 	}
 	jsonReceipt := cleanJSONReceipt{PhysicalTargets: []cleanJSONReceiptPhysicalTarget{{
@@ -250,6 +250,43 @@ func TestExecutePreparedCommandRemovingOwnerThenFailingIsPartial(t *testing.T) {
 	if finalizeErr == nil || finalized.Status != cleanJSONReceiptPartialFailure || finalized.Totals.Requested != 1 ||
 		finalized.Totals.Partial != 1 || finalized.Totals.FreedBytes != target.Size {
 		t.Fatalf("owner-removed JSON receipt = %+v error=%v", finalized, finalizeErr)
+	}
+}
+
+func TestExecutePreparedExternallyRemovedBeforeBarrierDoesNotClaimPartial(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	targetPath := filepath.Join(home, ".cache", "removed-before-barrier")
+	if err := os.MkdirAll(targetPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	target := types.DebrisInfo{
+		ID:             "removed-before-barrier",
+		Tool:           types.ToolBuildCache,
+		Category:       types.CategoryBuildCache,
+		Path:           targetPath,
+		Size:           30,
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{"definitely-missing-aibris-cleaner"},
+	}
+	runtime := staticOverlapSafetyRuntime(nil, nil)
+	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared := prepareCleanExecutionWithSafety(context.Background(), selection, runtime)
+	if err := os.RemoveAll(targetPath); err != nil {
+		t.Fatal(err)
+	}
+	execution, err := executePreparedCleanTargets(
+		context.Background(), prepared, quietActiveWorktreeExecutionOptions(),
+	)
+	if err == nil {
+		t.Fatal("pre-mutation disappearance unexpectedly succeeded")
+	}
+	unit := singleExecutionUnit(t, execution)
+	if unit.State != cleanExecutionFailed || !unit.PhysicalRemoved || unit.MutationAttempted || unit.FreedBytes != 0 {
+		t.Fatalf("pre-mutation disappearance receipt = %+v; want failed with zero credited bytes", unit)
 	}
 }
 
@@ -300,7 +337,7 @@ func TestExecutePreparedCommandRemovingOwnerThenCancelledIsPartial(t *testing.T)
 		t.Fatalf("execution error = %v; want context cancellation", err)
 	}
 	unit := singleExecutionUnit(t, execution)
-	if unit.State != cleanExecutionPartial || !unit.PhysicalRemoved || unit.FreedBytes != target.Size {
+	if unit.State != cleanExecutionPartial || !unit.PhysicalRemoved || !unit.MutationAttempted || unit.FreedBytes != target.Size {
 		t.Fatalf("owner-removed command cancellation = %+v; want partial physical removal", unit)
 	}
 }

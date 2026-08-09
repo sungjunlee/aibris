@@ -109,11 +109,12 @@ func ExecuteWithContext(ctx context.Context, worktrees []types.DebrisInfo) (int6
 // removal. It must be read-only and return an error to refuse the mutation.
 type MutationBarrier func(context.Context, types.DebrisInfo) error
 
-// CleanupMutationOutcome reports a cleanup strategy that was actually reached
-// after the mutation barrier. Observers are informational and cannot affect
-// cleanup safety or execution.
+// CleanupMutationOutcome reports an execution attempt made immediately after
+// the mutation barrier. Observers are informational and cannot affect cleanup
+// safety or execution.
 type CleanupMutationOutcome struct {
 	Item                       types.DebrisInfo
+	MutationAttempted          bool
 	CommandFallbackPathRemoval bool
 }
 
@@ -141,8 +142,8 @@ func ExecuteWithContextAndBarrierWithOutput(
 	return ExecuteWithContextAndBarrierWithOutputAndObserver(ctx, worktrees, barrier, output, errorOutput, nil)
 }
 
-// ExecuteWithContextAndBarrierWithOutputAndObserver also reports a missing
-// command fallback immediately before its path-removal mutation.
+// ExecuteWithContextAndBarrierWithOutputAndObserver reports each command or
+// path-removal attempt immediately after its mutation barrier succeeds.
 func ExecuteWithContextAndBarrierWithOutputAndObserver(
 	ctx context.Context,
 	worktrees []types.DebrisInfo,
@@ -231,7 +232,11 @@ func executeWithContextOutput(
 				fmt.Fprintf(errorOutput, "error: %v\n", err)
 				continue
 			}
-			if err := runCleanupCommand(ctx, w.CleanupCommand); err == nil {
+			if err := runCleanupCommand(ctx, w.CleanupCommand, func() {
+				if observer != nil {
+					observer(CleanupMutationOutcome{Item: w, MutationAttempted: true})
+				}
+			}); err == nil {
 				total += w.Size
 				fmt.Fprintf(output, "cleaned: %s (%s) via %s — %s\n",
 					w.ID, w.Tool, strings.Join(w.CleanupCommand, " "), FormatSize(w.Size))
@@ -251,8 +256,12 @@ func executeWithContextOutput(
 			fmt.Fprintf(errorOutput, "error: %v\n", err)
 			continue
 		}
-		if commandFallbackPathRemoval && observer != nil {
-			observer(CleanupMutationOutcome{Item: w, CommandFallbackPathRemoval: true})
+		if observer != nil {
+			observer(CleanupMutationOutcome{
+				Item:                       w,
+				MutationAttempted:          true,
+				CommandFallbackPathRemoval: commandFallbackPathRemoval,
+			})
 		}
 		if err := os.RemoveAll(w.Path); err != nil {
 			errs = append(errs, fmt.Errorf("removing %s: %w", w.Path, err))
@@ -294,7 +303,7 @@ func cleanupKind(w types.DebrisInfo) types.CleanupKind {
 	return types.CleanupRemovePath
 }
 
-func runCleanupCommand(ctx context.Context, argv []string) error {
+func runCleanupCommand(ctx context.Context, argv []string, beforeStart func()) error {
 	if len(argv) == 0 {
 		return nil
 	}
@@ -303,6 +312,9 @@ func runCleanupCommand(ctx context.Context, argv []string) error {
 		return errCleanupCommandNotFound
 	}
 	cmd := commandContext(ctx, bin, argv[1:]...)
+	if beforeStart != nil {
+		beforeStart()
+	}
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
