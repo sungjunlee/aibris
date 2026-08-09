@@ -320,6 +320,40 @@ func TestExecuteActiveWorktreeReportsPartialMultiMemberResultWithoutFreedBytes(t
 	}
 }
 
+func TestExecuteActiveWorktreePreservesPartialReceiptWhenBarrierFailsBetweenMembers(t *testing.T) {
+	home, repository, target, first, second := newExecutorMultiMemberUnit(t)
+	testutil.SetHome(t, home)
+	item := executorWorktreeItem(target, 1024)
+	selected := buildExecutorUnit(t, item)
+	opts := defaultActiveWorktreeExecutionOptions()
+	realRemove := opts.removeWorktree
+	opts.removeWorktree = realRemove
+	prepared := preparedExecutorTarget(t, item, selected)
+	refreshCalls := 0
+	prepared.MutationSafety.runtime.Refresh = func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
+		refreshCalls++
+		if refreshCalls >= 3 {
+			return cleaner.OverlapSafetyEvidence{}, errors.New("injected second-member safety refresh failure")
+		}
+		return cleaner.OverlapSafetyEvidence{Complete: true}, nil
+	}
+
+	receipt, err := executePreparedCleanTargets(context.Background(), []preparedCleanTarget{prepared}, opts)
+	if err == nil || !strings.Contains(err.Error(), "second-member safety refresh failure") {
+		t.Fatalf("between-member barrier error = %v", err)
+	}
+	unit := singleExecutionUnit(t, receipt)
+	if unit.State != cleanExecutionPartial || unit.PhysicalRemoved || unit.FreedBytes != 0 ||
+		len(unit.Members) != 2 || !unit.Members[0].Removed || unit.Members[1].Removed {
+		t.Fatalf("between-member cancellation receipt = %+v", unit)
+	}
+	if !pathDoesNotExist(first) || pathDoesNotExist(second) {
+		t.Fatalf("member mutation state first=%t second=%t; want only first removed", pathDoesNotExist(first), pathDoesNotExist(second))
+	}
+	assertRepositoryDoesNotListWorktree(t, repository, first)
+	assertRepositoryListsWorktree(t, repository, second)
+}
+
 func TestGitWorktreeRemoveArgsNeverIncludeForce(t *testing.T) {
 	args := gitWorktreeRemoveArgs("/repo/.git", "/worktree")
 	got := strings.Join(args, " ")

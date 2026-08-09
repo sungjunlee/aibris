@@ -103,6 +103,30 @@ func (s cleanupTargetSnapshot) validate() error {
 	return nil
 }
 
+// refreshAfterMutation advances only the observed metadata baseline after a
+// successful member mutation. Directory mtimes may legitimately change when
+// the executor removes one child; identity remains pinned and is rechecked
+// before the next mutation. A removed owner is a valid terminal state after
+// the final member mutation, which the caller distinguishes from an earlier
+// disappearance with members still pending.
+func (s *cleanupTargetSnapshot) refreshAfterMutation() (ownerRemoved bool, err error) {
+	if s == nil {
+		return false, fmt.Errorf("cleanup target snapshot unavailable")
+	}
+	current, err := os.Lstat(s.path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return true, nil
+		}
+		return false, fmt.Errorf("refreshing cleanup target %q after mutation: %w", s.path, err)
+	}
+	if s.info.Mode().Type() != current.Mode().Type() || !os.SameFile(s.info, current) {
+		return false, fmt.Errorf("cleanup target changed after mutation: path identity changed for %q", s.path)
+	}
+	s.info = current
+	return false, nil
+}
+
 func (s cleanupTargetSnapshot) validateAge(info os.FileInfo, observedAt time.Time) error {
 	if s.minimumAge <= 0 || info.ModTime().Before(observedAt.Add(-s.minimumAge)) {
 		return nil

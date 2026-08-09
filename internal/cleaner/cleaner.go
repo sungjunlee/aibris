@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -118,12 +119,41 @@ func ExecuteWithContextAndBarrier(
 	return executeWithContext(ctx, worktrees, adapter.AgentStateRevalidatorFor, barrier)
 }
 
+// ExecuteWithContextAndBarrierWithOutput preserves the cleanup executor while
+// allowing callers to choose where its progress and diagnostics go.
+func ExecuteWithContextAndBarrierWithOutput(
+	ctx context.Context,
+	worktrees []types.DebrisInfo,
+	barrier MutationBarrier,
+	output io.Writer,
+	errorOutput io.Writer,
+) (int64, error) {
+	return executeWithContextOutput(ctx, worktrees, adapter.AgentStateRevalidatorFor, barrier, output, errorOutput)
+}
+
 func executeWithContext(
 	ctx context.Context,
 	worktrees []types.DebrisInfo,
 	lookupRevalidator func(types.Tool) (adapter.AgentStateRevalidator, bool),
 	barrier MutationBarrier,
 ) (int64, error) {
+	return executeWithContextOutput(ctx, worktrees, lookupRevalidator, barrier, os.Stdout, os.Stderr)
+}
+
+func executeWithContextOutput(
+	ctx context.Context,
+	worktrees []types.DebrisInfo,
+	lookupRevalidator func(types.Tool) (adapter.AgentStateRevalidator, bool),
+	barrier MutationBarrier,
+	output io.Writer,
+	errorOutput io.Writer,
+) (int64, error) {
+	if output == nil {
+		output = io.Discard
+	}
+	if errorOutput == nil {
+		errorOutput = io.Discard
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return 0, fmt.Errorf("getting home dir: %w", err)
@@ -138,12 +168,12 @@ func executeWithContext(
 		if w.Category == types.CategoryWorktree && w.Status == types.WorktreeActive {
 			err := fmt.Errorf("active worktree %q requires Git-aware removal", w.Path)
 			errs = append(errs, err)
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			fmt.Fprintf(errorOutput, "error: %v\n", err)
 			continue
 		}
 		if !IsSafeTarget(home, w) {
 			errs = append(errs, fmt.Errorf("unsafe path %q rejected", w.Path))
-			fmt.Fprintf(os.Stderr, "error: unsafe path %q rejected\n", w.Path)
+			fmt.Fprintf(errorOutput, "error: unsafe path %q rejected\n", w.Path)
 			continue
 		}
 		if w.Category == types.CategoryAgentState {
@@ -151,48 +181,48 @@ func executeWithContext(
 			if !ok {
 				err := fmt.Errorf("refusing %s agent-state %q: no revalidator registered", w.Tool, w.Path)
 				errs = append(errs, err)
-				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				fmt.Fprintf(errorOutput, "error: %v\n", err)
 				continue
 			}
 			classification, revalidateErr := revalidator.RevalidateAgentState(ctx, w.Path)
 			if revalidateErr != nil {
 				err := fmt.Errorf("revalidating %s agent-state %q: %w", w.Tool, w.Path, revalidateErr)
 				errs = append(errs, err)
-				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				fmt.Fprintf(errorOutput, "error: %v\n", err)
 				continue
 			}
 			if classification != types.EntryClassOrphaned {
 				err := fmt.Errorf("%s agent-state %q is no longer orphaned (classified %s)", w.Tool, w.Path, classification)
 				errs = append(errs, err)
-				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				fmt.Fprintf(errorOutput, "error: %v\n", err)
 				continue
 			}
 		}
 		if cleanupKind(w) == types.CleanupCommand && len(w.CleanupCommand) > 0 {
-			fmt.Printf("running %d/%d: %s (%s) via %s ...\n",
+			fmt.Fprintf(output, "running %d/%d: %s (%s) via %s ...\n",
 				i+1, len(worktrees), debrisName(w), w.Category, strings.Join(w.CleanupCommand, " "))
 			if err := runMutationBarrier(ctx, barrier, w); err != nil {
 				errs = append(errs, err)
-				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				fmt.Fprintf(errorOutput, "error: %v\n", err)
 				continue
 			}
 			if err := runCleanupCommand(ctx, w.CleanupCommand); err == nil {
 				total += w.Size
-				fmt.Printf("cleaned: %s (%s) via %s — %s\n",
+				fmt.Fprintf(output, "cleaned: %s (%s) via %s — %s\n",
 					w.ID, w.Tool, strings.Join(w.CleanupCommand, " "), FormatSize(w.Size))
 				continue
 			} else if !errors.Is(err, errCleanupCommandNotFound) {
 				errs = append(errs, fmt.Errorf("running cleanup command for %s: %w", w.ID, err))
 				continue
 			}
-			fmt.Fprintf(os.Stderr, "warning: cleanup command %q not found; falling back to path removal for %s\n",
+			fmt.Fprintf(errorOutput, "warning: cleanup command %q not found; falling back to path removal for %s\n",
 				w.CleanupCommand[0], w.ID)
 		}
-		fmt.Printf("removing %d/%d: %s (%s) ...\n",
+		fmt.Fprintf(output, "removing %d/%d: %s (%s) ...\n",
 			i+1, len(worktrees), debrisName(w), w.Category)
 		if err := runMutationBarrier(ctx, barrier, w); err != nil {
 			errs = append(errs, err)
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			fmt.Fprintf(errorOutput, "error: %v\n", err)
 			continue
 		}
 		if err := os.RemoveAll(w.Path); err != nil {
@@ -200,7 +230,7 @@ func executeWithContext(
 			continue
 		}
 		total += w.Size
-		fmt.Printf("removed: %s (%s) — %s\n", w.ID, w.Tool, FormatSize(w.Size))
+		fmt.Fprintf(output, "removed: %s (%s) — %s\n", w.ID, w.Tool, FormatSize(w.Size))
 	}
 	if len(errs) > 0 {
 		return total, fmt.Errorf("failed to remove %d item(s): %w", len(errs), errors.Join(errs...))

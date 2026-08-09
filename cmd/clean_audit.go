@@ -717,7 +717,7 @@ func printWorktreeExecutionReceipts(receipt cleanExecutionReceipt) {
 			fmt.Println("worktree execution receipt")
 			printedHeader = true
 		}
-		fmt.Printf("  unit      %-7s %s\n", unit.State, unit.Target.Path)
+		fmt.Printf("  unit      %-7s %s\n", cleanExecutionDisplayState(unit.State), unit.Target.Path)
 		for _, member := range unit.Members {
 			state := "not removed"
 			if member.Removed {
@@ -750,7 +750,7 @@ func printCleanupComponentReceipts(receipt cleanExecutionReceipt) {
 			fmt.Println("cleanup component receipt")
 			printedHeader = true
 		}
-		fmt.Printf("  owner     %-7s %s\n", unit.State, unit.Target.Path)
+		fmt.Printf("  owner     %-7s %s\n", cleanExecutionDisplayState(unit.State), unit.Target.Path)
 		fmt.Printf("    physical-removed %t   freed %s\n",
 			unit.PhysicalRemoved,
 			cleaner.FormatSize(unit.FreedBytes))
@@ -788,6 +788,15 @@ func printCleanupComponentReceipts(receipt cleanExecutionReceipt) {
 			fmt.Printf("      reason   %s\n", unit.BlockingReason)
 		}
 	}
+}
+
+// Cancellation is a receipt-only execution state. Keep the established human
+// cleanup output vocabulary stable by rendering it as a failed unit.
+func cleanExecutionDisplayState(state cleanExecutionState) cleanExecutionState {
+	if state == cleanExecutionCancelled {
+		return cleanExecutionFailed
+	}
+	return state
 }
 
 func cleanTargetReason(w types.DebrisInfo) string {
