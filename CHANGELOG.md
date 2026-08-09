@@ -1,13 +1,35 @@
 # Changelog
 
-## Unreleased
+## [0.10.0] - 2026-08-09
 
 ### Added
 
+- `aibris clean --dry-run --json` now emits a versioned, path-redacted
+  `clean_plan` with containment-normalized physical targets, logical evidence
+  rows, policy decisions, and complete scan evidence. `--include-paths` is an
+  explicit opt-in for paths, projects, and cleanup commands.
+- Non-dry-run `aibris clean --json --force` and `--interactive` now emit a
+  versioned, path-redacted `clean_receipt` for the plan executed by that same
+  process. Receipts report requested, removed, partial, failed, cancelled, and
+  owner-verified freed-byte outcomes; plans and receipts are never replayable
+  execution inputs.
 - A documented [0.x compatibility and deprecation policy](docs/COMPATIBILITY.md)
   now defines stable CLI and JSON surfaces, migration-note requirements,
   schema-version behavior, and the minimum support window for deprecated
   aliases without implying a v1.0 schedule.
+
+### Changed
+
+- JSON execution is explicitly classic-route only: it requires `--force` or
+  `--interactive`, and rejects `--guide` before scan or mutation. Guided JSON
+  remains available for dry-run planning.
+
+### Fixed
+
+- Active-worktree receipt accounting now credits freed bytes only after a
+  mutation was actually attempted and the physical owner is verified absent.
+- HOME-dependent test fixtures are hermetic on Windows, including user and
+  cache-home discovery, and CI exercises that contract on `windows-latest`.
 
 ## [0.9.0] - 2026-08-08
 
