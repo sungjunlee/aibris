@@ -38,6 +38,7 @@ type guidedCleanRow struct {
 	Key               string
 	Row               guidedCodexWorktreeRow
 	Policy            guidedCleanPolicy
+	ReasonCodes       []DecisionReasonCode
 	Selected          bool
 	SelectionOverride *bool
 }
@@ -84,6 +85,9 @@ func newGuidedCleanStateFromCleanupPlan(source scanSource, reason string, activi
 				Reason: guidedCleanupDecisionReason(decision),
 			},
 			Policy: decision.Class,
+		}
+		for _, reason := range decision.Reasons {
+			row.ReasonCodes = append(row.ReasonCodes, reason.Code)
 		}
 		row.Selected = row.Policy == guidedCleanPolicyRecommended
 		rows = append(rows, row)
@@ -518,6 +522,9 @@ func replanGuidedCleanAge(state guidedCleanState, age time.Duration) (guidedClea
 	overrides := guidedCleanSelectionOverrides(state)
 	next := state
 	next.Rows = append([]guidedCleanRow(nil), state.Rows...)
+	for i := range next.Rows {
+		next.Rows[i].ReasonCodes = append([]DecisionReasonCode(nil), state.Rows[i].ReasonCodes...)
+	}
 	next.Policy = fillCleanupPolicy(state.Policy)
 	next.Policy.MinIdleAge = age
 	decisions := make(map[string]WorktreeCleanupDecision, len(state.Units))
@@ -531,6 +538,10 @@ func replanGuidedCleanAge(state guidedCleanState, age time.Duration) (guidedClea
 		}
 		next.Rows[i].Policy = decision.Class
 		next.Rows[i].Row.Reason = guidedCleanupDecisionReason(decision)
+		next.Rows[i].ReasonCodes = next.Rows[i].ReasonCodes[:0]
+		for _, reason := range decision.Reasons {
+			next.Rows[i].ReasonCodes = append(next.Rows[i].ReasonCodes, reason.Code)
+		}
 		next.Rows[i].Selected = next.Rows[i].Policy == guidedCleanPolicyRecommended
 	}
 	applyGuidedCleanSelectionOverrides(&next, overrides)

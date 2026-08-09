@@ -130,6 +130,38 @@ func TestRenderUnifiedCleanupReviewOmitsEmptySections(t *testing.T) {
 	}
 }
 
+func TestRenderUnifiedCleanupReviewRendersAggregatedGuidedReasonOnce(t *testing.T) {
+	item := cleanupReviewTestItem("/home/user/.codex/worktrees/recommended", "recommended", types.CategoryWorktree, 1024)
+	aggregated := "eligible for cleanup recommendation; local branch retained; no upstream configured"
+	state := guidedCleanState{Rows: []guidedCleanRow{{
+		Key:         "recommended",
+		Policy:      guidedCleanPolicyRecommended,
+		Selected:    true,
+		ReasonCodes: []DecisionReasonCode{DecisionReasonEligible, DecisionReasonCode(GitReasonAttachedBranch), DecisionReasonCode(GitReasonDetachedHeadReachable)},
+		Row: guidedCodexWorktreeRow{
+			Item:   item,
+			Reason: aggregated,
+		},
+	}}}
+	plan, err := BuildUnifiedCleanupPlan(context.Background(), guidedCleanupPlanCandidates(state), CleanupPlanEvidence{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output strings.Builder
+	renderUnifiedCleanupReview(&output, plan, "", cleanupReviewText, 400)
+	if got := strings.Count(output.String(), aggregated); got != 1 {
+		t.Fatalf("aggregated guided reason count = %d; want once; output:\n%s", got, output.String())
+	}
+	if !strings.Contains(output.String(), "no upstream configured") {
+		t.Fatalf("human output lost later guided reason:\n%s", output.String())
+	}
+	for _, code := range []string{"cleanup_recommended", "git_attached_local_branch", "git_detached_head_reachable"} {
+		if strings.Contains(output.String(), code) {
+			t.Fatalf("human output rendered raw machine reason code %q:\n%s", code, output.String())
+		}
+	}
+}
+
 func cleanupReviewTestPlan(t *testing.T) UnifiedCleanupPlan {
 	t.Helper()
 	root := t.TempDir()

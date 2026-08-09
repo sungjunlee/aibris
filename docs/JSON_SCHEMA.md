@@ -19,6 +19,17 @@ The installed/regenerable/protected terms used by the issue #142 planning
 taxonomy are not JSON fields or values. They do not extend `category` or
 `classification`. This document describes only the shipped schema.
 
+`aibris clean --dry-run --json` ships a separate versioned `clean_plan`
+document. It is a read-only phase-1 plan surface; execution receipts,
+cancellation receipts, replayable manifests, and receipt files remain future
+work. `aibris clean --json` without `--dry-run` therefore fails clearly rather
+than attempting execution.
+
+Phase-1 cleanup fails closed before encoding a `clean_plan` when the scan is
+partial. Consequently, every emitted `clean_plan` has `evidence.complete: true`;
+the partial-scan JSON described above applies to `scan --json`, not to a
+cleanup plan.
+
 The protected-content retention surface is frozen in
 [PROTECTED_RETENTION.md](PROTECTED_RETENTION.md). It ships as an additive
 read-only top-level `retention` object (see below) and is never an aggregate
@@ -241,3 +252,139 @@ No member path, session identifier, or transcript content appears in the
 projection or its diagnostics. The execution-layer selector, manifest, and
 `--retention-bucket` spelling remain parked (see
 [PROTECTED_RETENTION.md](PROTECTED_RETENTION.md)).
+
+## Clean dry-run plan
+
+### Invocation and privacy
+
+```bash
+aibris clean --dry-run --json
+aibris clean --no-guide --dry-run --json --include-paths
+```
+
+The default clean JSON document is path-redacted. Its successful stdout is
+exactly one JSON document and successful stderr is empty; it contains no home
+directory, project label, raw path, cleanup argv, blocker/member/obligation
+path, or internal canonical key. `--include-paths` opts in to explicit
+`path`, `project`, and `cleanup_command` fields on logical rows and `path` on
+physical targets. It never includes external command output.
+
+`--interactive --json` and `--include-paths` without `--json` fail. JSON mode
+never prompts: guided cleanup uses the existing deterministic defaults
+(recommended rows selected, reviewable rows held, and locked rows protected).
+
+### Shape
+
+The clean-plan document has this top-level shape:
+
+```json
+{
+  "schema_version": 1,
+  "document_type": "clean_plan",
+  "mode": "dry_run",
+  "paths_included": false,
+  "evidence": {
+    "complete": true,
+    "source": "live",
+    "observed_at": "2026-08-08T12:00:00Z"
+  },
+  "policy": {
+    "minimum_age": "7d",
+    "categories": [],
+    "tools": [],
+    "risky": false,
+    "include_active_worktrees": false
+  },
+  "totals": {
+    "visible_rows": 1,
+    "physical_targets": 1,
+    "physical_bytes": 4096,
+    "selected": 1,
+    "selected_bytes": 4096,
+    "reviewable": 0,
+    "reviewable_bytes": 0,
+    "protected": 0,
+    "protected_bytes": 0,
+    "skipped": 0,
+    "skipped_bytes": 0
+  },
+  "physical_targets": [
+    {
+      "id": "target-1",
+      "decision": "selected",
+      "bytes": 4096,
+      "category": "node_modules",
+      "tool": "node_modules",
+      "cleanup_kind": "remove-path"
+    }
+  ],
+  "rows": [
+    {
+      "id": "row-1",
+      "physical_target_id": "target-1",
+      "relation": "owner",
+      "policy_decision": "eligible",
+      "decision": "selected",
+      "category": "node_modules",
+      "tool": "node_modules",
+      "reason_codes": ["classic_eligible"]
+    }
+  ]
+}
+```
+
+`physical_targets` is the byte-owning list. IDs are deterministic and
+document-local (`target-1`, `target-2`, ...); they are not hashes or path
+identifiers. Each target is one containment-normalized physical component, so
+exact duplicate discoveries never add another target or another byte. A
+reviewable parent and a selected/locked child remain separate action owners to
+preserve cleanup safety; their `bytes` values are nevertheless containment-
+disjoint. Descendant components receive their claimed size first in canonical
+path order and each parent receives its remaining exclusive share. If children
+consume the parent estimate, that parent deterministically has `bytes: 0` but
+retains its decision and action identity. A descendant's claimed accounting is
+also capped by the remaining budget of its containing owner, so nested size
+estimates cannot make a containment tree exceed its outer owner budget.
+`rows` is the visible logical evidence list. Rows have no size field and use
+`owner`, `exact`, `nested`, or `ancestor` relations; every row references
+exactly one `physical_target_id`. `ancestor` means the row's discovered path
+contains the physical target owner (for example, a protected active worktree
+parent containing a selected `node_modules` owner). All arrays, including empty
+arrays, are emitted as `[]`.
+
+`rows[].decision` mirrors the final decision of the referenced
+`physical_target_id`; it is not a second logical-row action decision.
+`policy_decision` classifies the logical row's source policy:
+classic eligible rows use `eligible`, guided recommendations use
+`recommended`, guided soft holds use `reviewable`, hard locks and safety
+protections use `protected`, and filtered/noncandidate inventory uses
+`skipped`. `reason_codes` contains stable machine-readable codes only; human
+reason descriptions are not part of this contract. Only `physical_targets` are
+action rows. An `ancestor` row is evidence attached to the selected physical
+owner; its ancestor path is never an additional action target. A selected
+target may therefore carry protected or reviewable evidence with a
+`protected_overlap` reason code without becoming locked.
+
+`policy.minimum_age` is always the classic filter age actually passed in
+`opts.Age`, including on the mixed auto-guided route. When guided state exists,
+`policy.guided_min_idle_age` is additionally emitted with the guided policy's
+minimum idle age. It is omitted for classic-only plans. Thus the default
+auto-guided route reports `minimum_age: "7d"` and
+`guided_min_idle_age: "3d"`; an explicit guided route with its omitted age
+uses `3d` for both values.
+
+The byte accounting invariants are:
+
+- bytes are owned by `physical_targets`; rows do not carry sizes;
+- `physical_bytes` includes every emitted containment-disjoint physical target,
+  including skipped and protected inventory;
+- `selected_bytes` is the actionable subset of `physical_bytes`;
+- `selected + reviewable + protected + skipped` equals `physical_targets`;
+- the corresponding byte totals sum to `physical_bytes`;
+- changing exact or nested logical row counts does not inflate physical counts
+  or bytes.
+
+The human cleanup review uses evaluated policy descriptions, not machine reason
+codes. Guided rows keep their aggregate explanation once; reason entries with
+empty descriptions are omitted from human text, while all stable codes remain
+available in the JSON plan.

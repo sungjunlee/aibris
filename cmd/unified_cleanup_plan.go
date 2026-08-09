@@ -26,6 +26,18 @@ const (
 	CleanupPlanLocked     CleanupPlanSelection = "locked"
 )
 
+// CleanupPlanPolicyDecision is the source policy classification, independent
+// of the user's accepted selection state.
+type CleanupPlanPolicyDecision string
+
+const (
+	CleanupPlanPolicyEligible    CleanupPlanPolicyDecision = "eligible"
+	CleanupPlanPolicyRecommended CleanupPlanPolicyDecision = "recommended"
+	CleanupPlanPolicyReviewable  CleanupPlanPolicyDecision = "reviewable"
+	CleanupPlanPolicyProtected   CleanupPlanPolicyDecision = "protected"
+	CleanupPlanPolicySkipped     CleanupPlanPolicyDecision = "skipped"
+)
+
 type CleanupPlanReasonCode string
 
 const (
@@ -45,10 +57,11 @@ type CleanupPlanReason struct {
 // and guided worktree policy each adapt their existing decisions into this
 // shape instead of reimplementing policy in the unified plan.
 type CleanupPlanCandidate struct {
-	RowKey    string
-	Item      types.DebrisInfo
-	Selection CleanupPlanSelection
-	Reasons   []CleanupPlanReason
+	RowKey         string
+	Item           types.DebrisInfo
+	PolicyDecision CleanupPlanPolicyDecision
+	Selection      CleanupPlanSelection
+	Reasons        []CleanupPlanReason
 }
 
 // CleanupPlanEvidence records whether the scan can authorize a later
@@ -68,18 +81,23 @@ type CleanupPlanRow struct {
 	CanonicalPath   string
 	Relation        CleanupPlanRelation
 	Item            types.DebrisInfo
+	PolicyDecision  CleanupPlanPolicyDecision
 	PolicySelection CleanupPlanSelection
 	Selection       CleanupPlanSelection
 	Reasons         []CleanupPlanReason
 	PhysicalBytes   int64
 }
 
+// CleanupPlanRelation describes how a visible logical row relates to the
+// physical target that owns its bytes. The JSON contract includes owner,
+// exact, nested, and ancestor.
 type CleanupPlanRelation string
 
 const (
-	CleanupPlanRelationOwner  CleanupPlanRelation = "owner"
-	CleanupPlanRelationExact  CleanupPlanRelation = "exact"
-	CleanupPlanRelationNested CleanupPlanRelation = "nested"
+	CleanupPlanRelationOwner    CleanupPlanRelation = "owner"
+	CleanupPlanRelationExact    CleanupPlanRelation = "exact"
+	CleanupPlanRelationNested   CleanupPlanRelation = "nested"
+	CleanupPlanRelationAncestor CleanupPlanRelation = "ancestor"
 )
 
 // CleanupPhysicalTarget is one exact canonical path and retains every
@@ -211,6 +229,7 @@ func BuildUnifiedCleanupPlan(ctx context.Context, candidates []CleanupPlanCandid
 				TargetKey:       key,
 				CanonicalPath:   key,
 				Item:            candidate.Item,
+				PolicyDecision:  candidate.PolicyDecision,
 				PolicySelection: candidate.Selection,
 				Selection:       selection,
 				Reasons:         append([]CleanupPlanReason(nil), candidate.Reasons...),
@@ -247,10 +266,11 @@ func ClassicCleanupPlanCandidates(targets []types.DebrisInfo) []CleanupPlanCandi
 			}
 		}
 		candidates = append(candidates, CleanupPlanCandidate{
-			RowKey:    "classic:" + cleanTargetStableKey(target),
-			Item:      target,
-			Selection: CleanupPlanSelected,
-			Reasons:   []CleanupPlanReason{reason},
+			RowKey:         "classic:" + cleanTargetStableKey(target),
+			Item:           target,
+			PolicyDecision: CleanupPlanPolicyEligible,
+			Selection:      CleanupPlanSelected,
+			Reasons:        []CleanupPlanReason{reason},
 		})
 	}
 	return candidates
@@ -279,10 +299,11 @@ func WorktreeCleanupPlanCandidates(plan CleanupPlan, items []types.DebrisInfo) [
 			})
 		}
 		candidates = append(candidates, CleanupPlanCandidate{
-			RowKey:    "worktree:" + cleanupUnitStableKey(decision.Unit),
-			Item:      guidedCleanupUnitItem(decision.Unit, items),
-			Selection: cleanupPlanSelectionForDecision(decision.Class),
-			Reasons:   reasons,
+			RowKey:         "worktree:" + cleanupUnitStableKey(decision.Unit),
+			Item:           guidedCleanupUnitItem(decision.Unit, items),
+			PolicyDecision: cleanupPlanPolicyDecisionForClass(decision.Class),
+			Selection:      cleanupPlanSelectionForDecision(decision.Class),
+			Reasons:        reasons,
 		})
 	}
 	return candidates
@@ -411,6 +432,19 @@ func cleanupPlanSelectionForDecision(class DecisionClass) CleanupPlanSelection {
 		return CleanupPlanSelected
 	default:
 		return CleanupPlanUnselected
+	}
+}
+
+func cleanupPlanPolicyDecisionForClass(class DecisionClass) CleanupPlanPolicyDecision {
+	switch class {
+	case DecisionLocked:
+		return CleanupPlanPolicyProtected
+	case DecisionRecommended:
+		return CleanupPlanPolicyRecommended
+	case DecisionReviewable:
+		return CleanupPlanPolicyReviewable
+	default:
+		return CleanupPlanPolicySkipped
 	}
 }
 

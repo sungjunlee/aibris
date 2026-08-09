@@ -259,7 +259,7 @@ func cleanupPlanReasonText(reasons []CleanupPlanReason) string {
 	for _, reason := range reasons {
 		text := reason.Description
 		if text == "" {
-			text = string(reason.Code)
+			continue
 		}
 		if text != "" {
 			parts = append(parts, text)

@@ -251,6 +251,8 @@ func resetCleanFlags() {
 	cleanCategory = ""
 	cleanTools = ""
 	cleanDryRun = false
+	cleanJSON = false
+	cleanIncludePaths = false
 	cleanInteractive = false
 	cleanRisky = false
 	cleanForce = false
@@ -258,7 +260,7 @@ func resetCleanFlags() {
 	cleanNoGuide = false
 	cleanRoots = nil
 	cleanIncludeActiveWorktrees = false
-	for _, name := range []string{"age", "category", "tool", "dry-run", "interactive", "risky", "force", "guide", "no-guide", "root", "include-active-worktrees", "help"} {
+	for _, name := range []string{"age", "category", "tool", "dry-run", "json", "include-paths", "interactive", "risky", "force", "guide", "no-guide", "root", "include-active-worktrees", "help"} {
 		if flag := cleanCmd.Flags().Lookup(name); flag != nil {
 			flag.Changed = false
 			if name != "root" {
@@ -2209,6 +2211,9 @@ func TestRequireCompleteScanRejectsPartialResult(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("requireCompleteScan() error = nil")
+	}
+	if !errors.Is(err, errIncompleteCleanupScan) {
+		t.Fatalf("requireCompleteScan() error = %v; want incomplete-scan sentinel", err)
 	}
 	if !strings.Contains(err.Error(), "failed providers: codex, claude") {
 		t.Errorf("requireCompleteScan() error = %q", err)

@@ -84,6 +84,8 @@ Flags:
 | `--tool`, `-t` | empty | Comma-separated tool filter. Empty means all tools. |
 | `--root` | `$HOME` | Repeatable scan root. Each root must resolve under `$HOME`. |
 | `--dry-run` | `false` | Preview targets without deleting. |
+| `--json` | `false` | With `--dry-run`, emit the versioned path-redacted `clean_plan` JSON document. Execution JSON receipts are not shipped yet. |
+| `--include-paths` | `false` | With `--json`, opt in to explicit target/logical paths, projects, and cleanup commands. |
 | `--interactive`, `-i` | `false` | Confirm each item before deleting. |
 | `--risky` | `false` | Include risky categories such as AI logs. |
 | `--include-active-worktrees` | `false` | Include active Git worktrees in cleanup candidates. |
@@ -199,7 +201,15 @@ Human `clean` output must include a cleanup audit before deletion:
   truthful owner-only freed bytes, protected/skipped totals, and each nested
   obligation's path, tool, reason, and revalidation outcome
 
-The audit is human output only. `scan --json` remains the machine-readable surface for agents and scripts.
+The audit is human output only. `scan --json` remains the machine-readable
+inventory surface, and `clean --dry-run --json` is the shipped machine-readable
+cleanup-plan surface. Execution JSON receipts, cancellation semantics,
+replayable manifests, and receipt files remain future phase-2 work.
+
+The phase-1 JSON cleanup route also fails closed before emitting `clean_plan`
+when the scan is partial. Therefore an emitted cleanup plan always reports
+`evidence.complete: true`; partial scan documents remain a `scan --json`
+surface, not cleanup authorization.
 
 Default guided Codex worktree cleanup:
 
