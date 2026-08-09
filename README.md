@@ -213,16 +213,17 @@ aibris clean --no-guide --dry-run --json --include-paths
 The default JSON output is one path-redacted `clean_plan` document on stdout
 with empty stderr. It uses deterministic document-local `target-1` and
 `row-1` IDs, keeps bytes only on containment-normalized physical targets, and
-keeps exact/nested/ancestor discoveries as zero-byte logical rows. Guided JSON mode
-accepts the normal deterministic defaults without prompting. `--include-paths`
+keeps exact/nested/ancestor discoveries as zero-byte logical rows. Dry-run guided
+JSON accepts the normal deterministic defaults without prompting. `--include-paths`
 opts in to explicit target paths, logical paths/projects, and cleanup commands.
 Phase-1 clean fails closed before emitting this document if any scan provider
 failed, so an emitted plan always has `evidence.complete: true`. In mixed
 auto-guided output, `policy.minimum_age` remains the classic `7d` filter while
 the optional guided minimum idle age is reported separately as `3d`.
-Non-dry-run JSON requires `--force` or `--interactive`; either takes the
-classic route and executes the plan built in the current process and emits one
-versioned `clean_receipt` document. The receipt embeds the accepted redacted
+Non-dry-run JSON requires `--force` or `--interactive`, always takes the
+classic route, and executes the plan built in the current process before
+emitting one versioned `clean_receipt` document. `--guide` is rejected for
+non-dry-run JSON before scanning or mutation. The receipt embeds the accepted redacted
 plan, uses the same document-local physical target IDs, and exits zero only
 for a `succeeded` status. `--include-paths` opts in to the same path, project,
 and cleanup command fields as the dry-run plan.
@@ -525,6 +526,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) for architectu
 See [ROADMAP.md](ROADMAP.md). The project intentionally remains in the 0.x
 series until the maintainer is satisfied; milestones are capability gates, not
 promised release dates or an implied v1.0.0 schedule.
+
+The [0.x compatibility and deprecation policy](docs/COMPATIBILITY.md) defines
+which documented CLI and JSON contracts are stable during that period.
 
 ### License
 

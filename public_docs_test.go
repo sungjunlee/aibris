@@ -76,6 +76,8 @@ func TestScanJSONSchemaVersioningDocumented(t *testing.T) {
 		"`items` is the canonical all-debris array",
 		"0.x compatibility\n  alias",
 		"mirrors `items` exactly",
+		"[0.x compatibility and deprecation policy](COMPATIBILITY.md)",
+		"retained throughout 0.x",
 	} {
 		if !strings.Contains(content, want) {
 			t.Errorf("docs/JSON_SCHEMA.md must document %q", want)
@@ -88,6 +90,69 @@ func TestScanJSONSchemaVersioningDocumented(t *testing.T) {
 	}
 	if !strings.Contains(content, `"worktrees": [`) {
 		t.Errorf("docs/JSON_SCHEMA.md must retain the worktrees compatibility alias in the fixture")
+	}
+}
+
+func TestCompatibilityPolicyDocumentsStable0xContracts(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("docs", "COMPATIBILITY.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	for _, want := range []string{
+		"Stable documented surfaces",
+		"Flag names, documented short aliases, accepted selector values, defaults",
+		"`scan --json`, `clean --dry-run --json` (`clean_plan`), and execution",
+		"Process exit status",
+		"`CHANGELOG.md` entry",
+		"Upgrade and migration",
+		"new schema version",
+		"retained throughout 0.x",
+		"two subsequent 0.x feature/minor releases and 90\ncalendar days, whichever is longer",
+		"does not promise a v1.0 scope",
+		"release schedule",
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf("compatibility policy must document %q", want)
+		}
+	}
+
+	readme, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(readme), "[0.x compatibility and deprecation policy](docs/COMPATIBILITY.md)") {
+		t.Error("README must link to the canonical compatibility policy")
+	}
+
+	spec, err := os.ReadFile(filepath.Join("docs", "SPEC.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(spec), "[COMPATIBILITY.md](COMPATIBILITY.md)") {
+		t.Error("SPEC must link to the canonical compatibility policy")
+	}
+}
+
+func TestReleaseNotesTemplatePromptsCompatibilityImpact(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(".github", "release-notes", "TEMPLATE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	for _, want := range []string{
+		"## Compatibility impact",
+		"No compatibility change",
+		"Compatible addition",
+		"Breaking change",
+		"Deprecation",
+		"replacement and the earliest removal version",
+		"## Upgrade and migration",
+		"## Windows status",
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf("release-notes template must prompt %q", want)
+		}
 	}
 }
 

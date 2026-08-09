@@ -84,13 +84,13 @@ Flags:
 | `--tool`, `-t` | empty | Comma-separated tool filter. Empty means all tools. |
 | `--root` | `$HOME` | Repeatable scan root. Each root must resolve under `$HOME`. |
 | `--dry-run` | `false` | Preview targets without deleting. |
-| `--json` | `false` | With `--dry-run`, emit the versioned path-redacted `clean_plan` JSON document. Non-dry-run JSON requires `--force` or `--interactive` and emits a versioned path-redacted `clean_receipt` for the plan executed in the same process; it never accepts a replayed plan or receipt. |
+| `--json` | `false` | With `--dry-run`, emit the versioned path-redacted `clean_plan` JSON document. Non-dry-run JSON requires `--force` or `--interactive`, always uses the classic route, and emits a versioned path-redacted `clean_receipt` for the plan executed in the same process; `--guide` is rejected before scan or mutation. It never accepts a replayed plan or receipt. |
 | `--include-paths` | `false` | With `--json`, opt in to explicit target/logical paths, projects, and cleanup commands. |
 | `--interactive`, `-i` | `false` | Confirm each item before deleting. |
 | `--risky` | `false` | Include risky categories such as AI logs. |
 | `--include-active-worktrees` | `false` | Include active Git worktrees in cleanup candidates. |
 | `--force`, `-f` | `false` | Skip the final confirmation prompt. It does not bypass hard locks or force Git worktree removal. |
-| `--guide` | `false` | Force the guided Codex worktree cleanup flow. When category/tool filters are omitted, it implies `--category worktree --tool codex`. When age is omitted, guided cleanup uses a 3-day minimum idle age; explicit `--age` changes only that value. |
+| `--guide` | `false` | Force the guided Codex worktree cleanup flow. When category/tool filters are omitted, it implies `--category worktree --tool codex`. When age is omitted, guided cleanup uses a 3-day minimum idle age; explicit `--age` changes only that value. With `--json`, it is supported only with `--dry-run`; execution JSON rejects it. |
 | `--no-guide` | `false` | Keep the classic cleanup audit/executor route even when active Codex pressure would open guided review. |
 
 The planned repeatable `--retention-bucket <store_id>@<YYYY-MM>` spelling is
@@ -98,6 +98,9 @@ reserved by `docs/PROTECTED_RETENTION.md` but remains parked (no execution
 layer ships with the read-only inventory) and is therefore intentionally
 absent from this table. Current selectors do not authorize protected-content
 retention.
+
+The stable documented CLI, JSON, default, and exit-status surfaces for this
+0.x series are defined in [COMPATIBILITY.md](COMPATIBILITY.md).
 
 Behavior:
 
@@ -225,6 +228,9 @@ Default guided Codex worktree cleanup:
 - `--root` only narrows scan scope; it does not disable default guided routing.
 - `--no-guide` disables the default guided route and keeps the classic audit.
 - `--guide` explicitly forces guided Codex worktree cleanup.
+- Non-dry-run `--json` always uses the classic route; `--guide` is rejected
+  before scan or mutation, while dry-run JSON can use the deterministic guided
+  plan.
 - `recommended` rows start selected. `reviewable` rows are soft-policy holds and
   may be toggled. `locked` rows remain visible and cannot be selected.
 - Guided review owns active Codex worktree rows; when classic candidates also

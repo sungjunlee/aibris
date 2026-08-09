@@ -8,12 +8,13 @@ branch on.
 
 - `schema_version` is `1` today. Consumers must treat an unknown (newer)
   `schema_version` as unsupported and stop rather than assume the shape.
+- JSON compatibility and migration rules are defined by the
+  [0.x compatibility and deprecation policy](COMPATIBILITY.md).
 - The canonical all-debris array is `items`; it represents every debris
   category.
 - The historical field name `worktrees` is retained as a **0.x compatibility
   alias** and mirrors `items` exactly. It exists so existing 0.x consumers do
-  not break, and is scheduled for removal after the 0.x compatibility period.
-  New consumers should read `items`.
+  not break and is retained throughout 0.x. New consumers should read `items`.
 
 The installed/regenerable/protected terms used by the issue #142 planning
 taxonomy are not JSON fields or values. They do not extend `category` or
@@ -272,13 +273,15 @@ path, or internal canonical key. `--include-paths` opts in to explicit
 physical targets. It never includes external command output.
 
 `--include-paths` without `--json` fails. Non-dry-run `clean --json` requires
-either `--force` or `--interactive`; either takes the classic route. Use the
+either `--force` or `--interactive`; execution always takes the classic route,
+and an explicit `--guide` fails before scan or mutation. Use the
 same classic selectors for preview and execution (for example,
 `clean --no-guide --dry-run --json` and then
 `clean --no-guide --json --force`), changing only `--dry-run`. JSON mode never
-writes prompts or progress text to stdout: guided cleanup uses the existing deterministic
-defaults (recommended rows selected, reviewable rows held, and locked rows
-protected). Non-dry-run JSON uses the same redaction contract as the plan.
+writes prompts or progress text to stdout. Dry-run guided cleanup uses the
+existing deterministic defaults (recommended rows selected, reviewable rows
+held, and locked rows protected). Non-dry-run JSON uses the same redaction
+contract as the plan.
 
 `--force --json` attempts the complete selected set without a confirmation
 read. `--interactive --json` reads one silent line per selected physical target
