@@ -379,6 +379,26 @@ func TestApplyCleanJSONExecutionReceiptUsesCapturedTargetIDsAfterDeletion(t *tes
 	}
 }
 
+func TestApplyCleanJSONExecutionReceiptRecordsCommandFallbackPathRemoval(t *testing.T) {
+	item := types.DebrisInfo{ID: "fallback", Path: filepath.Join(t.TempDir(), "gone")}
+	receipt := cleanJSONReceipt{PhysicalTargets: []cleanJSONReceiptPhysicalTarget{{ID: "target-1", State: cleanJSONReceiptPending}}}
+	err := applyCleanJSONExecutionReceipt(&receipt, map[string]string{cleanJSONReceiptItemKey(item): "target-1"}, cleanExecutionReceipt{
+		Units: []cleanUnitExecutionReceipt{{
+			Target:                     item,
+			State:                      cleanExecutionRemoved,
+			PhysicalRemoved:            true,
+			FreedBytes:                 10,
+			CommandFallbackPathRemoval: true,
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(receipt.PhysicalTargets[0].ReasonCodes, "command_fallback_path_removal") {
+		t.Fatalf("fallback reason codes = %v", receipt.PhysicalTargets[0].ReasonCodes)
+	}
+}
+
 func TestOrderCleanJSONReceiptPreparedTargetsUsesPlanTargetOrderWithoutMutatingInput(t *testing.T) {
 	first := types.DebrisInfo{ID: "first", Path: filepath.Join(t.TempDir(), "first")}
 	second := types.DebrisInfo{ID: "second", Path: filepath.Join(t.TempDir(), "second")}

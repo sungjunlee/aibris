@@ -109,6 +109,16 @@ func ExecuteWithContext(ctx context.Context, worktrees []types.DebrisInfo) (int6
 // removal. It must be read-only and return an error to refuse the mutation.
 type MutationBarrier func(context.Context, types.DebrisInfo) error
 
+// CleanupMutationOutcome reports a cleanup strategy that was actually reached
+// after the mutation barrier. Observers are informational and cannot affect
+// cleanup safety or execution.
+type CleanupMutationOutcome struct {
+	Item                       types.DebrisInfo
+	CommandFallbackPathRemoval bool
+}
+
+type CleanupMutationObserver func(CleanupMutationOutcome)
+
 // ExecuteWithContextAndBarrier executes cleanup only after the supplied
 // component-level safety barrier succeeds at the first mutation boundary.
 func ExecuteWithContextAndBarrier(
@@ -128,7 +138,20 @@ func ExecuteWithContextAndBarrierWithOutput(
 	output io.Writer,
 	errorOutput io.Writer,
 ) (int64, error) {
-	return executeWithContextOutput(ctx, worktrees, adapter.AgentStateRevalidatorFor, barrier, output, errorOutput)
+	return ExecuteWithContextAndBarrierWithOutputAndObserver(ctx, worktrees, barrier, output, errorOutput, nil)
+}
+
+// ExecuteWithContextAndBarrierWithOutputAndObserver also reports a missing
+// command fallback immediately before its path-removal mutation.
+func ExecuteWithContextAndBarrierWithOutputAndObserver(
+	ctx context.Context,
+	worktrees []types.DebrisInfo,
+	barrier MutationBarrier,
+	output io.Writer,
+	errorOutput io.Writer,
+	observer CleanupMutationObserver,
+) (int64, error) {
+	return executeWithContextOutput(ctx, worktrees, adapter.AgentStateRevalidatorFor, barrier, output, errorOutput, observer)
 }
 
 func executeWithContext(
@@ -137,7 +160,7 @@ func executeWithContext(
 	lookupRevalidator func(types.Tool) (adapter.AgentStateRevalidator, bool),
 	barrier MutationBarrier,
 ) (int64, error) {
-	return executeWithContextOutput(ctx, worktrees, lookupRevalidator, barrier, os.Stdout, os.Stderr)
+	return executeWithContextOutput(ctx, worktrees, lookupRevalidator, barrier, os.Stdout, os.Stderr, nil)
 }
 
 func executeWithContextOutput(
@@ -147,6 +170,7 @@ func executeWithContextOutput(
 	barrier MutationBarrier,
 	output io.Writer,
 	errorOutput io.Writer,
+	observer CleanupMutationObserver,
 ) (int64, error) {
 	if output == nil {
 		output = io.Discard
@@ -198,6 +222,7 @@ func executeWithContextOutput(
 				continue
 			}
 		}
+		commandFallbackPathRemoval := false
 		if cleanupKind(w) == types.CleanupCommand && len(w.CleanupCommand) > 0 {
 			fmt.Fprintf(output, "running %d/%d: %s (%s) via %s ...\n",
 				i+1, len(worktrees), debrisName(w), w.Category, strings.Join(w.CleanupCommand, " "))
@@ -217,6 +242,7 @@ func executeWithContextOutput(
 			}
 			fmt.Fprintf(errorOutput, "warning: cleanup command %q not found; falling back to path removal for %s\n",
 				w.CleanupCommand[0], w.ID)
+			commandFallbackPathRemoval = true
 		}
 		fmt.Fprintf(output, "removing %d/%d: %s (%s) ...\n",
 			i+1, len(worktrees), debrisName(w), w.Category)
@@ -224,6 +250,9 @@ func executeWithContextOutput(
 			errs = append(errs, err)
 			fmt.Fprintf(errorOutput, "error: %v\n", err)
 			continue
+		}
+		if commandFallbackPathRemoval && observer != nil {
+			observer(CleanupMutationOutcome{Item: w, CommandFallbackPathRemoval: true})
 		}
 		if err := os.RemoveAll(w.Path); err != nil {
 			errs = append(errs, fmt.Errorf("removing %s: %w", w.Path, err))

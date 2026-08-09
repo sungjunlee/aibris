@@ -470,4 +470,6 @@ Only `succeeded` exits zero. Receipt accounting is physical-target based:
 The default receipt is redacted exactly like the plan. With `--include-paths`,
 physical target paths and the embedded plan's logical paths, projects, and
 cleanup commands are included. Error and refusal reason codes remain stable
-and path-free; external command output is never copied into JSON.
+and path-free; external command output is never copied into JSON. A
+`command_fallback_path_removal` reason code records that a missing planned
+cleanup command reached its safe path-removal fallback.

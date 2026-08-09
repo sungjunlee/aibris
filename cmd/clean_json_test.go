@@ -389,6 +389,9 @@ func TestCleanJSONPolicyDecisionFallbackUsesPropagatedSelectionOnly(t *testing.T
 }
 
 func TestCleanJSONReasonCodeAllowListPreservesKnownCodes(t *testing.T) {
+	if got := cleanJSONReasonCode("command_fallback_path_removal"); got != "command_fallback_path_removal" {
+		t.Fatalf("command fallback reason code normalized to %q", got)
+	}
 	decisionCodes := []DecisionReasonCode{
 		DecisionReasonCurrentWorkingDirectory,
 		DecisionReasonDirtyWorktree,

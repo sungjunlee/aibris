@@ -31,16 +31,17 @@ type cleanMemberExecutionReceipt struct {
 }
 
 type cleanUnitExecutionReceipt struct {
-	Target          types.DebrisInfo
-	Component       *cleanupOverlapComponent
-	State           cleanExecutionState
-	PhysicalRemoved bool
-	FreedBytes      int64
-	Members         []cleanMemberExecutionReceipt
-	Obligations     []cleaner.AgentStateRevalidationOutcome
-	BlockingPath    string
-	BlockingReason  string
-	Error           string
+	Target                     types.DebrisInfo
+	Component                  *cleanupOverlapComponent
+	State                      cleanExecutionState
+	PhysicalRemoved            bool
+	FreedBytes                 int64
+	Members                    []cleanMemberExecutionReceipt
+	Obligations                []cleaner.AgentStateRevalidationOutcome
+	BlockingPath               string
+	BlockingReason             string
+	CommandFallbackPathRemoval bool
+	Error                      string
 }
 
 type cleanExecutionReceipt struct {
@@ -258,7 +259,8 @@ func executePreparedCleanTargets(ctx context.Context, targets []preparedCleanTar
 		result.Units = append(result.Units, receipt)
 		result.FreedBytes += receipt.FreedBytes
 		if err != nil {
-			if errors.Is(err, context.Canceled) &&
+			if cleanupKind(target.Item) != types.CleanupCommand &&
+				errors.Is(err, context.Canceled) &&
 				receipt.State == cleanExecutionFailed &&
 				!cleanUnitHasMutation(receipt) {
 				receipt.State = cleanExecutionCancelled
@@ -295,7 +297,7 @@ func executePathCleanupTarget(
 	receipt := newCleanUnitExecutionReceipt(target, component, safety)
 	var validation cleaner.OverlapSafetyValidation
 	validated := false
-	freed, err := cleaner.ExecuteWithContextAndBarrierWithOutput(
+	freed, err := cleaner.ExecuteWithContextAndBarrierWithOutputAndObserver(
 		ctx,
 		[]types.DebrisInfo{target},
 		func(ctx context.Context, _ types.DebrisInfo) error {
@@ -312,6 +314,9 @@ func executePathCleanupTarget(
 		},
 		output,
 		errorOutput,
+		func(outcome cleaner.CleanupMutationOutcome) {
+			receipt.CommandFallbackPathRemoval = outcome.CommandFallbackPathRemoval
+		},
 	)
 	if validated {
 		applyOverlapValidationReceipt(&receipt, validation)

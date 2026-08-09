@@ -149,6 +149,92 @@ func TestExecuteActiveWorktreeRemovesMultiMemberUnitWithDefaultAge(t *testing.T)
 	}
 }
 
+func TestExecutePreparedCommandCancellationAfterStartRemainsFailed(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	targetPath := filepath.Join(home, ".cache", "command-cancelled")
+	if err := os.MkdirAll(targetPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(home, "command-started")
+	command := filepath.Join(t.TempDir(), "cancel-after-start")
+	writeJSONReceiptExecutable(t, command, "#!/bin/sh\ntouch \"$1\"\nsleep 5\n")
+	target := types.DebrisInfo{
+		ID:             "command-cancelled",
+		Tool:           types.ToolBuildCache,
+		Category:       types.CategoryBuildCache,
+		Path:           targetPath,
+		Size:           17,
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{command, marker},
+	}
+	runtime := staticOverlapSafetyRuntime(nil, nil)
+	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared := prepareCleanExecutionWithSafety(context.Background(), selection, runtime)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		for {
+			if _, err := os.Lstat(marker); err == nil {
+				cancel()
+				return
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}()
+
+	receipt, err := executePreparedCleanTargets(ctx, prepared, defaultActiveWorktreeExecutionOptions())
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("execution error = %v; want context cancellation", err)
+	}
+	unit := singleExecutionUnit(t, receipt)
+	if unit.State != cleanExecutionFailed || unit.PhysicalRemoved || unit.FreedBytes != 0 {
+		t.Fatalf("cancelled command receipt = %+v; want failed with retained physical owner", unit)
+	}
+	assertPathExists(t, targetPath)
+}
+
+func TestExecutePreparedMissingCommandRecordsFallbackPathRemoval(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	targetPath := filepath.Join(home, ".cache", "command-fallback")
+	if err := os.MkdirAll(targetPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	target := types.DebrisInfo{
+		ID:             "command-fallback",
+		Tool:           types.ToolBuildCache,
+		Category:       types.CategoryBuildCache,
+		Path:           targetPath,
+		Size:           19,
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{"definitely-missing-aibris-cleaner"},
+	}
+	runtime := staticOverlapSafetyRuntime(nil, nil)
+	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := executePreparedCleanTargets(
+		context.Background(),
+		prepareCleanExecutionWithSafety(context.Background(), selection, runtime),
+		quietActiveWorktreeExecutionOptions(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unit := singleExecutionUnit(t, receipt)
+	if unit.State != cleanExecutionRemoved || !unit.PhysicalRemoved || !unit.CommandFallbackPathRemoval {
+		t.Fatalf("fallback command receipt = %+v; want physically removed fallback", unit)
+	}
+	if !pathDoesNotExist(targetPath) {
+		t.Fatalf("fallback path %q still exists", targetPath)
+	}
+}
+
 func TestExecuteActiveWorktreePreflightsEveryMemberBeforeRemovingAny(t *testing.T) {
 	home, repository, target, first, second := newExecutorMultiMemberUnit(t)
 	testutil.SetHome(t, home)

@@ -511,7 +511,7 @@ func applyCleanJSONExecutionReceipt(
 				}
 			}
 			target.ReasonCodes = uniqueCleanJSONReasonCodes(
-				append(target.ReasonCodes, cleanJSONReceiptStateReason(unit)),
+				append(target.ReasonCodes, cleanJSONReceiptStateReasons(unit)...),
 			)
 			break
 		}
@@ -522,21 +522,25 @@ func applyCleanJSONExecutionReceipt(
 	return errors.Join(errs...)
 }
 
-func cleanJSONReceiptStateReason(unit cleanUnitExecutionReceipt) string {
+func cleanJSONReceiptStateReasons(unit cleanUnitExecutionReceipt) []string {
+	codes := make([]string, 0, 2)
+	if unit.CommandFallbackPathRemoval {
+		codes = append(codes, "command_fallback_path_removal")
+	}
 	if unit.State == cleanExecutionRemoved && !unit.PhysicalRemoved {
-		return "physical_owner_present"
+		return append(codes, "physical_owner_present")
 	}
 	switch unit.State {
 	case cleanExecutionRemoved:
-		return "removed"
+		return append(codes, "removed")
 	case cleanExecutionPartial:
-		return "partial_failure"
+		return append(codes, "partial_failure")
 	case cleanExecutionFailed:
-		return "execution_failed"
+		return append(codes, "execution_failed")
 	case cleanExecutionCancelled:
-		return "cancelled"
+		return append(codes, "cancelled")
 	default:
-		return "execution_state"
+		return append(codes, "execution_state")
 	}
 }
 
