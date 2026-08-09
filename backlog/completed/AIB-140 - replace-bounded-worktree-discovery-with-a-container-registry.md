@@ -1,7 +1,7 @@
 ---
 id: AIB-140
 title: Replace bounded worktree discovery with a container registry
-status: To Do
+status: Done
 labels:
   - enhancement
   - cli

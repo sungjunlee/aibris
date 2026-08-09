@@ -484,7 +484,11 @@ func applyCleanJSONExecutionReceipt(
 ) error {
 	var errs []error
 	for _, unit := range execution.Units {
-		key := cleanJSONReceiptItemKey(unit.Target)
+		key := unit.ReceiptTargetKey
+		if key == "" {
+			errs = append(errs, fmt.Errorf("execution receipt invariant: executed target is missing its pre-execution identity"))
+			continue
+		}
 		id := targetIDs[key]
 		if id == "" {
 			errs = append(errs, fmt.Errorf("execution receipt invariant: missing pre-execution target ID for executed target %q", key))

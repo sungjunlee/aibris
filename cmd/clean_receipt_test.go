@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -369,7 +370,7 @@ func TestApplyCleanJSONExecutionReceiptUsesCapturedTargetIDsAfterDeletion(t *tes
 	item := types.DebrisInfo{ID: "deleted", Path: filepath.Join(t.TempDir(), "gone")}
 	receipt := cleanJSONReceipt{PhysicalTargets: []cleanJSONReceiptPhysicalTarget{{ID: "target-1", State: cleanJSONReceiptPending}}}
 	err := applyCleanJSONExecutionReceipt(&receipt, map[string]string{cleanJSONReceiptItemKey(item): "target-1"}, cleanExecutionReceipt{
-		Units: []cleanUnitExecutionReceipt{{Target: item, State: cleanExecutionRemoved, PhysicalRemoved: true, FreedBytes: 10}},
+		Units: []cleanUnitExecutionReceipt{{Target: item, ReceiptTargetKey: cleanJSONReceiptItemKey(item), State: cleanExecutionRemoved, PhysicalRemoved: true, FreedBytes: 10}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -379,12 +380,62 @@ func TestApplyCleanJSONExecutionReceiptUsesCapturedTargetIDsAfterDeletion(t *tes
 	}
 }
 
+func TestApplyCleanJSONExecutionReceiptUsesPreMutationIdentityAfterSymlinkedAncestorRemoval(t *testing.T) {
+	realHome := t.TempDir()
+	aliasParent := t.TempDir()
+	aliasHome := filepath.Join(aliasParent, "home-alias")
+	if err := os.Symlink(realHome, aliasHome); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	testutil.SetHome(t, realHome)
+	target := types.DebrisInfo{
+		ID:             "fallback",
+		Tool:           types.ToolBuildCache,
+		Category:       types.CategoryBuildCache,
+		Path:           filepath.Join(aliasHome, ".cache", "fallback"),
+		Size:           23,
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{"definitely-missing-aibris-cleaner"},
+	}
+	if err := os.MkdirAll(target.Path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	targetIDKey := cleanJSONReceiptItemKey(target)
+	runtime := staticOverlapSafetyRuntime(nil, nil)
+	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	execution, err := executePreparedCleanTargets(
+		context.Background(),
+		prepareCleanExecutionWithSafety(context.Background(), selection, runtime),
+		quietActiveWorktreeExecutionOptions(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt := cleanJSONReceipt{PhysicalTargets: []cleanJSONReceiptPhysicalTarget{{
+		ID: "target-1", State: cleanJSONReceiptPending, Bytes: target.Size,
+	}}}
+	if err := applyCleanJSONExecutionReceipt(&receipt, map[string]string{targetIDKey: "target-1"}, execution); err != nil {
+		t.Fatal(err)
+	}
+	finalized, err := finishCleanJSONReceipt(receipt, nil)
+	if err != nil || finalized.Status != cleanJSONReceiptSucceeded || finalized.Totals.FreedBytes != target.Size {
+		t.Fatalf("symlinked fallback receipt = %+v error=%v", finalized, err)
+	}
+	if receiptTarget := finalized.PhysicalTargets[0]; receiptTarget.State != string(cleanExecutionRemoved) || !receiptTarget.PhysicalRemoved || receiptTarget.FreedBytes != target.Size {
+		t.Fatalf("symlinked fallback physical target = %+v", receiptTarget)
+	}
+}
+
 func TestApplyCleanJSONExecutionReceiptRecordsCommandFallbackPathRemoval(t *testing.T) {
 	item := types.DebrisInfo{ID: "fallback", Path: filepath.Join(t.TempDir(), "gone")}
 	receipt := cleanJSONReceipt{PhysicalTargets: []cleanJSONReceiptPhysicalTarget{{ID: "target-1", State: cleanJSONReceiptPending}}}
 	err := applyCleanJSONExecutionReceipt(&receipt, map[string]string{cleanJSONReceiptItemKey(item): "target-1"}, cleanExecutionReceipt{
 		Units: []cleanUnitExecutionReceipt{{
 			Target:                     item,
+			ReceiptTargetKey:           cleanJSONReceiptItemKey(item),
 			State:                      cleanExecutionRemoved,
 			PhysicalRemoved:            true,
 			FreedBytes:                 10,
@@ -423,7 +474,7 @@ func TestApplyCleanJSONExecutionReceiptIDMissFailsReceiptInvariant(t *testing.T)
 	item := types.DebrisInfo{ID: "unknown", Path: filepath.Join(t.TempDir(), "unknown")}
 	receipt := cleanJSONReceipt{PhysicalTargets: []cleanJSONReceiptPhysicalTarget{{ID: "target-1", State: cleanJSONReceiptPending}}}
 	applyErr := applyCleanJSONExecutionReceipt(&receipt, nil, cleanExecutionReceipt{
-		Units: []cleanUnitExecutionReceipt{{Target: item, State: cleanExecutionRemoved, PhysicalRemoved: true, FreedBytes: 10}},
+		Units: []cleanUnitExecutionReceipt{{Target: item, ReceiptTargetKey: cleanJSONReceiptItemKey(item), State: cleanExecutionRemoved, PhysicalRemoved: true, FreedBytes: 10}},
 	})
 	if applyErr == nil || !strings.Contains(applyErr.Error(), "execution receipt invariant") {
 		t.Fatalf("ID miss error = %v", applyErr)

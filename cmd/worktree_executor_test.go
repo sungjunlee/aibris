@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -150,6 +151,9 @@ func TestExecuteActiveWorktreeRemovesMultiMemberUnitWithDefaultAge(t *testing.T)
 }
 
 func TestExecutePreparedCommandCancellationAfterStartRemainsFailed(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell command fixture is Unix-specific")
+	}
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	targetPath := filepath.Join(home, ".cache", "command-cancelled")

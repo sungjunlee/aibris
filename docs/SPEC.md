@@ -84,7 +84,7 @@ Flags:
 | `--tool`, `-t` | empty | Comma-separated tool filter. Empty means all tools. |
 | `--root` | `$HOME` | Repeatable scan root. Each root must resolve under `$HOME`. |
 | `--dry-run` | `false` | Preview targets without deleting. |
-| `--json` | `false` | With `--dry-run`, emit the versioned path-redacted `clean_plan` JSON document. Execution JSON receipts are not shipped yet. |
+| `--json` | `false` | With `--dry-run`, emit the versioned path-redacted `clean_plan` JSON document. Non-dry-run JSON emits a versioned path-redacted `clean_receipt` for the plan executed in the same process; it never accepts a replayed plan or receipt. |
 | `--include-paths` | `false` | With `--json`, opt in to explicit target/logical paths, projects, and cleanup commands. |
 | `--interactive`, `-i` | `false` | Confirm each item before deleting. |
 | `--risky` | `false` | Include risky categories such as AI logs. |
@@ -202,9 +202,11 @@ Human `clean` output must include a cleanup audit before deletion:
   obligation's path, tool, reason, and revalidation outcome
 
 The audit is human output only. `scan --json` remains the machine-readable
-inventory surface, and `clean --dry-run --json` is the shipped machine-readable
-cleanup-plan surface. Execution JSON receipts, cancellation semantics,
-replayable manifests, and receipt files remain future phase-2 work.
+inventory surface, while `clean --dry-run --json` emits the shipped
+machine-readable cleanup plan and non-dry-run `clean --json` emits the shipped
+execution receipt, including cancellation semantics. Replayable manifests and
+on-disk receipt files remain future work: a receipt describes only the plan
+executed by its current process and cannot authorize a later execution.
 
 The phase-1 JSON cleanup route also fails closed before emitting `clean_plan`
 when the scan is partial. Therefore an emitted cleanup plan always reports

@@ -1,7 +1,7 @@
 ---
 id: AIB-141
 title: Generalize guided worktree review beyond codex
-status: To Do
+status: Done
 labels:
   - enhancement
   - cli

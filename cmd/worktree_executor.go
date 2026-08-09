@@ -32,6 +32,7 @@ type cleanMemberExecutionReceipt struct {
 
 type cleanUnitExecutionReceipt struct {
 	Target                     types.DebrisInfo
+	ReceiptTargetKey           string
 	Component                  *cleanupOverlapComponent
 	State                      cleanExecutionState
 	PhysicalRemoved            bool
@@ -724,7 +725,12 @@ func setActiveReceiptPhysicalState(receipt *cleanUnitExecutionReceipt, selected 
 }
 
 func failedCleanUnitReceipt(target types.DebrisInfo, members []GitWorktreeMember, err error) cleanUnitExecutionReceipt {
-	receipt := cleanUnitExecutionReceipt{Target: target, State: cleanExecutionFailed, Error: err.Error()}
+	receipt := cleanUnitExecutionReceipt{
+		Target:           target,
+		ReceiptTargetKey: cleanJSONReceiptItemKey(target),
+		State:            cleanExecutionFailed,
+		Error:            err.Error(),
+	}
 	for _, member := range members {
 		receipt.Members = append(receipt.Members, cleanMemberExecutionReceipt{WorktreePath: member.WorktreePath})
 	}
@@ -736,12 +742,13 @@ func failedPreparedCleanUnitReceipt(
 	err error,
 ) cleanUnitExecutionReceipt {
 	receipt := cleanUnitExecutionReceipt{
-		Target:         target.Item,
-		Component:      target.Component,
-		State:          cleanExecutionFailed,
-		BlockingPath:   target.Item.Path,
-		BlockingReason: err.Error(),
-		Error:          err.Error(),
+		Target:           target.Item,
+		ReceiptTargetKey: cleanJSONReceiptItemKey(target.Item),
+		Component:        target.Component,
+		State:            cleanExecutionFailed,
+		BlockingPath:     target.Item.Path,
+		BlockingReason:   err.Error(),
+		Error:            err.Error(),
 	}
 	if target.Component != nil {
 		for _, obligation := range target.Component.Obligations {
@@ -771,9 +778,10 @@ func newCleanUnitExecutionReceipt(
 	safety *cleanupMutationSafety,
 ) cleanUnitExecutionReceipt {
 	receipt := cleanUnitExecutionReceipt{
-		Target:    target,
-		Component: component,
-		State:     cleanExecutionFailed,
+		Target:           target,
+		ReceiptTargetKey: cleanJSONReceiptItemKey(target),
+		Component:        component,
+		State:            cleanExecutionFailed,
 	}
 	if component != nil {
 		for _, obligation := range component.Obligations {

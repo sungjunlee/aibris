@@ -1,7 +1,7 @@
 ---
 id: AIB-138
 title: Add provable-orphan cleanup for agent session stores
-status: In Progress
+status: Done
 labels:
   - enhancement
   - cli
