@@ -42,6 +42,21 @@ func TestPrintCleanAuditAlignsCategoryColumns(t *testing.T) {
 	}
 }
 
+func TestPrintWorktreeExecutionReceiptsRendersCancelledAsLegacyFailed(t *testing.T) {
+	receipt := cleanExecutionReceipt{Units: []cleanUnitExecutionReceipt{{
+		Target:       types.DebrisInfo{Category: types.CategoryWorktree, Status: types.WorktreeActive, Path: "/tmp/active"},
+		State:        cleanExecutionCancelled,
+		BlockingPath: "/tmp/active",
+		Component: &cleanupOverlapComponent{Owner: types.DebrisInfo{Path: "/tmp/active"},
+			LogicalRows: []cleanupOverlapLogicalRow{{Item: types.DebrisInfo{Path: "/tmp/active"}}}},
+	}}}
+	output := captureOutput(func() { printWorktreeExecutionReceipts(receipt) })
+	if !strings.Contains(output, "unit      failed") || !strings.Contains(output, "owner     failed") ||
+		strings.Contains(output, "cancelled") {
+		t.Fatalf("cancelled human output changed legacy vocabulary:\n%s", output)
+	}
+}
+
 func TestBuildCleanAudit_GroupsEligibleAndBlockedByCategory(t *testing.T) {
 	now := time.Now()
 	old := now.Add(-48 * time.Hour)

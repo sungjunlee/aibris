@@ -1,6 +1,6 @@
 ---
 milestone: 0.10.x Agent State Store Coverage
-status: active
+status: completed
 started: 2026-07-26
 due: TBD
 objectives: []
@@ -47,36 +47,27 @@ content that is surfaced rather than reclaimed.
 
 - [x] #139 L1 retention contract: freeze bucket, selector, aggregation, timestamp, and execution-manifest semantics → PR #165 (merged `2d9714a`, 3 hardened primary rounds plus final exact-head review)
 
-### Batch 7 — Add byproduct coverage — blocked on upstream producer cooperation
+### Batch 7 — Add byproduct coverage — disposition complete; blocked upstream
 
-- [ ] #142 `L2-regenerable-providers` — add only regenerable residue providers.
-- [ ] #142 L3 protected artifacts: surface user artifacts without implicit cleanup through default clean or `--risky`
+- [x] #142 `L2-regenerable-providers` — deferred outside this sprint; required producer-wide fencing is absent and the canonical issue remains `status:blocked`.
+- [x] #142 L3 protected artifacts — deferred outside this sprint for the upstream identity/quiescence gap; no implicit cleanup path was added.
 
 ### Batch 8 — Cover the largest retention stores
 
-- [~] #139 L2 (re-scoped to **read-only inventory**) Codex sessions: aggregate
-      counts, sizes, and orphan statistics by UTC month without parsing
-      conversation bodies [branch:issue-139-readonly-retention-inventory] —
-      implemented on a fresh branch from main; tests + docs green, PR pending
-- [ ] #139 L3 Cursor/Gstack/Claude: add coverage without duplicate rows or bytes
-      — parked with the execution layer; requires the parked selector/manifest
-      machinery or a future re-scope leaf
+- [x] #139 L2 read-only Codex-session inventory — shipped through PR #187 (`809635e`).
+- [x] #139 L3 Cursor/Gstack/Claude — parked outside this sprint; future work must re-establish selector and manifest safety contracts.
 
 ### Batch 9 — Open guided review to every tool
 
-- [~] #141 Generalize guided worktree review beyond codex (~3h) — implementation and full gates complete at `0a47323`; pre-publication parked on hardened advisory adapter availability [run:issue-141-20260731062303100-927250e4]
+- [x] #141 Generalize guided worktree review beyond codex — parked outside this sprint at `0a47323`; fresh-main audit/publication remains open [run:issue-141-20260731062303100-927250e4].
 
 ### Batch 10 — State the boundary
 
-- [~] #143 Reframe the documented product boundary around agent debris (~2h)
-      — README/SPEC/CATEGORY/ROADMAP reframed on
-      [branch:issue-143-product-boundary-reframe]; PR pending
+- [x] #143 Reframe the documented product boundary around agent debris — shipped through PR #188 (`1d15705`).
 
 ### Batch 11 — Close capability scope
 
-- [x] #137 [Epic] Cover the agent state store surface — closed 2026-08-06 with
-      the actionable scope shipped (#138/#139-re-scoped/#140/#142-L1/#143
-      merged; #141 parked, #142 L2/L3 blocked upstream); re-audit deferred
+- [x] #137 [Epic] Cover the agent state store surface — closed 2026-08-06 with actionable scope shipped; #141 parked, #142 L2/L3 blocked upstream, re-audit deferred.
 
 ## Running Context
 
@@ -603,3 +594,4 @@ measuring, because the real home lacked the triggering condition.
   lacked a ClinePass subscription. The review cap was increased once from 3 to
   4 with audited owner approval and will not be extended again. No PR was
   opened and nothing was merged.
+- 2026-08-09: Sprint closed. 16/16 tasks completed.

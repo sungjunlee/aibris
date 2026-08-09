@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,9 +18,10 @@ import (
 type cleanExecutionState string
 
 const (
-	cleanExecutionRemoved cleanExecutionState = "removed"
-	cleanExecutionPartial cleanExecutionState = "partial"
-	cleanExecutionFailed  cleanExecutionState = "failed"
+	cleanExecutionRemoved   cleanExecutionState = "removed"
+	cleanExecutionPartial   cleanExecutionState = "partial"
+	cleanExecutionFailed    cleanExecutionState = "failed"
+	cleanExecutionCancelled cleanExecutionState = "cancelled"
 )
 
 type cleanMemberExecutionReceipt struct {
@@ -29,16 +31,19 @@ type cleanMemberExecutionReceipt struct {
 }
 
 type cleanUnitExecutionReceipt struct {
-	Target          types.DebrisInfo
-	Component       *cleanupOverlapComponent
-	State           cleanExecutionState
-	PhysicalRemoved bool
-	FreedBytes      int64
-	Members         []cleanMemberExecutionReceipt
-	Obligations     []cleaner.AgentStateRevalidationOutcome
-	BlockingPath    string
-	BlockingReason  string
-	Error           string
+	Target                     types.DebrisInfo
+	ReceiptTargetKey           string
+	Component                  *cleanupOverlapComponent
+	State                      cleanExecutionState
+	PhysicalRemoved            bool
+	FreedBytes                 int64
+	Members                    []cleanMemberExecutionReceipt
+	Obligations                []cleaner.AgentStateRevalidationOutcome
+	BlockingPath               string
+	BlockingReason             string
+	MutationAttempted          bool
+	CommandFallbackPathRemoval bool
+	Error                      string
 }
 
 type cleanExecutionReceipt struct {
@@ -53,7 +58,7 @@ func (r cleanExecutionReceipt) counts() (removed, partial, failed int) {
 			removed++
 		case cleanExecutionPartial:
 			partial++
-		case cleanExecutionFailed:
+		case cleanExecutionFailed, cleanExecutionCancelled:
 			failed++
 		}
 	}
@@ -76,6 +81,8 @@ type activeWorktreeExecutionOptions struct {
 	removeAll      func(string) error
 	getwd          func() (string, error)
 	userHomeDir    func() (string, error)
+	output         io.Writer
+	errorOutput    io.Writer
 }
 
 func defaultActiveWorktreeExecutionOptions() activeWorktreeExecutionOptions {
@@ -84,6 +91,8 @@ func defaultActiveWorktreeExecutionOptions() activeWorktreeExecutionOptions {
 		removeAll:      os.RemoveAll,
 		getwd:          os.Getwd,
 		userHomeDir:    os.UserHomeDir,
+		output:         os.Stdout,
+		errorOutput:    os.Stderr,
 	}
 }
 
@@ -185,13 +194,19 @@ func executePreparedCleanTargets(ctx context.Context, targets []preparedCleanTar
 	if opts.userHomeDir == nil {
 		opts.userHomeDir = os.UserHomeDir
 	}
+	if opts.output == nil {
+		opts.output = io.Discard
+	}
+	if opts.errorOutput == nil {
+		opts.errorOutput = io.Discard
+	}
 
 	var result cleanExecutionReceipt
 	var errs []error
 	for i, target := range targets {
 		if err := ctx.Err(); err != nil {
 			for _, remaining := range targets[i:] {
-				receipt := failedPreparedCleanUnitReceipt(
+				receipt := cancelledPreparedCleanUnitReceipt(
 					remaining,
 					fmt.Errorf("cleanup cancelled before component execution: %w", err),
 				)
@@ -222,6 +237,8 @@ func executePreparedCleanTargets(ctx context.Context, targets []preparedCleanTar
 				target.Component,
 				target.MutationSafety,
 				target.TargetSnapshot,
+				opts.output,
+				opts.errorOutput,
 			)
 		case target.ActiveUnit == nil:
 			receipt = failedPreparedCleanUnitReceipt(
@@ -244,10 +261,17 @@ func executePreparedCleanTargets(ctx context.Context, targets []preparedCleanTar
 		result.Units = append(result.Units, receipt)
 		result.FreedBytes += receipt.FreedBytes
 		if err != nil {
+			if cleanupKind(target.Item) != types.CleanupCommand &&
+				errors.Is(err, context.Canceled) &&
+				receipt.State == cleanExecutionFailed &&
+				!cleanUnitHasMutation(receipt) {
+				receipt.State = cleanExecutionCancelled
+				result.Units[len(result.Units)-1] = receipt
+			}
 			errs = append(errs, fmt.Errorf("cleaning %s: %w", target.Item.Path, err))
 			if errors.Is(err, context.Canceled) {
 				for _, remaining := range targets[i+1:] {
-					cancelled := failedPreparedCleanUnitReceipt(
+					cancelled := cancelledPreparedCleanUnitReceipt(
 						remaining,
 						fmt.Errorf("cleanup cancelled before component execution: %w", err),
 					)
@@ -269,11 +293,13 @@ func executePathCleanupTarget(
 	component *cleanupOverlapComponent,
 	safety *cleanupMutationSafety,
 	snapshot *cleanupTargetSnapshot,
+	output io.Writer,
+	errorOutput io.Writer,
 ) (cleanUnitExecutionReceipt, error) {
 	receipt := newCleanUnitExecutionReceipt(target, component, safety)
 	var validation cleaner.OverlapSafetyValidation
 	validated := false
-	freed, err := cleaner.ExecuteWithContextAndBarrier(
+	freed, err := cleaner.ExecuteWithContextAndBarrierWithOutputAndObserver(
 		ctx,
 		[]types.DebrisInfo{target},
 		func(ctx context.Context, _ types.DebrisInfo) error {
@@ -288,16 +314,30 @@ func executePathCleanupTarget(
 			}
 			return snapshot.validate()
 		},
+		output,
+		errorOutput,
+		func(outcome cleaner.CleanupMutationOutcome) {
+			receipt.MutationAttempted = receipt.MutationAttempted || outcome.MutationAttempted
+			receipt.CommandFallbackPathRemoval = receipt.CommandFallbackPathRemoval || outcome.CommandFallbackPathRemoval
+		},
 	)
 	if validated {
 		applyOverlapValidationReceipt(&receipt, validation)
 	}
 	physicalOwnerPath := target.Path
 	if component != nil && component.CanonicalPath != "" {
+		// The raw selected path may be a symlink. Removing that link is a
+		// mutation, but it has not reclaimed the canonical cleanup owner (its
+		// referent), so it must not satisfy the physical removal postcondition
+		// or claim JSON freed bytes.
 		physicalOwnerPath = component.CanonicalPath
 	}
 	receipt.PhysicalRemoved = pathDoesNotExist(physicalOwnerPath)
 	if err != nil {
+		if receipt.PhysicalRemoved && receipt.MutationAttempted {
+			receipt.State = cleanExecutionPartial
+			receipt.FreedBytes = target.Size
+		}
 		if receipt.BlockingPath == "" {
 			receipt.BlockingPath = target.Path
 			receipt.BlockingReason = err.Error()
@@ -313,6 +353,9 @@ func executePathCleanupTarget(
 		return receipt, err
 	}
 	receipt.State = cleanExecutionRemoved
+	// Keep the legacy human receipt's command-clean estimate. The JSON
+	// projection independently credits bytes only when PhysicalRemoved is
+	// true, which is the stricter machine-readable accounting contract.
 	receipt.FreedBytes = freed
 	return receipt, nil
 }
@@ -361,7 +404,26 @@ func executeActiveWorktreeUnit(
 	}
 
 	for i, member := range refreshed.Members {
-		fmt.Printf("removing worktree member %d/%d: %s ...\n", i+1, len(refreshed.Members), member.WorktreePath)
+		validation, validationErr = safety.validate(ctx)
+		applyOverlapValidationReceipt(&receipt, validation)
+		if validationErr != nil {
+			receipt.Error = fmt.Sprintf("pre-mutation safety barrier: %v", validationErr)
+			setActiveReceiptPhysicalState(&receipt, selected)
+			return receipt, fmt.Errorf("pre-mutation safety barrier: %w", validationErr)
+		}
+		if snapshotErr := snapshot.validate(); snapshotErr != nil {
+			receipt.BlockingPath = target.Path
+			receipt.BlockingReason = snapshotErr.Error()
+			receipt.Error = fmt.Sprintf("pre-mutation safety barrier: %v", snapshotErr)
+			setActiveReceiptPhysicalState(&receipt, selected)
+			return receipt, errors.New(receipt.Error)
+		}
+		if err := ctx.Err(); err != nil {
+			receipt.Error = err.Error()
+			setActiveReceiptPhysicalState(&receipt, selected)
+			return receipt, err
+		}
+		fmt.Fprintf(opts.output, "removing worktree member %d/%d: %s ...\n", i+1, len(refreshed.Members), member.WorktreePath)
 		if err := opts.removeWorktree(ctx, member.RepositoryID, member.WorktreePath); err != nil {
 			removed, verificationErr := verifyRemovedWorktreeMember(ctx, member)
 			receipt.Members[i].Removed = removed
@@ -382,10 +444,45 @@ func executeActiveWorktreeUnit(
 			setActiveReceiptPhysicalState(&receipt, selected)
 			return receipt, errors.New(receipt.Error)
 		}
-		fmt.Printf("removed worktree member: %s\n", member.WorktreePath)
+		ownerRemoved, snapshotErr := snapshot.refreshAfterMutation()
+		if snapshotErr != nil {
+			receipt.BlockingPath = target.Path
+			receipt.BlockingReason = snapshotErr.Error()
+			receipt.Error = snapshotErr.Error()
+			setActiveReceiptPhysicalState(&receipt, selected)
+			return receipt, snapshotErr
+		}
+		if ownerRemoved && i+1 < len(refreshed.Members) {
+			err := fmt.Errorf("cleanup target disappeared before removing remaining worktree members: %q", target.Path)
+			receipt.BlockingPath = target.Path
+			receipt.BlockingReason = err.Error()
+			receipt.Error = err.Error()
+			setActiveReceiptPhysicalState(&receipt, selected)
+			return receipt, err
+		}
+		fmt.Fprintf(opts.output, "removed worktree member: %s\n", member.WorktreePath)
 	}
 
 	if !pathDoesNotExist(selected.TargetPath) {
+		validation, validationErr = safety.validate(ctx)
+		applyOverlapValidationReceipt(&receipt, validation)
+		if validationErr != nil {
+			receipt.Error = fmt.Sprintf("pre-mutation safety barrier: %v", validationErr)
+			setActiveReceiptPhysicalState(&receipt, selected)
+			return receipt, fmt.Errorf("pre-mutation safety barrier: %w", validationErr)
+		}
+		if snapshotErr := snapshot.validate(); snapshotErr != nil {
+			receipt.BlockingPath = target.Path
+			receipt.BlockingReason = snapshotErr.Error()
+			receipt.Error = fmt.Sprintf("pre-mutation safety barrier: %v", snapshotErr)
+			setActiveReceiptPhysicalState(&receipt, selected)
+			return receipt, errors.New(receipt.Error)
+		}
+		if err := ctx.Err(); err != nil {
+			receipt.Error = err.Error()
+			setActiveReceiptPhysicalState(&receipt, selected)
+			return receipt, err
+		}
 		if err := opts.removeAll(selected.TargetPath); err != nil {
 			receipt.Error = fmt.Sprintf("removing cleanup unit container %q: %v", selected.TargetPath, err)
 			setActiveReceiptPhysicalState(&receipt, selected)
@@ -401,7 +498,7 @@ func executeActiveWorktreeUnit(
 	receipt.State = cleanExecutionRemoved
 	receipt.PhysicalRemoved = true
 	receipt.FreedBytes = selected.Size
-	fmt.Printf("removed: %s (%s) — %s\n", debrisExecutionName(target), target.Tool, cleaner.FormatSize(receipt.FreedBytes))
+	fmt.Fprintf(opts.output, "removed: %s (%s) — %s\n", debrisExecutionName(target), target.Tool, cleaner.FormatSize(receipt.FreedBytes))
 	return receipt, nil
 }
 
@@ -634,7 +731,12 @@ func setActiveReceiptPhysicalState(receipt *cleanUnitExecutionReceipt, selected 
 }
 
 func failedCleanUnitReceipt(target types.DebrisInfo, members []GitWorktreeMember, err error) cleanUnitExecutionReceipt {
-	receipt := cleanUnitExecutionReceipt{Target: target, State: cleanExecutionFailed, Error: err.Error()}
+	receipt := cleanUnitExecutionReceipt{
+		Target:           target,
+		ReceiptTargetKey: cleanJSONReceiptItemKey(target),
+		State:            cleanExecutionFailed,
+		Error:            err.Error(),
+	}
 	for _, member := range members {
 		receipt.Members = append(receipt.Members, cleanMemberExecutionReceipt{WorktreePath: member.WorktreePath})
 	}
@@ -646,12 +748,13 @@ func failedPreparedCleanUnitReceipt(
 	err error,
 ) cleanUnitExecutionReceipt {
 	receipt := cleanUnitExecutionReceipt{
-		Target:         target.Item,
-		Component:      target.Component,
-		State:          cleanExecutionFailed,
-		BlockingPath:   target.Item.Path,
-		BlockingReason: err.Error(),
-		Error:          err.Error(),
+		Target:           target.Item,
+		ReceiptTargetKey: cleanJSONReceiptItemKey(target.Item),
+		Component:        target.Component,
+		State:            cleanExecutionFailed,
+		BlockingPath:     target.Item.Path,
+		BlockingReason:   err.Error(),
+		Error:            err.Error(),
 	}
 	if target.Component != nil {
 		for _, obligation := range target.Component.Obligations {
@@ -666,15 +769,25 @@ func failedPreparedCleanUnitReceipt(
 	return receipt
 }
 
+func cancelledPreparedCleanUnitReceipt(
+	target preparedCleanTarget,
+	err error,
+) cleanUnitExecutionReceipt {
+	receipt := failedPreparedCleanUnitReceipt(target, err)
+	receipt.State = cleanExecutionCancelled
+	return receipt
+}
+
 func newCleanUnitExecutionReceipt(
 	target types.DebrisInfo,
 	component *cleanupOverlapComponent,
 	safety *cleanupMutationSafety,
 ) cleanUnitExecutionReceipt {
 	receipt := cleanUnitExecutionReceipt{
-		Target:    target,
-		Component: component,
-		State:     cleanExecutionFailed,
+		Target:           target,
+		ReceiptTargetKey: cleanJSONReceiptItemKey(target),
+		Component:        component,
+		State:            cleanExecutionFailed,
 	}
 	if component != nil {
 		for _, obligation := range component.Obligations {
@@ -704,6 +817,18 @@ func applyOverlapValidationReceipt(
 	)
 	receipt.BlockingPath = validation.BlockingPath
 	receipt.BlockingReason = validation.BlockingReason
+}
+
+func cleanUnitHasMutation(receipt cleanUnitExecutionReceipt) bool {
+	if receipt.PhysicalRemoved {
+		return true
+	}
+	for _, member := range receipt.Members {
+		if member.Removed {
+			return true
+		}
+	}
+	return false
 }
 
 func isActiveWorktreeTarget(target types.DebrisInfo) bool {

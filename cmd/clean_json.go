@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -145,7 +147,7 @@ func runCleanJSON(cmd *cobra.Command) {
 		failCleanJSON("invalid --tool selector")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	roots, err := scanner.NormalizeRoots(cleanRoots)
 	if err != nil {
@@ -184,7 +186,7 @@ func runCleanJSON(cmd *cobra.Command) {
 		Age:                    age,
 		Categories:             categories,
 		Tools:                  tools,
-		DryRun:                 true,
+		DryRun:                 cleanDryRun,
 		Risky:                  cleanRisky,
 		Force:                  cleanForce,
 		IncludeActiveWorktrees: cleanIncludeActiveWorktrees,
@@ -252,8 +254,57 @@ func runCleanJSON(cmd *cobra.Command) {
 	if err != nil {
 		failCleanJSON("cleanup plan projection failed")
 	}
-	if err := encodeCleanJSON(os.Stdout, document); err != nil {
-		failCleanJSON("cleanup plan encoding failed")
+	if cleanDryRun {
+		if err := encodeCleanJSON(os.Stdout, document); err != nil {
+			failCleanJSON("cleanup plan encoding failed")
+		}
+		return
+	}
+
+	plan, err := unifiedCleanupPlanForClean(
+		ctx,
+		guidedStatePtr,
+		overlapSelection.Targets,
+		cleanupPlanEvidence(result, source, time.Now()),
+	)
+	if err != nil {
+		failCleanJSON("cleanup plan preparation failed")
+	}
+	selected := plan.SelectedPhysicalTargets()
+	if guidedStatePtr != nil {
+		logicalInputs = applyGuidedPolicyReasons(logicalInputs, *guidedStatePtr)
+	}
+	executionSelection, err := applyCleanupOverlapSafetyWithRows(
+		ctx,
+		overlapSafety,
+		selected,
+		logicalInputs,
+	)
+	if err != nil {
+		failCleanJSON("cleanup execution safety preparation failed")
+	}
+	prepared := prepareCleanExecutionWithOptions(ctx, executionSelection, overlapSafety, opts)
+	components := buildCleanJSONSnapshotComponents(
+		plan,
+		audit.Components,
+		result.Worktrees,
+		auditProtections,
+	)
+	receipt, executionErr := executeCleanJSONReceipt(
+		ctx,
+		document,
+		components,
+		plan,
+		prepared,
+		cleanForce,
+		cleanInteractive,
+	)
+	if err := encodeCleanJSONReceipt(os.Stdout, receipt); err != nil {
+		failCleanJSON("cleanup receipt encoding failed")
+	}
+	if executionErr != nil || receipt.Status != cleanJSONReceiptSucceeded {
+		fmt.Fprintln(os.Stderr, "error: cleanup execution did not succeed")
+		os.Exit(1)
 	}
 }
 
@@ -1003,7 +1054,8 @@ func cleanJSONReasonCode(code string) string {
 	switch code {
 	case "classic_eligible", "agent_state_orphaned", "contains_locked_target", "overlaps_locked_target", "worktree_policy_decision",
 		"current_working_directory", "git_dirty_or_untracked", "git_evidence_unavailable", "git_detached_head_unreferenced", "activity_evidence_unavailable", "recent_activity", "retained_per_repository", "younger_than_min_idle_age", "below_min_size", "cleanup_recommended", "git_attached_local_branch", "git_detached_head_reachable",
-		"filtered", "risky_requires_opt_in", "active_worktree", "worktree_requires_review", "minimum_age", "agent_state_live", "agent_state_undetermined", "eligible", "missing_path", "duplicate_path", "nested_target", "overlap_target", "protected_agent_state_ancestor", "protected_agent_state_descendant", "ambiguous_overlap_identity", "command_overlap", "nested_revalidation", "nested_revalidation_required", "scan_evidence_unavailable", "protected_overlap", "not_selected", "policy_protected", "policy_decision", "git_dirty_files", "git_upstream_unavailable", "git_unpushed_commits":
+		"filtered", "risky_requires_opt_in", "active_worktree", "worktree_requires_review", "minimum_age", "agent_state_live", "agent_state_undetermined", "eligible", "missing_path", "duplicate_path", "nested_target", "overlap_target", "protected_agent_state_ancestor", "protected_agent_state_descendant", "ambiguous_overlap_identity", "command_overlap", "nested_revalidation", "nested_revalidation_required", "scan_evidence_unavailable", "protected_overlap", "not_selected", "policy_protected", "policy_decision", "git_dirty_files", "git_upstream_unavailable", "git_unpushed_commits",
+		"removed", "partial_failure", "execution_failed", "cancelled", "physical_owner_present", "command_fallback_path_removal", "safety_refused", "execution_set_mismatch", "plan_validation_failed", "cancelled_before_execution", "cancelled_after_confirmation", "cancelled_after_execution", "cancelled_during_confirmation", "confirmation_cancelled", "invalid_confirmation", "not_confirmed", "execution_not_recorded", "execution_state":
 		return code
 	default:
 		return "policy_decision"

@@ -22,19 +22,16 @@
 - `Evidence-Based Worktree Reclamation` milestone #5 is complete. It shipped
   v0.8.0 with cleanup-unit identity, ref reachability, per-repository retention,
   unified activity evidence, and Git-aware active removal.
-- Milestone #6 `0.8.x Reliability & Trust` completed its implementation scope:
-  default-flow visibility, selector validation, truthful exit status,
-  partial-scan semantics, black-box contracts, and public trust surfaces.
-  Release gate #111 remains open and explicitly deferred pending maintainer
-  approval, so milestone #6 stays open without a tag or promised date.
-- The next active product initiative is milestone #7 `0.9.x Unified Cleanup
-  Experience`: replace the interim guided-then-classic handoff with one
-  inspectable cleanup plan, mixed-category review, and a single confirmation
-  and execution contract.
-- Planned follow-on milestones have no due dates: #7 `0.9.x Unified Cleanup
-  Experience`, #8 `0.x OSS Distribution & Release Trust`, and #9 `0.x
-  Automation & Schema`. Long-horizon configuration and performance work stays
-  in the existing `Future` milestone.
+- v0.9.0 shipped the unified cleanup experience. PR #198 subsequently added the
+  versioned, path-redacted `clean --dry-run --json` plan contract; #125 remains
+  open for real-execution receipts and exit/status agreement.
+- The 0.10.x agent-state coverage sprint closed with its actionable scope
+  shipped. #142 L2/L3 remain externally blocked on producer identity and
+  all-writer fencing; do not manufacture a local cleanup proof. #141 remains
+  parked at `0a47323` and requires a fresh-main audit before publication.
+- Planned follow-on milestones have no due dates: #8 `0.x OSS Distribution &
+  Release Trust` and #9 `0.x Automation & Schema`. Long-horizon configuration
+  and performance work stays in the existing `Future` milestone.
 
 ## Release Posture
 

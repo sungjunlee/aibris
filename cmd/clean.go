@@ -61,11 +61,9 @@ review displays protected targets as locked rows.`,
 			os.Exit(1)
 		}
 		if cleanJSON {
-			if cleanInteractive {
-				failCleanJSON("--interactive cannot be used with --json")
-			}
-			if !cleanDryRun {
-				failCleanJSON("execution receipts are not yet supported; use --dry-run")
+			if !cleanDryRun && !cleanForce && !cleanInteractive {
+				fmt.Fprintln(os.Stderr, "error: non-dry-run --json requires --force or --interactive")
+				os.Exit(1)
 			}
 			runCleanJSON(cmd)
 			return
@@ -448,7 +446,7 @@ func init() {
 		"Comma-separated tools ("+strings.Join(toolStrings(validCleanTools), ",")+")",
 	)
 	cleanCmd.Flags().BoolVar(&cleanDryRun, "dry-run", false, "Preview without deleting")
-	cleanCmd.Flags().BoolVar(&cleanJSON, "json", false, "Emit a machine-readable cleanup plan")
+	cleanCmd.Flags().BoolVar(&cleanJSON, "json", false, "Emit a machine-readable cleanup plan or execution receipt")
 	cleanCmd.Flags().BoolVar(&cleanIncludePaths, "include-paths", false, "Include paths and cleanup commands in JSON output")
 	cleanCmd.Flags().BoolVarP(&cleanInteractive, "interactive", "i", false, "Confirm each deletion")
 	cleanCmd.Flags().BoolVar(&cleanRisky, "risky", false, "Include risky categories (ai-logs)")

@@ -20,10 +20,10 @@ taxonomy are not JSON fields or values. They do not extend `category` or
 `classification`. This document describes only the shipped schema.
 
 `aibris clean --dry-run --json` ships a separate versioned `clean_plan`
-document. It is a read-only phase-1 plan surface; execution receipts,
-cancellation receipts, replayable manifests, and receipt files remain future
-work. `aibris clean --json` without `--dry-run` therefore fails clearly rather
-than attempting execution.
+document. Non-dry-run `aibris clean --json` executes the plan built in the
+current process and emits one versioned `clean_receipt` document. Plans and
+receipts are not accepted as external execution inputs; there is no replay
+command or persistent receipt store.
 
 Phase-1 cleanup fails closed before encoding a `clean_plan` when the scan is
 partial. Consequently, every emitted `clean_plan` has `evidence.complete: true`;
@@ -258,8 +258,10 @@ projection or its diagnostics. The execution-layer selector, manifest, and
 ### Invocation and privacy
 
 ```bash
-aibris clean --dry-run --json
+aibris clean --no-guide --dry-run --json
 aibris clean --no-guide --dry-run --json --include-paths
+aibris clean --no-guide --json --force
+aibris clean --no-guide --json --interactive
 ```
 
 The default clean JSON document is path-redacted. Its successful stdout is
@@ -269,9 +271,24 @@ path, or internal canonical key. `--include-paths` opts in to explicit
 `path`, `project`, and `cleanup_command` fields on logical rows and `path` on
 physical targets. It never includes external command output.
 
-`--interactive --json` and `--include-paths` without `--json` fail. JSON mode
-never prompts: guided cleanup uses the existing deterministic defaults
-(recommended rows selected, reviewable rows held, and locked rows protected).
+`--include-paths` without `--json` fails. Non-dry-run `clean --json` requires
+either `--force` or `--interactive`; either takes the classic route. Use the
+same classic selectors for preview and execution (for example,
+`clean --no-guide --dry-run --json` and then
+`clean --no-guide --json --force`), changing only `--dry-run`. JSON mode never
+writes prompts or progress text to stdout: guided cleanup uses the existing deterministic
+defaults (recommended rows selected, reviewable rows held, and locked rows
+protected). Non-dry-run JSON uses the same redaction contract as the plan.
+
+`--force --json` attempts the complete selected set without a confirmation
+read. `--interactive --json` reads one silent line per selected physical target
+in embedded `plan.physical_targets` order:
+`y`/`yes` executes that target, `n`/`no` records it as non-requested
+`skipped`, and invalid or missing input cancels that target and the remaining
+requests. If deletion-time safety changes the selected physical-target set,
+the receipt fails closed before consuming confirmation input. A confirmation is followed by the unified plan validation, and the
+prepared executor repeats target identity, cached-evidence, Git, and
+agent-state checks immediately before mutation.
 
 ### Shape
 
@@ -388,3 +405,70 @@ The human cleanup review uses evaluated policy descriptions, not machine reason
 codes. Guided rows keep their aggregate explanation once; reason entries with
 empty descriptions are omitted from human text, while all stable codes remain
 available in the JSON plan.
+
+## Clean execution receipt
+
+Non-dry-run JSON execution emits a single top-level receipt:
+
+```json
+{
+  "schema_version": 1,
+  "document_type": "clean_receipt",
+  "mode": "execute",
+  "paths_included": false,
+  "status": "succeeded",
+  "plan": { "document_type": "clean_plan", "mode": "dry_run" },
+  "totals": {
+    "requested": 1,
+    "removed": 1,
+    "partial": 0,
+    "failed": 0,
+    "cancelled": 0,
+    "protected": 0,
+    "reviewable": 0,
+    "skipped": 0,
+    "freed_bytes": 4096
+  },
+  "physical_targets": [
+    {
+      "id": "target-1",
+      "decision": "selected",
+      "state": "removed",
+      "requested": true,
+      "bytes": 4096,
+      "freed_bytes": 4096,
+      "physical_removed": true,
+      "category": "node_modules",
+      "tool": "node_modules",
+      "cleanup_kind": "remove-path",
+      "reason_codes": ["classic_eligible", "removed"]
+    }
+  ]
+}
+```
+
+The embedded `plan` is the accepted plan built in the same process. Its
+document-local `target-*` IDs are reused by receipt `physical_targets`; no
+path-derived or externally supplied ID authorizes execution. Receipt target
+rows are physical owners only. Logical rows remain inside the embedded plan
+and never contribute bytes.
+
+`status` is one of `succeeded`, `partial_failure`, `failed`, or `cancelled`.
+Only `succeeded` exits zero. Receipt accounting is physical-target based:
+
+- `requested = removed + partial + failed + cancelled`;
+- protected, reviewable, and skipped targets are not requested;
+- `freed_bytes` is credited only for a target whose physical owner was
+  verified absent after its mutation; it is never inferred from logical rows;
+- `partial_failure` means execution both made progress or left a partial
+  mutation and encountered a partial, failed, or cancelled request;
+- `failed` means at least one requested target failed without any successful
+  or partial mutation; `cancelled` means requests were cancelled without a
+  removal, partial mutation, or failure.
+
+The default receipt is redacted exactly like the plan. With `--include-paths`,
+physical target paths and the embedded plan's logical paths, projects, and
+cleanup commands are included. Error and refusal reason codes remain stable
+and path-free; external command output is never copied into JSON. A
+`command_fallback_path_removal` reason code records that a missing planned
+cleanup command reached its safe path-removal fallback.

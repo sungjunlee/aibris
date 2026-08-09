@@ -389,6 +389,9 @@ func TestCleanJSONPolicyDecisionFallbackUsesPropagatedSelectionOnly(t *testing.T
 }
 
 func TestCleanJSONReasonCodeAllowListPreservesKnownCodes(t *testing.T) {
+	if got := cleanJSONReasonCode("command_fallback_path_removal"); got != "command_fallback_path_removal" {
+		t.Fatalf("command fallback reason code normalized to %q", got)
+	}
 	decisionCodes := []DecisionReasonCode{
 		DecisionReasonCurrentWorkingDirectory,
 		DecisionReasonDirtyWorktree,
@@ -1005,8 +1008,6 @@ func TestCleanJSONFlagFailuresArePathFree(t *testing.T) {
 		args []string
 		want string
 	}{
-		{name: "execution receipts", args: []string{"clean", "--json"}, want: "execution receipts are not yet supported"},
-		{name: "interactive", args: []string{"clean", "--dry-run", "--json", "--interactive"}, want: "cannot be used with --json"},
 		{name: "include paths", args: []string{"clean", "--dry-run", "--include-paths"}, want: "requires --json"},
 		{name: "guide and no guide", args: []string{"clean", "--dry-run", "--json", "--guide", "--no-guide"}, want: "cannot use --guide with --no-guide"},
 	}

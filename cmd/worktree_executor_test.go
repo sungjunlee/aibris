@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -112,6 +113,270 @@ func TestExecuteActiveWorktreeKeepsReferencedDetachedCommitReachable(t *testing.
 	containing := runGitFixtureOutput(t, repository, "for-each-ref", "--format=%(refname)", "--contains="+headOID, "refs/heads", "refs/remotes")
 	if strings.TrimSpace(containing) == "" {
 		t.Fatalf("detached commit %s is no longer reachable from a named ref", headOID)
+	}
+}
+
+func TestExecuteActiveWorktreeRemovesMultiMemberUnitWithDefaultAge(t *testing.T) {
+	home, repository, target, first, second := newExecutorMultiMemberUnit(t)
+	testutil.SetHome(t, home)
+	item := executorWorktreeItem(target, 900)
+	selected := buildExecutorUnit(t, item)
+
+	receipt, err := executePreparedCleanTargets(
+		context.Background(),
+		[]preparedCleanTarget{preparedExecutorTarget(t, item, selected)},
+		defaultActiveWorktreeExecutionOptions(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unit := singleExecutionUnit(t, receipt)
+	if unit.State != cleanExecutionRemoved || !unit.PhysicalRemoved || unit.FreedBytes != item.Size || receipt.FreedBytes != item.Size {
+		t.Fatalf("unit = %+v, total freed=%d; want multi-member removal with default age", unit, receipt.FreedBytes)
+	}
+	if len(unit.Members) != 2 {
+		t.Fatalf("member receipts = %+v; want two members", unit.Members)
+	}
+	for _, member := range unit.Members {
+		if !member.Removed || member.Error != "" {
+			t.Errorf("member receipt = %+v; want removed", member)
+		}
+	}
+	for _, worktree := range []string{first, second} {
+		if !pathDoesNotExist(worktree) {
+			t.Errorf("worktree %q still exists", worktree)
+		}
+		assertRepositoryDoesNotListWorktree(t, repository, worktree)
+	}
+}
+
+func TestExecutePreparedCommandCancellationAfterStartRemainsFailed(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell command fixture is Unix-specific")
+	}
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	targetPath := filepath.Join(home, ".cache", "command-cancelled")
+	if err := os.MkdirAll(targetPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(home, "command-started")
+	command := filepath.Join(t.TempDir(), "cancel-after-start")
+	writeJSONReceiptExecutable(t, command, "#!/bin/sh\ntouch \"$1\"\nsleep 5\n")
+	target := types.DebrisInfo{
+		ID:             "command-cancelled",
+		Tool:           types.ToolBuildCache,
+		Category:       types.CategoryBuildCache,
+		Path:           targetPath,
+		Size:           17,
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{command, marker},
+	}
+	runtime := staticOverlapSafetyRuntime(nil, nil)
+	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared := prepareCleanExecutionWithSafety(context.Background(), selection, runtime)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		for {
+			if _, err := os.Lstat(marker); err == nil {
+				cancel()
+				return
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}()
+
+	receipt, err := executePreparedCleanTargets(ctx, prepared, defaultActiveWorktreeExecutionOptions())
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("execution error = %v; want context cancellation", err)
+	}
+	unit := singleExecutionUnit(t, receipt)
+	if unit.State != cleanExecutionFailed || unit.PhysicalRemoved || unit.FreedBytes != 0 {
+		t.Fatalf("cancelled command receipt = %+v; want failed with retained physical owner", unit)
+	}
+	assertPathExists(t, targetPath)
+}
+
+func TestExecutePreparedCommandRemovingOwnerThenFailingIsPartial(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell command fixture is Unix-specific")
+	}
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	targetPath := filepath.Join(home, ".cache", "command-removes-owner")
+	if err := os.MkdirAll(targetPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	command := filepath.Join(t.TempDir(), "remove-then-fail")
+	writeJSONReceiptExecutable(t, command, "#!/bin/sh\nrm -rf \"$1\"\nexit 7\n")
+	target := types.DebrisInfo{
+		ID:             "command-removes-owner",
+		Tool:           types.ToolBuildCache,
+		Category:       types.CategoryBuildCache,
+		Path:           targetPath,
+		Size:           29,
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{command, targetPath},
+	}
+	runtime := staticOverlapSafetyRuntime(nil, nil)
+	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetIDKey := cleanJSONReceiptItemKey(target)
+	execution, err := executePreparedCleanTargets(
+		context.Background(),
+		prepareCleanExecutionWithSafety(context.Background(), selection, runtime),
+		quietActiveWorktreeExecutionOptions(),
+	)
+	if err == nil {
+		t.Fatal("command failure unexpectedly succeeded")
+	}
+	unit := singleExecutionUnit(t, execution)
+	if unit.State != cleanExecutionPartial || !unit.PhysicalRemoved || !unit.MutationAttempted || unit.FreedBytes != target.Size {
+		t.Fatalf("owner-removed command failure = %+v; want partial physical removal", unit)
+	}
+	jsonReceipt := cleanJSONReceipt{PhysicalTargets: []cleanJSONReceiptPhysicalTarget{{
+		ID: "target-1", State: cleanJSONReceiptPending, Bytes: target.Size,
+	}}}
+	if err := applyCleanJSONExecutionReceipt(&jsonReceipt, map[string]string{targetIDKey: "target-1"}, execution); err != nil {
+		t.Fatal(err)
+	}
+	finalized, finalizeErr := finishCleanJSONReceipt(jsonReceipt, err)
+	if finalizeErr == nil || finalized.Status != cleanJSONReceiptPartialFailure || finalized.Totals.Requested != 1 ||
+		finalized.Totals.Partial != 1 || finalized.Totals.FreedBytes != target.Size {
+		t.Fatalf("owner-removed JSON receipt = %+v error=%v", finalized, finalizeErr)
+	}
+}
+
+func TestExecutePreparedExternallyRemovedBeforeBarrierDoesNotClaimPartial(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	targetPath := filepath.Join(home, ".cache", "removed-before-barrier")
+	if err := os.MkdirAll(targetPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	target := types.DebrisInfo{
+		ID:             "removed-before-barrier",
+		Tool:           types.ToolBuildCache,
+		Category:       types.CategoryBuildCache,
+		Path:           targetPath,
+		Size:           30,
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{"definitely-missing-aibris-cleaner"},
+	}
+	runtime := staticOverlapSafetyRuntime(nil, nil)
+	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared := prepareCleanExecutionWithSafety(context.Background(), selection, runtime)
+	if err := os.RemoveAll(targetPath); err != nil {
+		t.Fatal(err)
+	}
+	execution, err := executePreparedCleanTargets(
+		context.Background(), prepared, quietActiveWorktreeExecutionOptions(),
+	)
+	if err == nil {
+		t.Fatal("pre-mutation disappearance unexpectedly succeeded")
+	}
+	unit := singleExecutionUnit(t, execution)
+	if unit.State != cleanExecutionFailed || !unit.PhysicalRemoved || unit.MutationAttempted || unit.FreedBytes != 0 {
+		t.Fatalf("pre-mutation disappearance receipt = %+v; want failed with zero credited bytes", unit)
+	}
+}
+
+func TestExecutePreparedCommandRemovingOwnerThenCancelledIsPartial(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell command fixture is Unix-specific")
+	}
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	targetPath := filepath.Join(home, ".cache", "command-removes-then-cancels")
+	if err := os.MkdirAll(targetPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(home, "command-owner-removed")
+	command := filepath.Join(t.TempDir(), "remove-then-wait")
+	writeJSONReceiptExecutable(t, command, "#!/bin/sh\nrm -rf \"$1\"\ntouch \"$2\"\nsleep 5\n")
+	target := types.DebrisInfo{
+		ID:             "command-removes-then-cancels",
+		Tool:           types.ToolBuildCache,
+		Category:       types.CategoryBuildCache,
+		Path:           targetPath,
+		Size:           31,
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{command, targetPath, marker},
+	}
+	runtime := staticOverlapSafetyRuntime(nil, nil)
+	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		for {
+			if _, err := os.Lstat(marker); err == nil {
+				cancel()
+				return
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}()
+	execution, err := executePreparedCleanTargets(
+		ctx,
+		prepareCleanExecutionWithSafety(context.Background(), selection, runtime),
+		quietActiveWorktreeExecutionOptions(),
+	)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("execution error = %v; want context cancellation", err)
+	}
+	unit := singleExecutionUnit(t, execution)
+	if unit.State != cleanExecutionPartial || !unit.PhysicalRemoved || !unit.MutationAttempted || unit.FreedBytes != target.Size {
+		t.Fatalf("owner-removed command cancellation = %+v; want partial physical removal", unit)
+	}
+}
+
+func TestExecutePreparedMissingCommandRecordsFallbackPathRemoval(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	targetPath := filepath.Join(home, ".cache", "command-fallback")
+	if err := os.MkdirAll(targetPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	target := types.DebrisInfo{
+		ID:             "command-fallback",
+		Tool:           types.ToolBuildCache,
+		Category:       types.CategoryBuildCache,
+		Path:           targetPath,
+		Size:           19,
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{"definitely-missing-aibris-cleaner"},
+	}
+	runtime := staticOverlapSafetyRuntime(nil, nil)
+	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := executePreparedCleanTargets(
+		context.Background(),
+		prepareCleanExecutionWithSafety(context.Background(), selection, runtime),
+		quietActiveWorktreeExecutionOptions(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unit := singleExecutionUnit(t, receipt)
+	if unit.State != cleanExecutionRemoved || !unit.PhysicalRemoved || !unit.CommandFallbackPathRemoval {
+		t.Fatalf("fallback command receipt = %+v; want physically removed fallback", unit)
+	}
+	if !pathDoesNotExist(targetPath) {
+		t.Fatalf("fallback path %q still exists", targetPath)
 	}
 }
 
@@ -318,6 +583,40 @@ func TestExecuteActiveWorktreeReportsPartialMultiMemberResultWithoutFreedBytes(t
 			t.Errorf("partial receipt missing %q:\n%s", want, output)
 		}
 	}
+}
+
+func TestExecuteActiveWorktreePreservesPartialReceiptWhenBarrierFailsBetweenMembers(t *testing.T) {
+	home, repository, target, first, second := newExecutorMultiMemberUnit(t)
+	testutil.SetHome(t, home)
+	item := executorWorktreeItem(target, 1024)
+	selected := buildExecutorUnit(t, item)
+	opts := defaultActiveWorktreeExecutionOptions()
+	realRemove := opts.removeWorktree
+	opts.removeWorktree = realRemove
+	prepared := preparedExecutorTarget(t, item, selected)
+	refreshCalls := 0
+	prepared.MutationSafety.runtime.Refresh = func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
+		refreshCalls++
+		if refreshCalls >= 3 {
+			return cleaner.OverlapSafetyEvidence{}, errors.New("injected second-member safety refresh failure")
+		}
+		return cleaner.OverlapSafetyEvidence{Complete: true}, nil
+	}
+
+	receipt, err := executePreparedCleanTargets(context.Background(), []preparedCleanTarget{prepared}, opts)
+	if err == nil || !strings.Contains(err.Error(), "second-member safety refresh failure") {
+		t.Fatalf("between-member barrier error = %v", err)
+	}
+	unit := singleExecutionUnit(t, receipt)
+	if unit.State != cleanExecutionPartial || unit.PhysicalRemoved || unit.FreedBytes != 0 ||
+		len(unit.Members) != 2 || !unit.Members[0].Removed || unit.Members[1].Removed {
+		t.Fatalf("between-member cancellation receipt = %+v", unit)
+	}
+	if !pathDoesNotExist(first) || pathDoesNotExist(second) {
+		t.Fatalf("member mutation state first=%t second=%t; want only first removed", pathDoesNotExist(first), pathDoesNotExist(second))
+	}
+	assertRepositoryDoesNotListWorktree(t, repository, first)
+	assertRepositoryListsWorktree(t, repository, second)
 }
 
 func TestGitWorktreeRemoveArgsNeverIncludeForce(t *testing.T) {

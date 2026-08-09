@@ -107,8 +107,10 @@ aibris scan --json             # machine-readable output (see docs/JSON_SCHEMA.m
 aibris scan --root ~/.codex    # narrow scan to a home subdirectory
 
 aibris clean --dry-run         # preview without deleting
-aibris clean --dry-run --json  # redacted machine-readable cleanup plan
-aibris clean --dry-run --json --include-paths  # opt in to plan paths
+aibris clean --no-guide --dry-run --json  # redacted machine-readable cleanup plan
+aibris clean --no-guide --dry-run --json --include-paths  # opt in to plan paths
+aibris clean --no-guide --json --force    # execute and emit a redacted receipt
+aibris clean --no-guide --json --interactive  # silent stdin confirmations, JSON only
 aibris clean --no-guide --dry-run # force classic cleanup audit
 aibris clean                   # delete with confirmation
 aibris clean --root ~/.codex --dry-run
@@ -204,7 +206,7 @@ targets
 For automation, use the phase-1 dry-run plan:
 
 ```bash
-aibris clean --dry-run --json
+aibris clean --no-guide --dry-run --json
 aibris clean --no-guide --dry-run --json --include-paths
 ```
 
@@ -218,9 +220,29 @@ Phase-1 clean fails closed before emitting this document if any scan provider
 failed, so an emitted plan always has `evidence.complete: true`. In mixed
 auto-guided output, `policy.minimum_age` remains the classic `7d` filter while
 the optional guided minimum idle age is reported separately as `3d`.
-Execution JSON receipts, replayable manifests, cancellation receipts, and
-receipt files are not shipped yet; `clean --json` without `--dry-run` fails
-with that phase-2 status.
+Non-dry-run JSON requires `--force` or `--interactive`; either takes the
+classic route and executes the plan built in the current process and emits one
+versioned `clean_receipt` document. The receipt embeds the accepted redacted
+plan, uses the same document-local physical target IDs, and exits zero only
+for a `succeeded` status. `--include-paths` opts in to the same path, project,
+and cleanup command fields as the dry-run plan.
+
+JSON execution never writes prompts or progress text to stdout. For a classic
+`--force` or `--interactive` execution, use the same selectors for preview
+and execution (for example,
+`clean --no-guide --dry-run --json` followed by
+`clean --no-guide --json --force`), changing only `--dry-run`. With
+`--force`, all selected physical targets are attempted. `--interactive --json`
+reads one silent confirmation line per selected target in embedded
+`plan.physical_targets` order: `y`/`yes` executes, `n`/`no` records a
+non-requested `skipped` target, and invalid or missing input cancels the
+remaining requests.
+If deletion-time safety changes the selected physical-target set, JSON fails
+closed before consuming any confirmation input.
+`requested` always equals `removed + partial + failed + cancelled`; protected,
+reviewable, and skipped targets are not requests. `freed_bytes` is credited
+only when the physical owner is verified absent, so logical rows never add
+bytes. JSON execution never accepts an external plan or receipt for replay.
 
 When active Codex worktrees are the useful cleanup decision and no classic
 cleanup selector is supplied, `aibris clean --dry-run` opens guided Codex

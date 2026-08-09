@@ -1,7 +1,7 @@
 ---
 id: AIB-141
 title: Generalize guided worktree review beyond codex
-status: To Do
+status: Done
 labels:
   - enhancement
   - cli
@@ -12,6 +12,11 @@ milestone: 0.10.x Agent State Store Coverage
 created_date: '2026-07-26'
 ---
 ## Description
+
+> **Mirror disposition:** `Done` records only this sprint's completed
+> classification boundary. Canonical GitHub issue #141 remains open and blocked;
+> its delivery acceptance criteria below are unmet.
+
 ## Goal
 
 Let guided review admit worktree units from any agent tool. The largest single

@@ -1,7 +1,7 @@
 ---
 id: AIB-146
 title: Replace the absolute scan-time baseline with a same-session delta method
-status: To Do
+status: Done
 labels:
   - documentation
   - docs
@@ -51,4 +51,3 @@ Epic #137 adds four to five providers across #138, #139, #140, and #142. `~/.cod
 
 - Optimizing scan performance. This issue is about being able to measure it.
 - The repeatable full-home performance budgets in #129, which this unblocks but does not replace.
-
