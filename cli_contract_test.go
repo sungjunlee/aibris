@@ -553,6 +553,11 @@ func TestCLIContractCleanupFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	old := time.Now().Add(-8 * 24 * time.Hour)
+	// Cache staleness comes from the newest mtime anywhere in the tree, so an
+	// idle cache fixture has to backdate its entries as well as its container.
+	if err := os.Chtimes(filepath.Join(cache, "entry"), old, old); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Chtimes(cache, old, old); err != nil {
 		t.Fatal(err)
 	}

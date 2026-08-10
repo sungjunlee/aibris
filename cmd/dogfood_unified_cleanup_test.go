@@ -52,6 +52,7 @@ func TestDogfoodUnifiedJourneyRepresentativeHome(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(goBuild, "aa", "bb"), 0755); err != nil {
 		t.Fatal(err)
 	}
+	chtimesTree(t, goBuild, old)
 	for _, path := range []string{modules, goBuild, safePath, safePathB, lockedPath, orphanedPath} {
 		target := old
 		if path == orphanedPath {

@@ -175,7 +175,7 @@ item list, not as a worktree-only list.
 | `source` | string | Worktree source such as `.codex`, `.somename`, `project-local`, or the registered `superpowers`; empty for non-worktree items. Superpowers rows use `tool=unknown`. |
 | `path` | string | Absolute filesystem path |
 | `size` | integer | Size in bytes |
-| `mod_time` | string | Last modification time in RFC 3339 format |
+| `mod_time` | string | Last modification time in RFC 3339 format. For `build-cache` and `other-cache` rows this is the newest mtime found anywhere in the cache tree, not the path's own mtime. |
 | `status` | string | Worktree health (`active`, `orphaned`, `plain-dir`) or empty for non-worktree items. Only scanner-validated `active` and `orphaned` worktree rows can enter cleanup safety; `plain-dir`, empty, and unknown values are review-only. |
 | `classification` | string | Agent-state health (`live`, `orphaned`, `undetermined`), omitted for items outside `agent-state`. Cursor project-store entries derive this from all distinct absolute `workspacePath=` values in `worker.log` that are outside `~/.cursor`; any live path wins and `orphaned` requires every usable path to be proven absent. |
 | `risk` | string | Derived cleanup risk (`low`, `medium`, `high`) |

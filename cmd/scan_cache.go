@@ -15,7 +15,7 @@ import (
 const (
 	// Bump this explicit compatibility revision when cache format or provider
 	// behavior changes without a concrete provider-membership change.
-	lastScanCacheSchemaVersion = 5
+	lastScanCacheSchemaVersion = 6
 	lastScanCacheMaxAge        = 5 * time.Minute
 )
 

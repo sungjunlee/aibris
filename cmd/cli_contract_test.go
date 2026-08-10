@@ -276,10 +276,7 @@ func writeNestedOverlapCLIContractFixture(
 	if err := os.Symlink(agentRoot, filepath.Join(claudeDir, "projects")); err != nil {
 		t.Skipf("symlink unavailable: %v", err)
 	}
-	old := time.Now().Add(-48 * time.Hour)
-	if err := os.Chtimes(outer, old, old); err != nil {
-		t.Fatal(err)
-	}
+	chtimesTree(t, outer, time.Now().Add(-48*time.Hour))
 	return outer, filepath.Join(home, ".claude", "projects", "nested-claude")
 }
 

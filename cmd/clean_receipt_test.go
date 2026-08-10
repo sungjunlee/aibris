@@ -539,10 +539,7 @@ func writeJSONReceiptFixture(t *testing.T, path, contents string) {
 	if err := os.WriteFile(filepath.Join(path, "payload"), []byte(contents), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	old := time.Now().Add(-48 * time.Hour)
-	if err := os.Chtimes(path, old, old); err != nil {
-		t.Fatal(err)
-	}
+	chtimesTree(t, path, time.Now().Add(-48*time.Hour))
 }
 
 func writeJSONReceiptExecutable(t *testing.T, path, contents string) {

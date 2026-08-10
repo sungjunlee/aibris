@@ -1,17 +1,47 @@
 package cmd
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/types"
 )
+
+// errCleanupTargetYoungerThanMinimumAge marks an age refusal so JSON consumers
+// can tell "the target went live again, retry later" apart from "removal
+// failed". It never reaches the human message.
+var errCleanupTargetYoungerThanMinimumAge = errors.New("cleanup target is younger than the configured minimum age")
+
+type cleanupTargetMinimumAgeError struct {
+	path       string
+	minimumAge time.Duration
+}
+
+func (e cleanupTargetMinimumAgeError) Error() string {
+	return fmt.Sprintf("%q is younger than the configured minimum age %s", e.path, e.minimumAge)
+}
+
+func (e cleanupTargetMinimumAgeError) Unwrap() error {
+	return errCleanupTargetYoungerThanMinimumAge
+}
 
 type cleanupTargetSnapshot struct {
 	path       string
 	info       os.FileInfo
 	minimumAge time.Duration
+	// activityDerived marks items whose ModTime comes from anywhere in the tree
+	// instead of the path's own stat, so the age signal has to be re-derived
+	// with a walk. captureCleanupTargetSnapshot sets it only when minimumAge is
+	// non-zero, which excludes active worktree units by construction — that is
+	// what keeps the per-member validate loop from walking anything.
+	activityDerived bool
+	// scanActivityModTime is the scan's activity signal for such items. It is a
+	// floor rather than the answer: it can only be stale in the idle direction.
+	scanActivityModTime time.Time
 }
 
 func refreshCleanupInventoryMetadata(items []types.DebrisInfo) {
@@ -26,7 +56,21 @@ func refreshCleanupInventoryMetadata(items []types.DebrisInfo) {
 		if err != nil {
 			continue
 		}
-		items[i].ModTime = info.ModTime()
+		pathModTime := info.ModTime()
+		if items[i].PathModTime.IsZero() {
+			items[i].ModTime = pathModTime
+			continue
+		}
+		// ModTime here is activity from anywhere in the tree. Re-walking a
+		// multi-gigabyte cache would undo the "no extra traversal" property of
+		// that signal, and the scan this refresh corrects is at most
+		// lastScanCacheMaxAge old, so the refresh only ever raises the recorded
+		// activity. Never lowering it is fail-closed, and a newer container
+		// mtime still catches direct changes since the scan.
+		if pathModTime.After(items[i].ModTime) {
+			items[i].ModTime = pathModTime
+		}
+		items[i].PathModTime = pathModTime
 	}
 }
 
@@ -72,13 +116,25 @@ func captureCleanupTargetSnapshot(
 		info:       info,
 		minimumAge: minimumAge,
 	}
-	if err := snapshot.validateAge(info, time.Now()); err != nil {
+	if !item.PathModTime.IsZero() && minimumAge > 0 {
+		snapshot.activityDerived = true
+		snapshot.scanActivityModTime = item.ModTime
+	}
+	// Cheap early rejection only. Preparation runs before the confirmation
+	// prompt, so anything decided here is already stale by the time the target
+	// is actually removed; validate re-derives the signal at that moment.
+	if err := snapshot.validateAge(snapshot.recordedActivity(info), time.Now()); err != nil {
 		return nil, fmt.Errorf("cleanup target changed since scan: %w", err)
 	}
 	return snapshot, nil
 }
 
-func (s cleanupTargetSnapshot) validate() error {
+// validate is the last line of defence: it runs inside the pre-mutation
+// barrier, immediately before the target is removed and before any cleanup
+// command. The age recheck therefore belongs here rather than in preparation,
+// which in interactive mode happens before the first y/N prompt — an unbounded
+// window during which a cache can go live again.
+func (s cleanupTargetSnapshot) validate(ctx context.Context) error {
 	current, err := os.Lstat(s.path)
 	if err != nil {
 		return fmt.Errorf("cleanup target changed since cleanup selection: %q: %w", s.path, err)
@@ -97,7 +153,7 @@ func (s cleanupTargetSnapshot) validate() error {
 			current.ModTime().Format(time.RFC3339Nano),
 		)
 	}
-	if err := s.validateAge(current, time.Now()); err != nil {
+	if err := s.validateAge(s.liveActivity(ctx, current), time.Now()); err != nil {
 		return fmt.Errorf("cleanup target changed since cleanup selection: %w", err)
 	}
 	return nil
@@ -127,13 +183,36 @@ func (s *cleanupTargetSnapshot) refreshAfterMutation() (ownerRemoved bool, err e
 	return false, nil
 }
 
-func (s cleanupTargetSnapshot) validateAge(info os.FileInfo, observedAt time.Time) error {
-	if s.minimumAge <= 0 || info.ModTime().Before(observedAt.Add(-s.minimumAge)) {
+// recordedActivity is the newest activity known without touching the
+// filesystem beyond the stat the caller already holds.
+func (s cleanupTargetSnapshot) recordedActivity(info os.FileInfo) time.Time {
+	modTime := info.ModTime()
+	if s.scanActivityModTime.After(modTime) {
+		modTime = s.scanActivityModTime
+	}
+	return modTime
+}
+
+// liveActivity re-derives the activity signal for a target whose ModTime comes
+// from inside the tree: the path's own mtime alone would let a cache that is
+// still being written to underneath pass as idle. Taking the latest of the
+// three signals keeps this fail-closed — a walk that is cut short, hits an
+// unreadable subtree, or returns the zero time can only fall back to what is
+// already known, never below it.
+func (s cleanupTargetSnapshot) liveActivity(ctx context.Context, info os.FileInfo) time.Time {
+	activity := s.recordedActivity(info)
+	if !s.activityDerived || s.minimumAge <= 0 {
+		return activity
+	}
+	if fresh := adapter.NewestTreeModTime(ctx, s.path); fresh.After(activity) {
+		return fresh
+	}
+	return activity
+}
+
+func (s cleanupTargetSnapshot) validateAge(activity, observedAt time.Time) error {
+	if s.minimumAge <= 0 || activity.Before(observedAt.Add(-s.minimumAge)) {
 		return nil
 	}
-	return fmt.Errorf(
-		"%q is younger than the configured minimum age %s",
-		s.path,
-		s.minimumAge,
-	)
+	return cleanupTargetMinimumAgeError{path: s.path, minimumAge: s.minimumAge}
 }

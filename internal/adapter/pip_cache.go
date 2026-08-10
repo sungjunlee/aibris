@@ -56,13 +56,19 @@ func (a *PipCacheAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([]t
 		if err != nil || !info.IsDir() {
 			continue
 		}
+		activity := estimateDirActivity(ctx, p.path)
+		modTime := info.ModTime()
+		if activity.NewestModTime.After(modTime) {
+			modTime = activity.NewestModTime
+		}
 		item := types.DebrisInfo{
-			Tool:     types.ToolPipCache,
-			Category: types.CategoryOtherCache,
-			ID:       p.id,
-			Path:     p.path,
-			Size:     estimateDirSize(ctx, p.path),
-			ModTime:  info.ModTime(),
+			Tool:        types.ToolPipCache,
+			Category:    types.CategoryOtherCache,
+			ID:          p.id,
+			Path:        p.path,
+			Size:        activity.Size,
+			ModTime:     modTime,
+			PathModTime: info.ModTime(),
 		}
 		if len(p.command) > 0 {
 			item.CleanupKind = types.CleanupCommand

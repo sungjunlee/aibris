@@ -10,7 +10,21 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
+
+// dirActivity reports the total file bytes and the newest modification time
+// observed anywhere in a tree.
+type dirActivity struct {
+	Size          int64
+	NewestModTime time.Time
+}
+
+type dirActivityAccumulator struct {
+	modTimeMu        sync.Mutex
+	newestModTime    time.Time
+	hasReadableEntry bool
+}
 
 // estimateDirSize returns the total file size in bytes for the given path.
 // For regular files it returns the file's size directly.
@@ -19,26 +33,52 @@ import (
 // (no recursive goroutine spawning). This avoids the goroutine explosion that
 // occurs with per-directory goroutine spawning on deep, wide trees.
 func estimateDirSize(ctx context.Context, path string) int64 {
+	return estimateDirActivityWithOptions(ctx, path, false).Size
+}
+
+func estimateDirActivity(ctx context.Context, path string) dirActivity {
+	return estimateDirActivityWithOptions(ctx, path, true)
+}
+
+// NewestTreeModTime reports the newest modification time observed anywhere in
+// the tree at path, or the zero time when nothing readable was found. It is
+// the same signal cache adapters record as ModTime, for callers that must
+// re-derive it after the scan.
+//
+// The walk skips a subtree it cannot read, so an unreadable directory hides
+// any newer mtime beneath it and the result can be older than the tree really
+// is. Callers must therefore treat this as a lower bound and combine it with
+// whatever activity they already recorded, never replace that record with it.
+func NewestTreeModTime(ctx context.Context, path string) time.Time {
+	return estimateDirActivity(ctx, path).NewestModTime
+}
+
+func estimateDirActivityWithOptions(ctx context.Context, path string, trackModTime bool) dirActivity {
 	if err := ctx.Err(); err != nil {
-		return 0
+		return dirActivity{}
 	}
 
 	info, err := os.Stat(path)
 	if err != nil {
-		return 0
+		return dirActivity{}
 	}
 	if !info.IsDir() {
-		return info.Size()
+		activity := dirActivity{Size: info.Size()}
+		if trackModTime {
+			activity.NewestModTime = info.ModTime()
+		}
+		return activity
 	}
 
 	entries, err := os.ReadDir(path)
 	if err != nil {
-		return 0
+		return dirActivity{}
 	}
 
 	// Collect subdirectories to be walked in parallel.
 	var subdirs []string
 	var filesSize int64
+	activity := &dirActivityAccumulator{}
 	for _, e := range entries {
 		if e.IsDir() {
 			subdirs = append(subdirs, filepath.Join(path, e.Name()))
@@ -46,6 +86,9 @@ func estimateDirSize(ctx context.Context, path string) int64 {
 			info, err := e.Info()
 			if err == nil {
 				filesSize += info.Size()
+				if trackModTime {
+					activity.recordModTime(info.ModTime())
+				}
 			}
 		}
 	}
@@ -70,12 +113,16 @@ func estimateDirSize(ctx context.Context, path string) int64 {
 				<-sem // release
 				wg.Done()
 			}()
-			walkDirSequential(ctx, dir, &total)
+			walkDirSequential(ctx, dir, &total, activity, trackModTime)
 		}(subdir)
 	}
 
 	wg.Wait()
-	return total.Load()
+	result := dirActivity{Size: total.Load()}
+	if trackModTime {
+		result.NewestModTime = activity.latestModTime(info.ModTime())
+	}
+	return result
 }
 
 func estimateDirSizes(ctx context.Context, paths []string) map[string]int64 {
@@ -135,8 +182,14 @@ func estimateDirSizesWithDU(ctx context.Context, paths []string) (map[string]int
 
 // walkDirSequential walks a directory tree sequentially within a single
 // goroutine using filepath.WalkDir. It adds all file sizes to total
-// via atomic add.
-func walkDirSequential(ctx context.Context, path string, total *atomic.Int64) {
+// via atomic add and optionally records modification times.
+func walkDirSequential(
+	ctx context.Context,
+	path string,
+	total *atomic.Int64,
+	activity *dirActivityAccumulator,
+	trackModTime bool,
+) {
 	filepath.WalkDir(path, func(p string, d os.DirEntry, err error) error {
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -147,14 +200,45 @@ func walkDirSequential(ctx context.Context, path string, total *atomic.Int64) {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if !d.IsDir() {
-			info, err := d.Info()
-			if err == nil {
-				total.Add(info.Size())
+		if d.IsDir() {
+			if trackModTime {
+				info, err := d.Info()
+				if err == nil {
+					activity.recordModTime(info.ModTime())
+				}
+			}
+			return nil
+		}
+		info, err := d.Info()
+		if err == nil {
+			total.Add(info.Size())
+			if trackModTime {
+				activity.recordModTime(info.ModTime())
 			}
 		}
 		return nil
 	})
+}
+
+func (a *dirActivityAccumulator) recordModTime(modTime time.Time) {
+	a.modTimeMu.Lock()
+	defer a.modTimeMu.Unlock()
+	if !a.hasReadableEntry || modTime.After(a.newestModTime) {
+		a.newestModTime = modTime
+	}
+	a.hasReadableEntry = true
+}
+
+func (a *dirActivityAccumulator) latestModTime(rootModTime time.Time) time.Time {
+	a.modTimeMu.Lock()
+	defer a.modTimeMu.Unlock()
+	if !a.hasReadableEntry {
+		return time.Time{}
+	}
+	if rootModTime.After(a.newestModTime) {
+		return rootModTime
+	}
+	return a.newestModTime
 }
 
 func detectProjectName(path string) string {
