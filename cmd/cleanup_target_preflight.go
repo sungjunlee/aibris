@@ -56,9 +56,9 @@ func refreshCleanupInventoryMetadata(items []types.DebrisInfo) {
 		if err != nil {
 			continue
 		}
-		now := info.ModTime()
+		pathModTime := info.ModTime()
 		if items[i].PathModTime.IsZero() {
-			items[i].ModTime = now
+			items[i].ModTime = pathModTime
 			continue
 		}
 		// ModTime here is activity from anywhere in the tree. Re-walking a
@@ -67,10 +67,10 @@ func refreshCleanupInventoryMetadata(items []types.DebrisInfo) {
 		// lastScanCacheMaxAge old, so the refresh only ever raises the recorded
 		// activity. Never lowering it is fail-closed, and a newer container
 		// mtime still catches direct changes since the scan.
-		if now.After(items[i].ModTime) {
-			items[i].ModTime = now
+		if pathModTime.After(items[i].ModTime) {
+			items[i].ModTime = pathModTime
 		}
-		items[i].PathModTime = now
+		items[i].PathModTime = pathModTime
 	}
 }
 
