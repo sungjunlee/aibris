@@ -544,6 +544,11 @@ func cleanJSONReceiptStateReasons(unit cleanUnitExecutionReceipt) []string {
 	case cleanExecutionPartial:
 		return append(codes, "partial_failure")
 	case cleanExecutionFailed:
+		if errors.Is(unit.FailureCause, errCleanupTargetYoungerThanMinimumAge) {
+			// The pre-mutation barrier refused a target that went live again.
+			// That is retry-later, not a removal failure.
+			return append(codes, "minimum_age")
+		}
 		return append(codes, "execution_failed")
 	case cleanExecutionCancelled:
 		return append(codes, "cancelled")

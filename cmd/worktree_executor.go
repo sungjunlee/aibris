@@ -44,6 +44,9 @@ type cleanUnitExecutionReceipt struct {
 	MutationAttempted          bool
 	CommandFallbackPathRemoval bool
 	Error                      string
+	// FailureCause keeps the failure's error chain alongside its rendered
+	// message so the JSON projection can classify it with errors.Is.
+	FailureCause error
 }
 
 type cleanExecutionReceipt struct {
@@ -312,7 +315,7 @@ func executePathCleanupTarget(
 			if validationErr != nil {
 				return validationErr
 			}
-			return snapshot.validate()
+			return snapshot.validate(ctx)
 		},
 		output,
 		errorOutput,
@@ -343,6 +346,7 @@ func executePathCleanupTarget(
 			receipt.BlockingReason = err.Error()
 		}
 		receipt.Error = err.Error()
+		receipt.FailureCause = err
 		return receipt, err
 	}
 	if cleanupKind(target) == types.CleanupRemovePath && !receipt.PhysicalRemoved {
@@ -396,10 +400,11 @@ func executeActiveWorktreeUnit(
 		receipt.Error = "pre-mutation safety barrier: cleanup target snapshot unavailable"
 		return receipt, errors.New(receipt.Error)
 	}
-	if snapshotErr := snapshot.validate(); snapshotErr != nil {
+	if snapshotErr := snapshot.validate(ctx); snapshotErr != nil {
 		receipt.BlockingPath = target.Path
 		receipt.BlockingReason = snapshotErr.Error()
 		receipt.Error = fmt.Sprintf("pre-mutation safety barrier: %v", snapshotErr)
+		receipt.FailureCause = snapshotErr
 		return receipt, errors.New(receipt.Error)
 	}
 
@@ -411,10 +416,13 @@ func executeActiveWorktreeUnit(
 			setActiveReceiptPhysicalState(&receipt, selected)
 			return receipt, fmt.Errorf("pre-mutation safety barrier: %w", validationErr)
 		}
-		if snapshotErr := snapshot.validate(); snapshotErr != nil {
+		// snapshot is an active worktree unit here, so it is never
+		// activity-derived and validate cannot walk the tree per member.
+		if snapshotErr := snapshot.validate(ctx); snapshotErr != nil {
 			receipt.BlockingPath = target.Path
 			receipt.BlockingReason = snapshotErr.Error()
 			receipt.Error = fmt.Sprintf("pre-mutation safety barrier: %v", snapshotErr)
+			receipt.FailureCause = snapshotErr
 			setActiveReceiptPhysicalState(&receipt, selected)
 			return receipt, errors.New(receipt.Error)
 		}
@@ -472,10 +480,11 @@ func executeActiveWorktreeUnit(
 			setActiveReceiptPhysicalState(&receipt, selected)
 			return receipt, fmt.Errorf("pre-mutation safety barrier: %w", validationErr)
 		}
-		if snapshotErr := snapshot.validate(); snapshotErr != nil {
+		if snapshotErr := snapshot.validate(ctx); snapshotErr != nil {
 			receipt.BlockingPath = target.Path
 			receipt.BlockingReason = snapshotErr.Error()
 			receipt.Error = fmt.Sprintf("pre-mutation safety barrier: %v", snapshotErr)
+			receipt.FailureCause = snapshotErr
 			setActiveReceiptPhysicalState(&receipt, selected)
 			return receipt, errors.New(receipt.Error)
 		}
@@ -757,6 +766,7 @@ func failedPreparedCleanUnitReceipt(
 		BlockingPath:     target.Item.Path,
 		BlockingReason:   err.Error(),
 		Error:            err.Error(),
+		FailureCause:     err,
 	}
 	if target.Component != nil {
 		for _, obligation := range target.Component.Obligations {

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
@@ -211,5 +212,147 @@ func TestBuildCacheAdapter_ContextCancellation(t *testing.T) {
 	}
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("expected Canceled, got %v", err)
+	}
+}
+
+func TestBuildCacheAdapter_NestedActivityKeepsRecentCacheRecent(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	cacheDir := filepath.Join(home, ".gradle", "caches")
+	deep := filepath.Join(cacheDir, "8.14", "modules-2", "files-2.1")
+	if err := os.MkdirAll(deep, 0755); err != nil {
+		t.Fatal(err)
+	}
+	nestedFile := filepath.Join(deep, "artifact.bin")
+	if err := os.WriteFile(nestedFile, []byte("artifact"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	old := time.Now().Add(-30 * 24 * time.Hour)
+	recent := time.Now().Add(-time.Hour)
+	setTestModTime(t, cacheDir, old)
+	setTestModTime(t, filepath.Join(cacheDir, "8.14"), old)
+	setTestModTime(t, filepath.Join(cacheDir, "8.14", "modules-2"), old)
+	setTestModTime(t, deep, old)
+	setTestModTime(t, nestedFile, recent)
+
+	a := &BuildCacheAdapter{}
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var item types.DebrisInfo
+	found := false
+	for _, result := range results {
+		if result.ID == "gradle" {
+			item = result
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("gradle not found in results")
+	}
+	if item.ModTime.Before(fileModTime(t, nestedFile)) {
+		t.Errorf("gradle ModTime = %v; want at least nested file mtime %v", item.ModTime, fileModTime(t, nestedFile))
+	}
+	if !item.ModTime.After(fileModTime(t, cacheDir)) {
+		t.Errorf("gradle ModTime = %v; want newer than old container mtime %v", item.ModTime, fileModTime(t, cacheDir))
+	}
+	if !item.PathModTime.Equal(fileModTime(t, cacheDir)) {
+		t.Errorf("gradle PathModTime = %v; want container mtime %v", item.PathModTime, fileModTime(t, cacheDir))
+	}
+}
+
+func TestBuildCacheAdapter_IdleCacheKeepsOldActivity(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	cacheDir := filepath.Join(home, ".gradle", "caches")
+	deep := filepath.Join(cacheDir, "8.14", "modules-2")
+	if err := os.MkdirAll(deep, 0755); err != nil {
+		t.Fatal(err)
+	}
+	nestedFile := filepath.Join(deep, "artifact.bin")
+	if err := os.WriteFile(nestedFile, []byte("artifact"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	old := time.Now().Add(-30 * 24 * time.Hour)
+	setTestModTime(t, nestedFile, old)
+	setTestModTime(t, deep, old)
+	setTestModTime(t, filepath.Join(cacheDir, "8.14"), old)
+	setTestModTime(t, cacheDir, old)
+	expected := fileModTime(t, cacheDir)
+
+	a := &BuildCacheAdapter{}
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var item types.DebrisInfo
+	found := false
+	for _, result := range results {
+		if result.ID == "gradle" {
+			item = result
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("gradle not found in results")
+	}
+	if !item.ModTime.Equal(expected) {
+		t.Errorf("gradle ModTime = %v; want idle container mtime %v", item.ModTime, expected)
+	}
+	if !item.ModTime.Before(time.Now().Add(-7 * 24 * time.Hour)) {
+		t.Errorf("gradle ModTime = %v; want older than the 7-day age gate", item.ModTime)
+	}
+}
+
+// TestBuildCacheAdapter_ContainerModTimeWinsOverOlderTree pins the invariant
+// the safety argument rests on: the reported activity is never staler than the
+// container's own mtime.
+func TestBuildCacheAdapter_ContainerModTimeWinsOverOlderTree(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	cacheDir := filepath.Join(home, ".gradle", "caches")
+	deep := filepath.Join(cacheDir, "8.14", "modules-2")
+	if err := os.MkdirAll(deep, 0755); err != nil {
+		t.Fatal(err)
+	}
+	nestedFile := filepath.Join(deep, "artifact.bin")
+	if err := os.WriteFile(nestedFile, []byte("artifact"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	old := time.Now().Add(-30 * 24 * time.Hour)
+	setTestModTime(t, nestedFile, old)
+	setTestModTime(t, deep, old)
+	setTestModTime(t, filepath.Join(cacheDir, "8.14"), old)
+	setTestModTime(t, cacheDir, time.Now().Add(-time.Hour))
+	expected := fileModTime(t, cacheDir)
+
+	a := &BuildCacheAdapter{}
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var item types.DebrisInfo
+	found := false
+	for _, result := range results {
+		if result.ID == "gradle" {
+			item = result
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("gradle not found in results")
+	}
+	if !item.ModTime.Equal(expected) {
+		t.Errorf("gradle ModTime = %v; want container mtime %v", item.ModTime, expected)
+	}
+	if !item.PathModTime.Equal(expected) {
+		t.Errorf("gradle PathModTime = %v; want container mtime %v", item.PathModTime, expected)
 	}
 }

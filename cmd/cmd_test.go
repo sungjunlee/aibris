@@ -22,6 +22,22 @@ import (
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
+// chtimesTree backdates every entry under root. Cache staleness comes from the
+// newest mtime anywhere in the tree, so backdating only the container leaves a
+// fixture that correctly reads as an actively used cache.
+func chtimesTree(t *testing.T, root string, modTime time.Time) {
+	t.Helper()
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		return os.Chtimes(path, modTime, modTime)
+	})
+	if err != nil {
+		t.Fatalf("chtimesTree(%q): %v", root, err)
+	}
+}
+
 type failingScanProvider struct{}
 
 func (failingScanProvider) Name() types.Tool {
@@ -1906,9 +1922,7 @@ func TestCleanCmd_CleanupFailureExitsNonZero(t *testing.T) {
 			t.Fatal(err)
 		}
 		old := time.Now().Add(-2 * time.Hour)
-		if err := os.Chtimes(cache, old, old); err != nil {
-			t.Fatal(err)
-		}
+		chtimesTree(t, cache, old)
 		fakeBin := filepath.Join(home, "bin")
 		if err := os.MkdirAll(fakeBin, 0755); err != nil {
 			t.Fatal(err)

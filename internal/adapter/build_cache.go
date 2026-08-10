@@ -64,13 +64,19 @@ func (a *BuildCacheAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([
 		if err != nil || !info.IsDir() {
 			continue
 		}
+		activity := estimateDirActivity(ctx, c.path)
+		modTime := info.ModTime()
+		if activity.NewestModTime.After(modTime) {
+			modTime = activity.NewestModTime
+		}
 		item := types.DebrisInfo{
-			Tool:     types.ToolBuildCache,
-			Category: types.CategoryBuildCache,
-			ID:       c.id,
-			Path:     c.path,
-			Size:     estimateDirSize(ctx, c.path),
-			ModTime:  info.ModTime(),
+			Tool:        types.ToolBuildCache,
+			Category:    types.CategoryBuildCache,
+			ID:          c.id,
+			Path:        c.path,
+			Size:        activity.Size,
+			ModTime:     modTime,
+			PathModTime: info.ModTime(),
 		}
 		if len(c.command) > 0 {
 			item.CleanupKind = types.CleanupCommand

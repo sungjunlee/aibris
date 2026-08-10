@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
@@ -122,5 +123,45 @@ func TestPipCacheAdapter_ContextCancellation(t *testing.T) {
 	}
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("expected Canceled, got %v", err)
+	}
+}
+
+func TestPipCacheAdapter_NestedActivityKeepsRecentCacheRecent(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	cacheDir := filepath.Join(home, ".cache", "uv")
+	deep := filepath.Join(cacheDir, "archive", "wheels", "python")
+	if err := os.MkdirAll(deep, 0755); err != nil {
+		t.Fatal(err)
+	}
+	nestedFile := filepath.Join(deep, "package.whl")
+	if err := os.WriteFile(nestedFile, []byte("wheel"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	old := time.Now().Add(-30 * 24 * time.Hour)
+	recent := time.Now().Add(-time.Hour)
+	setTestModTime(t, cacheDir, old)
+	setTestModTime(t, filepath.Join(cacheDir, "archive"), old)
+	setTestModTime(t, filepath.Join(cacheDir, "archive", "wheels"), old)
+	setTestModTime(t, deep, old)
+	setTestModTime(t, nestedFile, recent)
+
+	a := &PipCacheAdapter{}
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].ID != "uv" {
+		t.Fatalf("results = %+v; want only uv cache", results)
+	}
+	if results[0].ModTime.Before(fileModTime(t, nestedFile)) {
+		t.Errorf("uv ModTime = %v; want at least nested file mtime %v", results[0].ModTime, fileModTime(t, nestedFile))
+	}
+	if !results[0].ModTime.After(fileModTime(t, cacheDir)) {
+		t.Errorf("uv ModTime = %v; want newer than old container mtime %v", results[0].ModTime, fileModTime(t, cacheDir))
+	}
+	if !results[0].PathModTime.Equal(fileModTime(t, cacheDir)) {
+		t.Errorf("uv PathModTime = %v; want container mtime %v", results[0].PathModTime, fileModTime(t, cacheDir))
 	}
 }

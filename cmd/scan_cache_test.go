@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -170,6 +171,120 @@ func TestReadLastScanCacheRejectsForeignProviderIdentity(t *testing.T) {
 	writeLastScanCache([]string{home}, scanner.DefaultScanner.ProviderIdentity(), &types.ScanResult{TotalCount: 1})
 	if _, _, ok := readFreshLastScanCache([]string{home}); !ok {
 		t.Fatal("readFreshLastScanCache rejected inventory produced by the default provider set")
+	}
+}
+
+// TestWriteLastScanCacheKeepsCacheWithNewerInTreeActivity guards the scan
+// side of the activity signal: a cache whose newest in-tree mtime differs from
+// its container mtime must not read as "changed before cache write", which
+// would silently invalidate the last-scan cache for everyone with an active
+// build cache.
+func TestWriteLastScanCacheKeepsCacheWithNewerInTreeActivity(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	cache := filepath.Join(home, ".gradle", "caches")
+	nested := filepath.Join(cache, "modules-2", "files-2.1")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	artifact := filepath.Join(nested, "artifact.bin")
+	if err := os.WriteFile(artifact, []byte("artifact"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	chtimesTree(t, cache, time.Now().Add(-30*24*time.Hour))
+	recent := time.Now().Add(-5 * time.Minute)
+	if err := os.Chtimes(artifact, recent, recent); err != nil {
+		t.Fatal(err)
+	}
+
+	roots := []string{home}
+	result, err := scanner.ScanWithOptions(context.Background(), types.ScanOptions{Roots: roots})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var scanned *types.DebrisInfo
+	for i := range result.Worktrees {
+		if result.Worktrees[i].Path == cache {
+			scanned = &result.Worktrees[i]
+		}
+	}
+	if scanned == nil {
+		t.Fatalf("scan did not report the fixture cache: %+v", result.Worktrees)
+	}
+	if !scanned.ModTime.After(scanned.PathModTime) {
+		t.Fatalf("fixture must produce in-tree activity newer than the container: %+v", *scanned)
+	}
+
+	writeLastScanCache(roots, scanner.DefaultScanner.ProviderIdentity(), result)
+	if _, ok := readLastScanCache(); !ok {
+		t.Fatal("last-scan cache was invalidated for a home with active in-tree cache activity")
+	}
+	cached, _, ok := readFreshLastScanCache(roots)
+	if !ok {
+		t.Fatal("readFreshLastScanCache rejected a cache written for active in-tree cache activity")
+	}
+	for _, item := range cached.Worktrees {
+		if item.Path != cache {
+			continue
+		}
+		if !item.ModTime.Equal(scanned.ModTime) || !item.PathModTime.Equal(scanned.PathModTime) {
+			t.Fatalf("cached activity signal = %v/%v; want %v/%v",
+				item.ModTime, item.PathModTime, scanned.ModTime, scanned.PathModTime)
+		}
+		return
+	}
+	t.Fatalf("cached scan result lost the fixture cache: %+v", cached.Worktrees)
+}
+
+// A cache entry without a recorded path mtime reads as though ModTime were the
+// path's own mtime, which turns the tree-activity signal off for the rest of
+// the run. The whole cache must be refused rather than trusted in that weaker
+// reading.
+func TestReadFreshLastScanCacheRejectsCacheEntryWithoutPathModTime(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	cache := filepath.Join(home, ".gradle", "caches")
+	nested := filepath.Join(cache, "modules-2", "files-2.1")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	artifact := filepath.Join(nested, "artifact.bin")
+	if err := os.WriteFile(artifact, []byte("artifact"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	chtimesTree(t, cache, time.Now().Add(-30*24*time.Hour))
+
+	roots := []string{home}
+	result, err := scanner.ScanWithOptions(context.Background(), types.ScanOptions{Roots: roots})
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeLastScanCache(roots, scanner.DefaultScanner.ProviderIdentity(), result)
+	if _, _, ok := readFreshLastScanCache(roots); !ok {
+		t.Fatal("readFreshLastScanCache rejected an intact cache; fixture is wrong")
+	}
+
+	stored, ok := readLastScanCache()
+	if !ok {
+		t.Fatal("last-scan cache was not written")
+	}
+	stripped := false
+	for i := range stored.Result.Worktrees {
+		if stored.Result.Worktrees[i].Path != cache {
+			continue
+		}
+		stored.Result.Worktrees[i].PathModTime = time.Time{}
+		stripped = true
+	}
+	if !stripped {
+		t.Fatalf("cached scan result lost the fixture cache: %+v", stored.Result.Worktrees)
+	}
+	if err := saveLastScanCache(stored); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, ok := readFreshLastScanCache(roots); ok {
+		t.Fatal("readFreshLastScanCache accepted a cache entry with no recorded path mtime")
 	}
 }
 

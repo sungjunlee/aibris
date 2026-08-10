@@ -1,5 +1,29 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Cache staleness is now judged from modification activity anywhere in the
+  cache tree instead of the container directory's own mtime. A nested cache
+  whose container ages past `--age` while the tree underneath is still being
+  written to is no longer default-selected for removal.
+- The age gate and the cleanup preflight now agree on that activity signal,
+  while the scan-evidence tamper check reads the path's own mtime. The cleanup
+  refresh only raises recorded activity, and the pre-mutation barrier
+  re-derives it for selected targets immediately before removal rather than at
+  plan preparation, so a cache that goes live while a confirmation prompt is
+  open is still refused. An actively used cache is therefore refused by
+  `minimum_age` rather than by an integrity error, while an idle cache whose
+  newest in-tree mtime differs from its container is still cleaned, and the
+  last-scan cache is written again for homes with active caches.
+- A reused last-scan cache is refused when a cache-category entry carries no
+  recorded path mtime, so a cache file that predates or omits that evidence
+  can no longer quietly downgrade the activity signal for the rest of the run.
+- A barrier age refusal now reports the `minimum_age` reason code on the JSON
+  receipt target instead of the generic `execution_failed`, so automation can
+  tell "the cache went live again, retry later" from a removal failure.
+
 ## [0.10.0] - 2026-08-09
 
 ### Added

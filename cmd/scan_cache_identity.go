@@ -26,7 +26,15 @@ func captureLastScanTargetEvidence(items []types.DebrisInfo) (map[string]lastSca
 			errs = append(errs, fmt.Errorf("capturing scan target evidence for %q: %w", item.Path, err))
 			continue
 		}
-		if item.Category != types.CategoryWorktree && !info.ModTime().Equal(item.ModTime) {
+		// This is a tamper check on the path itself, so it must compare against
+		// the path's own recorded mtime. ModTime can be derived from activity
+		// anywhere in the tree, and comparing that to a fresh stat would report
+		// every actively written cache as changed since the scan.
+		recorded := item.ModTime
+		if !item.PathModTime.IsZero() {
+			recorded = item.PathModTime
+		}
+		if item.Category != types.CategoryWorktree && !info.ModTime().Equal(recorded) {
 			errs = append(errs, fmt.Errorf("scan target changed before cache write: %q", item.Path))
 			continue
 		}
@@ -54,6 +62,13 @@ func validateLastScanTargetEvidence(items []types.DebrisInfo, evidence map[strin
 		if !ok {
 			return false
 		}
+		// A cached cache-category item without PathModTime would be treated as
+		// though its ModTime were the path's own mtime, which silently turns
+		// off the tree-activity signal for the rest of the run. Refuse the
+		// whole cache and rescan instead of trusting the weaker reading.
+		if cacheActivityCategory(item.Category) && item.PathModTime.IsZero() {
+			return false
+		}
 		info, identity, err := cleanupPathIdentity(item.Path)
 		if err != nil || identity != expected.Identity || info.Mode().Type() != expected.Type {
 			return false
@@ -62,6 +77,12 @@ func validateLastScanTargetEvidence(items []types.DebrisInfo, evidence map[strin
 		items[i].ScanPathType = uint32(expected.Type)
 	}
 	return true
+}
+
+// cacheActivityCategory reports whether a category's adapters derive ModTime
+// from activity inside the tree and therefore must record PathModTime.
+func cacheActivityCategory(category types.Category) bool {
+	return category == types.CategoryBuildCache || category == types.CategoryOtherCache
 }
 
 func cleanupPathIdentity(path string) (os.FileInfo, string, error) {

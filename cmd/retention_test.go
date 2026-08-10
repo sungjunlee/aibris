@@ -171,6 +171,9 @@ func TestRetentionPartialDoesNotBlockOrdinaryCleanPrerequisite(t *testing.T) {
 		ModTime:     time.Now().Add(-48 * time.Hour),
 		CleanupKind: types.CleanupRemovePath,
 	}
+	// Cache adapters always record the path's own mtime; a cached entry without
+	// it is refused, so the fixture has to carry it too.
+	item.PathModTime = item.ModTime
 	if err := os.MkdirAll(item.Path, 0755); err != nil {
 		t.Fatal(err)
 	}

@@ -869,12 +869,15 @@ func TestPreparePathCleanupRejectsReplacementAfterScanEvidenceValidation(t *test
 		t.Fatal(err)
 	}
 	item := types.DebrisInfo{
-		Tool:        types.ToolBuildCache,
-		Category:    types.CategoryBuildCache,
-		ID:          "replaced-after-scan",
-		Path:        targetPath,
-		Size:        8,
-		ModTime:     old,
+		Tool:     types.ToolBuildCache,
+		Category: types.CategoryBuildCache,
+		ID:       "replaced-after-scan",
+		Path:     targetPath,
+		Size:     8,
+		ModTime:  old,
+		// Cache adapters always record the path's own mtime; a cached entry
+		// without it is refused, so the fixture has to carry it too.
+		PathModTime: old,
 		CleanupKind: types.CleanupRemovePath,
 	}
 	saveCleanCacheFixture(t, home, []types.DebrisInfo{item})

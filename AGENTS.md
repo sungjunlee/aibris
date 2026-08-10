@@ -35,6 +35,8 @@ registry를 함께 사용하고 `.git` metadata로 검증한다.
 - `Name()`은 kebab-case 단일 소문자 (e.g. `codex`, `claude`)
 - `Scan()`은 context 취소를 존중해야 함
 - 발견된 모든 경로의 크기를 `estimateDirSize()`로 계산 (WalkDir 기반)
+- 중첩 캐시 트리(build cache, pip/uv cache)는 트리 내부 최신 mtime을 `ModTime`으로 보고하며, 컨테이너 mtime만 활동 신호로 사용하지 않는다. 컨테이너 자체 mtime이 곧 활동인 adapter(`node_modules` 등)에는 적용되지 않는다
+- `ModTime`을 트리 내부 활동에서 유도하는 adapter는 `PathModTime`에 경로 자체의 stat mtime을 반드시 채운다 (비우면 cleanup preflight가 `ModTime`을 컨테이너 mtime으로 덮어써 활동 신호가 사라진다)
 - worktree 컨테이너처럼 프로젝트가 하위 디렉토리인 adapter는 `detectProjectName()`으로 추론 (숨김 디렉토리 제외)
 - recorded cwd 자체가 프로젝트를 가리키는 store adapter는 `projectNameFromRecordedCWD()`로 마지막 경로 조각을 사용 (파일시스템 조회 금지)
 - `internal/adapter/providers.go` 의 `providers` 목록에 등록

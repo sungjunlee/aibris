@@ -74,14 +74,19 @@ const (
 
 // DebrisInfo describes a single debris item found during scanning.
 type DebrisInfo struct {
-	Tool           Tool
-	Category       Category
-	ID             string
-	Project        string
-	Source         string
-	Path           string
-	Size           int64
-	ModTime        time.Time
+	Tool     Tool
+	Category Category
+	ID       string
+	Project  string
+	Source   string
+	Path     string
+	Size     int64
+	ModTime  time.Time
+	// PathModTime is the target path's own mtime. Cache adapters set it whenever
+	// the item may carry tree-derived activity, so integrity checks can still
+	// compare against the path's own stat. A zero value means the path's own
+	// mtime is the whole signal.
+	PathModTime    time.Time
 	Status         WorktreeStatus // empty for non-worktree debris
 	Classification EntryClass     // empty for debris without entry classification
 	Reason         string
