@@ -94,11 +94,12 @@ create default cleanup eligibility.
 
 **No retention row authorizes default cleanup.** The merged #138 behavior
 remains unchanged: proof-based orphaned Claude and Cursor `agent-state` owners
-remain eligible without an age gate, while `live` and `undetermined` owners
-remain protected. The inventory itself is read-only: it never selects,
-prepares, or mutates members. Partial inventory (permission or I/O failures
-inside the store) degrades the retention section to `partial: true` without
-affecting debris results or cleanup authorization.
+remain default-eligible after the 48h grace period (younger orphans stay
+reviewable, never protected), while `live` and `undetermined` owners remain
+protected. The inventory itself is read-only: it never selects, prepares, or
+mutates members. Partial inventory (permission or I/O failures inside the
+store) degrades the retention section to `partial: true` without affecting
+debris results or cleanup authorization.
 
 ## Absolute exclusions and blocked stores
 

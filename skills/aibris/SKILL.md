@@ -267,7 +267,7 @@ aibris clean --category node_modules
 | `node_modules` | ✅ 안전 | `$HOME` scan root 아래 npm project dependencies | node_modules |
 | `build-cache` | ✅ 안전 | Go/Xcode/Gradle/npm/Cargo caches | build-cache |
 | `other-cache` | ✅ 안전 | Python/uv pip caches | pip-cache |
-| `agent-state` | ✅ orphaned만, age gate 없음 | recorded cwd로 판정한 project store. live/undetermined는 항상 보호 | claude, cursor |
+| `agent-state` | ✅ orphaned만, 48h grace period 후 기본 선택 | recorded cwd로 판정한 project store. orphaned는 48h 후 default-selected; 그 전에는 reviewable (명시 선택 가능), live/undetermined는 항상 보호 | claude, cursor |
 | `ai-logs` | 🚫 `--risky` 필요 | AI tool session logs, file history, archived sessions | ai-logs, windsurf |
 
 ## 주의사항

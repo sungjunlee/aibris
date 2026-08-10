@@ -171,10 +171,16 @@ current modification time. After overlap safety refresh and immediately before
 mutation, it verifies identity, type, modification time, and age again. Evidence
 failure protects the affected target rather than trusting stale scan state.
 
-For `agent-state`, `classification` replaces the age gate. An absent recorded
-working directory proves the associated work is gone and resume is already
-impossible, so `orphaned` is eligible regardless of age after category and tool
-selection. `live` and `undetermined` are protected.
+For `agent-state`, `classification` replaces the general age gate: an absent
+recorded working directory proves the associated work is gone and resume is
+already impossible. `live` and `undetermined` are protected. An `orphaned`
+entry becomes default-selected only after a dedicated 48-hour grace period
+(`cleaner.AgentStateOrphanedGracePeriod`); younger orphans stay reviewable
+(cleanable by explicit selection, never protected) so that removing a worktree
+right after a run cannot silently select the freshest session record. The
+general `--age` flag is intentionally not applied here: it is worktree-
+oriented (default 7d), while agent-state eligibility stays classification-
+driven with this single dedicated constant gating only default selection.
 
 Absence is proven only when the nearest existing ancestor is inside an
 available home or temporary tree and shares a volume identity with its parent.
@@ -338,7 +344,7 @@ Cross-category containment uses the same physical-component contract:
 | `node_modules` | yes | `node_modules` | `$HOME/**/node_modules`, with noisy system/media/cache directories pruned |
 | `build-cache` | yes | `build-cache` | `~/.cache/go-build`, `~/.gradle/caches`, `~/.npm/_cacache`, `~/.cargo/registry`, `~/Library/Caches/Xcode` |
 | `other-cache` | yes | `pip-cache` | `~/.cache/pip`, `~/.cache/uv` |
-| `agent-state` | orphaned only, no age gate | `claude`, `cursor` | recorded-cwd project stores; `live` and `undetermined` entries are protected |
+| `agent-state` | orphaned only (48h grace period) | `claude`, `cursor` | recorded-cwd project stores; `live` and `undetermined` entries are protected; orphans younger than 48h are reviewable, not default-selected |
 | `ai-logs` | no, requires `--risky` | `ai-logs`, `windsurf` | known Codex, Claude, and Windsurf log/cache locations |
 
 The installed/regenerable/protected store-nature terms used to plan issue #142

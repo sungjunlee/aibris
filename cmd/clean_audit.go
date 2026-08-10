@@ -62,6 +62,7 @@ const (
 	cleanReasonAge                           cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonAge)
 	cleanReasonAgentStateLive                cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonAgentStateLive)
 	cleanReasonAgentStateUndetermined        cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonAgentStateUndetermined)
+	cleanReasonAgentStateReviewable          cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonAgentStateReviewable)
 	cleanReasonMissingPath                   cleanAuditReason = "path no longer exists"
 	cleanReasonDuplicatePath                 cleanAuditReason = "duplicate cleanup target path"
 	cleanReasonNestedTarget                  cleanAuditReason = "covered by selected parent"
@@ -137,6 +138,8 @@ func cleanJSONPolicyForAuditItem(
 		cleaner.EligibilityReasonAgentStateLive,
 		cleaner.EligibilityReasonAgentStateUndetermined:
 		return cleanJSONPolicyProtected, []string{cleanJSONReasonCodeForEligibility(reason)}
+	case cleaner.EligibilityReasonAgentStateReviewable:
+		return cleanJSONPolicyReviewable, []string{cleanJSONReasonCodeForEligibility(reason)}
 	default:
 		return cleanJSONPolicySkipped, []string{cleanJSONReasonCodeForEligibility(reason)}
 	}

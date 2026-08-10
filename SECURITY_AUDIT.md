@@ -73,10 +73,12 @@ is no Trash or undo flow.
 
 The Claude and Cursor project stores (`~/.claude/projects` and
 `~/.cursor/projects`) are `agent-state`; Cursor project state is not `ai-logs`.
-Orphaned entries are eligible for cleanup by default with no age gate, while
-`live` and `undetermined` entries are always protected. The classification is
-proved from working-directory metadata recorded in each entry rather than
-inferred from the entry name or path.
+Orphaned entries are eligible for default cleanup only after a 48h grace
+period, so a freshly orphaned store (for example, right after a worktree is
+removed) stays reviewable instead of being silently default-selected; `live`
+and `undetermined` entries are always protected. The classification is proved
+from working-directory metadata recorded in each entry rather than inferred
+from the entry name or path.
 
 `ai-logs` and any unknown future category are risky by default. They are excluded
 from cleanup unless the user passes `--risky`.

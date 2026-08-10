@@ -39,7 +39,7 @@ internal/
 3. `Scan()` respects context cancellation
 4. Use `estimateDirSize(ctx, path)` for size calculation
 5. Register in the `internal/adapter/providers.go` `providers` slice
-6. For an adapter whose `Category()` is `agent-state`, also implement `AgentStateRevalidator`; `agent-state` is cleaned by default with no age gate, and cleanup refuses entries without a registered revalidator
+6. For an adapter whose `Category()` is `agent-state`, also implement `AgentStateRevalidator`; `agent-state` is cleaned by default after a 48h grace period (younger orphans are reviewable), and cleanup refuses entries without a registered revalidator
 7. Add tests in `internal/adapter/<name>_test.go`
 
 ## Before Submitting

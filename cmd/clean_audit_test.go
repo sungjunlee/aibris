@@ -109,7 +109,7 @@ func TestBuildCleanAudit_EligibilityMatchesFilterForMixedCategories(t *testing.T
 	old := now.Add(-2 * 365 * 24 * time.Hour)
 	recent := now.Add(-time.Hour)
 	items := []types.DebrisInfo{
-		{ID: "state-orphaned", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassOrphaned, Size: 50, ModTime: recent, Path: "/tmp/home/.claude/projects/orphaned"},
+		{ID: "state-orphaned", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassOrphaned, Size: 50, ModTime: old, Path: "/tmp/home/.claude/projects/orphaned"},
 		{ID: "state-live", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassLive, Size: 400, ModTime: old, Path: "/tmp/home/.claude/projects/live"},
 		{ID: "state-undetermined", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassUndetermined, Size: 200, ModTime: old, Path: "/tmp/home/.claude/projects/undetermined"},
 		{ID: "node-old", Tool: types.ToolNodeModules, Category: types.CategoryNodeModules, Size: 100, ModTime: old, Path: "/tmp/home/app/node_modules"},

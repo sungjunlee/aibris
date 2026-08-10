@@ -71,14 +71,17 @@ func guidedCleanupPlanCandidates(state guidedCleanState) []CleanupPlanCandidate 
 }
 
 // unifiedCleanupPlanForClean builds one policy-neutral plan from the accepted
-// guided selection (when present) and the classic-filtered targets. The plan
-// normalizes every category into exact physical components with hard-lock
-// dominance, so preview, toggling, validation, and execution all share one
-// selection state.
+// guided selection (when present) and the classic-filtered targets. Orphaned
+// agent-state entries still inside the grace period join as reviewable rows:
+// never default-selected, but explicitly selectable in the unified review. The
+// plan normalizes every category into exact physical components with
+// hard-lock dominance, so preview, toggling, validation, and execution all
+// share one selection state.
 func unifiedCleanupPlanForClean(
 	ctx context.Context,
 	guidedState *guidedCleanState,
 	classicTargets []types.DebrisInfo,
+	inventory []types.DebrisInfo,
 	evidence CleanupPlanEvidence,
 ) (UnifiedCleanupPlan, error) {
 	candidates := make([]CleanupPlanCandidate, 0, len(classicTargets)+guidedCandidateCount(guidedState))
@@ -86,6 +89,7 @@ func unifiedCleanupPlanForClean(
 		candidates = append(candidates, guidedCleanupPlanCandidates(*guidedState)...)
 	}
 	candidates = append(candidates, ClassicCleanupPlanCandidates(classicTargets)...)
+	candidates = append(candidates, ReviewableAgentStateCleanupPlanCandidates(inventory, evidence.ObservedAt)...)
 	return BuildUnifiedCleanupPlan(ctx, candidates, evidence)
 }
 
@@ -149,7 +153,7 @@ func runUnifiedGuidedClean(
 	stdout *os.File,
 ) {
 	evidence := cleanupPlanEvidence(result, source, time.Now())
-	plan, err := unifiedCleanupPlanForClean(ctx, guidedState, classicTargets, evidence)
+	plan, err := unifiedCleanupPlanForClean(ctx, guidedState, classicTargets, result.Worktrees, evidence)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)

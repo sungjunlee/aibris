@@ -45,6 +45,16 @@ func TestAgentStateCLIContract(t *testing.T) {
 	assertCLIContractHomeIsolated(t, binary, home,
 		claudeOrphan, claudeLive, cursorOrphan, cursorUndetermined)
 
+	// Age the orphaned entries past the grace period so the contract keeps
+	// exercising default selection of proven orphans rather than the
+	// grace-window review state.
+	orphanAge := time.Now().Add(-10 * 24 * time.Hour)
+	for _, orphanPath := range []string{claudeOrphan, cursorOrphan} {
+		if err := os.Chtimes(orphanPath, orphanAge, orphanAge); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	output, err := runCLIContract(binary, home, "clean", "--dry-run", "--category", "agent-state")
 	if err != nil {
 		t.Fatalf("agent-state dry-run failed: %v\n%s", err, output)

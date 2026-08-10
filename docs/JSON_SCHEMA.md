@@ -197,8 +197,9 @@ marker is not `plain-dir`; it is a top-level partial provider error.
 For Cursor `agent-state`, `project` is the final path segment of the recorded
 workspace, not a decoded form of the project-store directory name. Missing,
 unreadable, or unusable `worker.log` evidence produces `undetermined`.
-Orphaned Cursor entries are eligible for default cleanup without an age gate;
-`live` and `undetermined` entries remain protected.
+Orphaned Cursor entries are eligible for default cleanup after the 48h grace
+period; younger orphans are reviewable but not default-selected. `live` and
+`undetermined` entries remain protected.
 
 ### `summary` object
 

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -43,6 +44,7 @@ type CleanupPlanReasonCode string
 const (
 	CleanupPlanReasonClassicEligible        CleanupPlanReasonCode = "classic_eligible"
 	CleanupPlanReasonAgentStateOrphaned     CleanupPlanReasonCode = "agent_state_orphaned"
+	CleanupPlanReasonAgentStateGracePeriod  CleanupPlanReasonCode = "agent_state_grace_period"
 	CleanupPlanReasonContainsLockedTarget   CleanupPlanReasonCode = "contains_locked_target"
 	CleanupPlanReasonOverlapsLockedTarget   CleanupPlanReasonCode = "overlaps_locked_target"
 	CleanupPlanReasonWorktreePolicyDecision CleanupPlanReasonCode = "worktree_policy_decision"
@@ -271,6 +273,36 @@ func ClassicCleanupPlanCandidates(targets []types.DebrisInfo) []CleanupPlanCandi
 			PolicyDecision: CleanupPlanPolicyEligible,
 			Selection:      CleanupPlanSelected,
 			Reasons:        []CleanupPlanReason{reason},
+		})
+	}
+	return candidates
+}
+
+// ReviewableAgentStateCleanupPlanCandidates adapts orphaned agent-state
+// entries still inside the grace period into reviewable plan rows. They are
+// never default-selected but remain selectable in the unified review, unlike
+// hard-locked protected entries. Eligible orphans are already carried by the
+// classic candidates and are skipped here.
+func ReviewableAgentStateCleanupPlanCandidates(items []types.DebrisInfo, observedAt time.Time) []CleanupPlanCandidate {
+	var candidates []CleanupPlanCandidate
+	for _, item := range items {
+		if item.Category != types.CategoryAgentState ||
+			item.Classification != types.EntryClassOrphaned {
+			continue
+		}
+		eligible, reason := cleaner.EvaluateEligibility(item, types.PruneOptions{}, observedAt)
+		if eligible || reason != cleaner.EligibilityReasonAgentStateReviewable {
+			continue
+		}
+		candidates = append(candidates, CleanupPlanCandidate{
+			RowKey:         "reviewable-agent-state:" + cleanTargetStableKey(item),
+			Item:           item,
+			PolicyDecision: CleanupPlanPolicyReviewable,
+			Selection:      CleanupPlanUnselected,
+			Reasons: []CleanupPlanReason{{
+				Code:        CleanupPlanReasonAgentStateGracePeriod,
+				Description: "orphaned agent-state younger than grace period; reviewable",
+			}},
 		})
 	}
 	return candidates

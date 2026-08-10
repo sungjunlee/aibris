@@ -29,7 +29,7 @@ complements general-purpose cleaners; it does not compete with them.
 | Category | Examples | Default clean |
 | ---------- | ---------- | --------------- |
 | AI worktrees | Finite known containers plus `$HOME` conventions such as `.tool/worktrees` and project-local `worktrees` | Classic: orphaned; guided Codex: evidence-based |
-| Agent state | Claude and Cursor project stores | Orphaned only; no age gate |
+| Agent state | Claude and Cursor project stores | Orphaned only; 48h grace period before default selection |
 | AI logs | Codex, Claude, Windsurf logs | Only with `--risky` |
 | Dependencies | project `node_modules` directories | Yes |
 | Build caches | Go, npm, Gradle, Cargo, Xcode | Yes |
@@ -42,9 +42,15 @@ and winning on them is not an objective.
 
 Agent-state scan rows expose a `classification` of `live`, `orphaned`, or
 `undetermined`. This classification takes precedence over the classic age
-filter: an absent recorded working directory proves the associated work is gone
-and resume is already impossible, so an `orphaned` entry needs no age gate.
-`live` and `undetermined` entries remain protected.
+filter: an absent recorded working directory proves the associated work is
+gone and resume is already impossible, so `live` and `undetermined` entries
+remain protected. An `orphaned` entry becomes default-selected only after a
+dedicated 48-hour grace period — worktree-based agent workflows can remove the
+recorded working directory minutes after a run, so a freshly orphaned store is
+still the freshest record of recent work and stays reviewable (cleanable by
+explicit selection, never silently default-selected) until it ages out. The
+general `--age` flag (default 7d) is worktree-oriented and intentionally not
+applied here.
 
 Issue #142 also uses **installed**, **regenerable**, and **protected** as a
 planning taxonomy for six currently uncovered stores. Those terms are not
@@ -415,7 +421,8 @@ Cancellation remains a hard failure.
 ### Safety
 
 - **Independent age policies**: classic cleanup defaults to `--age 7d`, except
-  for proof-classified orphaned agent state; guided Codex cleanup defaults to a
+  for proof-classified orphaned agent state, which uses a dedicated 48h grace
+  period before default selection; guided Codex cleanup defaults to a
   3-day minimum idle age while always keeping its 6-hour recent-activity lock
   and recent-three retention
 - **Human age units** support `h`, `d`, `w`, `mo`, and `y`

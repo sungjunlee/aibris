@@ -26,7 +26,7 @@ func TestSummarizeCleanup_EligibilityMatchesFilterForMixedCategories(t *testing.
 		return path
 	}
 	items := []types.DebrisInfo{
-		{ID: "state-orphaned", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassOrphaned, Path: existingPath(t, "state-orphaned"), Size: 11, ModTime: recent},
+		{ID: "state-orphaned", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassOrphaned, Path: existingPath(t, "state-orphaned"), Size: 11, ModTime: old},
 		{ID: "state-live", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassLive, Path: existingPath(t, "state-live"), Size: 13, ModTime: old},
 		{ID: "state-undetermined", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassUndetermined, Path: existingPath(t, "state-undetermined"), Size: 17, ModTime: old},
 		{ID: "node-old", Tool: types.ToolNodeModules, Category: types.CategoryNodeModules, Path: existingPath(t, "node-old"), Size: 19, ModTime: old},
@@ -132,6 +132,37 @@ func TestSummarizeCleanup_CollapsesNestedEligibleTargetsLikeClean(t *testing.T) 
 	planned := normalizeCleanTargets(filterExistingTargets(cleaner.Filter(items, opts)))
 	if len(planned) != 1 || planned[0].Size != 100 {
 		t.Fatalf("clean pipeline planned %d targets; want exactly the parent with size 100", len(planned))
+	}
+}
+
+func TestSummarizeCleanup_AgentStateGraceWindowReviewable(t *testing.T) {
+	now := time.Now()
+	existingPath := func(name string) string {
+		path := filepath.Join(t.TempDir(), name)
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", path, err)
+		}
+		return path
+	}
+	items := []types.DebrisInfo{
+		{ID: "young-orphan", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassOrphaned, Path: existingPath("young-orphan"), Size: 11, ModTime: now.Add(-time.Hour)},
+		{ID: "old-orphan", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassOrphaned, Path: existingPath("old-orphan"), Size: 13, ModTime: now.Add(-10 * 24 * time.Hour)},
+	}
+	opts := types.PruneOptions{Age: 7 * 24 * time.Hour}
+	diagnostics := summarizeCleanup(items, opts)
+	if diagnostics.EligibleCount != 1 || diagnostics.EligibleSize != 13 {
+		t.Fatalf("eligible = %d/%d; want only the orphan past the grace period",
+			diagnostics.EligibleCount, diagnostics.EligibleSize)
+	}
+	if diagnostics.AgentStateReviewableCount != 1 || diagnostics.AgentStateReviewableSize != 11 {
+		t.Fatalf("reviewable agent-state bucket = %d/%d; want 1/11",
+			diagnostics.AgentStateReviewableCount, diagnostics.AgentStateReviewableSize)
+	}
+	output := captureOutput(func() {
+		printCleanupDiagnostics(diagnostics, opts)
+	})
+	if !strings.Contains(output, "reviewable  11 B orphaned agent-state within grace period; reviewable") {
+		t.Errorf("scan diagnostics missing reviewable agent-state line:\n%s", output)
 	}
 }
 

@@ -420,11 +420,11 @@ func TestEvaluateEligibility_WorktreeReviewStatusesFailClosed(t *testing.T) {
 	}
 }
 
-func TestFilter_AgentStateEligibilityUsesClassificationNotAge(t *testing.T) {
+func TestFilter_AgentStateEligibilityUsesClassificationNotGeneralAge(t *testing.T) {
 	recent := time.Now()
 	old := time.Now().Add(-20 * 365 * 24 * time.Hour)
 	items := []types.DebrisInfo{
-		{ID: "orphaned", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassOrphaned, ModTime: recent},
+		{ID: "orphaned", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassOrphaned, ModTime: old},
 		{ID: "live", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassLive, ModTime: old},
 		{ID: "undetermined", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassUndetermined, ModTime: old},
 		{ID: "node-old", Tool: types.ToolNodeModules, Category: types.CategoryNodeModules, ModTime: old},
@@ -443,7 +443,7 @@ func TestFilter_AgentStateEligibilityUsesClassificationNotAge(t *testing.T) {
 		ids[item.ID] = true
 	}
 	if !ids["orphaned"] {
-		t.Error("orphaned agent-state should be eligible despite an age cutoff that excludes it")
+		t.Error("orphaned agent-state should be eligible despite a general age cutoff that excludes it")
 	}
 	if ids["live"] || ids["undetermined"] {
 		t.Errorf("protected agent-state selected under --risky/--force equivalents: %v", ids)
@@ -453,10 +453,11 @@ func TestFilter_AgentStateEligibilityUsesClassificationNotAge(t *testing.T) {
 	}
 }
 
-func TestFilter_CursorAgentStateEligibilityUsesClassificationNotRiskOrAge(t *testing.T) {
+func TestFilter_CursorAgentStateEligibilityUsesClassificationNotRiskOrGeneralAge(t *testing.T) {
 	now := time.Now()
+	old := now.Add(-100 * 365 * 24 * time.Hour)
 	items := []types.DebrisInfo{
-		{ID: "cursor-orphaned", Tool: types.ToolCursor, Category: types.CategoryAgentState, Classification: types.EntryClassOrphaned, ModTime: now},
+		{ID: "cursor-orphaned", Tool: types.ToolCursor, Category: types.CategoryAgentState, Classification: types.EntryClassOrphaned, ModTime: old},
 		{ID: "cursor-live", Tool: types.ToolCursor, Category: types.CategoryAgentState, Classification: types.EntryClassLive, ModTime: time.Time{}},
 		{ID: "cursor-undetermined", Tool: types.ToolCursor, Category: types.CategoryAgentState, Classification: types.EntryClassUndetermined, ModTime: time.Time{}},
 	}
@@ -483,19 +484,21 @@ func TestEvaluateEligibility_AgentStateReasons(t *testing.T) {
 	tests := []struct {
 		name           string
 		classification types.EntryClass
+		modTime        time.Time
 		wantEligible   bool
 		wantReason     EligibilityReason
 	}{
-		{"orphaned", types.EntryClassOrphaned, true, EligibilityReasonEligible},
-		{"live", types.EntryClassLive, false, EligibilityReasonAgentStateLive},
-		{"undetermined", types.EntryClassUndetermined, false, EligibilityReasonAgentStateUndetermined},
+		{"orphaned", types.EntryClassOrphaned, observedAt.Add(-200 * 365 * 24 * time.Hour), true, EligibilityReasonEligible},
+		{"orphaned within grace period", types.EntryClassOrphaned, observedAt.Add(-time.Hour), false, EligibilityReasonAgentStateReviewable},
+		{"live", types.EntryClassLive, observedAt.Add(-200 * 365 * 24 * time.Hour), false, EligibilityReasonAgentStateLive},
+		{"undetermined", types.EntryClassUndetermined, observedAt.Add(-200 * 365 * 24 * time.Hour), false, EligibilityReasonAgentStateUndetermined},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			item := types.DebrisInfo{
 				Category:       types.CategoryAgentState,
 				Classification: tt.classification,
-				ModTime:        observedAt.Add(-200 * 365 * 24 * time.Hour),
+				ModTime:        tt.modTime,
 			}
 			eligible, reason := EvaluateEligibility(item, opts, observedAt)
 			if eligible != tt.wantEligible || reason != tt.wantReason {
@@ -503,6 +506,44 @@ func TestEvaluateEligibility_AgentStateReasons(t *testing.T) {
 					eligible, reason, tt.wantEligible, tt.wantReason)
 			}
 		})
+	}
+}
+
+func TestEvaluateEligibility_AgentStateGracePeriodBoundary(t *testing.T) {
+	observedAt := time.Now()
+	opts := types.PruneOptions{Age: 7 * 24 * time.Hour}
+	item := types.DebrisInfo{
+		Category:       types.CategoryAgentState,
+		Classification: types.EntryClassOrphaned,
+		ModTime:        observedAt.Add(-AgentStateOrphanedGracePeriod),
+	}
+	// Exactly at the grace boundary the entry is still reviewable.
+	if eligible, reason := EvaluateEligibility(item, opts, observedAt); eligible || reason != EligibilityReasonAgentStateReviewable {
+		t.Fatalf("grace boundary = %t/%q; want false/%q", eligible, reason, EligibilityReasonAgentStateReviewable)
+	}
+	// One nanosecond older it becomes default-eligible.
+	item.ModTime = observedAt.Add(-AgentStateOrphanedGracePeriod - time.Nanosecond)
+	if eligible, reason := EvaluateEligibility(item, opts, observedAt); !eligible || reason != EligibilityReasonEligible {
+		t.Fatalf("just past grace = %t/%q; want true/%q", eligible, reason, EligibilityReasonEligible)
+	}
+	// A zero modification time is treated as older than the grace period,
+	// matching the general age filter's handling of unknown mtimes.
+	item.ModTime = time.Time{}
+	if eligible, reason := EvaluateEligibility(item, opts, observedAt); !eligible || reason != EligibilityReasonEligible {
+		t.Fatalf("zero mtime = %t/%q; want true/%q", eligible, reason, EligibilityReasonEligible)
+	}
+}
+
+func TestFilter_AgentStateGraceWindowNotDefaultSelected(t *testing.T) {
+	now := time.Now()
+	items := []types.DebrisInfo{
+		{ID: "young-orphan", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassOrphaned, ModTime: now.Add(-time.Hour)},
+		{ID: "old-orphan", Tool: types.ToolClaude, Category: types.CategoryAgentState, Classification: types.EntryClassOrphaned, ModTime: now.Add(-10 * 24 * time.Hour)},
+	}
+	opts := types.PruneOptions{Age: 7 * 24 * time.Hour}
+	filtered := Filter(items, opts)
+	if len(filtered) != 1 || filtered[0].ID != "old-orphan" {
+		t.Fatalf("Filter() = %+v; want only the orphan past the grace period", filtered)
 	}
 }
 

@@ -564,6 +564,8 @@ type cleanupDiagnostics struct {
 	AgentStateLiveSize          int64
 	AgentStateUndeterminedCount int
 	AgentStateUndeterminedSize  int64
+	AgentStateReviewableCount   int
+	AgentStateReviewableSize    int64
 	OtherBlocked                map[cleaner.EligibilityReason]cleanupDiagnosticBucket
 }
 
@@ -601,6 +603,9 @@ func summarizeCleanup(items []types.DebrisInfo, opts types.PruneOptions) cleanup
 		case cleaner.EligibilityReasonAgentStateUndetermined:
 			summary.AgentStateUndeterminedCount++
 			summary.AgentStateUndeterminedSize += item.Size
+		case cleaner.EligibilityReasonAgentStateReviewable:
+			summary.AgentStateReviewableCount++
+			summary.AgentStateReviewableSize += item.Size
 		default:
 			if summary.OtherBlocked == nil {
 				summary.OtherBlocked = make(map[cleaner.EligibilityReason]cleanupDiagnosticBucket)
@@ -648,6 +653,10 @@ func printCleanupDiagnostics(summary cleanupDiagnostics, opts types.PruneOptions
 	if summary.AgentStateUndeterminedCount > 0 {
 		fmt.Printf("  agent-state %s %s\n",
 			cleaner.FormatSize(summary.AgentStateUndeterminedSize), cleaner.EligibilityReasonAgentStateUndetermined)
+	}
+	if summary.AgentStateReviewableCount > 0 {
+		fmt.Printf("  reviewable  %s %s\n",
+			cleaner.FormatSize(summary.AgentStateReviewableSize), cleaner.EligibilityReasonAgentStateReviewable)
 	}
 	if len(summary.OtherBlocked) > 0 {
 		reasons := make([]string, 0, len(summary.OtherBlocked))

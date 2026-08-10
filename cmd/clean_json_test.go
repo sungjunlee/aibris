@@ -430,6 +430,7 @@ func TestCleanJSONReasonCodeAllowListPreservesKnownCodes(t *testing.T) {
 		{cleanReasonAge, "minimum_age"},
 		{cleanReasonAgentStateLive, "agent_state_live"},
 		{cleanReasonAgentStateUndetermined, "agent_state_undetermined"},
+		{cleanReasonAgentStateReviewable, "agent_state_reviewable"},
 		{cleanReasonMissingPath, "missing_path"},
 		{cleanReasonDuplicatePath, "duplicate_path"},
 		{cleanReasonNestedTarget, "nested_target"},
@@ -452,6 +453,73 @@ func TestCleanJSONReasonCodeAllowListPreservesKnownCodes(t *testing.T) {
 		if code != tt.code || cleanJSONReasonCode(code) != tt.code {
 			t.Errorf("audit reason %q mapped to %q; want preserved %q", tt.reason, code, tt.code)
 		}
+	}
+}
+
+func TestCleanJSONPolicyForAuditItemClassifiesGraceWindowOrphanReviewable(t *testing.T) {
+	now := time.Now()
+	opts := types.PruneOptions{Age: 7 * 24 * time.Hour}
+	tests := []struct {
+		name       string
+		item       types.DebrisInfo
+		wantPolicy string
+		wantCodes  []string
+	}{
+		{
+			name: "orphaned past grace period",
+			item: types.DebrisInfo{
+				Tool:           types.ToolClaude,
+				Category:       types.CategoryAgentState,
+				Classification: types.EntryClassOrphaned,
+				ModTime:        now.Add(-10 * 24 * time.Hour),
+			},
+			wantPolicy: cleanJSONPolicyEligible,
+			wantCodes:  []string{"agent_state_orphaned"},
+		},
+		{
+			name: "orphaned within grace period",
+			item: types.DebrisInfo{
+				Tool:           types.ToolClaude,
+				Category:       types.CategoryAgentState,
+				Classification: types.EntryClassOrphaned,
+				ModTime:        now.Add(-time.Hour),
+			},
+			wantPolicy: cleanJSONPolicyReviewable,
+			wantCodes:  []string{"agent_state_reviewable"},
+		},
+		{
+			name: "live protected",
+			item: types.DebrisInfo{
+				Tool:           types.ToolClaude,
+				Category:       types.CategoryAgentState,
+				Classification: types.EntryClassLive,
+				ModTime:        now.Add(-time.Hour),
+			},
+			wantPolicy: cleanJSONPolicyProtected,
+			wantCodes:  []string{"agent_state_live"},
+		},
+		{
+			name: "undetermined protected",
+			item: types.DebrisInfo{
+				Tool:           types.ToolClaude,
+				Category:       types.CategoryAgentState,
+				Classification: types.EntryClassUndetermined,
+				ModTime:        now.Add(-time.Hour),
+			},
+			wantPolicy: cleanJSONPolicyProtected,
+			wantCodes:  []string{"agent_state_undetermined"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			policy, codes := cleanJSONPolicyForAuditItem(tt.item, opts, nil, now)
+			if policy != tt.wantPolicy {
+				t.Fatalf("policy = %q; want %q", policy, tt.wantPolicy)
+			}
+			if !slices.Equal(codes, tt.wantCodes) {
+				t.Fatalf("codes = %v; want %v", codes, tt.wantCodes)
+			}
+		})
 	}
 }
 

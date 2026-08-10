@@ -156,7 +156,7 @@ func TestUnifiedCleanupPlanAdaptersShareOnePolicyNeutralModel(t *testing.T) {
 	}
 }
 
-func TestUnifiedCleanupPlanAbsorbsAgeIndependentAgentState(t *testing.T) {
+func TestUnifiedCleanupPlanAbsorbsOrphanedAgentStateBeyondGracePeriod(t *testing.T) {
 	root := t.TempDir()
 	now := time.Now()
 	agentState := cleanupPlanTestItem(
@@ -166,7 +166,7 @@ func TestUnifiedCleanupPlanAbsorbsAgeIndependentAgentState(t *testing.T) {
 	)
 	agentState.Tool = types.ToolClaude
 	agentState.Classification = types.EntryClassOrphaned
-	agentState.ModTime = now
+	agentState.ModTime = now.Add(-10 * 24 * time.Hour)
 	cache := cleanupPlanTestItem(filepath.Join(root, ".cache", "pip"), types.CategoryOtherCache, 40)
 	cache.ModTime = now.Add(-60 * 24 * time.Hour)
 
@@ -174,7 +174,7 @@ func TestUnifiedCleanupPlanAbsorbsAgeIndependentAgentState(t *testing.T) {
 		Age: 30 * 24 * time.Hour,
 	})
 	if got, want := len(classicTargets), 2; got != want {
-		t.Fatalf("classic targets = %d, want %d; recent orphaned agent-state must bypass the age gate", got, want)
+		t.Fatalf("classic targets = %d, want %d; orphaned agent-state past the grace period must bypass the general age gate", got, want)
 	}
 
 	unit := WorktreeCleanupUnit{
@@ -218,6 +218,67 @@ func TestUnifiedCleanupPlanAbsorbsAgeIndependentAgentState(t *testing.T) {
 	}
 }
 
+func TestUnifiedCleanupPlanMarksGraceWindowAgentStateReviewable(t *testing.T) {
+	root := t.TempDir()
+	now := time.Now()
+	youngOrphan := cleanupPlanTestItem(
+		filepath.Join(root, ".claude", "projects", "young-orphan"),
+		types.CategoryAgentState,
+		50,
+	)
+	youngOrphan.Tool = types.ToolClaude
+	youngOrphan.Classification = types.EntryClassOrphaned
+	youngOrphan.ModTime = now.Add(-time.Hour)
+
+	// Within the grace period the classic filter excludes the entry from
+	// default selection...
+	classicTargets := cleaner.Filter([]types.DebrisInfo{youngOrphan}, types.PruneOptions{Age: 7 * 24 * time.Hour})
+	if len(classicTargets) != 0 {
+		t.Fatalf("classic targets = %d; want grace-window orphan excluded from default selection", len(classicTargets))
+	}
+
+	// ...but the reviewable adapter keeps it explicitly selectable.
+	candidates := ReviewableAgentStateCleanupPlanCandidates([]types.DebrisInfo{youngOrphan}, now)
+	if len(candidates) != 1 {
+		t.Fatalf("reviewable candidates = %d; want 1", len(candidates))
+	}
+	if candidates[0].Selection != CleanupPlanUnselected ||
+		candidates[0].PolicyDecision != CleanupPlanPolicyReviewable {
+		t.Fatalf("candidate selection/policy = %q/%q; want unselected/reviewable",
+			candidates[0].Selection, candidates[0].PolicyDecision)
+	}
+	if !hasCleanupPlanReason(candidates[0].Reasons, CleanupPlanReasonAgentStateGracePeriod) {
+		t.Fatalf("candidate reasons = %#v; want grace-period reason", candidates[0].Reasons)
+	}
+
+	plan, err := BuildUnifiedCleanupPlan(context.Background(), candidates, CleanupPlanEvidence{ObservedAt: now})
+	if err != nil {
+		t.Fatalf("BuildUnifiedCleanupPlan() error = %v", err)
+	}
+	row := cleanupPlanRowByKey(t, plan, candidates[0].RowKey)
+	if row.Selection != CleanupPlanUnselected {
+		t.Fatalf("plan selection = %q; want unselected", row.Selection)
+	}
+	if got := plan.SelectedPhysicalTargets(); len(got) != 0 {
+		t.Fatalf("selected physical targets = %d; grace-window orphan must not be default-selected", len(got))
+	}
+
+	// The reviewable adapter ignores eligible and protected entries.
+	oldOrphan := youngOrphan
+	oldOrphan.ID = "old-orphan"
+	oldOrphan.Path = filepath.Join(root, ".claude", "projects", "old-orphan")
+	oldOrphan.ModTime = now.Add(-10 * 24 * time.Hour)
+	live := youngOrphan
+	live.ID = "live"
+	live.Path = filepath.Join(root, ".claude", "projects", "live")
+	live.Classification = types.EntryClassLive
+	reviewable := ReviewableAgentStateCleanupPlanCandidates(
+		[]types.DebrisInfo{youngOrphan, oldOrphan, live}, now)
+	if len(reviewable) != 1 || reviewable[0].Item.ID != "young-orphan" {
+		t.Fatalf("reviewable candidates = %#v; want only the young orphan", reviewable)
+	}
+}
+
 func TestUnifiedCleanupPlanCountsNestedAgentStateOnce(t *testing.T) {
 	root := t.TempDir()
 	now := time.Now()
@@ -230,7 +291,7 @@ func TestUnifiedCleanupPlanCountsNestedAgentStateOnce(t *testing.T) {
 	)
 	agentState.Tool = types.ToolClaude
 	agentState.Classification = types.EntryClassOrphaned
-	agentState.ModTime = now
+	agentState.ModTime = now.Add(-60 * 24 * time.Hour)
 
 	targets := cleaner.Filter([]types.DebrisInfo{parent, agentState}, types.PruneOptions{
 		Age: 30 * 24 * time.Hour,
@@ -262,7 +323,7 @@ func TestUnifiedCleanupPlanDescendantLockDominatesSelectedAgentState(t *testing.
 	)
 	agentState.Tool = types.ToolClaude
 	agentState.Classification = types.EntryClassOrphaned
-	agentState.ModTime = time.Now()
+	agentState.ModTime = time.Now().Add(-10 * 24 * time.Hour)
 	selected := ClassicCleanupPlanCandidates(cleaner.Filter(
 		[]types.DebrisInfo{agentState},
 		types.PruneOptions{Age: 365 * 24 * time.Hour},

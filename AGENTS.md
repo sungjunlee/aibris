@@ -38,7 +38,7 @@ registry를 함께 사용하고 `.git` metadata로 검증한다.
 - worktree 컨테이너처럼 프로젝트가 하위 디렉토리인 adapter는 `detectProjectName()`으로 추론 (숨김 디렉토리 제외)
 - recorded cwd 자체가 프로젝트를 가리키는 store adapter는 `projectNameFromRecordedCWD()`로 마지막 경로 조각을 사용 (파일시스템 조회 금지)
 - `internal/adapter/providers.go` 의 `providers` 목록에 등록
-- `Category()`가 `agent-state`인 adapter는 `AgentStateRevalidator`도 구현 (`agent-state`는 age gate 없이 기본 정리되며, 등록된 revalidator가 없으면 삭제 거부)
+- `Category()`가 `agent-state`인 adapter는 `AgentStateRevalidator`도 구현 (`agent-state`는 orphaned만 정리되며, 48h grace period 이후 기본 선택되고 그 전에는 reviewable; 등록된 revalidator가 없으면 삭제 거부)
 
 **1-1. Worktree discovery 변경시 꼭 지킬 것**
 - known deep container는 finite exact registry로만 추가한다. 현재 registry는 `~/.codex/worktrees`, `~/.relay/worktrees`, `~/.gstack/worktrees`, `~/.config/superpowers/worktrees`
@@ -92,8 +92,8 @@ skills/
 | Tool | Category | clean 기본 | 기본 경로 |
 |------|----------|-----------|---------|
 | worktree (registry + convention) | worktree | orphaned만 ✅ | finite exact registry + depth-4 `{worktrees,worktree,worktree-*,worktrees-*}/<entry>/` fallback; direct/one-level nested `.git` only |
-| claude | agent-state | orphaned만 ✅ (age gate 없음; live/undetermined 보호) | `~/.claude/projects/<name>/` |
-| cursor | agent-state | orphaned만 ✅ (age gate 없음; live/undetermined 보호) | `~/.cursor/projects/<name>/` |
+| claude | agent-state | orphaned만 ✅ (48h grace period 후 기본 선택; 그 전 reviewable, live/undetermined 보호) | `~/.claude/projects/<name>/` |
+| cursor | agent-state | orphaned만 ✅ (48h grace period 후 기본 선택; 그 전 reviewable, live/undetermined 보호) | `~/.cursor/projects/<name>/` |
 | windsurf | ai-logs | 🚫 `--risky` | `~/.codeium/windsurf/` |
 | node_modules | node_modules | ✅ | `$HOME/**/node_modules/` with noisy directories pruned |
 | build-cache | build-cache | ✅ | `~/.cache/go-build/`, `~/.gradle/caches/`, `~/.npm/_cacache/`, `~/.cargo/registry/`, `~/Library/Caches/Xcode/` |

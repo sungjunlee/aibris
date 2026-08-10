@@ -14,9 +14,9 @@ mutation is ever authorized and in what a timestamp can mean.
    worktrees require validated `.git` health (classic cleanup still applies
    its age/status filters; guided review applies its own locks and holds),
    and agent-state entries require a recorded working directory proven absent
-   (#138), which replaces the age gate. Read-only retention
-   inventory (codex-sessions) adds a non-authorizing UTC-month surface
-   ([PROTECTED_RETENTION.md](PROTECTED_RETENTION.md)).
+   (#138), with a short grace period gating only default selection. Read-only
+   retention inventory (codex-sessions) adds a non-authorizing UTC-month
+   surface ([PROTECTED_RETENTION.md](PROTECTED_RETENTION.md)).
 2. **Generic build debris** — complementary coverage so `scan` is a complete
    picture of one home: `node_modules`, build caches, pip/uv caches. General-
    purpose cleaners already handle these; aibris includes them but does not
@@ -33,8 +33,9 @@ is immutable afterward, so UTC-month retention buckets and age presentation
 are meaningful there. A global cache directory's mtime tracks continuous use
 and can never satisfy a fixed age gate, so age-based cleanup is structurally
 weak for generic build debris. This asymmetry is why agent state never relies
-on age alone: proof-based recorded-cwd classification replaces the age gate
-for `agent-state`, and the retention inventory is a read-only mtime-based
+on age alone: proof-based recorded-cwd classification decides eligibility for
+`agent-state`, a short grace period gates only whether a proven orphan is
+default-selected, and the retention inventory is a read-only mtime-based
 snapshot rather than an age-based deletion path.
 
 ## Categories
@@ -45,7 +46,7 @@ snapshot rather than an age-based deletion path.
 | `node_modules` | yes | medium | Project dependency folders under `$HOME` scan roots. They can be recreated with package managers. |
 | `build-cache` | yes | medium | Go, Xcode, Gradle, npm, and Cargo caches. They are usually safe but may slow the next build. |
 | `other-cache` | yes | low | pip and uv package caches. |
-| `agent-state` | orphaned only | low | Claude and Cursor project-store entries classified from recorded working directories. Orphaned entries have no age gate; `live` and `undetermined` entries are always protected. |
+| `agent-state` | orphaned only (48h grace period) | low | Claude and Cursor project-store entries classified from recorded working directories. Orphaned entries are default-selected only after a 48h grace period; younger orphans are reviewable (cleanable by explicit selection), and `live` and `undetermined` entries are always protected. |
 | `ai-logs` | no | high | AI tool logs, archived sessions, file history, and similar records. Requires `--risky`. |
 
 Unknown or future categories should stay risky until they have explicit safety
@@ -208,12 +209,15 @@ other categories:
 | Classification | Meaning | Cleanup eligibility |
 | ---------------- | --------- | --------------------- |
 | `live` | At least one recorded working directory still exists. | Protected |
-| `orphaned` | Every usable recorded working directory is proven absent. | Eligible without an age gate |
+| `orphaned` | Every usable recorded working directory is proven absent. | Default-eligible after a 48h grace period; younger orphans are reviewable |
 | `undetermined` | Recorded working-directory evidence is missing, unreadable, ambiguous, or otherwise inconclusive. | Protected |
 
-Classification takes precedence over age because an absent recorded working
-directory proves the associated work is gone and resume is already impossible.
-Directory modification time cannot strengthen or weaken that proof.
+Classification takes precedence over the general age filter because an absent
+recorded working directory proves the associated work is gone and resume is
+already impossible. Directory modification time cannot strengthen or weaken
+that proof; it only gates whether a proven orphan is default-selected (the
+dedicated `cleaner.AgentStateOrphanedGracePeriod`, 48h) rather than held for
+review.
 
 Classification also applies across category boundaries. A `live` or
 `undetermined` agent-state row that contains, is contained by, or exactly
@@ -242,9 +246,10 @@ revalidation outcome.
 Cursor project-store migration is explicit at the category boundary:
 `--category ai-logs` no longer matches `~/.cursor/projects`, while
 `--category agent-state` now does. An orphaned Cursor entry is eligible for
-default cleanup immediately, without an age gate. A `live` or `undetermined`
-entry is protected even with `--risky --force`. The `ai-logs` category is not
-empty: it still includes the Windsurf adapter and the generic AI log provider.
+default cleanup after the 48h grace period; a younger orphan is reviewable but
+not default-selected. A `live` or `undetermined` entry is protected even with
+`--risky --force`. The `ai-logs` category is not empty: it still includes the
+Windsurf adapter and the generic AI log provider.
 
 ## Filter Semantics
 
