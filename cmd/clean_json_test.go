@@ -303,6 +303,131 @@ func TestCleanJSONPolicySeparatesClassicAndGuidedAge(t *testing.T) {
 	}
 }
 
+func TestCleanJSONPolicyEmitsAgentStateGrace(t *testing.T) {
+	policy := cleanJSONPolicyFor(
+		types.PruneOptions{
+			Age:                  7 * 24 * time.Hour,
+			AgentStateMinIdleAge: cleaner.DefaultAgentStateMinIdleAge,
+		},
+		nil,
+	)
+	if policy.AgentStateGrace != "1d" {
+		t.Fatalf("agent_state_grace = %q; want 1d for the 24h default", policy.AgentStateGrace)
+	}
+	disabled := cleanJSONPolicyFor(types.PruneOptions{Age: 7 * 24 * time.Hour}, nil)
+	if disabled.AgentStateGrace != "0d" {
+		t.Fatalf("disabled agent_state_grace = %q; want 0d", disabled.AgentStateGrace)
+	}
+}
+
+func TestCleanAgentStateGraceFlagDefaultsToTwentyFourHours(t *testing.T) {
+	flag := cleanCmd.Flags().Lookup("agent-state-grace")
+	if flag == nil {
+		t.Fatal("clean is missing --agent-state-grace")
+	}
+	if flag.DefValue != "24h" {
+		t.Fatalf("--agent-state-grace default = %q; want 24h", flag.DefValue)
+	}
+	grace, err := parseAge(flag.DefValue)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if grace != cleaner.DefaultAgentStateMinIdleAge {
+		t.Fatalf("--agent-state-grace default = %s; want %s", grace, cleaner.DefaultAgentStateMinIdleAge)
+	}
+}
+
+func TestBuildCleanJSONPlanHoldsFreshOrphanedAgentStateReviewable(t *testing.T) {
+	t.Cleanup(resetCleanFlags)
+	resetCleanFlags()
+	root := t.TempDir()
+	fresh := types.DebrisInfo{
+		Tool:           types.ToolClaude,
+		Category:       types.CategoryAgentState,
+		ID:             "fresh-orphan",
+		Path:           filepath.Join(root, "fresh"),
+		Size:           64,
+		Classification: types.EntryClassOrphaned,
+		ModTime:        time.Now().Add(-2 * time.Hour),
+	}
+	idle := types.DebrisInfo{
+		Tool:           types.ToolClaude,
+		Category:       types.CategoryAgentState,
+		ID:             "idle-orphan",
+		Path:           filepath.Join(root, "idle"),
+		Size:           128,
+		Classification: types.EntryClassOrphaned,
+		ModTime:        time.Now().Add(-48 * time.Hour),
+	}
+	for _, path := range []string{fresh.Path, idle.Path} {
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	items := []types.DebrisInfo{fresh, idle}
+	opts := types.PruneOptions{
+		Age:                  time.Hour,
+		AgentStateMinIdleAge: cleaner.DefaultAgentStateMinIdleAge,
+	}
+	targets := cleaner.Filter(items, opts)
+	if len(targets) != 1 || targets[0].ID != idle.ID {
+		t.Fatalf("filtered targets = %+v; want only the idle orphaned entry", targets)
+	}
+	source := scanSource{Kind: scanSourceLive, ObservedAt: time.Now()}
+	logicalInputs := cleanupOverlapLogicalInputsForAudit(items, opts, nil)
+	audit := buildPhysicalCleanAuditWithLogicalInputs(
+		items, nil, targets, opts, 1, source, nil, logicalInputs,
+	)
+
+	document, err := buildCleanJSONPlan(
+		context.Background(),
+		&types.ScanResult{Worktrees: items},
+		source,
+		opts,
+		nil,
+		targets,
+		nil,
+		audit,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if document.Policy.AgentStateGrace != "1d" {
+		t.Fatalf("plan agent_state_grace = %q; want 1d", document.Policy.AgentStateGrace)
+	}
+	if document.SchemaVersion != cleanJSONSchemaVersion {
+		t.Fatalf("schema version = %d; want %d", document.SchemaVersion, cleanJSONSchemaVersion)
+	}
+	byTarget := make(map[string]cleanJSONPhysicalTarget, len(document.PhysicalTargets))
+	for _, target := range document.PhysicalTargets {
+		byTarget[target.ID] = target
+	}
+	var freshRow, idleRow *cleanJSONRow
+	for i := range document.Rows {
+		switch byTarget[document.Rows[i].PhysicalTargetID].Bytes {
+		case fresh.Size:
+			freshRow = &document.Rows[i]
+		case idle.Size:
+			idleRow = &document.Rows[i]
+		}
+	}
+	if freshRow == nil || idleRow == nil {
+		t.Fatalf("plan rows = %+v; want one row per orphaned entry", document.Rows)
+	}
+	if freshRow.PolicyDecision != cleanJSONPolicyReviewable ||
+		freshRow.Decision != cleanJSONDecisionReviewable ||
+		!slices.Contains(freshRow.ReasonCodes, "agent_state_min_idle_age") {
+		t.Fatalf("fresh orphaned row = %+v; want reviewable agent_state_min_idle_age", freshRow)
+	}
+	if idleRow.PolicyDecision != cleanJSONPolicyEligible ||
+		!slices.Contains(idleRow.ReasonCodes, "agent_state_orphaned") {
+		t.Fatalf("idle orphaned row = %+v; want eligible agent_state_orphaned", idleRow)
+	}
+	if document.Totals.Selected != 1 || document.Totals.SelectedBytes != idle.Size {
+		t.Fatalf("plan totals = %+v; want only the idle entry selected", document.Totals)
+	}
+}
+
 func TestBuildCleanJSONPlanRejectsPartialScanBeforeEmission(t *testing.T) {
 	result := &types.ScanResult{ProviderErrors: []types.ScanProviderError{{
 		Tool:    types.ToolCodex,
@@ -430,6 +555,7 @@ func TestCleanJSONReasonCodeAllowListPreservesKnownCodes(t *testing.T) {
 		{cleanReasonAge, "minimum_age"},
 		{cleanReasonAgentStateLive, "agent_state_live"},
 		{cleanReasonAgentStateUndetermined, "agent_state_undetermined"},
+		{cleanReasonAgentStateMinIdleAge, "agent_state_min_idle_age"},
 		{cleanReasonMissingPath, "missing_path"},
 		{cleanReasonDuplicatePath, "duplicate_path"},
 		{cleanReasonNestedTarget, "nested_target"},
@@ -805,6 +931,106 @@ func TestCleanJSONCLIContractClassicRedactionAndIncludePaths(t *testing.T) {
 	if stderr != "" || !strings.Contains(stdout, nodeModules) || !strings.Contains(stdout, project) {
 		t.Fatalf("include-paths contract failed: stderr=%q stdout=%s", stderr, stdout)
 	}
+}
+
+func TestCleanJSONCLIContractAgentStateGraceDefaultAndAgedSelection(t *testing.T) {
+	binary := buildCLIContractBinary(t)
+	home := t.TempDir()
+	writeAgentStateGraceFixture(t, home)
+
+	stdout, stderr, err := runCleanJSONProcess(t, binary, home,
+		"clean", "--no-guide", "--dry-run", "--json", "--category", "agent-state")
+	if err != nil {
+		t.Fatalf("fresh orphaned clean JSON failed: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("fresh orphaned clean JSON stderr = %q", stderr)
+	}
+	var fresh cleanJSONPlan
+	if err := json.Unmarshal([]byte(stdout), &fresh); err != nil {
+		t.Fatalf("fresh orphaned clean JSON is invalid: %v\n%s", err, stdout)
+	}
+	if fresh.Policy.AgentStateGrace != "1d" {
+		t.Fatalf("default agent_state_grace = %q; want 1d", fresh.Policy.AgentStateGrace)
+	}
+	if len(fresh.Rows) != 1 || len(fresh.PhysicalTargets) != 1 {
+		t.Fatalf("fresh orphaned plan rows/targets = %d/%d; want 1/1", len(fresh.Rows), len(fresh.PhysicalTargets))
+	}
+	if fresh.Rows[0].Decision != cleanJSONDecisionReviewable ||
+		fresh.Rows[0].PolicyDecision != cleanJSONPolicyReviewable ||
+		!slices.Contains(fresh.Rows[0].ReasonCodes, "agent_state_min_idle_age") {
+		t.Fatalf("fresh orphaned row = %+v; want reviewable with agent_state_min_idle_age", fresh.Rows[0])
+	}
+	if fresh.PhysicalTargets[0].Decision != cleanJSONDecisionReviewable {
+		t.Fatalf("fresh orphaned physical target = %+v; want reviewable", fresh.PhysicalTargets[0])
+	}
+
+	stdout, stderr, err = runCleanJSONProcess(t, binary, home,
+		"clean", "--no-guide", "--dry-run", "--json", "--category", "agent-state",
+		"--agent-state-grace", "48h")
+	if err != nil {
+		t.Fatalf("custom grace clean JSON failed: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
+	}
+	var customGrace cleanJSONPlan
+	if err := json.Unmarshal([]byte(stdout), &customGrace); err != nil {
+		t.Fatalf("custom grace clean JSON is invalid: %v\n%s", err, stdout)
+	}
+	if customGrace.Policy.AgentStateGrace != "2d" {
+		t.Fatalf("custom agent_state_grace = %q; want 2d", customGrace.Policy.AgentStateGrace)
+	}
+
+	// The aged store gets its own home for two reasons. Idle age is the newest
+	// mtime anywhere inside the store, so the whole tree has to be backdated,
+	// not just the directory; and the runs above cached a scan of the first
+	// home, where the cleanup refresh is deliberately raising-only for
+	// activity-derived items and would keep the recorded fresh activity.
+	agedHome := t.TempDir()
+	agedEntry := writeAgentStateGraceFixture(t, agedHome)
+	chtimesTree(t, agedEntry, time.Now().Add(-72*time.Hour))
+	stdout, stderr, err = runCleanJSONProcess(t, binary, agedHome,
+		"clean", "--no-guide", "--dry-run", "--json", "--category", "agent-state",
+		"--agent-state-grace", "48h")
+	if err != nil {
+		t.Fatalf("aged orphaned clean JSON failed: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("aged orphaned clean JSON stderr = %q", stderr)
+	}
+	var aged cleanJSONPlan
+	if err := json.Unmarshal([]byte(stdout), &aged); err != nil {
+		t.Fatalf("aged orphaned clean JSON is invalid: %v\n%s", err, stdout)
+	}
+	if aged.Policy.AgentStateGrace != "2d" {
+		t.Fatalf("aged agent_state_grace = %q; want 2d", aged.Policy.AgentStateGrace)
+	}
+	if len(aged.Rows) != 1 || aged.Rows[0].Decision != cleanJSONDecisionSelected ||
+		aged.Rows[0].PolicyDecision != cleanJSONPolicyEligible ||
+		!slices.Contains(aged.Rows[0].ReasonCodes, "agent_state_orphaned") {
+		t.Fatalf("aged orphaned row = %+v; want selected agent_state_orphaned", aged.Rows)
+	}
+	if len(aged.PhysicalTargets) != 1 || aged.PhysicalTargets[0].Decision != cleanJSONDecisionSelected {
+		t.Fatalf("aged orphaned physical target = %+v; want selected", aged.PhysicalTargets)
+	}
+}
+
+// writeAgentStateGraceFixture creates one orphaned Claude project store under
+// home and returns its path.
+func writeAgentStateGraceFixture(t *testing.T, home string) string {
+	t.Helper()
+	entry := filepath.Join(home, ".claude", "projects", "fresh-orphan")
+	evidence, err := json.Marshal(map[string]string{
+		"cwd": filepath.Join(home, "missing", "fresh-project"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(entry, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(entry, "session.jsonl"), append(evidence, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return entry
 }
 
 func TestCleanJSONCLIContractPreservesProtectedWorktreeRowWithoutLockingNestedNodeModules(t *testing.T) {

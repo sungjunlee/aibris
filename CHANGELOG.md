@@ -2,6 +2,47 @@
 
 ## [Unreleased]
 
+### Added
+
+- `aibris clean --agent-state-grace <duration>` sets the minimum idle age an
+  orphaned `agent-state` entry must reach before it joins the default
+  selection. It defaults to `24h`, `0` disables the floor, and negative values
+  are refused. It is independent of `--age`, which still does not apply to
+  `agent-state`.
+- The clean-plan JSON `policy` object carries the new `agent_state_grace`
+  field, rendered by the same age display as `minimum_age` (the `24h` default
+  is emitted as `"1d"`, and `0` as `"0d"`).
+- The new `agent_state_min_idle_age` reason code marks a proof-classified
+  orphaned entry held by that floor.
+- A classic (`--no-guide`) plan can now carry `policy_decision: "reviewable"`,
+  which was previously reachable only on the guided route. It means "not
+  selected by default" on either route.
+
+### Changed
+
+- The stable default selection of orphaned `agent-state` now waits for a
+  minimum 24-hour idle grace. Classification remains proof-based from every
+  usable recorded working directory being absent, and `--age` still does not
+  apply. An entry
+  inside the grace window stays visible as non-selected plan evidence but never
+  enters the selection candidate set, so it is not offered as a toggleable row
+  under `--interactive`, in the guided unified review, or through JSON
+  execution; cleaning it means rerunning with a shorter or zero
+  `--agent-state-grace`, or waiting for the floor to elapse. To restore the previous immediate-selection
+  behavior, pass `--agent-state-grace 0`.
+- Agent-state idle age is now measured from the newest modification found
+  anywhere inside a project store rather than the store directory's own mtime.
+  A store directory's mtime stops moving once a session appends to a file
+  already inside it, so a session that started days ago and wrote a minute ago
+  used to read as idle. Such an entry now correctly stays out of the default
+  selection, and its `mod_time` in `scan --json` reports in-tree activity, as
+  `build-cache` and `other-cache` rows already do. A reused last-scan cache is
+  refused when an agent-state entry carries no recorded path mtime, the same
+  guard the cache categories already had.
+- `aibris scan`'s "default clean (estimate)" now applies the same 24-hour
+  agent-state idle floor `clean` uses, so the figure no longer counts entries
+  `clean` would refuse to select.
+
 ### Fixed
 
 - Cache staleness is now judged from modification activity anywhere in the

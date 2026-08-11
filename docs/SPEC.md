@@ -89,6 +89,7 @@ Flags:
 | `--interactive`, `-i` | `false` | Confirm each item before deleting. |
 | `--risky` | `false` | Include risky categories such as AI logs. |
 | `--include-active-worktrees` | `false` | Include active Git worktrees in cleanup candidates. |
+| `--agent-state-grace` | `24h` | Minimum idle age before a proof-classified orphaned `agent-state` entry joins the default selection. `0` disables the floor; the value must be non-negative. It gates only default selection of orphaned `agent-state` and is independent of `--age`, which never applies to that category. An entry inside the floor is excluded from the candidate set, so cleaning it requires rerunning with a lower or zero value. |
 | `--force`, `-f` | `false` | Skip the final confirmation prompt. It does not bypass hard locks or force Git worktree removal. |
 | `--guide` | `false` | Force the guided Codex worktree cleanup flow. When category/tool filters are omitted, it implies `--category worktree --tool codex`. When age is omitted, guided cleanup uses a 3-day minimum idle age; explicit `--age` changes only that value. With `--json`, it is supported only with `--dry-run`; execution JSON rejects it. |
 | `--no-guide` | `false` | Keep the classic cleanup audit/executor route even when active Codex pressure would open guided review. |
@@ -104,7 +105,9 @@ The stable documented CLI, JSON, default, and exit-status surfaces for this
 
 Behavior:
 
-1. Parse and validate `--age`.
+1. Parse and validate `--age` and `--agent-state-grace`. `--age` must be
+   positive; `--agent-state-grace` must be non-negative, where `0` disables the
+   agent-state idle floor.
 2. Warn when classic `--age` is shorter than one hour. The warning describes
    the broadened minimum-age eligibility only within the selected category/tool
    scope and explicitly preserves risky-category, active-worktree, agent-state,
@@ -112,7 +115,9 @@ Behavior:
 3. Obtain scan results from a fresh compatible scan cache or by scanning providers.
 4. Choose guided or classic cleanup. Classic cleanup applies category and tool
    selectors plus category-specific eligibility: age, risky status, and
-   worktree health for ordinary debris, or classification for `agent-state`.
+   worktree health for ordinary debris, or proof-based classification plus the
+   `--agent-state-grace` default-selection floor for `agent-state`. The classic
+   `--age` filter does not apply to `agent-state`.
    Guided cleanup builds physical cleanup units, collects Git and activity
    evidence, and applies the hierarchical policy below.
 5. Guided cleanup merges the accepted worktree selection and the classic
@@ -171,10 +176,26 @@ current modification time. After overlap safety refresh and immediately before
 mutation, it verifies identity, type, modification time, and age again. Evidence
 failure protects the affected target rather than trusting stale scan state.
 
-For `agent-state`, `classification` replaces the age gate. An absent recorded
-working directory proves the associated work is gone and resume is already
-impossible, so `orphaned` is eligible regardless of age after category and tool
-selection. `live` and `undetermined` are protected.
+For `agent-state`, `classification` remains proof-based rather than age-based.
+An entry is `orphaned` only once every usable recorded working directory is
+proven absent, which proves the associated work is gone and resume is already
+impossible; any live path keeps the entry `live`, and inconclusive evidence
+keeps it `undetermined`. The classic `--age` filter still
+does not apply. `--agent-state-grace` uses `item.ModTime` as a separate recency
+floor for default selection. For an agent-state store, `item.ModTime` is the
+newest modification found anywhere inside it, taken as the later of the store
+directory's own mtime and its in-tree activity, so a session still appending to
+an existing file counts as recent; `item.PathModTime` carries the store
+directory's own mtime for the tamper checks. An orphan inside that window is
+kept out of the selection candidate set rather than protected: it stays visible
+as non-selected plan evidence but is not offered as a toggleable row anywhere,
+and cleaning it requires rerunning with a shorter or
+zero `--agent-state-grace`, or waiting for the floor to elapse. Its JSON
+`policy_decision` is `reviewable`, meaning "not selected by default". The floor
+is a selection policy, not a mutation safety property: the pre-mutation barrier
+applies no age check to `agent-state`, and the registered agent-state
+revalidator remains the mutation-time guard. `live` and `undetermined` remain
+protected.
 
 Absence is proven only when the nearest existing ancestor is inside an
 available home or temporary tree and shares a volume identity with its parent.
@@ -338,7 +359,7 @@ Cross-category containment uses the same physical-component contract:
 | `node_modules` | yes | `node_modules` | `$HOME/**/node_modules`, with noisy system/media/cache directories pruned |
 | `build-cache` | yes | `build-cache` | `~/.cache/go-build`, `~/.gradle/caches`, `~/.npm/_cacache`, `~/.cargo/registry`, `~/Library/Caches/Xcode` |
 | `other-cache` | yes | `pip-cache` | `~/.cache/pip`, `~/.cache/uv` |
-| `agent-state` | orphaned only, no age gate | `claude`, `cursor` | recorded-cwd project stores; `live` and `undetermined` entries are protected |
+| `agent-state` | proof-classified orphaned only; default selection waits for `--agent-state-grace` | `claude`, `cursor` | recorded-cwd project stores; `live` and `undetermined` entries are protected; classic `--age` does not apply |
 | `ai-logs` | no, requires `--risky` | `ai-logs`, `windsurf` | known Codex, Claude, and Windsurf log/cache locations |
 
 The installed/regenerable/protected store-nature terms used to plan issue #142

@@ -58,6 +58,7 @@ type cleanJSONEvidence struct {
 type cleanJSONPolicy struct {
 	MinimumAge             string   `json:"minimum_age"`
 	GuidedMinIdleAge       string   `json:"guided_min_idle_age,omitempty"`
+	AgentStateGrace        string   `json:"agent_state_grace"`
 	Categories             []string `json:"categories"`
 	Tools                  []string `json:"tools"`
 	Risky                  bool     `json:"risky"`
@@ -135,6 +136,13 @@ func runCleanJSON(cmd *cobra.Command) {
 	if age <= 0 {
 		failCleanJSON("--age must be positive")
 	}
+	agentStateGrace, err := parseAge(cleanAgentStateGrace)
+	if err != nil {
+		failCleanJSON("invalid --agent-state-grace value")
+	}
+	if agentStateGrace < 0 {
+		failCleanJSON("--agent-state-grace must be non-negative")
+	}
 
 	guidedAge := guidedCleanAge(cmd, age)
 	if cleanGuide {
@@ -163,7 +171,7 @@ func runCleanJSON(cmd *cobra.Command) {
 		}
 		failCleanJSON("cleanup scan failed")
 	}
-	refreshCleanupInventoryMetadata(result.Worktrees)
+	refreshCleanupInventoryMetadataWithContext(ctx, result.Worktrees)
 	overlapSafety, err := newDefaultCleanupOverlapSafetyRuntime(ctx)
 	if err != nil {
 		failCleanJSON("cleanup safety preparation failed")
@@ -197,6 +205,7 @@ func runCleanJSON(cmd *cobra.Command) {
 		Risky:                  cleanRisky,
 		Force:                  cleanForce,
 		IncludeActiveWorktrees: cleanIncludeActiveWorktrees,
+		AgentStateMinIdleAge:   agentStateGrace,
 	}
 	var guidedStatePtr *guidedCleanState
 	if experience == cleanExperienceGuided {
@@ -401,6 +410,8 @@ func cleanJSONReasonCodeForEligibility(reason cleaner.EligibilityReason) string 
 		return "agent_state_live"
 	case cleaner.EligibilityReasonAgentStateUndetermined:
 		return "agent_state_undetermined"
+	case cleaner.EligibilityReasonAgentStateMinIdleAge:
+		return "agent_state_min_idle_age"
 	case cleaner.EligibilityReasonEligible:
 		return "eligible"
 	default:
@@ -422,6 +433,8 @@ func cleanJSONReasonCodeForAuditReason(reason cleanAuditReason) string {
 		return "agent_state_live"
 	case cleanReasonAgentStateUndetermined:
 		return "agent_state_undetermined"
+	case cleanReasonAgentStateMinIdleAge:
+		return "agent_state_min_idle_age"
 	case cleanReasonMissingPath:
 		return "missing_path"
 	case cleanReasonDuplicatePath:
@@ -808,10 +821,11 @@ func cleanJSONPolicyForAuditRow(
 	}
 }
 
-// cleanJSONDecisionForAuditComponent marks only standalone safety owners as
-// protected. A protected inventory row attached to a separately selected
-// nested component remains evidence on that selected component: upgrading it
-// into a locked plan candidate would reintroduce the B1 containment lockout.
+// cleanJSONDecisionForAuditComponent preserves standalone owner safety and
+// reviewable policy decisions. A protected inventory row attached to a
+// separately selected nested component remains evidence on that selected
+// component: upgrading it into a locked plan candidate would reintroduce the
+// B1 containment lockout.
 func cleanJSONDecisionForAuditComponent(
 	component cleanupOverlapComponent,
 	protections map[string]cleanAuditReason,
@@ -824,8 +838,12 @@ func cleanJSONDecisionForAuditComponent(
 		if cleanAuditItemKey(row.Item) != ownerKey {
 			continue
 		}
-		if cleanJSONPolicyForAuditRow(row, component, protections).Decision == cleanJSONPolicyProtected {
+		ownerPolicy := cleanJSONPolicyForAuditRow(row, component, protections).Decision
+		switch ownerPolicy {
+		case cleanJSONPolicyProtected:
 			return cleanJSONDecisionProtected
+		case cleanJSONPolicyReviewable:
+			return cleanJSONDecisionReviewable
 		}
 	}
 	return cleanJSONDecisionSkipped
@@ -967,6 +985,7 @@ func cleanJSONPolicyFor(opts types.PruneOptions, guidedState *guidedCleanState) 
 	sort.Strings(tools)
 	policy := cleanJSONPolicy{
 		MinimumAge:             cleanAgeDisplay(opts.Age),
+		AgentStateGrace:        cleanAgeDisplay(opts.AgentStateMinIdleAge),
 		Categories:             categories,
 		Tools:                  tools,
 		Risky:                  opts.Risky,
@@ -1061,7 +1080,7 @@ func cleanJSONReasonCode(code string) string {
 	switch code {
 	case "classic_eligible", "agent_state_orphaned", "contains_locked_target", "overlaps_locked_target", "worktree_policy_decision",
 		"current_working_directory", "git_dirty_or_untracked", "git_evidence_unavailable", "git_detached_head_unreferenced", "activity_evidence_unavailable", "recent_activity", "retained_per_repository", "younger_than_min_idle_age", "below_min_size", "cleanup_recommended", "git_attached_local_branch", "git_detached_head_reachable",
-		"filtered", "risky_requires_opt_in", "active_worktree", "worktree_requires_review", "minimum_age", "agent_state_live", "agent_state_undetermined", "eligible", "missing_path", "duplicate_path", "nested_target", "overlap_target", "protected_agent_state_ancestor", "protected_agent_state_descendant", "ambiguous_overlap_identity", "command_overlap", "nested_revalidation", "nested_revalidation_required", "scan_evidence_unavailable", "protected_overlap", "not_selected", "policy_protected", "policy_decision", "git_dirty_files", "git_upstream_unavailable", "git_unpushed_commits",
+		"filtered", "risky_requires_opt_in", "active_worktree", "worktree_requires_review", "minimum_age", "agent_state_live", "agent_state_undetermined", "agent_state_min_idle_age", "eligible", "missing_path", "duplicate_path", "nested_target", "overlap_target", "protected_agent_state_ancestor", "protected_agent_state_descendant", "ambiguous_overlap_identity", "command_overlap", "nested_revalidation", "nested_revalidation_required", "scan_evidence_unavailable", "protected_overlap", "not_selected", "policy_protected", "policy_decision", "git_dirty_files", "git_upstream_unavailable", "git_unpushed_commits",
 		"removed", "partial_failure", "execution_failed", "cancelled", "physical_owner_present", "command_fallback_path_removal", "safety_refused", "execution_set_mismatch", "plan_validation_failed", "cancelled_before_execution", "cancelled_after_confirmation", "cancelled_after_execution", "cancelled_during_confirmation", "confirmation_cancelled", "invalid_confirmation", "not_confirmed", "execution_not_recorded", "execution_state":
 		return code
 	default:

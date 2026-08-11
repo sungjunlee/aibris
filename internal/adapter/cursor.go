@@ -76,7 +76,8 @@ func (a *CursorAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([]typ
 			ID:             entry.Name(),
 			Project:        project,
 			Path:           entryPath,
-			ModTime:        info.ModTime(),
+			ModTime:        agentStoreActivityModTime(ctx, entryPath, info.ModTime()),
+			PathModTime:    info.ModTime(),
 			Classification: classification,
 			Reason:         reason,
 		})

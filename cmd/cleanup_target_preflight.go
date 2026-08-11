@@ -45,6 +45,10 @@ type cleanupTargetSnapshot struct {
 }
 
 func refreshCleanupInventoryMetadata(items []types.DebrisInfo) {
+	refreshCleanupInventoryMetadataWithContext(context.Background(), items)
+}
+
+func refreshCleanupInventoryMetadataWithContext(ctx context.Context, items []types.DebrisInfo) {
 	for i := range items {
 		if isActiveWorktreeTarget(items[i]) {
 			// Active worktrees use session activity plus Git-aware preflight.
@@ -69,6 +73,16 @@ func refreshCleanupInventoryMetadata(items []types.DebrisInfo) {
 		// mtime still catches direct changes since the scan.
 		if pathModTime.After(items[i].ModTime) {
 			items[i].ModTime = pathModTime
+		}
+		// Agent-state stores are small and their whole point is the session
+		// history inside them, so re-derive rather than rely on the raise: an
+		// append to an existing session file moves neither the store directory's
+		// mtime nor anything else this refresh would see, and the cleanup
+		// preflight gives agent-state no minimum age to recheck later.
+		if items[i].Category == types.CategoryAgentState {
+			if activity := adapter.NewestTreeModTime(ctx, items[i].Path); activity.After(items[i].ModTime) {
+				items[i].ModTime = activity
+			}
 		}
 		items[i].PathModTime = pathModTime
 	}

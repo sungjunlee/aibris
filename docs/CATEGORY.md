@@ -14,7 +14,9 @@ mutation is ever authorized and in what a timestamp can mean.
    worktrees require validated `.git` health (classic cleanup still applies
    its age/status filters; guided review applies its own locks and holds),
    and agent-state entries require a recorded working directory proven absent
-   (#138), which replaces the age gate. Read-only retention
+   (#138), which remains the proof-based classification rule. A minimum idle
+   age gates only default selection of a proven orphan; it does not replace
+   that proof. Read-only retention
    inventory (codex-sessions) adds a non-authorizing UTC-month surface
    ([PROTECTED_RETENTION.md](PROTECTED_RETENTION.md)).
 2. **Generic build debris** — complementary coverage so `scan` is a complete
@@ -33,8 +35,10 @@ is immutable afterward, so UTC-month retention buckets and age presentation
 are meaningful there. A global cache directory's mtime tracks continuous use
 and can never satisfy a fixed age gate, so age-based cleanup is structurally
 weak for generic build debris. This asymmetry is why agent state never relies
-on age alone: proof-based recorded-cwd classification replaces the age gate
-for `agent-state`, and the retention inventory is a read-only mtime-based
+on age for classification: proof-based recorded-cwd classification remains the
+safety rule for `agent-state`, while `--agent-state-grace` applies the store's
+`ModTime` only as a recency floor for default selection. The classic `--age`
+filter does not apply, and the retention inventory is a read-only mtime-based
 snapshot rather than an age-based deletion path.
 
 ## Categories
@@ -45,7 +49,7 @@ snapshot rather than an age-based deletion path.
 | `node_modules` | yes | medium | Project dependency folders under `$HOME` scan roots. They can be recreated with package managers. |
 | `build-cache` | yes | medium | Go, Xcode, Gradle, npm, and Cargo caches. They are usually safe but may slow the next build. |
 | `other-cache` | yes | low | pip and uv package caches. |
-| `agent-state` | orphaned only | low | Claude and Cursor project-store entries classified from recorded working directories. Orphaned entries have no age gate; `live` and `undetermined` entries are always protected. |
+| `agent-state` | orphaned only | low | Claude and Cursor project-store entries are classified from recorded working directories. The classification is proof-based; `--agent-state-grace` gates default selection of proven orphaned entries, while `live` and `undetermined` entries are always protected. |
 | `ai-logs` | no | high | AI tool logs, archived sessions, file history, and similar records. Requires `--risky`. |
 
 Unknown or future categories should stay risky until they have explicit safety
@@ -208,12 +212,25 @@ other categories:
 | Classification | Meaning | Cleanup eligibility |
 | ---------------- | --------- | --------------------- |
 | `live` | At least one recorded working directory still exists. | Protected |
-| `orphaned` | Every usable recorded working directory is proven absent. | Eligible without an age gate |
+| `orphaned` | Every usable recorded working directory is proven absent. | Excluded from default selection inside the minimum idle age; default-selected after it. The classification itself is proof-based. |
 | `undetermined` | Recorded working-directory evidence is missing, unreadable, ambiguous, or otherwise inconclusive. | Protected |
 
-Classification takes precedence over age because an absent recorded working
-directory proves the associated work is gone and resume is already impossible.
-Directory modification time cannot strengthen or weaken that proof.
+Classification takes precedence over the classic `--age` filter because every
+usable recorded working directory being absent proves the associated work is
+gone and resume is already impossible. Directory modification time cannot strengthen or weaken
+that proof; `item.ModTime` only determines whether a proven orphan is inside
+the minimum idle window for default selection. `item.ModTime` for an
+agent-state store is the newest modification found anywhere inside it, not the
+store directory's own mtime, because a session that keeps appending to a file
+already in the store never touches the directory again.
+
+An entry inside that window never enters the selection candidate set. It is
+therefore not a togglable row: it is not offered under `--interactive`, in the
+guided unified review, or as a JSON execution target. It does stay visible in
+the plan as non-selected evidence, with `policy_decision` `reviewable`, which
+here means "not selected by default" — the plan reports it rather than offering
+it. Cleaning it means rerunning with `--agent-state-grace 0` or a shorter value,
+or waiting for the floor to elapse.
 
 Classification also applies across category boundaries. A `live` or
 `undetermined` agent-state row that contains, is contained by, or exactly
@@ -241,10 +258,13 @@ revalidation outcome.
 
 Cursor project-store migration is explicit at the category boundary:
 `--category ai-logs` no longer matches `~/.cursor/projects`, while
-`--category agent-state` now does. An orphaned Cursor entry is eligible for
-default cleanup immediately, without an age gate. A `live` or `undetermined`
-entry is protected even with `--risky --force`. The `ai-logs` category is not
-empty: it still includes the Windsurf adapter and the generic AI log provider.
+`--category agent-state` now does. An orphaned Cursor entry is classified
+immediately when its recorded workspace is proven absent, but default cleanup
+waits for `--agent-state-grace`; during that window it is excluded from default
+selection and cleaning it requires rerunning with a lower or zero grace. A
+`live` or `undetermined` entry is protected even with
+`--risky --force`. The `ai-logs` category is not empty: it still includes the
+Windsurf adapter and the generic AI log provider.
 
 ## Filter Semantics
 

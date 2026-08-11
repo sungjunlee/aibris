@@ -175,7 +175,7 @@ item list, not as a worktree-only list.
 | `source` | string | Worktree source such as `.codex`, `.somename`, `project-local`, or the registered `superpowers`; empty for non-worktree items. Superpowers rows use `tool=unknown`. |
 | `path` | string | Absolute filesystem path |
 | `size` | integer | Size in bytes |
-| `mod_time` | string | Last modification time in RFC 3339 format. For `build-cache` and `other-cache` rows this is the newest mtime found anywhere in the cache tree, not the path's own mtime. |
+| `mod_time` | string | Last modification time in RFC 3339 format. For `build-cache`, `other-cache`, and `agent-state` rows this is the newest mtime found anywhere in the tree, not the path's own mtime. |
 | `status` | string | Worktree health (`active`, `orphaned`, `plain-dir`) or empty for non-worktree items. Only scanner-validated `active` and `orphaned` worktree rows can enter cleanup safety; `plain-dir`, empty, and unknown values are review-only. |
 | `classification` | string | Agent-state health (`live`, `orphaned`, `undetermined`), omitted for items outside `agent-state`. Cursor project-store entries derive this from all distinct absolute `workspacePath=` values in `worker.log` that are outside `~/.cursor`; any live path wins and `orphaned` requires every usable path to be proven absent. |
 | `risk` | string | Derived cleanup risk (`low`, `medium`, `high`) |
@@ -197,8 +197,15 @@ marker is not `plain-dir`; it is a top-level partial provider error.
 For Cursor `agent-state`, `project` is the final path segment of the recorded
 workspace, not a decoded form of the project-store directory name. Missing,
 unreadable, or unusable `worker.log` evidence produces `undetermined`.
-Orphaned Cursor entries are eligible for default cleanup without an age gate;
-`live` and `undetermined` entries remain protected.
+Orphaned Cursor entries are classified from proof that every recorded workspace
+is absent. The classic `--age` filter does not apply; `policy.agent_state_grace`
+only gates default selection by the store's `mod_time`, which for agent-state is
+the newest mtime anywhere inside the store. An entry inside that window is
+`reviewable`, meaning it is not selected by default. It stays visible in the
+plan as non-selected evidence, but it never enters the selection candidate set,
+so it is not a toggleable row and cannot be requested through JSON execution.
+Rerun with a shorter or zero `--agent-state-grace` to clean it. `live` and `undetermined` entries remain
+protected.
 
 ### `summary` object
 
@@ -310,6 +317,7 @@ The clean-plan document has this top-level shape:
   },
   "policy": {
     "minimum_age": "7d",
+    "agent_state_grace": "1d",
     "categories": [],
     "tools": [],
     "risky": false,
@@ -376,8 +384,9 @@ arrays, are emitted as `[]`.
 `physical_target_id`; it is not a second logical-row action decision.
 `policy_decision` classifies the logical row's source policy:
 classic eligible rows use `eligible`, guided recommendations use
-`recommended`, guided soft holds use `reviewable`, hard locks and safety
-protections use `protected`, and filtered/noncandidate inventory uses
+`recommended`, guided soft holds and classic agent-state idle holds use
+`reviewable`, hard locks and safety protections use `protected`, and
+filtered/noncandidate inventory uses
 `skipped`. `reason_codes` contains stable machine-readable codes only; human
 reason descriptions are not part of this contract. Only `physical_targets` are
 action rows. An `ancestor` row is evidence attached to the selected physical
@@ -386,12 +395,33 @@ target may therefore carry protected or reviewable evidence with a
 `protected_overlap` reason code without becoming locked.
 
 `policy.minimum_age` is always the classic filter age actually passed in
-`opts.Age`, including on the mixed auto-guided route. When guided state exists,
-`policy.guided_min_idle_age` is additionally emitted with the guided policy's
-minimum idle age. It is omitted for classic-only plans. Thus the default
-auto-guided route reports `minimum_age: "7d"` and
-`guided_min_idle_age: "3d"`; an explicit guided route with its omitted age
-uses `3d` for both values.
+`opts.Age`, including on the mixed auto-guided route. `policy.agent_state_grace`
+is the configured `--agent-state-grace` duration rendered by the same age
+display as `minimum_age`, so the `24h` flag default is emitted as `"1d"`; `0` is
+emitted as `"0d"` and disables the floor. It only gates default selection of
+proof-classified orphaned `agent-state` rows. It does not change their
+classification or make the classic `--age` filter apply to them. When guided
+state exists, `policy.guided_min_idle_age` is additionally emitted with the
+guided policy's minimum idle age. It is omitted for classic-only plans. Thus
+the default auto-guided route reports `minimum_age: "7d"`,
+`agent_state_grace: "1d"`, and `guided_min_idle_age: "3d"`; an explicit guided
+route with its omitted age uses `3d` for both guided and classic values.
+
+`policy_decision: "reviewable"` is no longer guided-only. A classic
+(`--no-guide`) plan now emits it for a proof-classified orphaned `agent-state`
+row held by `agent_state_grace`. A consumer that keyed `reviewable` to the
+guided route must stop doing so; the value means "not selected by default" on
+either route. It is still not an offer: the held row is reported as evidence but
+never enters the selection candidate set.
+
+The stable agent-state policy reason codes are:
+
+| Code | Meaning |
+| ---- | ------- |
+| `agent_state_orphaned` | Recorded working directories are proven absent and the entry is eligible for selection. |
+| `agent_state_min_idle_age` | The entry is proven orphaned but its `mod_time` is inside `agent_state_grace`, so it is not selected by default. Rerun with a shorter or zero `--agent-state-grace` to clean it. |
+| `agent_state_live` | At least one recorded working directory still exists. |
+| `agent_state_undetermined` | The recorded working-directory evidence is inconclusive. |
 
 The byte accounting invariants are:
 

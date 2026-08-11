@@ -267,7 +267,7 @@ aibris clean --category node_modules
 | `node_modules` | ✅ 안전 | `$HOME` scan root 아래 npm project dependencies | node_modules |
 | `build-cache` | ✅ 안전 | Go/Xcode/Gradle/npm/Cargo caches | build-cache |
 | `other-cache` | ✅ 안전 | Python/uv pip caches | pip-cache |
-| `agent-state` | ✅ orphaned만, age gate 없음 | recorded cwd로 판정한 project store. live/undetermined는 항상 보호 | claude, cursor |
+| `agent-state` | ✅ recorded cwd 부재로 orphaned 분류; classic `--age`는 적용되지 않음; `--agent-state-grace` 경과 후 기본 선택 (0으로 해제) | 분류는 증명 기반. idle age는 store 내부 최신 mtime 기준. grace window 안의 항목은 기본 선택에서 제외되며 후보 row로도 나오지 않으므로, 지우려면 `--agent-state-grace 0`(또는 더 짧은 값)으로 재실행하거나 grace 경과를 기다린다. live/undetermined는 항상 보호 | claude, cursor |
 | `ai-logs` | 🚫 `--risky` 필요 | AI tool session logs, file history, archived sessions | ai-logs, windsurf |
 
 ## 주의사항

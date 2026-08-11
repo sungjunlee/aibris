@@ -62,11 +62,11 @@ func validateLastScanTargetEvidence(items []types.DebrisInfo, evidence map[strin
 		if !ok {
 			return false
 		}
-		// A cached cache-category item without PathModTime would be treated as
-		// though its ModTime were the path's own mtime, which silently turns
+		// A cached activity-derived item without PathModTime would be treated
+		// as though its ModTime were the path's own mtime, which silently turns
 		// off the tree-activity signal for the rest of the run. Refuse the
 		// whole cache and rescan instead of trusting the weaker reading.
-		if cacheActivityCategory(item.Category) && item.PathModTime.IsZero() {
+		if treeActivityCategory(item.Category) && item.PathModTime.IsZero() {
 			return false
 		}
 		info, identity, err := cleanupPathIdentity(item.Path)
@@ -79,10 +79,15 @@ func validateLastScanTargetEvidence(items []types.DebrisInfo, evidence map[strin
 	return true
 }
 
-// cacheActivityCategory reports whether a category's adapters derive ModTime
-// from activity inside the tree and therefore must record PathModTime.
-func cacheActivityCategory(category types.Category) bool {
-	return category == types.CategoryBuildCache || category == types.CategoryOtherCache
+// treeActivityCategory reports whether a category's adapters derive ModTime
+// from activity inside the tree and therefore must record PathModTime. Build
+// and package caches do; so do the agent-state project stores, whose own
+// directory mtime stops moving while a session keeps appending to a file
+// already inside them.
+func treeActivityCategory(category types.Category) bool {
+	return category == types.CategoryBuildCache ||
+		category == types.CategoryOtherCache ||
+		category == types.CategoryAgentState
 }
 
 func cleanupPathIdentity(path string) (os.FileInfo, string, error) {

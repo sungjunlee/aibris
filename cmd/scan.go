@@ -391,7 +391,13 @@ func printHumanScanResult(ctx context.Context, r *types.ScanResult) {
 	if r.Partial() {
 		fmt.Println("  default clean unavailable until a complete scan succeeds")
 	} else {
-		defaultPolicy := types.PruneOptions{Age: 7 * 24 * time.Hour}
+		// Mirror clean's own defaults, including the agent-state idle floor:
+		// the AI workflow starts from this estimate, so a figure that counts
+		// entries clean would not select is worse than no figure.
+		defaultPolicy := types.PruneOptions{
+			Age:                  7 * 24 * time.Hour,
+			AgentStateMinIdleAge: cleaner.DefaultAgentStateMinIdleAge,
+		}
 		diagnostics := summarizeCleanup(r.Worktrees, defaultPolicy)
 		fmt.Printf("  default clean (estimate) %s\n", cleaner.FormatSize(diagnostics.EligibleSize))
 		printCleanupDiagnostics(diagnostics, defaultPolicy)

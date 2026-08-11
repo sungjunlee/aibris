@@ -35,12 +35,12 @@ registry를 함께 사용하고 `.git` metadata로 검증한다.
 - `Name()`은 kebab-case 단일 소문자 (e.g. `codex`, `claude`)
 - `Scan()`은 context 취소를 존중해야 함
 - 발견된 모든 경로의 크기를 `estimateDirSize()`로 계산 (WalkDir 기반)
-- 중첩 캐시 트리(build cache, pip/uv cache)는 트리 내부 최신 mtime을 `ModTime`으로 보고하며, 컨테이너 mtime만 활동 신호로 사용하지 않는다. 컨테이너 자체 mtime이 곧 활동인 adapter(`node_modules` 등)에는 적용되지 않는다
+- 중첩 캐시 트리(build cache, pip/uv cache)와 agent-state project store는 트리 내부 최신 mtime을 `ModTime`으로 보고하며, 컨테이너 mtime만 활동 신호로 사용하지 않는다. 컨테이너 자체 mtime이 곧 활동인 adapter(`node_modules` 등)에는 적용되지 않는다
 - `ModTime`을 트리 내부 활동에서 유도하는 adapter는 `PathModTime`에 경로 자체의 stat mtime을 반드시 채운다 (비우면 cleanup preflight가 `ModTime`을 컨테이너 mtime으로 덮어써 활동 신호가 사라진다)
 - worktree 컨테이너처럼 프로젝트가 하위 디렉토리인 adapter는 `detectProjectName()`으로 추론 (숨김 디렉토리 제외)
 - recorded cwd 자체가 프로젝트를 가리키는 store adapter는 `projectNameFromRecordedCWD()`로 마지막 경로 조각을 사용 (파일시스템 조회 금지)
 - `internal/adapter/providers.go` 의 `providers` 목록에 등록
-- `Category()`가 `agent-state`인 adapter는 `AgentStateRevalidator`도 구현 (`agent-state`는 age gate 없이 기본 정리되며, 등록된 revalidator가 없으면 삭제 거부)
+- `Category()`가 `agent-state`인 adapter는 `AgentStateRevalidator`도 구현 (`agent-state` 분류는 recorded cwd 부재 증명 기반이고, `--age`는 적용되지 않으며, `--agent-state-grace` 최소 idle age는 기본 선택만 제한한다. 등록된 revalidator가 없으면 삭제 거부)
 
 **1-1. Worktree discovery 변경시 꼭 지킬 것**
 - known deep container는 finite exact registry로만 추가한다. 현재 registry는 `~/.codex/worktrees`, `~/.relay/worktrees`, `~/.gstack/worktrees`, `~/.config/superpowers/worktrees`
@@ -94,8 +94,8 @@ skills/
 | Tool | Category | clean 기본 | 기본 경로 |
 |------|----------|-----------|---------|
 | worktree (registry + convention) | worktree | orphaned만 ✅ | finite exact registry + depth-4 `{worktrees,worktree,worktree-*,worktrees-*}/<entry>/` fallback; direct/one-level nested `.git` only |
-| claude | agent-state | orphaned만 ✅ (age gate 없음; live/undetermined 보호) | `~/.claude/projects/<name>/` |
-| cursor | agent-state | orphaned만 ✅ (age gate 없음; live/undetermined 보호) | `~/.cursor/projects/<name>/` |
+| claude | agent-state | orphaned만 ✅ (분류는 증명 기반; `--age` 미적용; `--agent-state-grace`가 기본 선택을 지연; live/undetermined 보호) | `~/.claude/projects/<name>/` |
+| cursor | agent-state | orphaned만 ✅ (분류는 증명 기반; `--age` 미적용; `--agent-state-grace`가 기본 선택을 지연; live/undetermined 보호) | `~/.cursor/projects/<name>/` |
 | windsurf | ai-logs | 🚫 `--risky` | `~/.codeium/windsurf/` |
 | node_modules | node_modules | ✅ | `$HOME/**/node_modules/` with noisy directories pruned |
 | build-cache | build-cache | ✅ | `~/.cache/go-build/`, `~/.gradle/caches/`, `~/.npm/_cacache/`, `~/.cargo/registry/`, `~/Library/Caches/Xcode/` |
