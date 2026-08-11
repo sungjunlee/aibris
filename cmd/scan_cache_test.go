@@ -288,6 +288,61 @@ func TestReadFreshLastScanCacheRejectsCacheEntryWithoutPathModTime(t *testing.T)
 	}
 }
 
+// Agent-state stores derive ModTime from in-tree activity too, so the same
+// refusal has to cover them: without PathModTime the store's ModTime would be
+// read as the directory's own mtime and the --agent-state-grace floor would
+// silently go back to measuring the wrong thing.
+func TestReadFreshLastScanCacheRejectsAgentStateEntryWithoutPathModTime(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	entry := filepath.Join(home, ".claude", "projects", "orphaned-entry")
+	if err := os.MkdirAll(entry, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	session := filepath.Join(entry, "session.jsonl")
+	absentCWD := filepath.Join(home, "missing", "project")
+	if err := os.WriteFile(session, []byte(fmt.Sprintf("{\"cwd\":%q}\n", absentCWD)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	chtimesTree(t, entry, time.Now().Add(-48*time.Hour))
+
+	roots := []string{home}
+	result, err := scanner.ScanWithOptions(context.Background(), types.ScanOptions{Roots: roots})
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeLastScanCache(roots, scanner.DefaultScanner.ProviderIdentity(), result)
+	if _, _, ok := readFreshLastScanCache(roots); !ok {
+		t.Fatal("readFreshLastScanCache rejected an intact cache; fixture is wrong")
+	}
+
+	stored, ok := readLastScanCache()
+	if !ok {
+		t.Fatal("last-scan cache was not written")
+	}
+	stripped := false
+	for i := range stored.Result.Worktrees {
+		if stored.Result.Worktrees[i].Path != entry {
+			continue
+		}
+		if stored.Result.Worktrees[i].Category != types.CategoryAgentState {
+			t.Fatalf("fixture entry is %q; want agent-state", stored.Result.Worktrees[i].Category)
+		}
+		stored.Result.Worktrees[i].PathModTime = time.Time{}
+		stripped = true
+	}
+	if !stripped {
+		t.Fatalf("cached scan result lost the fixture store: %+v", stored.Result.Worktrees)
+	}
+	if err := saveLastScanCache(stored); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, ok := readFreshLastScanCache(roots); ok {
+		t.Fatal("readFreshLastScanCache accepted an agent-state entry with no recorded path mtime")
+	}
+}
+
 func TestReadLastScanCacheRejectsMalformedPayload(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)

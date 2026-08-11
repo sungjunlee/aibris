@@ -216,4 +216,7 @@ type PruneOptions struct {
 	Risky                  bool
 	Force                  bool
 	IncludeActiveWorktrees bool
+	// AgentStateMinIdleAge is the recency floor for default-selecting an orphaned
+	// agent-state entry. A value <= 0 disables the floor.
+	AgentStateMinIdleAge time.Duration
 }

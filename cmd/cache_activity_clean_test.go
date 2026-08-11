@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
+	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -402,5 +404,54 @@ func TestCleanJSONCLIContractIdleNestedCacheIsStillCleaned(t *testing.T) {
 	}
 	if _, statErr := os.Lstat(cache); !os.IsNotExist(statErr) {
 		t.Fatalf("idle nested cache survived cleanup: %v", statErr)
+	}
+}
+
+// TestAgentStateGraceSurvivesInventoryRefresh pins the composition, not just
+// the pieces: a store whose own directory mtime is long past the floor but
+// whose session file was written minutes ago must still be held after the
+// scan result passes through refreshCleanupInventoryMetadata. Round 1 of this
+// change had the adapter right and lost the signal here, because the refresh
+// overwrote ModTime with the directory's own mtime.
+func TestAgentStateGraceSurvivesInventoryRefresh(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	entry := writeAgentStateGraceFixture(t, home)
+	session := filepath.Join(entry, "session.jsonl")
+
+	stale := time.Now().Add(-30 * 24 * time.Hour)
+	chtimesTree(t, entry, stale)
+	written := time.Now().Add(-5 * time.Minute)
+	if err := os.Chtimes(session, written, written); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := scanner.ScanWithOptions(context.Background(), types.ScanOptions{Roots: []string{home}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	refreshCleanupInventoryMetadata(result.Worktrees)
+
+	opts := types.PruneOptions{
+		Age:                  7 * 24 * time.Hour,
+		AgentStateMinIdleAge: cleaner.DefaultAgentStateMinIdleAge,
+	}
+	var found bool
+	for _, item := range result.Worktrees {
+		if item.Path != entry {
+			continue
+		}
+		found = true
+		if item.Classification != types.EntryClassOrphaned {
+			t.Fatalf("fixture store classification = %q; want orphaned", item.Classification)
+		}
+		eligible, reason := cleaner.EvaluateEligibility(item, opts, time.Now())
+		if eligible || reason != cleaner.EligibilityReasonAgentStateMinIdleAge {
+			t.Fatalf("refreshed store eligibility = %t/%q (ModTime %v); want held by the idle floor",
+				eligible, reason, item.ModTime)
+		}
+	}
+	if !found {
+		t.Fatalf("scan did not report the fixture store: %+v", result.Worktrees)
 	}
 }

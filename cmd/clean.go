@@ -35,6 +35,7 @@ var (
 	cleanNoGuide                bool
 	cleanRoots                  []string
 	cleanIncludeActiveWorktrees bool
+	cleanAgentStateGrace        string
 )
 
 var cleanCmd = &cobra.Command{
@@ -81,6 +82,15 @@ review displays protected targets as locked rows.`,
 
 		if age <= 0 {
 			fmt.Fprintf(os.Stderr, "error: --age must be positive (got %s)\n", cleanAge)
+			os.Exit(1)
+		}
+		agentStateGrace, err := parseAge(cleanAgentStateGrace)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "invalid agent-state grace '%s': expected duration like 24h, 2d, 1w, or 0\n", cleanAgentStateGrace)
+			os.Exit(1)
+		}
+		if agentStateGrace < 0 {
+			fmt.Fprintf(os.Stderr, "error: --agent-state-grace must be non-negative (got %s)\n", cleanAgentStateGrace)
 			os.Exit(1)
 		}
 		guidedAge := guidedCleanAge(cmd, age)
@@ -155,6 +165,7 @@ review displays protected targets as locked rows.`,
 			Risky:                  cleanRisky,
 			Force:                  cleanForce,
 			IncludeActiveWorktrees: cleanIncludeActiveWorktrees,
+			AgentStateMinIdleAge:   agentStateGrace,
 		}
 
 		var guidedStatePtr *guidedCleanState
@@ -460,6 +471,12 @@ func init() {
 	cleanCmd.Flags().BoolVar(&cleanNoGuide, "no-guide", false, "Use classic cleanup even when guided Codex review is available")
 	cleanCmd.Flags().StringArrayVar(&cleanRoots, "root", nil, "Scan root under $HOME (repeatable)")
 	cleanCmd.Flags().BoolVar(&cleanIncludeActiveWorktrees, "include-active-worktrees", false, "Include active worktrees in cleanup candidates")
+	cleanCmd.Flags().StringVar(
+		&cleanAgentStateGrace,
+		"agent-state-grace",
+		"24h",
+		"Minimum idle age before an orphaned agent-state entry is selected by default (0 disables)",
+	)
 }
 
 func applyGuidedCleanDefaults(cmd *cobra.Command, age time.Duration) time.Duration {

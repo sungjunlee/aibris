@@ -506,6 +506,124 @@ func TestEvaluateEligibility_AgentStateReasons(t *testing.T) {
 	}
 }
 
+func TestEvaluateEligibility_AgentStateMinIdleAge(t *testing.T) {
+	observedAt := time.Now()
+	tests := []struct {
+		name           string
+		classification types.EntryClass
+		modTime        time.Time
+		minIdleAge     time.Duration
+		wantEligible   bool
+		wantReason     EligibilityReason
+	}{
+		{
+			name:           "orphaned within window",
+			classification: types.EntryClassOrphaned,
+			modTime:        observedAt.Add(-time.Hour),
+			minIdleAge:     DefaultAgentStateMinIdleAge,
+			wantEligible:   false,
+			wantReason:     EligibilityReasonAgentStateMinIdleAge,
+		},
+		{
+			name:           "orphaned older than window",
+			classification: types.EntryClassOrphaned,
+			modTime:        observedAt.Add(-48 * time.Hour),
+			minIdleAge:     DefaultAgentStateMinIdleAge,
+			wantEligible:   true,
+			wantReason:     EligibilityReasonEligible,
+		},
+		{
+			name:           "zero window keeps every orphaned entry selectable",
+			classification: types.EntryClassOrphaned,
+			modTime:        observedAt.Add(time.Hour),
+			minIdleAge:     0,
+			wantEligible:   true,
+			wantReason:     EligibilityReasonEligible,
+		},
+		{
+			name:           "live stays protected inside the window",
+			classification: types.EntryClassLive,
+			modTime:        observedAt,
+			minIdleAge:     DefaultAgentStateMinIdleAge,
+			wantEligible:   false,
+			wantReason:     EligibilityReasonAgentStateLive,
+		},
+		{
+			name:           "undetermined stays protected inside the window",
+			classification: types.EntryClassUndetermined,
+			modTime:        observedAt,
+			minIdleAge:     DefaultAgentStateMinIdleAge,
+			wantEligible:   false,
+			wantReason:     EligibilityReasonAgentStateUndetermined,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			item := types.DebrisInfo{
+				Category:       types.CategoryAgentState,
+				Classification: tt.classification,
+				ModTime:        tt.modTime,
+			}
+			opts := types.PruneOptions{
+				Age:                  168 * time.Hour,
+				AgentStateMinIdleAge: tt.minIdleAge,
+			}
+			eligible, reason := EvaluateEligibility(item, opts, observedAt)
+			if eligible != tt.wantEligible || reason != tt.wantReason {
+				t.Fatalf("EvaluateEligibility() = %t/%q; want %t/%q",
+					eligible, reason, tt.wantEligible, tt.wantReason)
+			}
+		})
+	}
+}
+
+func TestEvaluateEligibility_AgentStateMinIdleAgeLeavesOtherCategoriesOnTheAgeGate(t *testing.T) {
+	observedAt := time.Now()
+	opts := types.PruneOptions{
+		Age:                  time.Hour,
+		AgentStateMinIdleAge: DefaultAgentStateMinIdleAge,
+	}
+	item := types.DebrisInfo{
+		Tool:     types.ToolNodeModules,
+		Category: types.CategoryNodeModules,
+		ModTime:  observedAt.Add(-2 * time.Hour),
+	}
+	if eligible, reason := EvaluateEligibility(item, opts, observedAt); !eligible {
+		t.Fatalf("node_modules eligibility = %t/%q; want the classic age gate only", eligible, reason)
+	}
+}
+
+// TestEvaluateEligibility_AgentStateMinIdleAgeBoundaryIsHeld pins the exact
+// boundary rather than a comfortably-inside case: an entry whose ModTime lands
+// exactly on observedAt-grace is held, not selected. That matches the classic
+// --age gate's existing !Before convention, so the test exists to stop a later
+// refactor from silently flipping the inclusive edge.
+func TestEvaluateEligibility_AgentStateMinIdleAgeBoundaryIsHeld(t *testing.T) {
+	observedAt := time.Now()
+	opts := types.PruneOptions{
+		Age:                  168 * time.Hour,
+		AgentStateMinIdleAge: DefaultAgentStateMinIdleAge,
+	}
+	boundary := types.DebrisInfo{
+		Category:       types.CategoryAgentState,
+		Classification: types.EntryClassOrphaned,
+		ModTime:        observedAt.Add(-DefaultAgentStateMinIdleAge),
+	}
+	if eligible, reason := EvaluateEligibility(boundary, opts, observedAt); eligible ||
+		reason != EligibilityReasonAgentStateMinIdleAge {
+		t.Fatalf("boundary eligibility = %t/%q; want false/%q",
+			eligible, reason, EligibilityReasonAgentStateMinIdleAge)
+	}
+
+	justPast := boundary
+	justPast.ModTime = observedAt.Add(-DefaultAgentStateMinIdleAge - time.Nanosecond)
+	if eligible, reason := EvaluateEligibility(justPast, opts, observedAt); !eligible ||
+		reason != EligibilityReasonEligible {
+		t.Fatalf("one nanosecond past the boundary = %t/%q; want true/%q",
+			eligible, reason, EligibilityReasonEligible)
+	}
+}
+
 func TestFilter_NoFilter(t *testing.T) {
 	opts := types.PruneOptions{Age: 168 * time.Hour}
 	worktrees := []types.DebrisInfo{

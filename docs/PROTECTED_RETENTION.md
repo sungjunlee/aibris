@@ -93,9 +93,12 @@ These statistics are a subset annotation on the aggregate row. They never emit
 create default cleanup eligibility.
 
 **No retention row authorizes default cleanup.** The merged #138 behavior
-remains unchanged: proof-based orphaned Claude and Cursor `agent-state` owners
-remain eligible without an age gate, while `live` and `undetermined` owners
-remain protected. The inventory itself is read-only: it never selects,
+remains unchanged: Claude and Cursor `agent-state` owners are still classified
+by proof of an absent recorded cwd, while `--agent-state-grace` only gates
+default selection of a proven orphan (and `--age` does not apply). An orphan
+inside that floor is excluded from default selection rather than protected, and
+is cleaned by rerunning with a shorter or zero grace; `live` and `undetermined`
+owners remain protected. The inventory itself is read-only: it never selects,
 prepares, or mutates members. Partial inventory (permission or I/O failures
 inside the store) degrades the retention section to `partial: true` without
 affecting debris results or cleanup authorization.

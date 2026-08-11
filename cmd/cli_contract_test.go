@@ -41,6 +41,9 @@ func TestAgentStateCLIContract(t *testing.T) {
 	if err := os.MkdirAll(cursorUndetermined, 0755); err != nil {
 		t.Fatal(err)
 	}
+	// Default selection now waits for the orphaned agent-state minimum idle age,
+	// so these stores must have idled past it to exercise the default route.
+	idleCLIContractAgentState(t, claudeOrphan, cursorOrphan)
 
 	assertCLIContractHomeIsolated(t, binary, home,
 		claudeOrphan, claudeLive, cursorOrphan, cursorUndetermined)
@@ -164,6 +167,138 @@ func TestAgentStateCLIContract(t *testing.T) {
 	}
 	if _, statErr := os.Stat(claudeLive); statErr != nil {
 		t.Fatalf("live Claude state changed during cleanup: %v", statErr)
+	}
+}
+
+func TestAgentStateGraceCLIContract(t *testing.T) {
+	binary := buildCLIContractBinary(t)
+	home := t.TempDir()
+
+	freshOrphan := filepath.Join(home, ".claude", "projects", "fresh-orphan")
+	freshOrphanCWD := filepath.Join(home, "missing", "fresh-project")
+	writeCLIContractFile(t, filepath.Join(freshOrphan, "session.jsonl"),
+		fmt.Sprintf("{\"cwd\":%q}\n", freshOrphanCWD))
+
+	output, err := runCLIContract(binary, home, "clean", "--dry-run", "--category", "agent-state")
+	if err != nil {
+		t.Fatalf("default grace dry-run failed: %v\n%s", err, output)
+	}
+	for _, want := range []string{"matched  0 candidates", "idle less than 1d", "No items to clean."} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("default grace dry-run missing %q:\n%s", want, output)
+		}
+	}
+
+	disabledOutput, disabledErr := runCLIContract(
+		binary,
+		home,
+		"clean",
+		"--dry-run",
+		"--category",
+		"agent-state",
+		"--agent-state-grace",
+		"0",
+	)
+	if disabledErr != nil {
+		t.Fatalf("disabled grace dry-run failed: %v\n%s", disabledErr, disabledOutput)
+	}
+	for _, want := range []string{"matched  1 candidate", filepath.Base(freshOrphan), freshOrphanCWD} {
+		if !strings.Contains(disabledOutput, want) {
+			t.Fatalf("disabled grace dry-run missing %q:\n%s", want, disabledOutput)
+		}
+	}
+
+	negativeOutput, negativeErr := runCLIContract(
+		binary,
+		home,
+		"clean",
+		"--dry-run",
+		"--category",
+		"agent-state",
+		"--agent-state-grace",
+		"-1d",
+	)
+	if negativeErr == nil {
+		t.Fatalf("negative grace succeeded:\n%s", negativeOutput)
+	}
+	if !strings.Contains(negativeOutput, "--agent-state-grace must be non-negative") {
+		t.Fatalf("negative grace output missing refusal:\n%s", negativeOutput)
+	}
+}
+
+// TestScanDefaultCleanEstimateMatchesAgentStateGrace pins scan and clean to the
+// same agent-state idle floor. The documented AI workflow starts from scan's
+// "default clean (estimate)", so an estimate that counts an entry clean will
+// not select sends the workflow after bytes it cannot free.
+func TestScanDefaultCleanEstimateMatchesAgentStateGrace(t *testing.T) {
+	binary := buildCLIContractBinary(t)
+
+	newHome := func(t *testing.T, idle bool) string {
+		t.Helper()
+		home := t.TempDir()
+		entry := filepath.Join(home, ".claude", "projects", "orphan")
+		writeCLIContractFile(t, filepath.Join(entry, "session.jsonl"),
+			fmt.Sprintf("{\"cwd\":%q}\n", filepath.Join(home, "missing", "project")))
+		if idle {
+			idleCLIContractAgentState(t, entry)
+		}
+		return home
+	}
+
+	t.Run("fresh orphan is in neither", func(t *testing.T) {
+		home := newHome(t, false)
+
+		scanOutput, err := runCLIContract(binary, home, "scan")
+		if err != nil {
+			t.Fatalf("scan failed: %v\n%s", err, scanOutput)
+		}
+		estimate := cliContractLineWithPrefix(t, scanOutput, "default clean (estimate)")
+		if !strings.HasSuffix(strings.TrimSpace(estimate), " 0 B") {
+			t.Fatalf("scan estimate counts an entry clean will not select: %q\n%s", estimate, scanOutput)
+		}
+
+		cleanOutput, err := runCLIContract(binary, home,
+			"clean", "--no-guide", "--dry-run", "--category", "agent-state")
+		if err != nil {
+			t.Fatalf("clean dry-run failed: %v\n%s", err, cleanOutput)
+		}
+		if !strings.Contains(cleanOutput, "matched  0 candidates") {
+			t.Fatalf("clean selected a fresh orphan the estimate excluded:\n%s", cleanOutput)
+		}
+	})
+
+	t.Run("idle orphan is in both", func(t *testing.T) {
+		home := newHome(t, true)
+
+		scanOutput, err := runCLIContract(binary, home, "scan")
+		if err != nil {
+			t.Fatalf("scan failed: %v\n%s", err, scanOutput)
+		}
+		estimate := cliContractLineWithPrefix(t, scanOutput, "default clean (estimate)")
+		if strings.HasSuffix(strings.TrimSpace(estimate), " 0 B") {
+			t.Fatalf("scan estimate dropped an entry clean will select: %q\n%s", estimate, scanOutput)
+		}
+
+		cleanOutput, err := runCLIContract(binary, home,
+			"clean", "--no-guide", "--dry-run", "--category", "agent-state")
+		if err != nil {
+			t.Fatalf("clean dry-run failed: %v\n%s", err, cleanOutput)
+		}
+		if !strings.Contains(cleanOutput, "matched  1 candidate") {
+			t.Fatalf("clean skipped an idle orphan the estimate counted:\n%s", cleanOutput)
+		}
+	})
+}
+
+// idleCLIContractAgentState backdates the whole store, not just its directory.
+// Agent-state idle age is the newest mtime anywhere inside the store, so a
+// backdated directory holding a freshly written session file is an actively
+// used store, not an idle one.
+func idleCLIContractAgentState(t *testing.T, paths ...string) {
+	t.Helper()
+	idle := time.Now().Add(-48 * time.Hour)
+	for _, path := range paths {
+		chtimesTree(t, path, idle)
 	}
 }
 

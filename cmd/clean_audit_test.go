@@ -163,6 +163,44 @@ func TestBuildCleanAudit_EligibilityMatchesFilterForMixedCategories(t *testing.T
 	}
 }
 
+func TestCleanAuditReasonTextReportsAgentStateMinIdleAge(t *testing.T) {
+	opts := types.PruneOptions{
+		Age:                  7 * 24 * time.Hour,
+		AgentStateMinIdleAge: cleaner.DefaultAgentStateMinIdleAge,
+	}
+	if got := cleanAuditReasonText(cleanReasonAgentStateMinIdleAge, opts); got != "idle less than 1d" {
+		t.Fatalf("agent-state min idle age text = %q; want idle less than 1d", got)
+	}
+}
+
+func TestCleanJSONPolicyForAuditItemMarksFreshOrphanedAgentStateReviewable(t *testing.T) {
+	observedAt := time.Now()
+	opts := types.PruneOptions{
+		Age:                  time.Hour,
+		AgentStateMinIdleAge: cleaner.DefaultAgentStateMinIdleAge,
+	}
+	item := types.DebrisInfo{
+		Tool:           types.ToolClaude,
+		Category:       types.CategoryAgentState,
+		ID:             "fresh-orphan",
+		Path:           "/tmp/home/.claude/projects/fresh",
+		Classification: types.EntryClassOrphaned,
+		ModTime:        observedAt.Add(-2 * time.Hour),
+	}
+	decision, codes := cleanJSONPolicyForAuditItem(item, opts, nil, observedAt)
+	if decision != cleanJSONPolicyReviewable ||
+		len(codes) != 1 || codes[0] != "agent_state_min_idle_age" {
+		t.Fatalf("fresh orphaned policy = %q/%v; want reviewable agent_state_min_idle_age", decision, codes)
+	}
+
+	item.ModTime = observedAt.Add(-48 * time.Hour)
+	decision, codes = cleanJSONPolicyForAuditItem(item, opts, nil, observedAt)
+	if decision != cleanJSONPolicyEligible ||
+		len(codes) != 1 || codes[0] != "agent_state_orphaned" {
+		t.Fatalf("idle orphaned policy = %q/%v; want eligible agent_state_orphaned", decision, codes)
+	}
+}
+
 func TestCleanAuditPolicyLine(t *testing.T) {
 	got := cleanAuditPolicyLine(types.PruneOptions{Age: 7 * 24 * time.Hour})
 	for _, want := range []string{"age>7d", "risky=false", "active-worktrees=protected"} {

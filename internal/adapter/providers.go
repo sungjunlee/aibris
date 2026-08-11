@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -71,6 +73,24 @@ func agentStateStoreRootFor(suffix string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("agent-state store root %q is not registered", suffix)
+}
+
+// agentStoreActivityModTime reports when a project store was last written to.
+// A store directory's own mtime only moves when a session file is created or
+// removed in it, so a session that started days ago and is still appending to
+// its existing file would otherwise look idle. Stores are small, so the extra
+// walk costs little; sizes still come from the batched estimateDirSizes path.
+//
+// The result is a best-effort recency signal, not a safety guarantee: the walk
+// skips a subtree it cannot read, so activity hidden under one leaves the store
+// looking as idle as it did before this signal existed. That is acceptable
+// because the minimum idle age is a selection-time courtesy, while deletion
+// safety rests on the recorded-cwd proof and the pre-deletion revalidator.
+func agentStoreActivityModTime(ctx context.Context, entryPath string, pathModTime time.Time) time.Time {
+	if activity := NewestTreeModTime(ctx, entryPath); activity.After(pathModTime) {
+		return activity
+	}
+	return pathModTime
 }
 
 // DefaultProviderIdentity identifies the concrete provider membership in the

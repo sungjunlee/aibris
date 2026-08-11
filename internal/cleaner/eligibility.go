@@ -6,6 +6,12 @@ import (
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
+// DefaultAgentStateMinIdleAge is the default recency floor applied to orphaned
+// agent-state selection. Worktree-based agent runs orphan their store within
+// minutes of finishing, so the freshest history stays out of the default set
+// for one day.
+const DefaultAgentStateMinIdleAge = 24 * time.Hour
+
 // EligibilityReason explains the cleanup policy decision for one item.
 type EligibilityReason string
 
@@ -17,6 +23,7 @@ const (
 	EligibilityReasonAge                    EligibilityReason = "younger than configured age"
 	EligibilityReasonAgentStateLive         EligibilityReason = "live agent-state protected"
 	EligibilityReasonAgentStateUndetermined EligibilityReason = "undetermined agent-state protected"
+	EligibilityReasonAgentStateMinIdleAge   EligibilityReason = "orphaned agent-state within minimum idle age"
 	EligibilityReasonEligible               EligibilityReason = "eligible for cleanup"
 )
 
@@ -33,8 +40,17 @@ func EvaluateEligibility(item types.DebrisInfo, opts types.PruneOptions, observe
 	if item.Category == types.CategoryAgentState {
 		// Agent-state recoverability is proved by its recorded cwd; directory
 		// age says nothing about whether the associated work still exists.
+		// Classification therefore stays proof-based, and the classic --age
+		// filter never applies here. AgentStateMinIdleAge only adds a recency
+		// floor on top of that proof: an orphaned entry whose store is still
+		// fresh stays out of the default selection until it has idled, because
+		// a worktree run orphans its store the moment the worktree is removed.
 		switch item.Classification {
 		case types.EntryClassOrphaned:
+			if opts.AgentStateMinIdleAge > 0 &&
+				!item.ModTime.Before(observedAt.Add(-opts.AgentStateMinIdleAge)) {
+				return false, EligibilityReasonAgentStateMinIdleAge
+			}
 			return true, EligibilityReasonEligible
 		case types.EntryClassLive:
 			return false, EligibilityReasonAgentStateLive

@@ -62,6 +62,7 @@ const (
 	cleanReasonAge                           cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonAge)
 	cleanReasonAgentStateLive                cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonAgentStateLive)
 	cleanReasonAgentStateUndetermined        cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonAgentStateUndetermined)
+	cleanReasonAgentStateMinIdleAge          cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonAgentStateMinIdleAge)
 	cleanReasonMissingPath                   cleanAuditReason = "path no longer exists"
 	cleanReasonDuplicatePath                 cleanAuditReason = "duplicate cleanup target path"
 	cleanReasonNestedTarget                  cleanAuditReason = "covered by selected parent"
@@ -137,6 +138,11 @@ func cleanJSONPolicyForAuditItem(
 		cleaner.EligibilityReasonAgentStateLive,
 		cleaner.EligibilityReasonAgentStateUndetermined:
 		return cleanJSONPolicyProtected, []string{cleanJSONReasonCodeForEligibility(reason)}
+	case cleaner.EligibilityReasonAgentStateMinIdleAge:
+		// Reported rather than offered: the entry is dropped before a plan is
+		// built, so it is not a togglable row anywhere. Cleaning it means
+		// rerunning with a shorter or zero --agent-state-grace.
+		return cleanJSONPolicyReviewable, []string{cleanJSONReasonCodeForEligibility(reason)}
 	default:
 		return cleanJSONPolicySkipped, []string{cleanJSONReasonCodeForEligibility(reason)}
 	}
@@ -609,6 +615,8 @@ func cleanAuditReasonText(reason cleanAuditReason, opts types.PruneOptions) stri
 		return "requires --risky"
 	case cleanReasonActiveWorktree:
 		return "active worktree protected"
+	case cleanReasonAgentStateMinIdleAge:
+		return "idle less than " + cleanAgeDisplay(opts.AgentStateMinIdleAge)
 	case cleanReasonFiltered:
 		return "outside category/tool filters"
 	case cleanReasonMissingPath:

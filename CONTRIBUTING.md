@@ -39,8 +39,9 @@ internal/
 3. `Scan()` respects context cancellation
 4. Use `estimateDirSize(ctx, path)` for size calculation
 5. Register in the `internal/adapter/providers.go` `providers` slice
-6. For an adapter whose `Category()` is `agent-state`, also implement `AgentStateRevalidator`; `agent-state` is cleaned by default with no age gate, and cleanup refuses entries without a registered revalidator
-7. Add tests in `internal/adapter/<name>_test.go`
+6. For an adapter whose `Category()` is `agent-state`, also implement `AgentStateRevalidator`; classification is proof-based from the recorded cwd, while `--agent-state-grace` only gates default selection (the classic `--age` filter does not apply), and cleanup refuses entries without a registered revalidator
+7. Report `ModTime` as the later of the path's own mtime and `NewestTreeModTime(ctx, path)` when the container's own mtime is not the activity signal (cache trees, agent-state stores), and always set `PathModTime` to the path's own mtime in that case — leaving it empty makes the cleanup preflight overwrite `ModTime` with the container mtime
+8. Add tests in `internal/adapter/<name>_test.go`
 
 ## Before Submitting
 

@@ -29,7 +29,7 @@ complements general-purpose cleaners; it does not compete with them.
 | Category | Examples | Default clean |
 | ---------- | ---------- | --------------- |
 | AI worktrees | Finite known containers plus `$HOME` conventions such as `.tool/worktrees` and project-local `worktrees` | Classic: orphaned; guided Codex: evidence-based |
-| Agent state | Claude and Cursor project stores | Orphaned only; no age gate |
+| Agent state | Claude and Cursor project stores | Orphaned only by proof; default selection waits for `--agent-state-grace` (24h) |
 | AI logs | Codex, Claude, Windsurf logs | Only with `--risky` |
 | Dependencies | project `node_modules` directories | Yes |
 | Build caches | Go, npm, Gradle, Cargo, Xcode | Yes |
@@ -41,9 +41,16 @@ complete picture of a home, but general-purpose cleaners already handle them
 and winning on them is not an objective.
 
 Agent-state scan rows expose a `classification` of `live`, `orphaned`, or
-`undetermined`. This classification takes precedence over the classic age
-filter: an absent recorded working directory proves the associated work is gone
-and resume is already impossible, so an `orphaned` entry needs no age gate.
+`undetermined`. Classification remains proof-based rather than age-based: an
+absent recorded working directory proves the associated work is gone and resume
+is already impossible. The classic `--age` filter still does not apply to
+agent-state; a separate `--agent-state-grace` minimum idle age (24h by default)
+only gates default selection of a proven orphaned entry. Idle age is measured
+from the newest modification anywhere inside the store, not the store
+directory's own mtime, so a long-running session that is still appending stays
+fresh. An entry inside that recency window is excluded from default selection
+and does not appear as a candidate row; to clean it now, rerun with
+`--agent-state-grace 0` or a shorter value, or wait for the floor to elapse.
 `live` and `undetermined` entries remain protected.
 
 Issue #142 also uses **installed**, **regenerable**, and **protected** as a
@@ -123,6 +130,7 @@ aibris clean --category node_modules   # only node_modules
 aibris clean --tool codex,claude       # only specific tools
 aibris clean --risky           # include ai-logs
 aibris clean --include-active-worktrees # include active worktrees
+aibris clean --agent-state-grace 0      # drop the orphaned agent-state idle floor (default 24h)
 aibris clean --force           # skip confirmation prompt
 ```
 
@@ -414,10 +422,13 @@ Cancellation remains a hard failure.
 
 ### Safety
 
-- **Independent age policies**: classic cleanup defaults to `--age 7d`, except
-  for proof-classified orphaned agent state; guided Codex cleanup defaults to a
-  3-day minimum idle age while always keeping its 6-hour recent-activity lock
-  and recent-three retention
+- **Independent age policies**: classic cleanup defaults to `--age 7d`, while
+  `--age` does not apply to agent-state. Proof-classified orphaned agent state
+  uses `--agent-state-grace` (24h by default) only to gate default selection —
+  an entry inside the floor is left out of the candidate set entirely, so
+  cleaning it means rerunning with a lower or zero grace; guided Codex cleanup
+  defaults to a 3-day minimum idle age while always keeping its 6-hour
+  recent-activity lock and recent-three retention
 - **Human age units** support `h`, `d`, `w`, `mo`, and `y`
 - **Low classic age warnings** describe the widened minimum-age eligibility
   within the selected category/tool scope; they do not imply that risky,
