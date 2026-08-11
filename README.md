@@ -41,9 +41,10 @@ complete picture of a home, but general-purpose cleaners already handle them
 and winning on them is not an objective.
 
 Agent-state scan rows expose a `classification` of `live`, `orphaned`, or
-`undetermined`. Classification remains proof-based rather than age-based: an
-absent recorded working directory proves the associated work is gone and resume
-is already impossible. The classic `--age` filter still does not apply to
+`undetermined`. Classification remains proof-based rather than age-based: every
+usable recorded working directory being absent proves the associated work is
+gone and resume is already impossible, while any live path keeps the entry
+`live` and inconclusive evidence keeps it `undetermined`. The classic `--age` filter still does not apply to
 agent-state; a separate `--agent-state-grace` minimum idle age (24h by default)
 only gates default selection of a proven orphaned entry. Idle age is measured
 from the newest modification anywhere inside the store, not the store

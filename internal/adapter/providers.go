@@ -81,11 +81,12 @@ func agentStateStoreRootFor(suffix string) (string, error) {
 // its existing file would otherwise look idle. Stores are small, so the extra
 // walk costs little; sizes still come from the batched estimateDirSizes path.
 //
-// The result is a best-effort recency signal, not a safety guarantee: the walk
-// skips a subtree it cannot read, so activity hidden under one leaves the store
-// looking as idle as it did before this signal existed. That is acceptable
-// because the minimum idle age is a selection-time courtesy, while deletion
-// safety rests on the recorded-cwd proof and the pre-deletion revalidator.
+// The result is a best-effort recency signal, not a safety guarantee. The walk
+// skips a subtree it cannot read and does not follow symlinks, so activity
+// hidden behind either leaves the store looking as idle as it did before this
+// signal existed. That is acceptable because the minimum idle age is a
+// selection-time courtesy, while deletion safety rests on the recorded-cwd
+// proof and the pre-deletion revalidator.
 func agentStoreActivityModTime(ctx context.Context, entryPath string, pathModTime time.Time) time.Time {
 	if activity := NewestTreeModTime(ctx, entryPath); activity.After(pathModTime) {
 		return activity

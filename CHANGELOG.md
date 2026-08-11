@@ -21,8 +21,9 @@
 ### Changed
 
 - The stable default selection of orphaned `agent-state` now waits for a
-  minimum 24-hour idle grace. Classification remains proof-based from an
-  absent recorded working directory, and `--age` still does not apply. An entry
+  minimum 24-hour idle grace. Classification remains proof-based from every
+  usable recorded working directory being absent, and `--age` still does not
+  apply. An entry
   inside the grace window stays visible as non-selected plan evidence but never
   enters the selection candidate set, so it is not offered as a toggleable row
   under `--interactive`, in the guided unified review, or through JSON

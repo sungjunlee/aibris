@@ -215,9 +215,9 @@ other categories:
 | `orphaned` | Every usable recorded working directory is proven absent. | Excluded from default selection inside the minimum idle age; default-selected after it. The classification itself is proof-based. |
 | `undetermined` | Recorded working-directory evidence is missing, unreadable, ambiguous, or otherwise inconclusive. | Protected |
 
-Classification takes precedence over the classic `--age` filter because an
-absent recorded working directory proves the associated work is gone and resume
-is already impossible. Directory modification time cannot strengthen or weaken
+Classification takes precedence over the classic `--age` filter because every
+usable recorded working directory being absent proves the associated work is
+gone and resume is already impossible. Directory modification time cannot strengthen or weaken
 that proof; `item.ModTime` only determines whether a proven orphan is inside
 the minimum idle window for default selection. `item.ModTime` for an
 agent-state store is the newest modification found anywhere inside it, not the
@@ -225,12 +225,12 @@ store directory's own mtime, because a session that keeps appending to a file
 already in the store never touches the directory again.
 
 An entry inside that window never enters the selection candidate set. It is
-therefore not a togglable row: it does not appear under
-`--interactive`, in the guided unified review, or in a JSON execution plan.
-Cleaning it means rerunning with `--agent-state-grace 0` or a shorter value, or
-waiting for the floor to elapse. The JSON `policy_decision` for such an entry is
-`reviewable`, which here means "not selected by default" — the plan reports it
-rather than offering it.
+therefore not a togglable row: it is not offered under `--interactive`, in the
+guided unified review, or as a JSON execution target. It does stay visible in
+the plan as non-selected evidence, with `policy_decision` `reviewable`, which
+here means "not selected by default" — the plan reports it rather than offering
+it. Cleaning it means rerunning with `--agent-state-grace 0` or a shorter value,
+or waiting for the floor to elapse.
 
 Classification also applies across category boundaries. A `live` or
 `undetermined` agent-state row that contains, is contained by, or exactly
