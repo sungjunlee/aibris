@@ -119,6 +119,7 @@ aibris clean --no-guide --dry-run --json  # redacted machine-readable cleanup pl
 aibris clean --no-guide --dry-run --json --include-paths  # opt in to plan paths
 aibris clean --no-guide --json --force    # execute and emit a redacted receipt
 aibris clean --no-guide --json --interactive  # silent stdin confirmations, JSON only
+aibris clean --guide --force --receipt-file cleanup.json  # guided execution receipt to a file
 aibris clean --no-guide --dry-run # force classic cleanup audit
 aibris clean                   # delete with confirmation
 aibris clean --root ~/.codex --dry-run
@@ -253,6 +254,31 @@ closed before consuming any confirmation input.
 reviewable, and skipped targets are not requests. `freed_bytes` is credited
 only when the physical owner is verified absent, so logical rows never add
 bytes. JSON execution never accepts an external plan or receipt for replay.
+
+`--receipt-file <path>` writes that same versioned `clean_receipt` document to
+a file instead of relying on stdout:
+
+```bash
+aibris clean --guide --force --receipt-file cleanup.json     # guided execution, machine-readable outcome
+aibris clean --no-guide --json --force --receipt-file cleanup.json
+```
+
+It makes guided execution auditable without changing its interactive review:
+stdout stays the human surface and the file carries the receipt. On the `--json`
+route the file is byte-identical to the receipt on stdout. Redaction is
+unchanged — paths, projects, and cleanup commands appear only with
+`--include-paths`, which is accepted alongside `--receipt-file` — and the file
+is written owner-only. The flag requires an execution run: it is refused with
+`--dry-run` and on the classic human route, which already has `--json`. It does
+not make `clean --json --guide` executable.
+
+The file records the run; it never changes which targets are cleaned. A target
+declined at a guided `--interactive` prompt is reported the way
+`--json --interactive` reports it — `skipped`, not requested, reason
+`not_confirmed` — so a declined target leaves both the receipt status and the
+run's exit status untouched. Asking for a receipt does make a few outcomes
+visible that the human route reports silently, and those exit non-zero; see
+[the receipt file sink](docs/JSON_SCHEMA.md) for the exact list.
 
 When active Codex worktrees are the useful cleanup decision and no classic
 cleanup selector is supplied, `aibris clean --dry-run` opens guided Codex

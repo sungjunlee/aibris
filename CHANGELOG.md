@@ -4,6 +4,21 @@
 
 ### Added
 
+- `aibris clean --receipt-file <path>` writes the versioned `clean_receipt`
+  execution document to a file. It makes guided execution machine-readable
+  while stdout stays the human review surface, and on the `--json` route it
+  writes the same bytes printed on stdout. Redaction is unchanged
+  (`--include-paths` is now accepted together with `--receipt-file`), the file
+  is written owner-only, and receipt status still agrees with exit status
+  except when the sink itself cannot be written, which exits non-zero without
+  ever meaning the deletion failed. It
+  requires an execution run: `--dry-run` and the classic human route are
+  refused, and non-dry-run `clean --json --guide` stays rejected. A target
+  declined at a guided `--interactive` prompt is reported the way
+  `--json --interactive` reports it — `skipped`, not requested, reason
+  `not_confirmed` — so a declined target changes neither the receipt status nor
+  the run's exit status. No existing flag, field, default, or exit behavior
+  changes.
 - `aibris clean --agent-state-grace <duration>` sets the minimum idle age an
   orphaned `agent-state` entry must reach before it joins the default
   selection. It defaults to `24h`, `0` disables the floor, and negative values

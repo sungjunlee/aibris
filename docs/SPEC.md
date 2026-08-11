@@ -85,7 +85,8 @@ Flags:
 | `--root` | `$HOME` | Repeatable scan root. Each root must resolve under `$HOME`. |
 | `--dry-run` | `false` | Preview targets without deleting. |
 | `--json` | `false` | With `--dry-run`, emit the versioned path-redacted `clean_plan` JSON document. Non-dry-run JSON requires `--force` or `--interactive`, always uses the classic route, and emits a versioned path-redacted `clean_receipt` for the plan executed in the same process; `--guide` is rejected before scan or mutation. It never accepts a replayed plan or receipt. |
-| `--include-paths` | `false` | With `--json`, opt in to explicit target/logical paths, projects, and cleanup commands. |
+| `--include-paths` | `false` | With `--json` or `--receipt-file`, opt in to explicit target/logical paths, projects, and cleanup commands. |
+| `--receipt-file` | empty | Write the versioned `clean_receipt` execution document to this path, owner-only and truncating an existing file. Supported on the guided route (stdout stays the human review surface) and on the `--json` route (the file matches the receipt on stdout). It requires an execution run: `--dry-run` and the classic human route are refused, the classic refusal happening before any mutation even when the route settles on classic only after the scan. It does not make non-dry-run `--json --guide` executable, and it never accepts a replayed receipt. A target declined at a guided `--interactive` prompt is reported as a non-requested `skipped` with reason `not_confirmed`, exactly as on the `--json --interactive` route, so a decline changes neither the receipt status nor the run's exit status. |
 | `--interactive`, `-i` | `false` | Confirm each item before deleting. |
 | `--risky` | `false` | Include risky categories such as AI logs. |
 | `--include-active-worktrees` | `false` | Include active Git worktrees in cleanup candidates. |
@@ -228,9 +229,10 @@ Human `clean` output must include a cleanup audit before deletion:
 The audit is human output only. `scan --json` remains the machine-readable
 inventory surface, while `clean --dry-run --json` emits the shipped
 machine-readable cleanup plan and non-dry-run `clean --json` emits the shipped
-execution receipt, including cancellation semantics. Replayable manifests and
-on-disk receipt files remain future work: a receipt describes only the plan
-executed by its current process and cannot authorize a later execution.
+execution receipt, including cancellation semantics. `--receipt-file` writes
+that same execution receipt to an explicit sink. Replayable manifests remain
+future work: a receipt, on stdout or on disk, describes only the plan executed
+by its current process and can never authorize a later execution.
 
 The phase-1 JSON cleanup route also fails closed before emitting `clean_plan`
 when the scan is partial. Therefore an emitted cleanup plan always reports

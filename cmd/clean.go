@@ -36,7 +36,12 @@ var (
 	cleanRoots                  []string
 	cleanIncludeActiveWorktrees bool
 	cleanAgentStateGrace        string
+	cleanReceiptFile            string
 )
+
+// errClassicRouteReceiptFile is shared by the pre-scan flag check and the
+// post-scan route check so both refusals read identically.
+const errClassicRouteReceiptFile = "error: --receipt-file is not available on the classic route; use --json for a classic receipt"
 
 var cleanCmd = &cobra.Command{
 	Use:   "clean",
@@ -50,16 +55,29 @@ Use --no-guide, or pass an explicit classic selector such as --category, --tool,
 classic cleanup audit and executor route. JSON execution is always classic;
 --guide is available with JSON only for --dry-run plans.
 
+--receipt-file writes the machine-readable execution receipt of a guided or
+--json execution run to a file while stdout keeps its usual shape. It requires
+an execution run and is not available on the classic route, which already has
+--json.
+
 Across both routes, selected targets enter the cleanup plan, reviewable targets
 require explicit selection, and protected targets never enter the plan. Guided
 review displays protected targets as locked rows.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if cleanIncludePaths && !cleanJSON {
+		if cleanIncludePaths && !cleanJSON && cleanReceiptFile == "" {
 			fmt.Fprintln(os.Stderr, "error: --include-paths requires --json")
+			os.Exit(1)
+		}
+		if cleanReceiptFile != "" && cleanDryRun {
+			fmt.Fprintln(os.Stderr, "error: --receipt-file requires an execution run (remove --dry-run)")
 			os.Exit(1)
 		}
 		if cleanGuide && cleanNoGuide {
 			fmt.Fprintln(os.Stderr, "error: cannot use --guide with --no-guide")
+			os.Exit(1)
+		}
+		if cleanReceiptFile != "" && cleanNoGuide && !cleanJSON {
+			fmt.Fprintln(os.Stderr, errClassicRouteReceiptFile)
 			os.Exit(1)
 		}
 		if cleanJSON {
@@ -166,6 +184,13 @@ review displays protected targets as locked rows.`,
 			Force:                  cleanForce,
 			IncludeActiveWorktrees: cleanIncludeActiveWorktrees,
 			AgentStateMinIdleAge:   agentStateGrace,
+		}
+
+		// The route is only settled after the scan. A receipt file requested on
+		// a run that resolved to classic fails here, before any mutation.
+		if cleanReceiptFile != "" && experience != cleanExperienceGuided {
+			fmt.Fprintln(os.Stderr, errClassicRouteReceiptFile)
+			os.Exit(1)
 		}
 
 		var guidedStatePtr *guidedCleanState
@@ -476,6 +501,12 @@ func init() {
 		"agent-state-grace",
 		"24h",
 		"Minimum idle age before an orphaned agent-state entry is selected by default (0 disables)",
+	)
+	cleanCmd.Flags().StringVar(
+		&cleanReceiptFile,
+		"receipt-file",
+		"",
+		"Write a machine-readable execution receipt to this path",
 	)
 }
 
@@ -1023,10 +1054,46 @@ func interactiveClean(ctx context.Context, targets []preparedCleanTarget) (clean
 	return interactiveCleanWithValidation(ctx, targets, nil)
 }
 
+// interactiveCleanSkipOutcome reports a prepared target the confirmation loop
+// left without an execution unit. Declined is true when the operator answered
+// the prompt and refused, and false when the confirmation stream ended before
+// an answer arrived. Observers are informational: they cannot affect cleanup
+// safety, execution, or the printed confirmation.
+type interactiveCleanSkipOutcome struct {
+	Target   preparedCleanTarget
+	Declined bool
+}
+
+type interactiveCleanSkipObserver func(interactiveCleanSkipOutcome)
+
 func interactiveCleanWithValidation(
 	ctx context.Context,
 	targets []preparedCleanTarget,
 	validate func(context.Context) error,
+) (cleanExecutionReceipt, error) {
+	return interactiveCleanWithValidationAndObserver(ctx, targets, validate, nil)
+}
+
+// reportUnansweredCleanTargets hands the targets whose confirmation never
+// arrived to an optional observer. It prints nothing, so the confirmation loop
+// reads identically with and without an observer.
+func reportUnansweredCleanTargets(
+	observer interactiveCleanSkipObserver,
+	targets []preparedCleanTarget,
+) {
+	if observer == nil {
+		return
+	}
+	for _, target := range targets {
+		observer(interactiveCleanSkipOutcome{Target: target})
+	}
+}
+
+func interactiveCleanWithValidationAndObserver(
+	ctx context.Context,
+	targets []preparedCleanTarget,
+	validate func(context.Context) error,
+	observer interactiveCleanSkipObserver,
 ) (cleanExecutionReceipt, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -1050,6 +1117,7 @@ func interactiveCleanWithValidation(
 		printCleanTarget(w, displayHome)
 		fmt.Print("Remove? [y/N]: ")
 		if !scanner.Scan() {
+			reportUnansweredCleanTargets(observer, targets[i:])
 			break
 		}
 		response := strings.TrimSpace(strings.ToLower(scanner.Text()))
@@ -1072,6 +1140,9 @@ func interactiveCleanWithValidation(
 			}
 		} else {
 			fmt.Printf("  skipped\n")
+			if observer != nil {
+				observer(interactiveCleanSkipOutcome{Target: target, Declined: true})
+			}
 		}
 	}
 	return result, errors.Join(errs...)

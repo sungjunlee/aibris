@@ -622,3 +622,125 @@ func encodeCleanJSONReceipt(output io.Writer, receipt cleanJSONReceipt) error {
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(receipt)
 }
+
+// writeCleanJSONReceiptFile stores one execution receipt at the explicit sink
+// requested by --receipt-file. With --include-paths the document carries
+// absolute paths, so the file stays owner-only.
+func writeCleanJSONReceiptFile(path string, receipt cleanJSONReceipt) error {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		return err
+	}
+	// The open mode only applies to a file this call creates, so an existing
+	// sink would keep whatever permissions it already had while gaining the
+	// document's contents.
+	if err := file.Chmod(0600); err != nil {
+		file.Close()
+		return err
+	}
+	if err := encodeCleanJSONReceipt(file, receipt); err != nil {
+		file.Close()
+		return err
+	}
+	return file.Close()
+}
+
+// guidedCleanExecutionReceipt carries the pre-execution receipt document and
+// the physical target identities of a guided run that asked for a receipt
+// file. Identities are captured before mutation: a removed path can no longer
+// be canonicalized back to its plan target.
+type guidedCleanExecutionReceipt struct {
+	receipt   cleanJSONReceipt
+	targetIDs map[string]string
+}
+
+// newGuidedCleanExecutionReceipt renders the receipt from the plan the guided
+// review actually accepted, not from the default candidate set.
+func newGuidedCleanExecutionReceipt(
+	source scanSource,
+	opts types.PruneOptions,
+	guidedState *guidedCleanState,
+	plan UnifiedCleanupPlan,
+	audit cleanAudit,
+	inventory []types.DebrisInfo,
+	protections map[string]cleanAuditReason,
+	prepared []preparedCleanTarget,
+) (guidedCleanExecutionReceipt, error) {
+	components := buildCleanJSONSnapshotComponents(plan, audit.Components, inventory, protections)
+	document := renderCleanJSONPlanDocument(source, opts, guidedState, plan.Evidence, components)
+	targetIDs, err := cleanJSONReceiptTargetIDsForPrepared(components, prepared)
+	if err != nil {
+		return guidedCleanExecutionReceipt{}, err
+	}
+	receipt := newCleanJSONReceipt(document)
+	// A deletion-time overlap refusal shrinks the prepared set after the plan
+	// was accepted. Name it the way the classic route does instead of letting
+	// the finalize fallback report it as an unrecorded execution.
+	for _, target := range plan.SelectedPhysicalTargets() {
+		id := cleanJSONReceiptTargetIDForItem(components, target)
+		if id == "" {
+			return guidedCleanExecutionReceipt{}, fmt.Errorf(
+				"execution receipt invariant: no physical target ID for selected target %q",
+				cleanJSONReceiptItemKey(target),
+			)
+		}
+		if !containsPreparedCleanJSONTarget(targetIDs, id) {
+			markCleanJSONReceiptTarget(&receipt, id, cleanJSONReceiptFailed, true, "safety_refused")
+		}
+	}
+	return guidedCleanExecutionReceipt{
+		receipt:   receipt,
+		targetIDs: targetIDs,
+	}, nil
+}
+
+// observeInteractiveSkip records a prepared target the guided confirmation
+// loop left without an execution unit, using the vocabulary the JSON
+// interactive route already publishes: declining a target is a normal
+// non-requested skip, and a confirmation that never arrived cancels a request.
+func (r *guidedCleanExecutionReceipt) observeInteractiveSkip(outcome interactiveCleanSkipOutcome) {
+	id := r.targetIDs[cleanJSONReceiptItemKey(outcome.Target.Item)]
+	if outcome.Declined {
+		markCleanJSONReceiptTarget(&r.receipt, id, cleanJSONReceiptSkipped, false, "not_confirmed")
+		return
+	}
+	markCleanJSONReceiptTarget(&r.receipt, id, cleanJSONReceiptCancelled, true, "confirmation_cancelled")
+}
+
+func (r *guidedCleanExecutionReceipt) finish(
+	execution cleanExecutionReceipt,
+	executionErr error,
+) (cleanJSONReceipt, error) {
+	applyErr := applyCleanJSONExecutionReceipt(&r.receipt, r.targetIDs, execution)
+	return finishCleanJSONReceipt(r.receipt, errors.Join(executionErr, applyErr))
+}
+
+// writeGuidedCleanExecutionReceipt finalizes and stores the guided execution
+// receipt. The cleanup has already run at this point, so a write failure is
+// reported as a receipt failure and never as a failed deletion.
+func writeGuidedCleanExecutionReceipt(
+	pending *guidedCleanExecutionReceipt,
+	execution cleanExecutionReceipt,
+	executionErr error,
+) {
+	if pending == nil {
+		return
+	}
+	receipt, finishErr := pending.finish(execution, executionErr)
+	if err := writeCleanJSONReceiptFile(cleanReceiptFile, receipt); err != nil {
+		fmt.Fprintf(os.Stderr, "error: the cleanup already ran; writing the receipt file failed: %v\n", err)
+		os.Exit(1)
+	}
+	if executionErr != nil {
+		// The caller reports the execution failure and exits non-zero.
+		return
+	}
+	if finishErr != nil {
+		fmt.Fprintf(os.Stderr, "error: cleanup receipt status is %q: %v\n", receipt.Status, finishErr)
+		os.Exit(1)
+	}
+	if receipt.Status != cleanJSONReceiptSucceeded {
+		fmt.Fprintf(os.Stderr, "error: cleanup receipt status is %q\n", receipt.Status)
+		os.Exit(1)
+	}
+}
