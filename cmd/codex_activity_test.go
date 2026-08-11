@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -286,6 +287,41 @@ func TestLoadCodexActivityIndexUnavailableForMissingOrInvalidCache(t *testing.T)
 	}
 	if invalid.Err == nil {
 		t.Fatal("invalid cache should expose an error for fail-closed callers")
+	}
+}
+
+func TestDefaultCodexSessionRootsDefaultToHomeCodex(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+
+	roots, err := defaultCodexSessionRoots()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		filepath.Join(home, ".codex", "sessions"),
+		filepath.Join(home, ".codex", "archived_sessions"),
+	}
+	if !reflect.DeepEqual(roots, want) {
+		t.Fatalf("roots = %v; want %v", roots, want)
+	}
+}
+
+func TestDefaultCodexSessionRootsHonorCodexHomeEnv(t *testing.T) {
+	testutil.SetHome(t, t.TempDir())
+	codexHome := filepath.Join(t.TempDir(), "codex-runtime-home")
+	t.Setenv("CODEX_HOME", codexHome)
+
+	roots, err := defaultCodexSessionRoots()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		filepath.Join(codexHome, "sessions"),
+		filepath.Join(codexHome, "archived_sessions"),
+	}
+	if !reflect.DeepEqual(roots, want) {
+		t.Fatalf("roots = %v; want %v", roots, want)
 	}
 }
 

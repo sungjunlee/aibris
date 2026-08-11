@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
+	"github.com/sungjunlee/aibris/internal/codexhome"
 	"github.com/sungjunlee/aibris/internal/codexsession"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -36,7 +37,8 @@ var (
 )
 
 // CodexSessionsProvider inventories regular rollout files under the exact
-// ~/.codex/sessions root as read-only UTC-month aggregates. The inventory is
+// sessions root of the resolved Codex home ($CODEX_HOME, or ~/.codex when
+// unset) as read-only UTC-month aggregates. The inventory is
 // protected content, not debris: it never feeds totals, caching, or any
 // cleanup authorization, and no member path or transcript content is exposed.
 //
@@ -67,7 +69,7 @@ func (p *CodexSessionsProvider) Scan(
 		addProviderError(&projection, "resolving store root", err)
 		return projection, nil
 	}
-	if !storeSelected(root, opts.Roots) {
+	if !storeSelected(root, rootsCoveringCodexHome(opts.Roots)) {
 		return projection, nil
 	}
 
@@ -123,16 +125,17 @@ func (p *CodexSessionsProvider) Scan(
 	return projection, nil
 }
 
-// codexSessionsRoot returns the exact bounded store root.
+// codexSessionsRoot returns the exact bounded store root: the sessions
+// directory of the resolved Codex home ($CODEX_HOME, or ~/.codex when unset).
 func codexSessionsRoot() (string, error) {
-	home, err := os.UserHomeDir()
+	codexHome, err := codexhome.Home()
 	if err != nil {
 		return "", err
 	}
-	if resolved, resolveErr := filepath.EvalSymlinks(home); resolveErr == nil {
-		home = resolved
+	if resolved, resolveErr := filepath.EvalSymlinks(codexHome); resolveErr == nil {
+		codexHome = resolved
 	}
-	return filepath.Join(home, ".codex", "sessions"), nil
+	return filepath.Join(codexHome, "sessions"), nil
 }
 
 type inventoryState struct {
@@ -283,6 +286,17 @@ func addProviderError(projection *types.RetentionProjection, stage string, err e
 		StoreID: types.RetentionStoreCodexSessions,
 		Message: stage + ": " + err.Error(),
 	})
+}
+
+// rootsCoveringCodexHome returns the root selection extended with the
+// resolved Codex home when it is not already covered, so a CODEX_HOME
+// outside the scan roots is inventoried rather than silently deselected.
+func rootsCoveringCodexHome(roots []string) []string {
+	codexHome, err := codexhome.Home()
+	if err != nil || len(roots) == 0 || storeSelected(codexHome, roots) {
+		return roots
+	}
+	return append(append([]string(nil), roots...), codexHome)
 }
 
 func storeSelected(store string, roots []string) bool {

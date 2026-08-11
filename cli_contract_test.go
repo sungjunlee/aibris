@@ -118,15 +118,17 @@ func newCLIContractCommand(t *testing.T, ctx context.Context, home string, extra
 
 func filteredCLIContractEnv() []string {
 	blocked := map[string]bool{
-		"HOME":           true,
-		"USERPROFILE":    true,
-		"HOMEDRIVE":      true,
-		"HOMEPATH":       true,
-		"XDG_CACHE_HOME": true,
-		"LOCALAPPDATA":   true,
-		"TMPDIR":         true,
-		"TMP":            true,
-		"TEMP":           true,
+		"HOME":               true,
+		"USERPROFILE":        true,
+		"HOMEDRIVE":          true,
+		"HOMEPATH":           true,
+		"XDG_CACHE_HOME":     true,
+		"LOCALAPPDATA":       true,
+		"TMPDIR":             true,
+		"TMP":                true,
+		"TEMP":               true,
+		"CODEX_HOME":         true,
+		"AIBRIS_CODEX_HOMES": true,
 	}
 	var env []string
 	for _, entry := range os.Environ() {

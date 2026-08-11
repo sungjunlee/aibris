@@ -676,6 +676,65 @@ func TestWorktreeAdapter_RegisteredContainers(t *testing.T) {
 	}
 }
 
+func TestWorktreeAdapter_CodexHomeEnvOutsideHomeStillDiscovered(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	codexHome := t.TempDir()
+	unit := filepath.Join(codexHome, "worktrees", "runtime-hash")
+	createWorktreeGit(t, filepath.Join(unit, "proj"), filepath.Join(home, "main-repo"), "runtime-hash")
+	t.Setenv("CODEX_HOME", codexHome)
+
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results = %+v; want the CODEX_HOME worktree container discovered", results)
+	}
+	r := results[0]
+	if r.ID != "runtime-hash" {
+		t.Errorf("ID = %q; want runtime-hash", r.ID)
+	}
+	if r.Source != ".codex" || r.Tool != types.ToolCodex {
+		t.Errorf("source/tool = %q/%q; want .codex/codex", r.Source, r.Tool)
+	}
+	if r.Path != canonicalExistingPath(unit) {
+		t.Errorf("path = %q; want %q", r.Path, unit)
+	}
+	if r.Status != types.WorktreeActive {
+		t.Errorf("status = %q; want active", r.Status)
+	}
+}
+
+func TestWorktreeAdapter_ExtraCodexHomesDiscovered(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	homeUnit := filepath.Join(home, ".codex", "worktrees", "home-hash")
+	createWorktreeGit(t, homeUnit, filepath.Join(home, "home-parent"), "home-hash")
+	extra := t.TempDir()
+	extraUnit := filepath.Join(extra, "worktrees", "extra-hash")
+	createWorktreeGit(t, extraUnit, filepath.Join(home, "extra-parent"), "extra-hash")
+	t.Setenv("AIBRIS_CODEX_HOMES", extra)
+
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("results = %+v; want both the primary and extra codex containers", results)
+	}
+	byID := map[string]types.DebrisInfo{}
+	for _, r := range results {
+		byID[r.ID] = r
+	}
+	if got := byID["home-hash"]; got.Source != ".codex" || got.Path != canonicalExistingPath(homeUnit) {
+		t.Errorf("home-hash row = %+v; want the primary-home codex container", got)
+	}
+	if got := byID["extra-hash"]; got.Source != ".codex" || got.Path != canonicalExistingPath(extraUnit) {
+		t.Errorf("extra-hash row = %+v; want the extra-home codex container", got)
+	}
+}
+
 func TestWorktreeAdapter_SuperpowersFullHomeAndScopedL2(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)

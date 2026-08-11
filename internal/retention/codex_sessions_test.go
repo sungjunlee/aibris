@@ -191,6 +191,64 @@ func TestCodexSessionsHonorsSelectedRootsAndMissingRootIsCompleteEmpty(t *testin
 	}
 }
 
+func TestCodexSessionsRootHonorsCodexHomeEnv(t *testing.T) {
+	testutil.SetHome(t, t.TempDir())
+	codexHome := filepath.Join(t.TempDir(), "codex-runtime-home")
+	if err := os.MkdirAll(codexHome, 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CODEX_HOME", codexHome)
+
+	root, err := codexSessionsRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantHome := codexHome
+	if resolved, resolveErr := filepath.EvalSymlinks(codexHome); resolveErr == nil {
+		wantHome = resolved
+	}
+	if want := filepath.Join(wantHome, "sessions"); root != want {
+		t.Fatalf("codexSessionsRoot() = %q; want %q", root, want)
+	}
+}
+
+func TestCodexSessionsInventoriesCodexHomeOutsideDefaultRoots(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+	provider := testCodexProvider()
+
+	// The session leaf lives under CODEX_HOME/sessions, not ~/.codex.
+	liveCWD := filepath.Join(home, "live-project")
+	if err := os.MkdirAll(liveCWD, 0755); err != nil {
+		t.Fatal(err)
+	}
+	directory := filepath.Join(codexHome, "sessions", "2026", "01", "02")
+	if err := os.MkdirAll(directory, 0755); err != nil {
+		t.Fatal(err)
+	}
+	leaf := filepath.Join(directory, "rollout-runtime.jsonl")
+	if err := os.WriteFile(leaf, []byte(validMetadata(liveCWD)+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	setModTime(t, leaf, time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC))
+
+	// Default-style scan roots cover only $HOME; the CODEX_HOME store must
+	// still be inventoried rather than silently deselected.
+	projection, err := provider.Scan(context.Background(), types.ScanOptions{Roots: []string{home}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bucket := onlyBucket(t, projection)
+	if bucket.BucketID != "2026-01" || bucket.UnitCount != 1 || bucket.MemberCount != 1 {
+		t.Fatalf("bucket = %+v; want the CODEX_HOME leaf inventoried", bucket)
+	}
+	if projection.Partial {
+		t.Fatalf("projection = %+v; want complete", projection)
+	}
+}
+
 func TestCodexSessionsCancellationIsHard(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)

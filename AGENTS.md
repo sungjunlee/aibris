@@ -43,7 +43,7 @@ registry를 함께 사용하고 `.git` metadata로 검증한다.
 - `Category()`가 `agent-state`인 adapter는 `AgentStateRevalidator`도 구현 (`agent-state` 분류는 recorded cwd 부재 증명 기반이고, `--age`는 적용되지 않으며, `--agent-state-grace` 최소 idle age는 기본 선택만 제한한다. 등록된 revalidator가 없으면 삭제 거부)
 
 **1-1. Worktree discovery 변경시 꼭 지킬 것**
-- known deep container는 finite exact registry로만 추가한다. 현재 registry는 `~/.codex/worktrees`, `~/.relay/worktrees`, `~/.gstack/worktrees`, `~/.config/superpowers/worktrees`
+- known deep container는 finite exact registry로만 추가한다. 현재 registry는 `~/.codex/worktrees`(codex 컨테이너는 `$CODEX_HOME`, `$AIBRIS_CODEX_HOMES` home 기준), `~/.relay/worktrees`, `~/.gstack/worktrees`, `~/.config/superpowers/worktrees`
 - generic fallback은 `$HOME` 아래 `worktrees`, `worktree`, `worktree-*`, `worktrees-*` 디렉토리를 찾고 `maxWorktreeContainerDepth=4`를 유지한다
 - hidden owner 디렉토리(`.codex`, `.somename` 등)는 worktree source일 수 있으므로 일반적으로 숨김이라는 이유만으로 prune하지 않는다
 - 전체 `$HOME`이나 hidden owner를 무제한 재귀 탐색하지 않는다. hidden owner는 immediate convention child까지만 확인한다
@@ -100,7 +100,7 @@ skills/
 | node_modules | node_modules | ✅ | `$HOME/**/node_modules/` with noisy directories pruned |
 | build-cache | build-cache | ✅ | `~/.cache/go-build/`, `~/.gradle/caches/`, `~/.npm/_cacache/`, `~/.cargo/registry/`, `~/Library/Caches/Xcode/` |
 | pip-cache | other-cache | ✅ | `~/.cache/pip/`, `~/.cache/uv/` |
-| ai-logs | ai-logs | 🚫 `--risky` | `~/.codex/logs_2.sqlite`, `~/.codex/archived_sessions/`, `~/.claude/command-audit.log`, `~/.claude/file-history/` |
+| ai-logs | ai-logs | 🚫 `--risky` | `$CODEX_HOME/logs_2.sqlite`, `$CODEX_HOME/archived_sessions/` (`$CODEX_HOME` 기본값 `~/.codex`; `$AIBRIS_CODEX_HOMES` 추가 home 지원), `~/.claude/command-audit.log`, `~/.claude/file-history/` |
 
 ### Worktree health
 

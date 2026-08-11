@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/codexhome"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -219,14 +220,16 @@ func codexActivityCachePath() (string, error) {
 	return filepath.Join(dir, "aibris", "codex-activity.json"), nil
 }
 
+// defaultCodexSessionRoots returns the Codex session roots under the
+// resolved Codex home ($CODEX_HOME, or ~/.codex when unset).
 func defaultCodexSessionRoots() ([]string, error) {
-	home, err := os.UserHomeDir()
+	codexHome, err := codexhome.Home()
 	if err != nil {
 		return nil, err
 	}
 	return []string{
-		filepath.Join(home, ".codex", "sessions"),
-		filepath.Join(home, ".codex", "archived_sessions"),
+		filepath.Join(codexHome, "sessions"),
+		filepath.Join(codexHome, "archived_sessions"),
 	}, nil
 }
 
