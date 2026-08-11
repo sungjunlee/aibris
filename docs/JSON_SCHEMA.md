@@ -517,8 +517,8 @@ aibris clean --no-guide --json --force --receipt-file cleanup.json
 ```
 
 It is available on the guided route and on the `--json` route. On the guided
-route stdout stays the human review and receipt surface and the file is the
-only machine-readable output; on the `--json` route the file content is
+route stdout stays the human review surface and the file is the only
+machine-readable output; on the `--json` route the file content is
 byte-identical to the receipt printed on stdout. The document is the same one
 described above: same `schema_version`, `document_type`, `mode`, embedded
 `plan` with `mode: "dry_run"`, accounting, and reason codes. Its embedded plan

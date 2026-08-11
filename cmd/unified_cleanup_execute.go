@@ -202,10 +202,6 @@ func runUnifiedGuidedClean(
 	}
 	printOverlapSafetyRefusals(selection)
 	selected = selection.Targets
-	if len(selected) == 0 {
-		fmt.Fprintln(stdout, "No selected items passed overlap safety.")
-		return
-	}
 
 	auditProtections := mergeCleanAuditProtections(classicProtections, selection.Protections)
 	audit := buildPhysicalCleanAudit(
@@ -222,6 +218,14 @@ func runUnifiedGuidedClean(
 	pendingReceipt := prepareGuidedCleanExecutionReceipt(
 		source, opts, guidedState, plan, audit, result.Worktrees, auditProtections, prepared,
 	)
+	if len(selected) == 0 {
+		fmt.Fprintln(stdout, "No selected items passed overlap safety.")
+		// Every accepted target was refused, which the receipt must state as
+		// plainly as a partial refusal does. Without a sink the run keeps its
+		// existing exit status.
+		writeGuidedCleanExecutionReceipt(pendingReceipt, cleanExecutionReceipt{}, nil)
+		return
+	}
 	if opts.Interactive {
 		receipt, interactiveErr := interactiveCleanWithValidationAndObserver(ctx, prepared, func(ctx context.Context) error {
 			return validateUnifiedCleanupPlanForMutation(ctx, plan, time.Now())
@@ -275,6 +279,10 @@ func prepareGuidedCleanExecutionReceipt(
 ) *guidedCleanExecutionReceipt {
 	if cleanReceiptFile == "" {
 		return nil
+	}
+	if err := rejectCleanReceiptSinkOverlap(cleanReceiptFile, plan.SelectedPhysicalTargets()); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
 	}
 	pending, err := newGuidedCleanExecutionReceipt(
 		source, opts, guidedState, plan, audit, inventory, protections, prepared,

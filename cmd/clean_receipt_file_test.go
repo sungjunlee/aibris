@@ -183,8 +183,8 @@ func TestCleanCmd_GuidedReceiptFileIsOwnerOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if perm := info.Mode().Perm() &^ 0600; perm != 0 {
-		t.Fatalf("receipt file mode = %v; want owner-only", info.Mode().Perm())
+	if perm := info.Mode().Perm(); perm != 0600 {
+		t.Fatalf("receipt file mode = %v; want exactly 0600", perm)
 	}
 }
 
@@ -683,5 +683,32 @@ func assertCleanReceiptRequestAccounting(t *testing.T, totals map[string]any) {
 		jsonReceiptInt(totals, "failed") + jsonReceiptInt(totals, "cancelled")
 	if jsonReceiptInt(totals, "requested") != outcomes {
 		t.Fatalf("receipt violates requested accounting: %+v", totals)
+	}
+}
+
+// TestCleanReceiptFileRejectsSinkInsideACleanupTarget refuses a sink the run is
+// about to delete. Writing there would recreate the path after its removal, so
+// the receipt would report a target as removed while it exists again.
+func TestCleanReceiptFileRejectsSinkInsideACleanupTarget(t *testing.T) {
+	binary := buildCLIContractBinary(t)
+	home := t.TempDir()
+	modules := filepath.Join(home, "workspace", "app", "node_modules")
+	writeJSONReceiptFixture(t, modules, "payload")
+	receiptPath := filepath.Join(modules, "receipt.json")
+
+	stdout, stderr, err := runCleanJSONProcess(t, binary, home,
+		"clean", "--no-guide", "--json", "--force", "--age", "1h",
+		"--category", "node_modules", "--receipt-file", receiptPath)
+	if err == nil {
+		t.Fatalf("overlapping receipt sink succeeded: stdout=%q stderr=%q", stdout, stderr)
+	}
+	if !strings.Contains(stderr, "is inside a cleanup target") {
+		t.Fatalf("overlapping receipt sink stderr = %q; want the sink refusal", stderr)
+	}
+	if _, statErr := os.Stat(modules); statErr != nil {
+		t.Fatalf("refused run deleted the cleanup target anyway: %v", statErr)
+	}
+	if _, statErr := os.Stat(receiptPath); !os.IsNotExist(statErr) {
+		t.Fatalf("refused run wrote a receipt file: %v", statErr)
 	}
 }

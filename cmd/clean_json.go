@@ -299,6 +299,11 @@ func runCleanJSON(cmd *cobra.Command) {
 	if err != nil {
 		failCleanJSON("cleanup execution safety preparation failed")
 	}
+	if cleanReceiptFile != "" {
+		if err := rejectCleanReceiptSinkOverlap(cleanReceiptFile, selected); err != nil {
+			failCleanJSON(err.Error())
+		}
+	}
 	prepared := prepareCleanExecutionWithOptions(ctx, executionSelection, overlapSafety, opts)
 	components := buildCleanJSONSnapshotComponents(
 		plan,

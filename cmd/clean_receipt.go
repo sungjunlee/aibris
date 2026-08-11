@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -743,4 +744,41 @@ func writeGuidedCleanExecutionReceipt(
 		fmt.Fprintf(os.Stderr, "error: cleanup receipt status is %q\n", receipt.Status)
 		os.Exit(1)
 	}
+}
+
+// resolveCleanReceiptSink normalizes the requested sink for containment
+// comparison. The file need not exist yet, so only its parent directory can be
+// resolved through symlinks.
+func resolveCleanReceiptSink(path string) (string, error) {
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	absolute = filepath.Clean(absolute)
+	parent, err := filepath.EvalSymlinks(filepath.Dir(absolute))
+	if err != nil {
+		return absolute, nil
+	}
+	return filepath.Join(filepath.Clean(parent), filepath.Base(absolute)), nil
+}
+
+// rejectCleanReceiptSinkOverlap refuses a sink that is, or lives inside, a
+// target this run is about to remove. Writing there would recreate the path
+// after its removal, so the receipt would claim a target was removed while it
+// exists again.
+func rejectCleanReceiptSinkOverlap(path string, targets []types.DebrisInfo) error {
+	sink, err := resolveCleanReceiptSink(path)
+	if err != nil {
+		return fmt.Errorf("resolving receipt file %q: %w", path, err)
+	}
+	for _, target := range targets {
+		targetPath, ok := cleanTargetPathKey(target.Path)
+		if !ok {
+			continue
+		}
+		if sink == targetPath || cleanTargetContains(targetPath, sink) {
+			return fmt.Errorf("receipt file %q is inside a cleanup target", path)
+		}
+	}
+	return nil
 }
