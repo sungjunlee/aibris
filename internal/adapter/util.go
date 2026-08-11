@@ -11,6 +11,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/sungjunlee/aibris/internal/codexhome"
 )
 
 // dirActivity reports the total file bytes and the newest modification time
@@ -301,4 +303,23 @@ func pathUnderRoots(path string, roots []string) bool {
 		}
 	}
 	return false
+}
+
+// appendUncoveredCodexHomes returns roots extended with every Codex home
+// (CODEX_HOME plus any AIBRIS_CODEX_HOMES entries) that is not already under
+// one of them. Scan roots default to $HOME while the Codex CLI honors
+// CODEX_HOME, so a Codex home outside the roots must still be covered or its
+// store would be silently filtered away.
+func appendUncoveredCodexHomes(roots []string) ([]string, error) {
+	homes, err := codexhome.Homes()
+	if err != nil {
+		return nil, err
+	}
+	extended := append([]string(nil), roots...)
+	for _, home := range homes {
+		if !pathUnderRoots(home, extended) {
+			extended = append(extended, home)
+		}
+	}
+	return extended, nil
 }

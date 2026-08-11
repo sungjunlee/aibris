@@ -394,9 +394,13 @@ or active-worktree opt-in. The default guided Codex route may recommend linked
 active units only after the cleanup-unit policy passes.
 
 Worktree discovery combines two bounded mechanisms. A finite exact registry
-looks up `$HOME/.codex/worktrees`, `$HOME/.relay/worktrees`,
+looks up the resolved Codex home's `worktrees` container (`$CODEX_HOME`,
+default `$HOME/.codex`, plus any `$AIBRIS_CODEX_HOMES` entries),
+`$HOME/.relay/worktrees`,
 `$HOME/.gstack/worktrees`, and `$HOME/.config/superpowers/worktrees` when each
-container is within a requested normalized root. Registered paths are not
+container is within a requested normalized root. A Codex home outside the
+requested roots is still covered, so an overridden `$CODEX_HOME` store is
+reported rather than filtered. Registered paths are not
 discovered by recursively opening hidden owners, and symlink escapes do not
 produce cleanable rows. Superpowers rows are attributed as
 `source=superpowers`, `tool=unknown`.

@@ -17,8 +17,14 @@ import (
 // convention elsewhere; XDG_CACHE_HOME covers Unix consumers that honor it.
 // TEMP and TMP are intentionally not changed here; callers that need
 // temporary-directory isolation should set those variables explicitly.
+//
+// CODEX_HOME and AIBRIS_CODEX_HOMES override where Codex stores live, so
+// they are cleared too: the fixture home stays the only Codex home unless a
+// test sets them explicitly.
 func SetHome(tb testing.TB, home string) {
 	tb.Helper()
+	tb.Setenv("CODEX_HOME", "")
+	tb.Setenv("AIBRIS_CODEX_HOMES", "")
 	tb.Setenv("HOME", home)
 	tb.Setenv("USERPROFILE", home)
 	drive := filepath.VolumeName(home)

@@ -46,6 +46,22 @@ func TestSetHomeRedirectsUserCacheDir(t *testing.T) {
 	}
 }
 
+// TestSetHomeClearsCodexHomeOverrides guards Codex-home isolation: ambient
+// CODEX_HOME and AIBRIS_CODEX_HOMES values must not leak into tests that
+// only redirected the user home.
+func TestSetHomeClearsCodexHomeOverrides(t *testing.T) {
+	t.Setenv("CODEX_HOME", "/ambient/codex")
+	t.Setenv("AIBRIS_CODEX_HOMES", "/ambient/extra")
+	SetHome(t, t.TempDir())
+
+	if got := os.Getenv("CODEX_HOME"); got != "" {
+		t.Fatalf("CODEX_HOME = %q; want cleared", got)
+	}
+	if got := os.Getenv("AIBRIS_CODEX_HOMES"); got != "" {
+		t.Fatalf("AIBRIS_CODEX_HOMES = %q; want cleared", got)
+	}
+}
+
 // TestSetHomePreservesVolumeShape guards the HOMEDRIVE/HOMEPATH pair: they
 // must still reconstruct the fixture home so Windows tools that prefer that
 // fallback stay inside the test profile.

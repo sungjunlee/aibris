@@ -435,12 +435,14 @@ func runCLIContract(binary, home string, args ...string) (string, error) {
 
 func cliContractEnv(environ []string, home string) []string {
 	isolatedKeys := map[string]bool{
-		"HOME":           true,
-		"USERPROFILE":    true,
-		"HOMEDRIVE":      true,
-		"HOMEPATH":       true,
-		"XDG_CACHE_HOME": true,
-		"LOCALAPPDATA":   true,
+		"HOME":               true,
+		"USERPROFILE":        true,
+		"HOMEDRIVE":          true,
+		"HOMEPATH":           true,
+		"XDG_CACHE_HOME":     true,
+		"LOCALAPPDATA":       true,
+		"CODEX_HOME":         true,
+		"AIBRIS_CODEX_HOMES": true,
 	}
 	env := make([]string, 0, len(environ)+len(isolatedKeys))
 	for _, entry := range environ {

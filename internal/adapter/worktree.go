@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/codexhome"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -19,18 +20,34 @@ const maxWorktreeContainerDepth = 4
 const noWorktreeMetadataReason = "no direct or one-level nested linked worktree metadata"
 
 type registeredWorktreeContainer struct {
+	base         string
 	relativePath string
 	source       string
 }
 
 // registeredWorktreeContainers covers known containers whose exact location is
 // deeper than the bounded convention fallback can discover. Keep this finite:
-// it is an exact lookup registry, not a second filesystem crawler.
-var registeredWorktreeContainers = []registeredWorktreeContainer{
-	{relativePath: filepath.Join(".codex", "worktrees"), source: ".codex"},
-	{relativePath: filepath.Join(".relay", "worktrees"), source: ".relay"},
-	{relativePath: filepath.Join(".gstack", "worktrees"), source: ".gstack"},
-	{relativePath: filepath.Join(".config", "superpowers", "worktrees"), source: "superpowers"},
+// it is an exact lookup registry, not a second filesystem crawler. The codex
+// container follows the resolved Codex home ($CODEX_HOME, plus any extra
+// homes listed in $AIBRIS_CODEX_HOMES) instead of assuming ~/.codex.
+func registeredWorktreeContainers(home string) ([]registeredWorktreeContainer, error) {
+	containers := []registeredWorktreeContainer{
+		{base: home, relativePath: filepath.Join(".relay", "worktrees"), source: ".relay"},
+		{base: home, relativePath: filepath.Join(".gstack", "worktrees"), source: ".gstack"},
+		{base: home, relativePath: filepath.Join(".config", "superpowers", "worktrees"), source: "superpowers"},
+	}
+	codexHomes, err := codexhome.Homes()
+	if err != nil {
+		return nil, err
+	}
+	for _, codexHome := range codexHomes {
+		containers = append(containers, registeredWorktreeContainer{
+			base:         canonicalExistingPath(codexHome),
+			relativePath: "worktrees",
+			source:       ".codex",
+		})
+	}
+	return containers, nil
 }
 
 type worktreeRoot struct {
@@ -63,6 +80,10 @@ func (a *WorktreeAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([]t
 	if err != nil {
 		return nil, err
 	}
+	roots, err = appendUncoveredCodexHomes(roots)
+	if err != nil {
+		return nil, err
+	}
 	roots = normalizedWorktreeScanRoots(roots)
 
 	home, err := os.UserHomeDir()
@@ -71,8 +92,13 @@ func (a *WorktreeAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([]t
 	}
 	home = canonicalExistingPath(home)
 
+	containers, err := registeredWorktreeContainers(home)
+	if err != nil {
+		return nil, err
+	}
+
 	rootByPath := make(map[string]worktreeRoot)
-	registeredRoots, blockedAliases, err := discoverRegisteredWorktreeRoots(ctx, home, roots)
+	registeredRoots, blockedAliases, err := discoverRegisteredWorktreeRoots(ctx, containers, roots)
 	if err != nil {
 		return nil, err
 	}
@@ -156,16 +182,16 @@ func canonicalExistingPath(path string) string {
 	return path
 }
 
-func discoverRegisteredWorktreeRoots(ctx context.Context, home string, roots []string) ([]worktreeRoot, map[string]bool, error) {
+func discoverRegisteredWorktreeRoots(ctx context.Context, containers []registeredWorktreeContainer, roots []string) ([]worktreeRoot, map[string]bool, error) {
 	var results []worktreeRoot
 	seen := make(map[string]bool)
 	blockedAliases := make(map[string]bool)
-	for _, registered := range registeredWorktreeContainers {
+	for _, registered := range containers {
 		if err := ctx.Err(); err != nil {
 			return nil, nil, err
 		}
 
-		path := filepath.Join(home, registered.relativePath)
+		path := filepath.Join(registered.base, registered.relativePath)
 		if !pathUnderRoots(path, roots) {
 			continue
 		}
@@ -193,7 +219,7 @@ func discoverRegisteredWorktreeRoots(ctx context.Context, home string, roots []s
 			return nil, nil, fmt.Errorf("resolving registered worktree container %q: %w", path, err)
 		}
 		resolved = filepath.Clean(resolved)
-		if resolved != filepath.Clean(path) || !pathUnderRoots(resolved, []string{home}) || !pathUnderRoots(resolved, roots) {
+		if resolved != filepath.Clean(path) || !pathUnderRoots(resolved, []string{registered.base}) || !pathUnderRoots(resolved, roots) {
 			blockedAliases[resolved] = true
 			continue
 		}

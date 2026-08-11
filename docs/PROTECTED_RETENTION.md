@@ -18,7 +18,7 @@ complete units; it may not broadly walk the surrounding tool home.
 
 | Store ID | Exact bounded root | Bounded retention unit | Trusted primary timestamp |
 | --- | --- | --- | --- |
-| `codex-sessions` | `~/.codex/sessions` | One recognized fixed Codex session regular-file leaf. The leaf is both the unit anchor and its only content member unless a later producer-versioned layout explicitly registers bounded metadata companions. | The fixed session file's `Lstat.ModTime`. Date-shaped ancestors and timestamps found later in the transcript do not participate. |
+| `codex-sessions` | `$CODEX_HOME/sessions` (default `~/.codex/sessions` when `CODEX_HOME` is unset) | One recognized fixed Codex session regular-file leaf. The leaf is both the unit anchor and its only content member unless a later producer-versioned layout explicitly registers bounded metadata companions. | The fixed session file's `Lstat.ModTime`. Date-shaped ancestors and timestamps found later in the transcript do not participate. |
 
 Additional stores (`cursor-chats`, `claude-projects`, `gstack-projects`,
 `relay-runs`, `codex-generated-images`) remain future provider work under the

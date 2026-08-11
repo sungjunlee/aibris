@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/sungjunlee/aibris/internal/testutil"
@@ -103,6 +104,119 @@ func TestAILogsAdapter_Multiple(t *testing.T) {
 	}
 	if !ids["codex-logs"] || !ids["codex-archived"] || !ids["claude-command-log"] {
 		t.Errorf("missing expected IDs: %v", results)
+	}
+}
+
+func TestAILogsAdapter_CodexHomeEnvOverridesDefaultLocation(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	codexHome := filepath.Join(home, "codex-runtime-home")
+	if err := os.MkdirAll(filepath.Join(codexHome, "archived_sessions"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(codexHome, "logs_2.sqlite"), make([]byte, 100), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// A decoy store at the default location must stay invisible once
+	// CODEX_HOME overrides it.
+	if err := os.MkdirAll(filepath.Join(home, ".codex"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".codex", "logs_2.sqlite"), make([]byte, 100), 0644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CODEX_HOME", codexHome)
+
+	a := &AILogsAdapter{}
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pathByID := map[string]string{}
+	for _, r := range results {
+		pathByID[r.ID] = r.Path
+	}
+	if len(results) != 2 {
+		t.Fatalf("results = %+v; want codex-logs and codex-archived under CODEX_HOME", results)
+	}
+	if pathByID["codex-logs"] != filepath.Join(codexHome, "logs_2.sqlite") {
+		t.Errorf("codex-logs path = %q; want it under CODEX_HOME", pathByID["codex-logs"])
+	}
+	if pathByID["codex-archived"] != filepath.Join(codexHome, "archived_sessions") {
+		t.Errorf("codex-archived path = %q; want it under CODEX_HOME", pathByID["codex-archived"])
+	}
+}
+
+func TestAILogsAdapter_CodexHomeOutsideScanRootsStillReported(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	codexHome := t.TempDir()
+	if err := os.WriteFile(filepath.Join(codexHome, "logs_2.sqlite"), make([]byte, 100), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(codexHome, "archived_sessions"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(codexHome, "archived_sessions", "s.jsonl"), make([]byte, 10), 0644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CODEX_HOME", codexHome)
+
+	a := &AILogsAdapter{}
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := map[string]bool{}
+	for _, r := range results {
+		ids[r.ID] = true
+		if !strings.HasPrefix(r.Path, codexHome+string(filepath.Separator)) {
+			t.Errorf("row %s path = %q; want it under CODEX_HOME %q", r.ID, r.Path, codexHome)
+		}
+	}
+	if !ids["codex-logs"] || !ids["codex-archived"] {
+		t.Fatalf("results = %+v; want the codex store outside $HOME still reported", results)
+	}
+}
+
+func TestAILogsAdapter_ExtraCodexHomesReportedSeparately(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	if err := os.MkdirAll(filepath.Join(home, ".codex"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".codex", "logs_2.sqlite"), make([]byte, 40), 0644); err != nil {
+		t.Fatal(err)
+	}
+	extra := t.TempDir()
+	if err := os.WriteFile(filepath.Join(extra, "logs_2.sqlite"), make([]byte, 100), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(extra, "archived_sessions"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AIBRIS_CODEX_HOMES", extra)
+
+	a := &AILogsAdapter{}
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pathByID := map[string]string{}
+	for _, r := range results {
+		pathByID[r.ID] = r.Path
+	}
+	if len(results) != 3 {
+		t.Fatalf("results = %+v; want primary and extra codex stores reported separately", results)
+	}
+	if pathByID["codex-logs"] != filepath.Join(home, ".codex", "logs_2.sqlite") {
+		t.Errorf("codex-logs path = %q; want the primary home store", pathByID["codex-logs"])
+	}
+	if pathByID["codex-logs-2"] != filepath.Join(extra, "logs_2.sqlite") {
+		t.Errorf("codex-logs-2 path = %q; want the extra home store", pathByID["codex-logs-2"])
+	}
+	if pathByID["codex-archived-2"] != filepath.Join(extra, "archived_sessions") {
+		t.Errorf("codex-archived-2 path = %q; want the extra home store", pathByID["codex-archived-2"])
 	}
 }
 

@@ -32,9 +32,22 @@
 - A classic (`--no-guide`) plan can now carry `policy_decision: "reviewable"`,
   which was previously reachable only on the guided route. It means "not
   selected by default" on either route.
+- `AIBRIS_CODEX_HOMES` lists extra Codex homes as a PATH-style list of
+  absolute paths. The `ai-logs` and `worktree` scan surfaces report each
+  extra home's store separately, attributed by path (`codex-logs-2`,
+  `codex-archived-2`, ... rows and `.codex`-sourced worktree containers).
+  The retention inventory still covers only the primary Codex home.
 
 ### Changed
 
+- Every Codex surface now honors the Codex CLI's `CODEX_HOME` override
+  instead of hardcoding `~/.codex`: the `codex-sessions` retention root, the
+  `ai-logs` adapter's `codex-logs`/`codex-archived` candidates, the
+  registered `.codex` worktree container, and the Codex activity session
+  roots all resolve through the Codex home. A Codex home outside the scan
+  roots is still covered, so an overridden home (sandboxed runtimes, CI
+  images) is reported instead of silently filtered. Without `CODEX_HOME`,
+  behavior is unchanged (`~/.codex`).
 - The stable default selection of orphaned `agent-state` now waits for a
   minimum 24-hour idle grace. Classification remains proof-based from every
   usable recorded working directory being absent, and `--age` still does not

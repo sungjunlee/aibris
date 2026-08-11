@@ -64,7 +64,8 @@ cannot be unlocked by `--risky` alone. See
 [docs/CATEGORY.md](docs/CATEGORY.md) for the store-specific future constraints.
 
 `aibris scan` also emits a **read-only protected-content inventory**: protected
-Codex session files under `~/.codex/sessions` are aggregated by UTC month into
+Codex session files under the resolved Codex home (`$CODEX_HOME/sessions`,
+default `~/.codex/sessions`) are aggregated by UTC month into
 a top-level `retention` JSON object (also shown in human output) with
 per-bucket unit/member counts, apparent bytes, and orphan statistics derived
 from proven-absent recorded working directories. The inventory is

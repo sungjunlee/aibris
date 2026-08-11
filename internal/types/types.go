@@ -132,7 +132,8 @@ type ScanProviderError struct {
 type RetentionStoreID string
 
 // RetentionStoreCodexSessions inventories regular rollout files under the
-// exact ~/.codex/sessions root as UTC-month aggregates.
+// exact sessions root of the resolved Codex home ($CODEX_HOME, or
+// ~/.codex/sessions when unset) as UTC-month aggregates.
 const RetentionStoreCodexSessions RetentionStoreID = "codex-sessions"
 
 // RetentionBucket is a read-only aggregate over protected content. It is
