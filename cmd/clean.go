@@ -124,7 +124,7 @@ review displays protected targets as locked rows.`,
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
-		refreshCleanupInventoryMetadata(result.Worktrees)
+		refreshCleanupInventoryMetadataWithContext(ctx, result.Worktrees)
 		overlapSafety, err := newDefaultCleanupOverlapSafetyRuntime(ctx)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: preparing overlap safety: %v\n", err)

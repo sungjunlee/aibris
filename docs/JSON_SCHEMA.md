@@ -201,10 +201,10 @@ Orphaned Cursor entries are classified from proof that every recorded workspace
 is absent. The classic `--age` filter does not apply; `policy.agent_state_grace`
 only gates default selection by the store's `mod_time`, which for agent-state is
 the newest mtime anywhere inside the store. An entry inside that window is
-`reviewable`, meaning it is not selected by default; it is dropped before the
-plan is built, so it never appears as a toggleable plan candidate and cannot be
-requested through JSON execution. Rerun with a shorter or zero
-`--agent-state-grace` to clean it. `live` and `undetermined` entries remain
+`reviewable`, meaning it is not selected by default. It stays visible in the
+plan as non-selected evidence, but it never enters the selection candidate set,
+so it is not a toggleable row and cannot be requested through JSON execution.
+Rerun with a shorter or zero `--agent-state-grace` to clean it. `live` and `undetermined` entries remain
 protected.
 
 ### `summary` object
@@ -411,8 +411,8 @@ route with its omitted age uses `3d` for both guided and classic values.
 (`--no-guide`) plan now emits it for a proof-classified orphaned `agent-state`
 row held by `agent_state_grace`. A consumer that keyed `reviewable` to the
 guided route must stop doing so; the value means "not selected by default" on
-either route. It is still not an offer: the held row is dropped before the plan
-is built, so it never becomes a selectable candidate.
+either route. It is still not an offer: the held row is reported as evidence but
+never enters the selection candidate set.
 
 The stable agent-state policy reason codes are:
 

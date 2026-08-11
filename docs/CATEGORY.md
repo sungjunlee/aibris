@@ -224,8 +224,8 @@ agent-state store is the newest modification found anywhere inside it, not the
 store directory's own mtime, because a session that keeps appending to a file
 already in the store never touches the directory again.
 
-An entry inside that window is dropped from the candidate set before a plan is
-built. It is therefore not a togglable row: it does not appear under
+An entry inside that window never enters the selection candidate set. It is
+therefore not a togglable row: it does not appear under
 `--interactive`, in the guided unified review, or in a JSON execution plan.
 Cleaning it means rerunning with `--agent-state-grace 0` or a shorter value, or
 waiting for the floor to elapse. The JSON `policy_decision` for such an entry is

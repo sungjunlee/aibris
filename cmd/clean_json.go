@@ -171,7 +171,7 @@ func runCleanJSON(cmd *cobra.Command) {
 		}
 		failCleanJSON("cleanup scan failed")
 	}
-	refreshCleanupInventoryMetadata(result.Worktrees)
+	refreshCleanupInventoryMetadataWithContext(ctx, result.Worktrees)
 	overlapSafety, err := newDefaultCleanupOverlapSafetyRuntime(ctx)
 	if err != nil {
 		failCleanJSON("cleanup safety preparation failed")

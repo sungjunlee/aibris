@@ -23,11 +23,11 @@
 - The stable default selection of orphaned `agent-state` now waits for a
   minimum 24-hour idle grace. Classification remains proof-based from an
   absent recorded working directory, and `--age` still does not apply. An entry
-  inside the grace window is excluded from the default selection and is dropped
-  before a plan is built, so it is not offered as a toggleable row under
-  `--interactive`, in the guided unified review, or through JSON execution;
-  cleaning it means rerunning with a shorter or zero `--agent-state-grace`, or
-  waiting for the floor to elapse. To restore the previous immediate-selection
+  inside the grace window stays visible as non-selected plan evidence but never
+  enters the selection candidate set, so it is not offered as a toggleable row
+  under `--interactive`, in the guided unified review, or through JSON
+  execution; cleaning it means rerunning with a shorter or zero
+  `--agent-state-grace`, or waiting for the floor to elapse. To restore the previous immediate-selection
   behavior, pass `--agent-state-grace 0`.
 - Agent-state idle age is now measured from the newest modification found
   anywhere inside a project store rather than the store directory's own mtime.

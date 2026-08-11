@@ -455,3 +455,62 @@ func TestAgentStateGraceSurvivesInventoryRefresh(t *testing.T) {
 		t.Fatalf("scan did not report the fixture store: %+v", result.Worktrees)
 	}
 }
+
+// TestAgentStateGraceSeesPostScanSessionAppend covers the cached-scan window:
+// `clean` may run against a scan up to lastScanCacheMaxAge old, and an append
+// to an existing session file moves neither the store directory's mtime nor
+// anything else the refresh would otherwise observe. Agent-state gets no
+// minimum age at the mutation barrier either, so the refresh is the last place
+// this can be caught.
+func TestAgentStateGraceSeesPostScanSessionAppend(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	entry := writeAgentStateGraceFixture(t, home)
+	session := filepath.Join(entry, "session.jsonl")
+
+	stale := time.Now().Add(-30 * 24 * time.Hour)
+	chtimesTree(t, entry, stale)
+
+	result, err := scanner.ScanWithOptions(context.Background(), types.ScanOptions{Roots: []string{home}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range result.Worktrees {
+		if item.Path == entry && !item.ModTime.Equal(stale.Truncate(time.Second)) &&
+			item.ModTime.After(time.Now().Add(-time.Hour)) {
+			t.Fatalf("fixture was not idle at scan time: ModTime = %v", item.ModTime)
+		}
+	}
+
+	// The session keeps writing after the scan; only the file's mtime moves.
+	appended := time.Now()
+	if err := os.Chtimes(session, appended, appended); err != nil {
+		t.Fatal(err)
+	}
+	dirInfo, err := os.Lstat(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dirInfo.ModTime().After(time.Now().Add(-time.Hour)) {
+		t.Fatalf("fixture invalid: the append moved the store directory mtime to %v", dirInfo.ModTime())
+	}
+
+	refreshCleanupInventoryMetadataWithContext(context.Background(), result.Worktrees)
+
+	opts := types.PruneOptions{
+		Age:                  7 * 24 * time.Hour,
+		AgentStateMinIdleAge: cleaner.DefaultAgentStateMinIdleAge,
+	}
+	for _, item := range result.Worktrees {
+		if item.Path != entry {
+			continue
+		}
+		eligible, reason := cleaner.EvaluateEligibility(item, opts, time.Now())
+		if eligible || reason != cleaner.EligibilityReasonAgentStateMinIdleAge {
+			t.Fatalf("store written after the scan stayed eligible: %t/%q (ModTime %v)",
+				eligible, reason, item.ModTime)
+		}
+		return
+	}
+	t.Fatalf("scan did not report the fixture store: %+v", result.Worktrees)
+}

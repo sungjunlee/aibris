@@ -177,17 +177,19 @@ mutation, it verifies identity, type, modification time, and age again. Evidence
 failure protects the affected target rather than trusting stale scan state.
 
 For `agent-state`, `classification` remains proof-based rather than age-based.
-An absent recorded working directory proves the associated work is gone and
-resume is already impossible, so an `orphaned` entry is immediately classified
-as orphaned after category and tool selection. The classic `--age` filter still
+An entry is `orphaned` only once every usable recorded working directory is
+proven absent, which proves the associated work is gone and resume is already
+impossible; any live path keeps the entry `live`, and inconclusive evidence
+keeps it `undetermined`. The classic `--age` filter still
 does not apply. `--agent-state-grace` uses `item.ModTime` as a separate recency
 floor for default selection. For an agent-state store, `item.ModTime` is the
 newest modification found anywhere inside it, taken as the later of the store
 directory's own mtime and its in-tree activity, so a session still appending to
 an existing file counts as recent; `item.PathModTime` carries the store
 directory's own mtime for the tamper checks. An orphan inside that window is
-dropped from the candidate set rather than protected: it is not offered as a
-toggleable row anywhere, and cleaning it requires rerunning with a shorter or
+kept out of the selection candidate set rather than protected: it stays visible
+as non-selected plan evidence but is not offered as a toggleable row anywhere,
+and cleaning it requires rerunning with a shorter or
 zero `--agent-state-grace`, or waiting for the floor to elapse. Its JSON
 `policy_decision` is `reviewable`, meaning "not selected by default". The floor
 is a selection policy, not a mutation safety property: the pre-mutation barrier
