@@ -299,6 +299,11 @@ func runCleanJSON(cmd *cobra.Command) {
 	if err != nil {
 		failCleanJSON("cleanup execution safety preparation failed")
 	}
+	if cleanReceiptFile != "" {
+		if err := rejectCleanReceiptSinkOverlap(cleanReceiptFile, selected); err != nil {
+			failCleanJSON(err.Error())
+		}
+	}
 	prepared := prepareCleanExecutionWithOptions(ctx, executionSelection, overlapSafety, opts)
 	components := buildCleanJSONSnapshotComponents(
 		plan,
@@ -317,6 +322,11 @@ func runCleanJSON(cmd *cobra.Command) {
 	)
 	if err := encodeCleanJSONReceipt(os.Stdout, receipt); err != nil {
 		failCleanJSON("cleanup receipt encoding failed")
+	}
+	if cleanReceiptFile != "" {
+		if err := writeCleanJSONReceiptFile(cleanReceiptFile, receipt); err != nil {
+			failCleanJSON("cleanup already ran; writing the receipt file failed")
+		}
 	}
 	if executionErr != nil || receipt.Status != cleanJSONReceiptSucceeded {
 		fmt.Fprintln(os.Stderr, "error: cleanup execution did not succeed")
@@ -361,6 +371,19 @@ func buildCleanJSONPlan(
 		result.Worktrees,
 		protections,
 	)
+	return renderCleanJSONPlanDocument(source, opts, guidedState, evidence, components), nil
+}
+
+// renderCleanJSONPlanDocument projects already-normalized snapshot components
+// into the public plan document. Callers that already hold the accepted plan
+// render from it directly instead of rebuilding one from default candidates.
+func renderCleanJSONPlanDocument(
+	source scanSource,
+	opts types.PruneOptions,
+	guidedState *guidedCleanState,
+	evidence CleanupPlanEvidence,
+	components []cleanJSONSnapshotComponent,
+) cleanJSONPlan {
 	return cleanJSONPlan{
 		SchemaVersion:   cleanJSONSchemaVersion,
 		DocumentType:    "clean_plan",
@@ -371,7 +394,7 @@ func buildCleanJSONPlan(
 		Totals:          cleanJSONTotalsFor(components),
 		PhysicalTargets: cleanJSONPhysicalTargetsFor(components),
 		Rows:            cleanJSONRowsFor(components),
-	}, nil
+	}
 }
 
 func encodeCleanJSON(output io.Writer, document cleanJSONPlan) error {

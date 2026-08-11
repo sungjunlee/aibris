@@ -202,10 +202,6 @@ func runUnifiedGuidedClean(
 	}
 	printOverlapSafetyRefusals(selection)
 	selected = selection.Targets
-	if len(selected) == 0 {
-		fmt.Fprintln(stdout, "No selected items passed overlap safety.")
-		return
-	}
 
 	auditProtections := mergeCleanAuditProtections(classicProtections, selection.Protections)
 	audit := buildPhysicalCleanAudit(
@@ -219,12 +215,24 @@ func runUnifiedGuidedClean(
 	)
 
 	prepared := prepareCleanExecutionWithOptions(ctx, selection, overlapSafety, opts)
+	pendingReceipt := prepareGuidedCleanExecutionReceipt(
+		source, opts, guidedState, plan, audit, result.Worktrees, auditProtections, prepared,
+	)
+	if len(selected) == 0 {
+		fmt.Fprintln(stdout, "No selected items passed overlap safety.")
+		// Every accepted target was refused, which the receipt must state as
+		// plainly as a partial refusal does. Without a sink the run keeps its
+		// existing exit status.
+		writeGuidedCleanExecutionReceipt(pendingReceipt, cleanExecutionReceipt{}, nil)
+		return
+	}
 	if opts.Interactive {
-		receipt, interactiveErr := interactiveCleanWithValidation(ctx, prepared, func(ctx context.Context) error {
+		receipt, interactiveErr := interactiveCleanWithValidationAndObserver(ctx, prepared, func(ctx context.Context) error {
 			return validateUnifiedCleanupPlanForMutation(ctx, plan, time.Now())
-		})
+		}, guidedCleanSkipObserver(pendingReceipt))
 		printWorktreeExecutionReceipts(receipt)
 		printCleanupReceipt(len(selected), receipt, audit)
+		writeGuidedCleanExecutionReceipt(pendingReceipt, receipt, interactiveErr)
 		if interactiveErr != nil {
 			fmt.Fprintf(os.Stderr, "error during cleanup: %v\n", interactiveErr)
 			os.Exit(1)
@@ -239,8 +247,49 @@ func runUnifiedGuidedClean(
 	receipt, executeErr := executeUnifiedPreparedCleanTargets(ctx, plan, prepared)
 	printWorktreeExecutionReceipts(receipt)
 	printCleanupReceipt(len(selected), receipt, audit)
+	writeGuidedCleanExecutionReceipt(pendingReceipt, receipt, executeErr)
 	if executeErr != nil {
 		fmt.Fprintf(os.Stderr, "error during cleanup: %v\n", executeErr)
 		os.Exit(1)
 	}
+}
+
+// guidedCleanSkipObserver records the confirmation loop's per-target
+// dispositions into the pending receipt. A run without --receipt-file has no
+// receipt to record into and observes nothing.
+func guidedCleanSkipObserver(pending *guidedCleanExecutionReceipt) interactiveCleanSkipObserver {
+	if pending == nil {
+		return nil
+	}
+	return pending.observeInteractiveSkip
+}
+
+// prepareGuidedCleanExecutionReceipt captures the receipt document before any
+// mutation. A receipt whose accounting cannot be trusted is a hard failure:
+// the run stops before deleting anything.
+func prepareGuidedCleanExecutionReceipt(
+	source scanSource,
+	opts types.PruneOptions,
+	guidedState *guidedCleanState,
+	plan UnifiedCleanupPlan,
+	audit cleanAudit,
+	inventory []types.DebrisInfo,
+	protections map[string]cleanAuditReason,
+	prepared []preparedCleanTarget,
+) *guidedCleanExecutionReceipt {
+	if cleanReceiptFile == "" {
+		return nil
+	}
+	if err := rejectCleanReceiptSinkOverlap(cleanReceiptFile, plan.SelectedPhysicalTargets()); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	pending, err := newGuidedCleanExecutionReceipt(
+		source, opts, guidedState, plan, audit, inventory, protections, prepared,
+	)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: preparing cleanup receipt: %v\n", err)
+		os.Exit(1)
+	}
+	return &pending
 }

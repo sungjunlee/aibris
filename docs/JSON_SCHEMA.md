@@ -505,3 +505,73 @@ cleanup commands are included. Error and refusal reason codes remain stable
 and path-free; external command output is never copied into JSON. A
 `command_fallback_path_removal` reason code records that a missing planned
 cleanup command reached its safe path-removal fallback.
+
+### Receipt file sink
+
+`--receipt-file <path>` writes the same versioned `clean_receipt` document to
+an explicit file sink:
+
+```bash
+aibris clean --guide --force --receipt-file cleanup.json
+aibris clean --no-guide --json --force --receipt-file cleanup.json
+```
+
+It is available on the guided route and on the `--json` route. On the guided
+route stdout stays the human review surface and the file is the only
+machine-readable output; on the `--json` route the file content is
+byte-identical to the receipt printed on stdout. The document is the same one
+described above: same `schema_version`, `document_type`, `mode`, embedded
+`plan` with `mode: "dry_run"`, accounting, and reason codes. Its embedded plan
+is rendered from the plan the guided review accepted, so a row de-selected in
+review appears as a non-requested physical target.
+
+Redaction is identical to the JSON route: paths, projects, and cleanup
+commands stay out of the file unless `--include-paths` is supplied, and
+`--include-paths` is accepted together with `--receipt-file` on the guided
+route for that reason. Because the document can then contain absolute paths,
+the file is created with mode `0600` and truncated if it already exists.
+
+`--receipt-file` requires an execution run. It is refused with `--dry-run`,
+which performs no execution, and on the classic human route, which already has
+`--json` for a receipt; the classic refusal is emitted before any mutation,
+including when the route resolves to classic only after the scan. It does not
+change the `--json --guide` refusal: non-dry-run `clean --json --guide` is
+still rejected before scanning or mutation.
+
+The file is written by a run that reaches execution. A guided run that returns
+earlier — an aborted review, an empty selection, nothing surviving overlap
+safety, or a declined final confirmation — deletes nothing and writes no
+receipt file. A run that cannot resolve a physical target identity for the
+receipt stops before the confirmation prompt and before any mutation, and exits
+non-zero: a receipt whose accounting cannot be trusted is never worth a
+deletion. Receipt status and exit status agree as they do on the `--json`
+route: only a `succeeded` status exits zero. The one exception is the sink
+itself — a failure to write the file after a successful cleanup is reported on
+stderr and exits non-zero even though the document it could not store says
+`succeeded`. That reports a missing artifact, never a failed deletion.
+
+Guided `--interactive` execution reports every prepared target with the same
+vocabulary the `--json --interactive` route publishes. Declining a target at
+its per-target prompt is a normal outcome, not a missing one: it is reported
+as `state: "skipped"`, `requested: false`, reason `not_confirmed`. A declined
+target therefore leaves receipt status and exit status exactly as they are
+without `--receipt-file`, and a run whose only non-removal is a decline still
+ends `succeeded` and exits zero.
+
+A target whose confirmation never arrives — the operator's input ends before
+the prompt is answered — is a cancelled request instead: `state: "cancelled"`,
+`requested: true`, reason `confirmation_cancelled`, matching the JSON
+interactive route. A cancelled request is not a completed run, so the receipt
+status is `cancelled` (or `partial_failure` beside a removal) and the run
+exits non-zero, while the same run without `--receipt-file` stops at the
+unanswered prompt and exits zero.
+
+A target the plan selected but deletion-time overlap safety refused is reported
+as `state: "failed"`, `requested: true`, reason `safety_refused`, the same code
+the classic JSON route uses. The refusal is also printed on the human surface,
+which without `--receipt-file` still exits zero.
+
+The fail-closed `execution_not_recorded` outcome — `state: "failed"`,
+`physical_removed: false`, `freed_bytes: 0`, `requested: true` — remains the
+backstop for a requested target that reaches the end of a run with no recorded
+outcome at all. It reports a missing outcome, not a failed deletion.
