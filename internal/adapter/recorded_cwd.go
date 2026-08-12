@@ -225,3 +225,51 @@ func pathWithinContainer(path, root string) bool {
 		(rel == "." || (rel != ".." && !filepath.IsAbs(rel) &&
 			!strings.HasPrefix(rel, ".."+string(filepath.Separator))))
 }
+
+// RecordedCWDOwners reports every distinct working directory recorded in the
+// registered agent-state stores, mapped to the tool that recorded it. It is
+// the owning-agent signal used to prove ownership of debris discovered under
+// an explicitly rooted system temp dir; unreadable session records contribute
+// no signal.
+func RecordedCWDOwners(ctx context.Context) (map[string]types.Tool, error) {
+	stores := []struct {
+		suffix string
+		tool   types.Tool
+		gather recordedCWDEvidenceGatherer
+	}{
+		{filepath.Join(".claude", "projects"), types.ToolClaude, recordedCWDsFromClaudeProject},
+		{filepath.Join(".cursor", "projects"), types.ToolCursor, recordedCWDFromCursorProject},
+	}
+	owners := make(map[string]types.Tool)
+	for _, store := range stores {
+		base, err := agentStateStoreRootFor(store.suffix)
+		if err != nil {
+			return nil, err
+		}
+		entries, err := os.ReadDir(base)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return nil, err
+		}
+		for _, entry := range entries {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			if !entry.IsDir() {
+				continue
+			}
+			evidence, err := store.gather(ctx, filepath.Join(base, entry.Name()))
+			if err != nil {
+				return nil, err
+			}
+			for _, cwd := range evidence.cwds {
+				if _, ok := owners[cwd]; !ok {
+					owners[cwd] = store.tool
+				}
+			}
+		}
+	}
+	return owners, nil
+}
