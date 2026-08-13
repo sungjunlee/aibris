@@ -6,75 +6,26 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/sungjunlee/aibris)](https://goreportcard.com/report/github.com/sungjunlee/aibris)
 
 AI + debris. A small CLI for cleaning up the filesystem leftovers from AI
-coding agents: Git worktrees, agent session stores, logs, and recorded-cwd
-agent state — with generic build debris (`node_modules`, build caches) as
-complementary coverage so `scan` stays a complete picture of one home.
+coding agents (Codex CLI, Claude Code, Cursor, Windsurf): Git worktrees,
+agent session stores, AI logs, and recorded-cwd agent state — with generic
+build debris (`node_modules`, build caches, pip/uv caches) as complementary
+coverage so `scan` stays a complete picture of one home.
 
 AI tools are productive, but they shed a lot of temporary state while they
-branch, build, test, and retry. aibris scans the places that debris tends to
-collect, shows a readable cleanup plan, and only deletes after filters,
-confirmation, and path safety checks. Its subject is agent-produced state:
-worktrees, session transcripts, and recorded-cwd project stores. It
-complements general-purpose cleaners; it does not compete with them.
+branch, build, test, and retry. aibris scans `$HOME` for the places that
+debris collects, shows you how much space is found, how much is reclaimable,
+and what is protected — then deletes only after filters, a preview, and
+confirmation.
 
-## Who is this for?
+## Platforms
 
-- Developers who use AI coding tools that create Git worktrees under `$HOME`
-- Teams sharing development machines where worktrees accumulate
-- Anyone who wants to reclaim disk space from node_modules and build caches
-- AI assistants that need structured scan output before cleanup
+- **macOS and Linux**: first-class. The `install.sh` installer downloads
+  verified release binaries; no `sudo` needed by default.
+- **Windows**: experimental archives. See the canonical
+  [Windows support contract](docs/WINDOWS.md) for native installation, tested
+  behavior, and unaudited boundaries. `install.sh` remains Unix/Bash-only.
 
-## What it cleans
-
-| Category | Examples | Default clean |
-| ---------- | ---------- | --------------- |
-| AI worktrees | Finite known containers plus `$HOME` conventions such as `.tool/worktrees` and project-local `worktrees` | Classic: orphaned; guided Codex: evidence-based |
-| Agent state | Claude and Cursor project stores | Orphaned only by proof; default selection waits for `--agent-state-grace` (24h) |
-| AI logs | Codex, Claude, Windsurf logs | Only with `--risky` |
-| Dependencies | project `node_modules` directories | Yes |
-| Build caches | Go, npm, Gradle, Cargo, Xcode | Yes |
-| Python caches | pip and uv cache directories | Yes |
-
-The first three rows are **agent-produced state** — aibris's subject. The last
-three are **generic build debris**: aibris covers them so `scan` reports a
-complete picture of a home, but general-purpose cleaners already handle them
-and winning on them is not an objective.
-
-Agent-state scan rows expose a `classification` of `live`, `orphaned`, or
-`undetermined`. Classification remains proof-based rather than age-based: every
-usable recorded working directory being absent proves the associated work is
-gone and resume is already impossible, while any live path keeps the entry
-`live` and inconclusive evidence keeps it `undetermined`. The classic `--age` filter still does not apply to
-agent-state; a separate `--agent-state-grace` minimum idle age (24h by default)
-only gates default selection of a proven orphaned entry. Idle age is measured
-from the newest modification anywhere inside the store, not the store
-directory's own mtime, so a long-running session that is still appending stays
-fresh. An entry inside that recency window is excluded from default selection
-and does not appear as a candidate row; to clean it now, rerun with
-`--agent-state-grace 0` or a shorter value, or wait for the floor to elapse.
-`live` and `undetermined` entries remain protected.
-
-Issue #142 also uses **installed**, **regenerable**, and **protected** as a
-planning taxonomy for six currently uncovered stores. Those terms are not
-shipped categories, agent-state classifications, JSON fields, or CLI selectors.
-Codex packages and Computer Use stay outside providers as installed content;
-Codex tmp is only a future safety-bounded default-clean child-unit candidate;
-generated images, Codex SQLite, and Cursor AI tracking remain protected and
-cannot be unlocked by `--risky` alone. See
-[docs/CATEGORY.md](docs/CATEGORY.md) for the store-specific future constraints.
-
-`aibris scan` also emits a **read-only protected-content inventory**: protected
-Codex session files under the resolved Codex home (`$CODEX_HOME/sessions`,
-default `~/.codex/sessions`) are aggregated by UTC month into
-a top-level `retention` JSON object (also shown in human output) with
-per-bucket unit/member counts, apparent bytes, and orphan statistics derived
-from proven-absent recorded working directories. The inventory is
-non-authorizing — it never creates cleanup candidates, never selects or mutates
-members, and its partial state never blocks ordinary clean. The execution
-layer (selector, manifest, executor) is deliberately parked; see
-[docs/PROTECTED_RETENTION.md](docs/PROTECTED_RETENTION.md).
-
-### Install
+## Install
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.sh | bash
@@ -104,444 +55,241 @@ add it for your shell. For a system-wide install, pass an explicit prefix:
 curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.sh | bash -s -- --prefix /usr/local/bin
 ```
 
-Windows archives are experimental. See the canonical
-[Windows support contract](docs/WINDOWS.md) for native installation, tested
-behavior, and unaudited boundaries. `install.sh` remains Unix/Bash-only.
+## Quick start: scan → dry-run → clean
 
-### Usage
+The core loop is three commands:
 
 ```bash
-aibris scan                    # discover what's taking space
-aibris scan --json             # machine-readable output (see docs/JSON_SCHEMA.md)
-aibris scan --root ~/.codex    # narrow scan to a home subdirectory
-
-aibris clean --dry-run         # preview without deleting
-aibris clean --no-guide --dry-run --json  # redacted machine-readable cleanup plan
-aibris clean --no-guide --dry-run --json --include-paths  # opt in to plan paths
-aibris clean --no-guide --json --force    # execute and emit a redacted receipt
-aibris clean --no-guide --json --interactive  # silent stdin confirmations, JSON only
-aibris clean --guide --force --receipt-file cleanup.json  # guided execution receipt to a file
-aibris clean --no-guide --dry-run # force classic cleanup audit
-aibris clean                   # delete with confirmation
-aibris clean --root ~/.codex --dry-run
-aibris clean --age 7d          # classic filter, or guided minimum idle age
-aibris clean --age 30d         # older than 30 days
-aibris clean --age 1mo         # older than 30 days (month shorthand)
-aibris clean --age 1y          # older than 365 days
-aibris clean --interactive     # confirm each item
-aibris clean --category node_modules   # only node_modules
-aibris clean --tool codex,claude       # only specific tools
-aibris clean --risky           # include ai-logs
-aibris clean --include-active-worktrees # include active worktrees
-aibris clean --agent-state-grace 0      # drop the orphaned agent-state idle floor (default 24h)
-aibris clean --force           # skip confirmation prompt
+aibris scan             # 1. discover what's taking space
+aibris clean --dry-run  # 2. preview a cleanup plan without deleting
+aibris clean            # 3. review the plan and confirm before deletion
 ```
 
-See [docs/DOGFOOD.md](docs/DOGFOOD.md) for real local scan transcripts used to
-validate release behavior.
+### 1. Scan
 
-### Example
+`aibris scan` inventories debris under `$HOME` (or under `--root` subpaths)
+and reports found space, a default-clean estimate of reclaimable space, and
+what is held back by age, `--risky`, or protection:
 
 ```text
-$ aibris scan
+$ aibris scan --root ~/aibris_demo
 
 scan
-  roots  ~
+  roots  ~/aibris_demo
 
-  scanned  7 sources   4 items   3.2 GB
+  scanning node_modules
+  scanning build-cache 
+  scanning pip-cache   
+  scanning cursor      
+  scanning claude      
+  scanning ai-logs     
+  scanning windsurf    
+  scanning codex       
+  found    pip-cache      0 items   0 B
+
+  found    cursor         0 items   0 B
+
+  found    claude         0 items   0 B
+
+  found    windsurf       0 items   0 B
+
+  found    ai-logs        1 items   94.2 MB
+
+  found    codex          0 items   0 B
+
+  found    build-cache    0 items   0 B
+
+  found    node_modules   2 items   20.0 KB
 
 summary
-  found       4 items
-  found size  3.2 GB
-  default clean (estimate) 3.1 GB
-  protected   96.0 MB active worktrees; use --include-active-worktrees after review
+  found       3 items
+  found size  94.2 MB
+  default clean (estimate) 0 B
+  age-blocked 20.0 KB younger than 7d
+  risky       94.2 MB requires --risky
 
 by category
-  node_modules    1   1.8 GB
-  build-cache     2   1.3 GB
-  worktree        1   96.0 MB
+  ai-logs         1   94.2 MB
+  node_modules    2   20.0 KB
 
 largest
-    1.8 GB  node_modules  dashboard    -                  24d
-  842.0 MB  build-cache   go-build     global             9d
-  512.4 MB  build-cache   npm          global             18d
-   96.0 MB  worktree      b7f4c2       aibris             active today
+   94.2 MB  ai-logs       codex-logs   global             today
+   12.0 KB  node_modules  projA        -                  today
+    8.0 KB  node_modules  projB        -                  today
+
+retention (protected content, read-only)
+  codex-sessions   2026-08  units 55  members 55  4.5 MB  orphaned 0/0 B
 
 next
   aibris clean --dry-run
   aibris scan --json
 ```
 
-The `default clean` figure is an estimate. `scan` applies the same existence
-filtering and target normalization that `clean` applies, so nested or
-duplicate targets count once; but clean-time safety protections (git safety,
-overlap safety, scan-evidence filtering, physical owner checks) can only be
-resolved by `clean` itself
-and can only shrink the final plan. Run `aibris clean --dry-run` for the
-exact plan.
+Reading the summary:
 
-Preview before deleting anything:
+- **found** — everything on disk in scope (94.2 MB here).
+- **default clean (estimate)** — what a default `aibris clean` would reclaim.
+  It is an estimate; run `aibris clean --dry-run` for the exact plan.
+- **age-blocked** and **risky** — space held back by the default `7d` age
+  filter or by the explicit `--risky` gate for AI logs.
+- **retention** — a read-only inventory of protected Codex session content;
+  it never becomes a cleanup candidate. See
+  [docs/PROTECTED_RETENTION.md](docs/PROTECTED_RETENTION.md).
+
+### 2. Preview (dry-run)
+
+`aibris clean --dry-run` plans the deletion without touching anything. This
+example widens the age filter and scopes to `node_modules`:
 
 ```text
-$ aibris clean --category worktree --age 7d --dry-run
-clean
-  roots  ~
+$ aibris clean --no-guide --dry-run --age 1s --category node_modules --root ~/aibris_demo
 
-  policy  age>7d, risky=false, active-worktrees=protected
-  scan    cached, 8s old
+clean
+  roots  ~/aibris_demo
+
+  policy  age>1s, risky=false, active-worktrees=protected
+  scan    cached, 15s old
 
 scan summary
-  scanned    7 sources   3 items   2.0 GB
-  eligible   1 item   96.0 MB
-  protected/skipped 2 items   1.9 GB
+  scanned    8 sources   3 physical items   94.2 MB   3 evidence rows
+  eligible   2 items   20.0 KB
+  protected/skipped 1 item   94.2 MB
 
 by category
-  category             found     eligible  protected/skipped  main reason
-  worktree          2  192.0 MB   1  96.0 MB   1  96.0 MB  active worktree protected
-  node_modules      1    1.8 GB   0      0 B   1   1.8 GB  outside category/tool filters
+  category             found     eligible  protected/skipped evidence  main reason
+  ai-logs         1  94.2 MB   0      0 B         1  94.2 MB        1  outside category/tool filters
+  node_modules    2  20.0 KB   2  20.0 KB         0      0 B        2  eligible for cleanup
 
-  matched  1 candidate   96.0 MB
+  matched  2 candidates   20.0 KB
 
 clean plan
   mode     dry-run
-  targets  1 item   96.0 MB
+  targets  2 items   20.0 KB
 
 targets
       size  category      name         project            age/status     action       reason
-   96.0 MB  worktree      b7f4c2       aibris             orphaned 12d   remove-path  orphaned worktree; parent repo metadata missing
-    ~/.codex/worktrees/b7f4c2
+   12.0 KB  node_modules  projA        -                  today          remove-path  dependency directory; can be reinstalled
+    ~/aibris_demo/projA/node_modules
+    8.0 KB  node_modules  projB        -                  today          remove-path  dependency directory; can be reinstalled
+    ~/aibris_demo/projB/node_modules
 
 [DRY-RUN] No files were removed.
 ```
 
-For automation, use the phase-1 dry-run plan:
+The plan separates **eligible** (reclaimable) targets from
+**protected/skipped** space, shows the exact paths, and only executes after
+you drop `--dry-run` and confirm.
+
+### 3. Clean
+
+Run the same command without `--dry-run` to execute. aibris prints the plan,
+asks `Proceed? [y/N]:`, and only then deletes:
 
 ```bash
-aibris clean --no-guide --dry-run --json
-aibris clean --no-guide --dry-run --json --include-paths
+aibris clean --no-guide --age 1s --category node_modules --root ~/aibris_demo
 ```
 
-The default JSON output is one path-redacted `clean_plan` document on stdout
-with empty stderr. It uses deterministic document-local `target-1` and
-`row-1` IDs, keeps bytes only on containment-normalized physical targets, and
-keeps exact/nested/ancestor discoveries as zero-byte logical rows. Dry-run guided
-JSON accepts the normal deterministic defaults without prompting. `--include-paths`
-opts in to explicit target paths, logical paths/projects, and cleanup commands.
-Phase-1 clean fails closed before emitting this document if any scan provider
-failed, so an emitted plan always has `evidence.complete: true`. In mixed
-auto-guided output, `policy.minimum_age` remains the classic `7d` filter while
-the optional guided minimum idle age is reported separately as `3d`.
-Non-dry-run JSON requires `--force` or `--interactive`, always takes the
-classic route, and executes the plan built in the current process before
-emitting one versioned `clean_receipt` document. `--guide` is rejected for
-non-dry-run JSON before scanning or mutation. The receipt embeds the accepted redacted
-plan, uses the same document-local physical target IDs, and exits zero only
-for a `succeeded` status. `--include-paths` opts in to the same path, project,
-and cleanup command fields as the dry-run plan.
-
-JSON execution never writes prompts or progress text to stdout. For a classic
-`--force` or `--interactive` execution, use the same selectors for preview
-and execution (for example,
-`clean --no-guide --dry-run --json` followed by
-`clean --no-guide --json --force`), changing only `--dry-run`. With
-`--force`, all selected physical targets are attempted. `--interactive --json`
-reads one silent confirmation line per selected target in embedded
-`plan.physical_targets` order: `y`/`yes` executes, `n`/`no` records a
-non-requested `skipped` target, and invalid or missing input cancels the
-remaining requests.
-If deletion-time safety changes the selected physical-target set, JSON fails
-closed before consuming any confirmation input.
-`requested` always equals `removed + partial + failed + cancelled`; protected,
-reviewable, and skipped targets are not requests. `freed_bytes` is credited
-only when the physical owner is verified absent, so logical rows never add
-bytes. JSON execution never accepts an external plan or receipt for replay.
-
-`--receipt-file <path>` writes that same versioned `clean_receipt` document to
-a file instead of relying on stdout:
+Automation can drive the same loop with machine-readable output — see
+[JSON output](docs/JSON_SCHEMA.md):
 
 ```bash
-aibris clean --guide --force --receipt-file cleanup.json     # guided execution, machine-readable outcome
-aibris clean --no-guide --json --force --receipt-file cleanup.json
+aibris scan --json                        # machine-readable inventory
+aibris clean --no-guide --dry-run --json  # machine-readable cleanup plan
 ```
 
-It makes guided execution auditable without changing its interactive review:
-stdout stays the human surface and the file carries the receipt. On the `--json`
-route the file is byte-identical to the receipt on stdout. Redaction is
-unchanged — paths, projects, and cleanup commands appear only with
-`--include-paths`, which is accepted alongside `--receipt-file` — and the file
-is written owner-only. The flag requires an execution run: it is refused with
-`--dry-run` and on the classic human route, which already has `--json`. It does
-not make `clean --json --guide` executable.
+## What it cleans
 
-The file records the run; it never changes which targets are cleaned. A target
-declined at a guided `--interactive` prompt is reported the way
-`--json --interactive` reports it — `skipped`, not requested, reason
-`not_confirmed` — so a declined target leaves both the receipt status and the
-run's exit status untouched. Asking for a receipt does make a few outcomes
-visible that the human route reports silently, and those exit non-zero; see
-[the receipt file sink](docs/JSON_SCHEMA.md) for the exact list.
+| Category | Examples | Default clean |
+| ---------- | ---------- | --------------- |
+| AI worktrees | Finite known containers plus `$HOME` conventions such as `.tool/worktrees` and project-local `worktrees` | Classic: orphaned; guided Codex: evidence-based |
+| Agent state | Claude and Cursor project stores | Orphaned only by proof; default selection waits for `--agent-state-grace` (24h) |
+| AI logs | Codex, Claude, Windsurf logs | Only with `--risky` |
+| Dependencies | project `node_modules` directories | Yes |
+| Build caches | Go, npm, Gradle, Cargo, Xcode | Yes |
+| Python caches | pip and uv cache directories | Yes |
 
-When active Codex worktrees are the useful cleanup decision and no classic
-cleanup selector is supplied, `aibris clean --dry-run` opens guided Codex
-worktree review by default. This includes protected-only pressure: at least one
-validated active Codex cleanup unit and either 256 MB total or three units. The
-guide defaults recommended rows to selected, keeps reviewable and locked rows
-visible, lets you toggle selectable rows by number, and still hands the final
-selection to the normal dry-run plan before anything can be deleted:
+The first three rows are **agent-produced state** — aibris's subject. The last
+three are **generic build debris**: aibris covers them so `scan` reports a
+complete picture of a home, but general-purpose cleaners already handle them
+and winning on them is not an objective. Category-level definitions and future
+store constraints live in [docs/CATEGORY.md](docs/CATEGORY.md).
+
+## Common commands
 
 ```bash
-aibris clean --dry-run
+aibris scan                    # discover what's taking space
+aibris scan --json             # machine-readable output (see docs/JSON_SCHEMA.md)
+aibris scan --root ~/.codex    # narrow scan to a home subdirectory
+
+aibris clean                   # guided or classic cleanup with confirmation
+aibris clean --dry-run         # preview without deleting
+aibris clean --root ~/.codex --dry-run
+aibris clean --age 7d          # classic filter, or guided minimum idle age
+aibris clean --age 30d         # older than 30 days
+aibris clean --age 1mo         # month shorthand
+aibris clean --age 1y          # older than 365 days
+aibris clean --category node_modules   # only node_modules
+aibris clean --tool codex,claude       # only specific tools
+aibris clean --risky           # include ai-logs
+aibris clean --interactive     # confirm each item
+aibris clean --include-active-worktrees # include active worktrees
+aibris clean --agent-state-grace 0      # drop the orphaned agent-state idle floor (default 24h)
+aibris clean --no-guide        # force the classic cleanup audit
+aibris clean --guide           # force guided Codex worktree review
+aibris clean --force           # skip the confirmation prompt only
+aibris clean --guide --force --receipt-file cleanup.json  # machine-readable execution receipt
 ```
 
-The guided policy operates on physical cleanup units. A unit is sized and
-removed once, but every direct or one-level nested Git worktree member must pass
-safety inspection. Members are grouped for retention by canonical Git
-common-dir, not by the path-derived project label.
+All flags come from `aibris --help`, `aibris scan --help`, and
+`aibris clean --help`. See [docs/DOGFOOD.md](docs/DOGFOOD.md) for real local
+scan transcripts used to validate release behavior.
 
-Policy evaluation is ordered:
+## Safety
 
-1. Lock the unit when it contains the current directory, dirty or untracked
-   files, unreadable Git or Codex activity evidence, a detached HEAD unreachable
-   from named refs, or activity within the last 6 hours.
-2. Keep the three most recently active units per canonical repository as
-   reviewable and unselected. A user may explicitly select these soft holds.
-3. Keep units younger than the guided minimum idle age (3 days by default) or
-   smaller than 256 MB reviewable and unselected.
-4. Recommend and select the remaining units.
+- **Preview first**: `--dry-run` plans without deleting; every real `clean`
+  asks for confirmation (`--force` skips only the prompt, never a safety lock)
+- **`--interactive`** confirms each item individually
+- **Default age floor**: classic cleanup defaults to `--age 7d` (units `h`,
+  `d`, `w`, `mo`, `y`, plus Go duration units such as `s`); negative ages are rejected
+- **`--risky` required** to touch AI logs
+- **Active worktrees excluded by default**; opt in with
+  `--include-active-worktrees` only intentionally
+- **Agent state is proof-classified** (`live` / `orphaned` / `undetermined`);
+  only proven-orphaned entries can be selected, and only after the
+  `--agent-state-grace` idle floor (24h default)
+- **Guided Codex review** locks dirty, active, or recently used worktree
+  units and keeps protected rows visible but unselectable
+- **Home-scoped roots**: scans start at `$HOME`; `--root` only narrows to
+  existing directories under it. Deletions outside `$HOME`, symlink escapes,
+  and unvalidated paths are rejected
+- **Protected content is read-only**: Codex session retention aggregates are
+  inventory only — see [docs/PROTECTED_RETENTION.md](docs/PROTECTED_RETENTION.md)
 
-An attached local branch is recoverable even without an upstream. A detached
-HEAD is recoverable when a local or remote named ref contains it. Missing or
-gone upstream is shown as explanatory metadata and never locks a row by itself.
-Changing `--age` or using the prompt's `age`, `+`, `-`, `[` or `]` commands
-changes only the minimum idle age; the 6-hour lock and recent-three ranking do
-not change.
+The full safety model, guided policy ordering, cache-reuse identity checks,
+and partial-scan behavior are specified in [docs/SPEC.md](docs/SPEC.md).
 
-The guide reads only Codex session metadata such as timestamps and working
-directories, never conversation bodies. A real deletion still requires the
-dry-run preview first and then the normal confirmation prompt unless `--force`
-is explicitly provided. `--force` skips only that prompt: it cannot select a
-locked row and is never passed to `git worktree remove`. Use `--no-guide` to
-keep the classic cleanup audit/executor route, or `--guide` to force guided
-Codex review.
+## Documentation
 
-When default guided review activates, it owns active Codex worktree decisions
-and merges them with the classic candidates into one unified cleanup review:
-selected guided parents and classic targets share one selection state, and a
-classic target nested inside a selected guided cleanup unit is reported as
-covered evidence rather than a second physical target. An empty guided
-selection therefore cannot hide classic candidates.
+- [docs/JSON_SCHEMA.md](docs/JSON_SCHEMA.md) — versioned `scan --json`,
+  `clean_plan`, and `clean_receipt` schemas, including `--include-paths`
+  and `--receipt-file` behavior
+- [docs/SPEC.md](docs/SPEC.md) — engineering spec: flag semantics, guided
+  cleanup policy, safety boundaries
+- [docs/CATEGORY.md](docs/CATEGORY.md) — category definitions and
+  future store constraints
+- [docs/PROTECTED_RETENTION.md](docs/PROTECTED_RETENTION.md) — the frozen,
+  read-only protected-content retention surface
+- [docs/DOGFOOD.md](docs/DOGFOOD.md) — real dogfood scan and dry-run
+  transcripts validating release behavior
+- [docs/WINDOWS.md](docs/WINDOWS.md) — Windows support contract
+- [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) — 0.x compatibility and
+  deprecation policy
 
-Cleanup overlap accounting follows one containment component from plan through
-receipt:
+## Agent workflow
 
-- The outermost executable target is the physical owner. Its on-disk size is
-  counted once in found, eligible, selected, protected, planned, and freed
-  totals. Nested and exact-path discovery rows remain visible as evidence and
-  contribute no additional bytes.
-- A `live` or `undetermined` agent-state row anywhere above, below, or exactly
-  on a cleanup target protects the complete component. `--force`, category
-  selectors, and tool selectors cannot bypass this subtree shield.
-- When a generic outer owner contains orphaned agent state, the owner inherits
-  every canonical child revalidation obligation. All obligations must still be
-  orphaned immediately before the first mutation; otherwise the whole component
-  survives, freed bytes are zero, and the receipt identifies the blocking path
-  while unattempted obligations remain `not-attempted`.
-
-For piped or other non-TTY input, EOF accepts the guided default selection.
-`--dry-run` then continues to the classic audit deterministically. In deletion
-mode without `--force`, missing or declined guided confirmation aborts the
-whole cleanup flow before classic targets can run.
-
-Confirm before deleting anything:
-
-```text
-$ aibris clean --category node_modules --age 7d
-clean
-  roots  ~
-
-  policy  age>7d, risky=false, active-worktrees=protected
-  scan    cached, 11s old
-
-scan summary
-  scanned    7 sources   4 items   3.2 GB
-  eligible   1 item   1.8 GB
-  protected/skipped 3 items   1.4 GB
-
-by category
-  category             found     eligible  protected/skipped  main reason
-  node_modules      1    1.8 GB   1   1.8 GB   0      0 B  eligible for cleanup
-  build-cache       2    1.3 GB   0      0 B   2   1.3 GB  outside category/tool filters
-  worktree          1   96.0 MB   0      0 B   1  96.0 MB  active worktree protected
-
-  matched  1 candidate   1.8 GB
-
-clean plan
-  mode     delete
-  targets  1 item   1.8 GB
-
-targets
-      size  category      name         project            age/status     action       reason
-    1.8 GB  node_modules  dashboard    -                  24d           remove-path  dependency directory; can be reinstalled
-    ~/path/to/dashboard/node_modules
-
-Proceed? [y/N]: y
-removing 1/1: dashboard (node_modules) ...
-removed: dashboard (node_modules) — 1.8 GB
-
-cleanup receipt
-  targets    1 item
-  freed      1.8 GB
-  protected/skipped 3 items   1.4 GB
-```
-
-`scan` writes a short-lived snapshot under the user cache directory. A following
-`clean` reuses it only when it is at most 5 minutes old and its normalized scan
-roots, explicit cache revision (`schema_version`), and concrete provider
-membership identity all match. A missing legacy identity or any mismatch falls
-back to a live scan with progress output. The membership identity detects
-provider additions, removals, and duplicate registrations, not behavior changes
-inside an unchanged provider; those changes require a cache revision bump. Each
-cached target also carries filesystem identity and type evidence. Missing,
-replaced, type-changed, symlink, or Windows reparse-point targets reject cache
-reuse instead of being trusted as the object that was scanned.
-
-Live fallback keeps the same audit shape after non-interactive scan progress:
-
-```text
-clean
-  roots  ~
-
-  scanning node_modules
-  scanning build-cache
-  found    build-cache    2 items   1.3 GB
-  found    node_modules   1 items   1.8 GB
-
-  policy  age>7d, risky=false, active-worktrees=protected
-  scan    live
-
-scan summary
-  scanned    7 sources   3 items   3.1 GB
-  eligible   1 item   1.8 GB
-  protected/skipped 2 items   1.3 GB
-```
-
-For unscoped guided Codex cleanup, the no-selector loop is fast and visible:
-
-```bash
-aibris scan
-aibris clean --dry-run
-aibris clean
-```
-
-This plain-command pair is not a substitute for a scoped cleanup. If the user
-approves selectors or safety flags, keep every flag and value identical in the
-preview and execution commands and remove only `--dry-run` for execution.
-
-When stdout is an interactive terminal, scans use a single-line spinner while
-providers run. In non-interactive logs, progress falls back to plain
-`scanning` / `found` lines.
-
-If a provider fails but other providers return usable results, `scan` labels
-the inventory as partial, lists the failed providers, emits the retained human
-or JSON result, and exits with status 1. Partial scans are never cached for
-cleanup, and `clean` requires a complete scan before it can plan or remove
-anything. A partial scan also invalidates any previous cleanup scan cache.
-Cancellation remains a hard failure.
-
-### Safety
-
-- **Independent age policies**: classic cleanup defaults to `--age 7d`, while
-  `--age` does not apply to agent-state. Proof-classified orphaned agent state
-  uses `--agent-state-grace` (24h by default) only to gate default selection —
-  an entry inside the floor is left out of the candidate set entirely, so
-  cleaning it means rerunning with a lower or zero grace; guided Codex cleanup
-  defaults to a 3-day minimum idle age while always keeping its 6-hour
-  recent-activity lock and recent-three retention
-- **Human age units** support `h`, `d`, `w`, `mo`, and `y`
-- **Low classic age warnings** describe the widened minimum-age eligibility
-  within the selected category/tool scope; they do not imply that risky,
-  active-worktree, agent-state, overlap, or Git protections are bypassed
-- **`--dry-run`** previews before deleting
-- **`--interactive`** confirms each item
-- **Target plan before final confirmation** shows category, size, project,
-  age/status, path, cleanup command when applicable, and zero-byte nested
-  overlap lineage
-- **Guided Codex cleanup** classifies physical units as recommended,
-  reviewable, or locked after member-level Git and activity checks, then uses
-  the same dry-run and confirmation model as regular `clean`
-- **Git-aware active removal** preflights every member, removes it with
-  `git worktree remove` semantics, preserves attached branch refs and referenced
-  detached commits, and verifies parent worktree metadata. It never falls back
-  to recursive deletion after Git removal fails.
-- **Recent scan reuse** skips a repeated scan when `clean` can use a fresh
-  snapshot with matching roots, cache revision, and concrete provider
-  membership. It binds each target to filesystem identity and type evidence,
-  refreshes current modification time before selection, and verifies identity,
-  type, age, and modification time again at the mutation boundary
-- **`--risky`** must be explicitly set to delete AI logs
-- **Active worktrees are excluded by default**; use
-  `--include-active-worktrees` only when you intentionally want age-based
-  cleanup for valid worktrees
-- **Recorded-cwd volume boundaries fail closed**: agent-state classification
-  compares the nearest existing ancestor with its parent. Unix uses device
-  identity and Windows uses `GetVolumePathNameW`; a different volume or a
-  lookup failure leaves the entry `undetermined` and protected.
-- **Home-scoped roots**: default scanning starts at `$HOME`; `--root` can narrow
-  scope to one or more existing directories under `$HOME`
-- **Convention-based worktree discovery**: worktrees are discovered by finding
-  `worktrees`, `worktree`, `worktree-*`, and `worktrees-*` directories under
-  scan roots, then validating direct or one-level nested `.git` files. The
-  generic fallback keeps a container depth limit of 4. A separate finite exact
-  registry covers `~/.codex/worktrees`, `~/.relay/worktrees`,
-  `~/.gstack/worktrees`, and `~/.config/superpowers/worktrees` without opening
-  unrelated hidden-owner fanout. Superpowers rows use `source=superpowers` and
-  `tool=unknown`.
-- **Pruned scan directories** for project-style discovery include `.Trash`,
-  `Library`, `Applications`, `Pictures`, `Movies`, `Music`, `.git`, `vendor`,
-  and nested `node_modules`; `Desktop` and `Downloads` are scanned
-- **Official cache cleanup commands** are preferred for supported caches
-  (`go clean -cache`, `npm cache clean --force`, `uv cache prune`). If the
-  owning command is missing, aibris falls back to the existing safe path removal
-  behavior; if the command runs and fails, aibris does not fall back silently.
-- **Confirmation prompt** on every `clean` (use `--force` to skip only the
-  prompt; hard locks and non-forced Git removal remain unchanged)
-- **Safety validation** rejects deletions outside `$HOME`, symlink escapes, and
-  unvalidated arbitrary paths. Generic worktrees are only cleanable after scan
-  metadata proves they are active or orphaned Git worktrees. A readable unit
-  with missing or invalid direct/one-level metadata remains visible as one
-  `plain-dir` owner row for review; mixed valid/invalid members protect the
-  whole owner. `plain-dir`, empty, and unknown worktree statuses are never
-  cleanup candidates.
-- **Negative age rejection** prevents accidental full-scope deletion
-
-### How It Works
-
-```
-aibris scan  → discovers worktree conventions, caches, node_modules, logs under scan roots
-aibris clean → filters or plans evidence-based units → previews → deletes safely
-```
-
-AI tools leave debris in predictable conventions. aibris scans `$HOME` by
-default, prunes high-noise system and media directories while discovering
-development debris, validates Git worktree metadata before reporting worktrees,
-measures disk usage, and cleans only after filters and safety checks.
-Judgment about what should be removed stays with a human or an AI assistant
-using `scan --json`.
-
-New tools can be added by implementing the `DebrisProvider` interface.
-
-### Agent Workflow
-
-No-selector guided Codex cleanup:
-
-```bash
-aibris scan --json
-aibris clean --dry-run
-aibris clean
-```
-
-Scoped cleanup keeps every approved selector and safety flag identical between
-preview and execution; only `--dry-run` is removed:
+AI assistants can drive the same loop with JSON: scan, summarize by
+project/category/age, run a dry-run plan, ask the user, then execute with
+identical selectors (only `--dry-run` removed):
 
 ```bash
 aibris scan --json
@@ -549,18 +297,13 @@ aibris clean --no-guide --category worktree --age 7d --dry-run
 aibris clean --no-guide --category worktree --age 7d
 ```
 
-The intended agent flow is: scan, summarize by project/category/age, use guided
-review for active Codex pressure, run a dry-run, ask again, then execute. Treat
-`active` as linked Git metadata, not proof of recent use; rely on the guided
-class and reason before proposing an active unit. A scoped execution must never
-fall back to plain `aibris clean`: preserve all approved `--category`, `--tool`,
-`--root`, `--age`, routing, and safety flags.
+## Contributing
 
-### Contributing
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) for
+architecture and development guidelines. New tools can be added by
+implementing the `DebrisProvider` interface.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) for architecture and development guidelines.
-
-### Roadmap
+## Roadmap
 
 See [ROADMAP.md](ROADMAP.md). The project intentionally remains in the 0.x
 series until the maintainer is satisfied; milestones are capability gates, not
@@ -569,6 +312,6 @@ promised release dates or an implied v1.0.0 schedule.
 The [0.x compatibility and deprecation policy](docs/COMPATIBILITY.md) defines
 which documented CLI and JSON contracts are stable during that period.
 
-### License
+## License
 
 MIT — see [LICENSE](LICENSE).
