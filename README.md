@@ -118,7 +118,7 @@ largest
     8.0 KB  node_modules  projB        -                  today
 
 retention (protected content, read-only)
-  codex-sessions  ... (read-only protected inventory)
+  codex-sessions   2026-08  units 55  members 55  4.5 MB  orphaned 0/0 B
 
 next
   aibris clean --dry-run
@@ -250,7 +250,7 @@ scan transcripts used to validate release behavior.
   asks for confirmation (`--force` skips only the prompt, never a safety lock)
 - **`--interactive`** confirms each item individually
 - **Default age floor**: classic cleanup defaults to `--age 7d` (units `h`,
-  `d`, `w`, `mo`, `y`); negative ages are rejected
+  `d`, `w`, `mo`, `y`, plus Go duration units such as `s`); negative ages are rejected
 - **`--risky` required** to touch AI logs
 - **Active worktrees excluded by default**; opt in with
   `--include-active-worktrees` only intentionally
