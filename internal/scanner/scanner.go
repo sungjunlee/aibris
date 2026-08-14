@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
+	"github.com/sungjunlee/aibris/internal/exclude"
 	"github.com/sungjunlee/aibris/internal/retention"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -213,6 +214,8 @@ func (s *Scanner) ScanWithOptions(ctx context.Context, opts types.ScanOptions) (
 
 	result.Worktrees = requireTempDirOwnership(ctx, result.Worktrees, roots)
 
+	applyUserExclusions(result, opts)
+
 	result.TotalCount = len(result.Worktrees)
 	for _, w := range result.Worktrees {
 		result.TotalSize += w.Size
@@ -237,6 +240,33 @@ func (s *Scanner) ScanWithOptions(ctx context.Context, opts types.ScanOptions) (
 
 	result.Retention = scanRetention(ctx, opts, s.RetentionProviders)
 	return result, nil
+}
+
+// applyUserExclusions removes discovered items covered by user exclusion
+// patterns (--exclude flags, the per-user ignore file, and repo-local
+// .aibris-ignore files under the scan roots). Exclusions affect discovery
+// only; they never broaden deletion authority.
+func applyUserExclusions(result *types.ScanResult, opts types.ScanOptions) {
+	patterns := make([]exclude.Pattern, 0, len(opts.Excludes))
+	for _, raw := range opts.Excludes {
+		patterns = append(patterns, exclude.Pattern{Raw: raw, Source: types.ExcludeSourceFlag})
+	}
+	patterns = append(patterns, exclude.IgnoreFilePatterns(opts.Roots)...)
+	if len(patterns) == 0 {
+		return
+	}
+	matcher := exclude.New(patterns, opts.Roots)
+	kept := result.Worktrees[:0]
+	for _, item := range result.Worktrees {
+		if matcher.Match(item.Path) {
+			result.ExcludedByUser++
+			continue
+		}
+		kept = append(kept, item)
+	}
+	result.Worktrees = kept
+	result.ExcludedScopes = matcher.Scopes()
+	result.RejectedExcludes = matcher.Rejected()
 }
 
 // scanRetention inventories protected-content stores after the debris scan.

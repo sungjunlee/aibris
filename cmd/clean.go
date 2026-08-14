@@ -34,6 +34,7 @@ var (
 	cleanGuide                  bool
 	cleanNoGuide                bool
 	cleanRoots                  []string
+	cleanExcludes               []string
 	cleanIncludeActiveWorktrees bool
 	cleanAgentStateGrace        string
 	cleanReceiptFile            string
@@ -137,11 +138,12 @@ review displays protected targets as locked rows.`,
 		}
 		printCleanHeader(roots)
 
-		result, source, err := scanForClean(ctx, roots)
+		result, source, err := scanForClean(ctx, roots, cleanExcludes)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
+		printExclusionDiagnostics(result)
 		refreshCleanupInventoryMetadataWithContext(ctx, result.Worktrees)
 		overlapSafety, err := newDefaultCleanupOverlapSafetyRuntime(ctx)
 		if err != nil {
@@ -495,6 +497,7 @@ func init() {
 	cleanCmd.Flags().BoolVar(&cleanGuide, "guide", false, "Guided Codex worktree cleanup review")
 	cleanCmd.Flags().BoolVar(&cleanNoGuide, "no-guide", false, "Use classic cleanup even when guided Codex review is available")
 	cleanCmd.Flags().StringArrayVar(&cleanRoots, "root", nil, "Scan root under $HOME (repeatable)")
+	cleanCmd.Flags().StringArrayVar(&cleanExcludes, "exclude", nil, "Exclude a path or glob pattern under scan roots from discovery (repeatable)")
 	cleanCmd.Flags().BoolVar(&cleanIncludeActiveWorktrees, "include-active-worktrees", false, "Include active worktrees in cleanup candidates")
 	cleanCmd.Flags().StringVar(
 		&cleanAgentStateGrace,
@@ -678,25 +681,27 @@ func printCleanHeader(roots []string) {
 	fmt.Printf("  roots  %s\n\n", strings.Join(displayRoots(roots), ", "))
 }
 
-func scanForClean(ctx context.Context, roots []string) (*types.ScanResult, scanSource, error) {
-	return scanForCleanWithProgress(ctx, roots, true)
+func scanForClean(ctx context.Context, roots, excludes []string) (*types.ScanResult, scanSource, error) {
+	return scanForCleanWithProgress(ctx, roots, excludes, true)
 }
 
-func scanForCleanQuiet(ctx context.Context, roots []string) (*types.ScanResult, scanSource, error) {
-	return scanForCleanWithProgress(ctx, roots, false)
+func scanForCleanQuiet(ctx context.Context, roots, excludes []string) (*types.ScanResult, scanSource, error) {
+	return scanForCleanWithProgress(ctx, roots, excludes, false)
 }
 
-func scanForCleanWithProgress(ctx context.Context, roots []string, showProgress bool) (*types.ScanResult, scanSource, error) {
+func scanForCleanWithProgress(ctx context.Context, roots, excludes []string, showProgress bool) (*types.ScanResult, scanSource, error) {
 	cacheReadAt := time.Now()
-	if result, age, ok := readFreshLastScanCache(roots); ok {
-		if err := requireCompleteScan(result); err != nil {
-			return nil, scanSource{}, err
+	if len(excludes) == 0 {
+		if result, age, ok := readFreshLastScanCache(roots); ok && !scanResultHasExclusions(result) {
+			if err := requireCompleteScan(result); err != nil {
+				return nil, scanSource{}, err
+			}
+			return result, scanSource{
+				Kind:       scanSourceCached,
+				Age:        age,
+				ObservedAt: cacheReadAt.Add(-age),
+			}, nil
 		}
-		return result, scanSource{
-			Kind:       scanSourceCached,
-			Age:        age,
-			ObservedAt: cacheReadAt.Add(-age),
-		}, nil
 	}
 
 	var result *types.ScanResult
@@ -705,6 +710,7 @@ func scanForCleanWithProgress(ctx context.Context, roots []string, showProgress 
 		progress := newScanProgressPrinter(os.Stdout)
 		result, err = scanner.ScanWithOptions(ctx, types.ScanOptions{
 			Roots:      roots,
+			Excludes:   excludes,
 			OnProgress: progress.Handle,
 		})
 		progress.Stop()
@@ -714,7 +720,7 @@ func scanForCleanWithProgress(ctx context.Context, roots []string, showProgress 
 			scanner.DefaultScanner.RetentionProviders,
 		)
 		quietScanner.ErrorWriter = io.Discard
-		result, err = quietScanner.ScanWithOptions(ctx, types.ScanOptions{Roots: roots})
+		result, err = quietScanner.ScanWithOptions(ctx, types.ScanOptions{Roots: roots, Excludes: excludes})
 	}
 	if err != nil {
 		return nil, scanSource{}, err
@@ -727,6 +733,12 @@ func scanForCleanWithProgress(ctx context.Context, roots []string, showProgress 
 }
 
 var errIncompleteCleanupScan = errors.New("cleanup requires a complete scan")
+
+// scanResultHasExclusions reports whether a cached scan was produced with
+// user exclusions applied, so a plain clean never reuses a filtered cache.
+func scanResultHasExclusions(result *types.ScanResult) bool {
+	return result.ExcludedByUser > 0 || len(result.ExcludedScopes) > 0 || len(result.RejectedExcludes) > 0
+}
 
 func requireCompleteScan(result *types.ScanResult) error {
 	if result == nil || !result.Partial() {
