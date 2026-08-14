@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/retention"
@@ -27,6 +28,16 @@ type Scanner struct {
 	Providers          []adapter.DebrisProvider
 	RetentionProviders []types.RetentionProvider
 	ErrorWriter        io.Writer
+	// Now is a clock seam for deterministic provider diagnostics; it
+	// defaults to time.Now when nil.
+	Now func() time.Time
+}
+
+func (s *Scanner) now() time.Time {
+	if s.Now != nil {
+		return s.Now()
+	}
+	return time.Now()
 }
 
 func (s *Scanner) errw() io.Writer {
@@ -127,11 +138,13 @@ func (s *Scanner) ScanWithOptions(ctx context.Context, opts types.ScanOptions) (
 				results <- providerScanResult{provider: p, err: scanCtx.Err()}
 				return
 			}
+			start := s.now()
 			items, err := p.Scan(scanCtx, opts)
+			dur := s.now().Sub(start)
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				cancel()
 			}
-			results <- providerScanResult{provider: p, items: items, err: err}
+			results <- providerScanResult{provider: p, items: items, err: err, duration: dur}
 		}(p)
 	}
 	close(startGate)
@@ -153,6 +166,14 @@ func (s *Scanner) ScanWithOptions(ctx context.Context, opts types.ScanOptions) (
 				Err:   err,
 			})
 			fmt.Fprintf(s.errw(), "scan:%s:%v\n", p.Name(), err)
+			if opts.Diagnostics {
+				result.Diagnostics = append(result.Diagnostics, types.ProviderDiagnostic{
+					Tool:     p.Name(),
+					State:    types.ScanProgressError,
+					Duration: providerResult.duration,
+					Err:      err.Error(),
+				})
+			}
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				cancelErr = err
 			} else {
@@ -169,6 +190,15 @@ func (s *Scanner) ScanWithOptions(ctx context.Context, opts types.ScanOptions) (
 			Count: len(worktrees),
 			Size:  totalSize(worktrees),
 		})
+		if opts.Diagnostics {
+			result.Diagnostics = append(result.Diagnostics, types.ProviderDiagnostic{
+				Tool:     p.Name(),
+				State:    types.ScanProgressDone,
+				Count:    len(worktrees),
+				Bytes:    totalSize(worktrees),
+				Duration: providerResult.duration,
+			})
+		}
 		result.Worktrees = append(result.Worktrees, worktrees...)
 	}
 	if cancelErr != nil {
@@ -176,6 +206,9 @@ func (s *Scanner) ScanWithOptions(ctx context.Context, opts types.ScanOptions) (
 	}
 	sort.Slice(result.ProviderErrors, func(i, j int) bool {
 		return result.ProviderErrors[i].Tool < result.ProviderErrors[j].Tool
+	})
+	sort.Slice(result.Diagnostics, func(i, j int) bool {
+		return result.Diagnostics[i].Tool < result.Diagnostics[j].Tool
 	})
 
 	result.TotalCount = len(result.Worktrees)
@@ -271,6 +304,7 @@ type providerScanResult struct {
 	provider adapter.DebrisProvider
 	items    []types.DebrisInfo
 	err      error
+	duration time.Duration
 }
 
 func emitProgress(fn func(types.ScanProgressEvent), event types.ScanProgressEvent) {

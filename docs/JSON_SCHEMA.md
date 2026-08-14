@@ -230,6 +230,49 @@ protected.
 | `count` | integer | Number of items |
 | `size` | integer | Total size in bytes |
 
+## Diagnostics (experimental)
+
+**Experimental: subject to change; not yet a stable contract.** The
+`diagnostics` array is opt-in via `aibris scan --diagnostics` and is omitted
+entirely unless that flag is set. It is additive, so `schema_version` stays
+`1`.
+
+```json
+{
+  "diagnostics": [
+    {
+      "tool": "codex",
+      "state": "done",
+      "count": 3,
+      "bytes": 4096,
+      "duration_ms": 250
+    },
+    {
+      "tool": "claude",
+      "state": "error",
+      "count": 0,
+      "bytes": 0,
+      "duration_ms": 40,
+      "error": "permission denied"
+    }
+  ]
+}
+```
+
+One entry is emitted per scan provider, ordered by `tool`.
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `tool` | string | Provider name that identifies the responsible tool |
+| `state` | string | `done` when the provider succeeded, `error` when it failed |
+| `count` | integer | Number of items found by the provider |
+| `bytes` | integer | Total bytes found by the provider |
+| `duration_ms` | integer | Provider scan duration in milliseconds |
+| `error` | string | Error message; omitted when the provider succeeded |
+
+Diagnostics carry only aggregate accounting (tool, state, count, bytes,
+duration, error). They never contain file paths, item paths, or file content.
+
 ## Retention projection (read-only, shipped)
 
 The top-level `retention` object is always present. It is non-additive

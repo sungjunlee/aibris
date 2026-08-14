@@ -81,6 +81,7 @@ func captureOutput(fn func()) string {
 
 func resetScanFlags() {
 	scanJSON = false
+	scanDiagnostics = false
 	scanRoots = nil
 }
 

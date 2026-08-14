@@ -20,8 +20,9 @@ import (
 )
 
 var (
-	scanJSON  bool
-	scanRoots []string
+	scanJSON        bool
+	scanDiagnostics bool
+	scanRoots       []string
 )
 
 // scanJSONSchemaVersion is the version of the top-level `scan --json`
@@ -43,7 +44,10 @@ var scanCmd = &cobra.Command{
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
 			}
-			result, err := scanner.DefaultScanner.ScanWithOptions(ctx, types.ScanOptions{Roots: roots})
+			result, err := scanner.DefaultScanner.ScanWithOptions(ctx, types.ScanOptions{
+				Roots:       roots,
+				Diagnostics: scanDiagnostics,
+			})
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
@@ -65,8 +69,9 @@ var scanCmd = &cobra.Command{
 
 		progress := newScanProgressPrinter(os.Stdout)
 		result, err := scanner.DefaultScanner.ScanWithOptions(ctx, types.ScanOptions{
-			Roots:      roots,
-			OnProgress: progress.Handle,
+			Roots:       roots,
+			Diagnostics: scanDiagnostics,
+			OnProgress:  progress.Handle,
 		})
 		progress.Stop()
 		if err != nil {
@@ -116,6 +121,16 @@ type jsonProviderError struct {
 	Message string `json:"message"`
 }
 
+// jsonProviderDiagnostic is experimental; see docs/JSON_SCHEMA.md.
+type jsonProviderDiagnostic struct {
+	Tool       string `json:"tool"`
+	State      string `json:"state"`
+	Count      int    `json:"count"`
+	Bytes      int64  `json:"bytes"`
+	DurationMS int64  `json:"duration_ms"`
+	Error      string `json:"error,omitempty"`
+}
+
 type jsonRetentionProviderError struct {
 	StoreID string `json:"store_id"`
 	Message string `json:"message"`
@@ -138,13 +153,14 @@ type jsonRetention struct {
 }
 
 type jsonOutput struct {
-	SchemaVersion  int                 `json:"schema_version"`
-	Items          []jsonWorktree      `json:"items"`
-	Worktrees      []jsonWorktree      `json:"worktrees"`
-	Summary        jsonSummary         `json:"summary"`
-	Retention      jsonRetention       `json:"retention"`
-	Partial        bool                `json:"partial,omitempty"`
-	ProviderErrors []jsonProviderError `json:"provider_errors,omitempty"`
+	SchemaVersion  int                      `json:"schema_version"`
+	Items          []jsonWorktree           `json:"items"`
+	Worktrees      []jsonWorktree           `json:"worktrees"`
+	Summary        jsonSummary              `json:"summary"`
+	Retention      jsonRetention            `json:"retention"`
+	Partial        bool                     `json:"partial,omitempty"`
+	ProviderErrors []jsonProviderError      `json:"provider_errors,omitempty"`
+	Diagnostics    []jsonProviderDiagnostic `json:"diagnostics,omitempty"`
 }
 
 func printJSON(r *types.ScanResult) {
@@ -170,6 +186,16 @@ func printJSON(r *types.ScanResult) {
 		out.ProviderErrors = append(out.ProviderErrors, jsonProviderError{
 			Tool:    string(providerErr.Tool),
 			Message: providerErr.Message,
+		})
+	}
+	for _, diagnostic := range r.Diagnostics {
+		out.Diagnostics = append(out.Diagnostics, jsonProviderDiagnostic{
+			Tool:       string(diagnostic.Tool),
+			State:      string(diagnostic.State),
+			Count:      diagnostic.Count,
+			Bytes:      diagnostic.Bytes,
+			DurationMS: diagnostic.Duration.Milliseconds(),
+			Error:      diagnostic.Err,
 		})
 	}
 	for i, w := range r.Worktrees {
@@ -407,6 +433,7 @@ func printHumanScanResult(ctx context.Context, r *types.ScanResult) {
 	printLargestItems(r.Worktrees)
 	printRetentionProjection(r.Retention)
 	printCodexActivityRecommendations(ctx, r.Worktrees)
+	printProviderDiagnostics(r)
 
 	fmt.Println("\nnext")
 	if r.Partial() {
@@ -439,6 +466,28 @@ func printRetentionProjection(projection types.RetentionProjection) {
 			bucket.OrphanedCount,
 			cleaner.FormatSize(bucket.OrphanedBytes),
 		)
+	}
+}
+
+func printProviderDiagnostics(r *types.ScanResult) {
+	if len(r.Diagnostics) == 0 {
+		return
+	}
+
+	fmt.Println("\ndiagnostics (experimental)")
+	for _, diagnostic := range r.Diagnostics {
+		line := fmt.Sprintf("  %-12s %-5s %3d %s   %s   %s",
+			diagnostic.Tool,
+			diagnostic.State,
+			diagnostic.Count,
+			itemNoun(diagnostic.Count),
+			cleaner.FormatSize(diagnostic.Bytes),
+			diagnostic.Duration,
+		)
+		if diagnostic.Err != "" {
+			line += "  " + diagnostic.Err
+		}
+		fmt.Println(line)
 	}
 }
 
@@ -773,5 +822,6 @@ func ageString(d time.Duration) string {
 
 func init() {
 	scanCmd.Flags().BoolVar(&scanJSON, "json", false, "Output as JSON")
+	scanCmd.Flags().BoolVar(&scanDiagnostics, "diagnostics", false, "Report per-provider timing and diagnostics (experimental)")
 	scanCmd.Flags().StringArrayVar(&scanRoots, "root", nil, "Scan root under $HOME (repeatable)")
 }
