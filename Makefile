@@ -26,8 +26,8 @@ tidy:
 	go mod tidy
 
 release-assets:
-	mkdir -p dist/release-assets
-	go run ./tools/gen-release-assets dist/release-assets
+	mkdir -p release-assets
+	go run ./tools/gen-release-assets release-assets
 
 dist: release-assets
 	goreleaser release --snapshot --clean

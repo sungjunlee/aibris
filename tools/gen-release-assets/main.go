@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	outDir := "dist/release-assets"
+	outDir := "release-assets"
 	if len(os.Args) > 1 {
 		outDir = os.Args[1]
 	}
