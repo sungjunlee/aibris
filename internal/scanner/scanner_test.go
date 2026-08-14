@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -478,6 +479,22 @@ func TestNormalizeRoots_RejectsOutsideHome(t *testing.T) {
 	}
 }
 
+func TestNormalizeRoots_AcceptsSystemTempDir(t *testing.T) {
+	testutil.SetHome(t, t.TempDir())
+
+	roots, err := NormalizeRoots([]string{os.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := filepath.EvalSymlinks(os.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(roots, []string{want}) {
+		t.Errorf("roots = %v; want %v", roots, []string{want})
+	}
+}
+
 func TestNormalizeRoots_RejectsSymlinkEscape(t *testing.T) {
 	parent := t.TempDir()
 	home := filepath.Join(parent, "home")
@@ -496,6 +513,67 @@ func TestNormalizeRoots_RejectsSymlinkEscape(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "must be under") {
 		t.Errorf("error = %v; want must be under", err)
+	}
+}
+
+func TestScan_TempDirRootRequiresOwnershipEvidence(t *testing.T) {
+	parent := t.TempDir()
+	home := filepath.Join(parent, "home")
+	temp := filepath.Join(parent, "temp")
+	for _, dir := range []string{home, temp} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("TMPDIR", temp)
+	t.Setenv("TMP", temp)
+	t.Setenv("TEMP", temp)
+	testutil.SetHome(t, home)
+
+	checkout := filepath.Join(temp, "dispatch-checkout")
+	ownedUnit := filepath.Join(checkout, "node_modules")
+	if err := os.MkdirAll(ownedUnit, 0755); err != nil {
+		t.Fatal(err)
+	}
+	strayUnit := filepath.Join(temp, "stray", "node_modules")
+	if err := os.MkdirAll(strayUnit, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	entry := filepath.Join(home, ".claude", "projects", "-dispatch-checkout")
+	if err := os.MkdirAll(entry, 0755); err != nil {
+		t.Fatal(err)
+	}
+	record := fmt.Sprintf("{\"cwd\": %q}\n", checkout)
+	if err := os.WriteFile(filepath.Join(entry, "session.jsonl"), []byte(record), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New([]adapter.DebrisProvider{&adapter.NodeModulesAdapter{}})
+	result, err := s.ScanWithOptions(context.Background(), types.ScanOptions{Roots: []string{temp}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wantUnit, err := filepath.EvalSymlinks(ownedUnit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Worktrees) != 1 {
+		t.Fatalf("worktrees = %+v; want only the unit with ownership evidence", result.Worktrees)
+	}
+	item := result.Worktrees[0]
+	if item.Path != wantUnit {
+		t.Fatalf("path = %q; want %q", item.Path, wantUnit)
+	}
+	if item.Source != string(types.ToolClaude) {
+		t.Errorf("source = %q; want owning agent %q", item.Source, types.ToolClaude)
+	}
+	if item.Project != "dispatch-checkout" {
+		t.Errorf("project = %q; want the recorded-cwd project label", item.Project)
+	}
+	if !strings.Contains(item.Reason, "recorded cwd") || !strings.Contains(item.Reason, checkout) {
+		t.Errorf("reason = %q; want recorded cwd evidence for %q", item.Reason, checkout)
 	}
 }
 

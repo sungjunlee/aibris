@@ -4,6 +4,15 @@
 
 ### Added
 
+- `aibris scan --root` accepts the resolved system temp dir
+  (`os.TempDir()` / `TMPDIR`) as an explicit opt-in root outside `$HOME`;
+  every other root outside `$HOME` is still rejected. A unit discovered under
+  such a root surfaces only with per-unit ownership proof: the current user
+  owns the path and an agent-state store records a working directory
+  referencing it, and each proven row carries that owning-agent evidence
+  (`source`, `project`, and `reason`). Default scan and clean are unchanged:
+  the temp dir never joins the default roots, and clean still refuses every
+  path outside `$HOME`.
 - `aibris clean --receipt-file <path>` writes the versioned `clean_receipt`
   execution document to a file. It makes guided execution machine-readable
   while stdout stays the human review surface, and on the `--json` route it
