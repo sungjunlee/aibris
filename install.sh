@@ -187,6 +187,38 @@ install_binary() {
   log "Installed ${BINARY} to ${INSTALL_DIR}/${BINARY}"
 }
 
+install_one_completion() {
+  local shell="$1" dir="$2" file="$3"
+  if ! mkdir -p "$dir" 2>/dev/null; then
+    log "warning: could not install completions: cannot create ${dir}"
+    return 0
+  fi
+  if ! "${INSTALL_DIR}/${BINARY}" completion "$shell" > "$file" 2>/dev/null; then
+    log "warning: could not install completions: ${shell}"
+  fi
+}
+
+install_completions() {
+  # Install shell completions into standard per-user locations. Best-effort:
+  # failures warn and never abort the install. This never edits shell profile
+  # files (.bashrc, .zshrc, config.fish). PowerShell completions ship in the
+  # release archives; see docs/COMPLETIONS.md.
+  [[ -x "${INSTALL_DIR}/${BINARY}" ]] || return 0
+  if [[ -z "${HOME:-}" ]]; then
+    log "warning: could not install completions: HOME is not set"
+    return 0
+  fi
+  install_one_completion bash \
+    "${HOME}/.local/share/bash-completion/completions" \
+    "${HOME}/.local/share/bash-completion/completions/aibris"
+  install_one_completion zsh \
+    "${HOME}/.local/share/zsh/site-functions" \
+    "${HOME}/.local/share/zsh/site-functions/_aibris"
+  install_one_completion fish \
+    "${HOME}/.config/fish/completions" \
+    "${HOME}/.config/fish/completions/aibris.fish"
+}
+
 path_contains_install_dir() {
   case ":${PATH:-}:" in
     *":${INSTALL_DIR}:"*) return 0 ;;
@@ -400,6 +432,8 @@ main() {
       download_release "$(normalize_tag "$VERSION")"
       ;;
   esac
+
+  install_completions
 
   "${INSTALL_DIR}/${BINARY}" --version || true
   print_path_hint

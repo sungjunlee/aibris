@@ -2,6 +2,7 @@ version: 2
 before:
   hooks:
     - go mod tidy
+    - make release-assets
 builds:
   - env:
       - CGO_ENABLED=0
@@ -20,6 +21,12 @@ archives:
     format_overrides:
       - goos: windows
         formats: [zip]
+    files:
+      - LICENSE*
+      - README*
+      - CHANGELOG*
+      - release-assets/completions/*
+      - release-assets/man/*
 checksum:
   name_template: 'checksums.txt'
 snapshot:
