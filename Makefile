@@ -1,4 +1,4 @@
-.PHONY: build clean test install
+.PHONY: build clean test install release-assets dist
 
 BINARY := aibris
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -25,5 +25,9 @@ lint:
 tidy:
 	go mod tidy
 
-dist:
+release-assets:
+	mkdir -p release-assets
+	go run ./tools/gen-release-assets release-assets
+
+dist: release-assets
 	goreleaser release --snapshot --clean

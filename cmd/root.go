@@ -25,7 +25,17 @@ Scans for:
   - protected Codex session retention aggregates (read-only inventory)
 
 Run "aibris scan" first to see what's taking space,
-then "aibris clean --dry-run" to preview deletions.`,
+then "aibris clean --dry-run" to preview deletions.
+
+Safety gates:
+  - clean previews with --dry-run and asks for confirmation before deleting
+  - AI logs are only touched with --risky
+  - active worktrees are protected unless --include-active-worktrees
+  - scans stay under $HOME; deletions outside it are rejected
+
+Exit status:
+  0  successful completion
+  1  invalid usage, fail-closed safety refusal, cancellation, or failed execution`,
 }
 
 func Execute() {

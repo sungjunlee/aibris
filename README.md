@@ -284,6 +284,8 @@ and partial-scan behavior are specified in [docs/SPEC.md](docs/SPEC.md).
 - [docs/WINDOWS.md](docs/WINDOWS.md) — Windows support contract
 - [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) — 0.x compatibility and
   deprecation policy
+- [docs/COMPLETIONS.md](docs/COMPLETIONS.md) — shell completions and man
+  page: installation, uninstall, and regeneration
 
 ## Agent workflow
 
