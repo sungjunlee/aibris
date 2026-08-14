@@ -66,6 +66,6 @@ pinned man page date):
 make release-assets
 ```
 
-This writes the completions and man pages to `dist/release-assets/`. The
-release pipeline (`make dist` / goreleaser) runs the same step before
-packaging.
+This writes the completions and man pages to `release-assets/` at the
+repository root. The release pipeline (`make dist` / goreleaser) runs the
+same step before packaging.
