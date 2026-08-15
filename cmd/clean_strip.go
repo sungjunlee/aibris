@@ -214,6 +214,9 @@ func stripWorktreeUnit(ctx context.Context, home string, target types.DebrisInfo
 
 	// One baseline evidence inspection per checkout touched by this unit.
 	baselines := make(map[string]GitWorktreeMember)
+	// A checkout is only re-verified after strip if something was actually
+	// removed from it; all-skipped checkouts had no mutation to verify.
+	mutated := make(map[string]bool)
 	baselineReason := func(checkoutDir string) string {
 		baseline, ok := baselines[checkoutDir]
 		if !ok {
@@ -259,12 +262,18 @@ func stripWorktreeUnit(ctx context.Context, home string, target types.DebrisInfo
 			continue
 		}
 		outcome.Freed += subtree.Bytes
+		mutated[checkoutDir] = true
 		outcome.Subtrees = append(outcome.Subtrees, subtree)
 	}
 
-	// Verify each touched checkout kept its HEAD and its exact visible Git
+	// Verify each mutated checkout kept its HEAD and its exact visible Git
 	// state: removing ignored subtrees must change nothing a status can see.
+	// Checkouts whose subtrees were all skipped saw no mutation, so a failed
+	// re-check there would falsely look like strip damage.
 	for checkoutDir, baseline := range baselines {
+		if !mutated[checkoutDir] {
+			continue
+		}
 		after := buildGitWorktreeMember(ctx, checkoutDir)
 		switch {
 		case !after.GitEvidenceAvailable:
@@ -307,8 +316,9 @@ func stripCheckoutDir(unitPath, subtreePath string) (string, bool) {
 // stripSubtreeGitSafe reports whether the subtree holds nothing Git can see.
 // A tracked-and-modified file, or a file the repo's ignore rules do not
 // match, would surface in a porcelain status scoped to the subtree, so any
-// output refuses the strip; a deliberately vendored checkout is never
-// touched.
+// output refuses the strip. Porcelain cannot see tracked-and-clean files, so
+// a second ls-files inspection refuses any subtree the repo has committed;
+// a deliberately vendored checkout is never touched.
 func stripSubtreeGitSafe(ctx context.Context, checkoutDir, subtreePath string) (string, bool) {
 	rel, err := filepath.Rel(checkoutDir, subtreePath)
 	if err != nil || rel == "." || rel == ".." ||
@@ -324,6 +334,13 @@ func stripSubtreeGitSafe(ctx context.Context, checkoutDir, subtreePath string) (
 	}
 	if strings.TrimSpace(string(output)) != "" {
 		return "tracked-modified or non-ignored files present", false
+	}
+	output, err = runWorktreeGitCommand(ctx, checkoutDir, "ls-files", "--", rel)
+	if err != nil {
+		return "git ls-files unavailable", false
+	}
+	if strings.TrimSpace(string(output)) != "" {
+		return "tracked files present in subtree", false
 	}
 	return "", true
 }

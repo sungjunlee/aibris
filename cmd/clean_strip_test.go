@@ -383,3 +383,105 @@ func TestBuiltCLI_StripSeparatesScanBytesAndPreservesUnit(t *testing.T) {
 		t.Errorf("git diff HEAD not empty after strip:\n%s", diff)
 	}
 }
+
+func TestStripSkipsSubtreeContainingTrackedCleanFiles(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	_, worktree := newStripFixtureWorktree(t, home, "feature", stripFixtureIgnore)
+	// Vendor node_modules on purpose: committed content is tracked and
+	// clean, so porcelain alone cannot see it.
+	writeGitFixtureFile(t, worktree, "node_modules/dep/index.js", "vendored on purpose\n")
+	runGitFixture(t, worktree, "add", "-f", "node_modules/dep/index.js")
+	runGitFixture(t, worktree, "commit", "-m", "vendor node_modules")
+	runGitFixture(t, worktree, "push", "origin", "feature")
+	writeGitFixtureFile(t, worktree, "android/build/out.bin", "build output\n")
+
+	headBefore := gitFixtureOutputTrimmed(t, worktree, "rev-parse", "--verify", "HEAD")
+	if status := gitFixtureOutputTrimmed(t, worktree, "status", "--porcelain"); status != "" {
+		t.Fatalf("fixture worktree not clean before strip:\n%s", status)
+	}
+
+	target := stripFixtureTarget(worktree,
+		filepath.Join(worktree, "node_modules"),
+		filepath.Join(worktree, "android", "build"),
+	)
+	outcomes, err := executeStripTargets(context.Background(), []types.DebrisInfo{target})
+	if err != nil {
+		t.Fatalf("strip failed: %v", err)
+	}
+	if len(outcomes) != 1 {
+		t.Fatalf("outcomes = %d; want 1", len(outcomes))
+	}
+	outcome := outcomes[0]
+	if outcome.Error != "" {
+		t.Fatalf("post-strip verification failed: %s", outcome.Error)
+	}
+
+	var keptOutcome, removedOutcome *stripSubtreeOutcome
+	for i := range outcome.Subtrees {
+		switch outcome.Subtrees[i].Path {
+		case filepath.Join(worktree, "node_modules"):
+			keptOutcome = &outcome.Subtrees[i]
+		case filepath.Join(worktree, "android", "build"):
+			removedOutcome = &outcome.Subtrees[i]
+		}
+	}
+	if keptOutcome == nil || removedOutcome == nil {
+		t.Fatalf("missing subtree outcomes: %+v", outcome.Subtrees)
+	}
+	if keptOutcome.Skipped != "tracked files present in subtree" {
+		t.Errorf("tracked subtree skip reason = %q; want tracked files present in subtree",
+			keptOutcome.Skipped)
+	}
+	if _, err := os.Stat(filepath.Join(worktree, "node_modules", "dep", "index.js")); err != nil {
+		t.Errorf("tracked-clean file was stripped: %v", err)
+	}
+	if removedOutcome.Skipped != "" {
+		t.Errorf("safe subtree was skipped: %s", removedOutcome.Skipped)
+	}
+	if _, err := os.Stat(filepath.Join(worktree, "android", "build")); !os.IsNotExist(err) {
+		t.Errorf("safe subtree still exists (stat err %v)", err)
+	}
+
+	// The checkout must stay exactly as clean as it was before.
+	if status := gitFixtureOutputTrimmed(t, worktree, "status", "--porcelain"); status != "" {
+		t.Errorf("git status not clean after strip:\n%s", status)
+	}
+	headAfter := gitFixtureOutputTrimmed(t, worktree, "rev-parse", "--verify", "HEAD")
+	if headAfter != headBefore {
+		t.Errorf("HEAD moved during strip: %s -> %s", headBefore, headAfter)
+	}
+}
+
+func TestStripReportsNoErrorWhenEverySubtreeWasSkipped(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	// A checkout whose worktree metadata points at unreadable Git data: the
+	// baseline evidence inspection fails, so every subtree is skipped before
+	// any mutation. That must be a quiet no-op, not a strip failure.
+	unit := filepath.Join(home, ".codex", "worktrees", "noevidence")
+	writeGitFixtureFile(t, unit, ".git", "gitdir: "+filepath.Join(home, "missing-git-dir", "worktrees", "noevidence")+"\n")
+	writeGitFixtureFile(t, unit, "node_modules/dep/index.js", "untracked\n")
+
+	target := stripFixtureTarget(unit, filepath.Join(unit, "node_modules"))
+	outcomes, err := executeStripTargets(context.Background(), []types.DebrisInfo{target})
+	if err != nil {
+		t.Fatalf("strip reported an error for an all-skipped unit: %v", err)
+	}
+	if len(outcomes) != 1 {
+		t.Fatalf("outcomes = %d; want 1", len(outcomes))
+	}
+	outcome := outcomes[0]
+	if outcome.Error != "" {
+		t.Fatalf("all-skipped unit reported outcome.Error: %s", outcome.Error)
+	}
+	if outcome.Freed != 0 {
+		t.Errorf("Freed = %d; want 0", outcome.Freed)
+	}
+	if len(outcome.Subtrees) != 1 || outcome.Subtrees[0].Skipped == "" {
+		t.Fatalf("subtrees = %+v; want one skipped subtree", outcome.Subtrees)
+	}
+	if _, err := os.Stat(filepath.Join(unit, "node_modules", "dep", "index.js")); err != nil {
+		t.Errorf("skipped subtree was removed: %v", err)
+	}
+}
