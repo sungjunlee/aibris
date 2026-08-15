@@ -78,3 +78,27 @@ func EvaluateEligibility(item types.DebrisInfo, opts types.PruneOptions, observe
 	}
 	return true, EligibilityReasonEligible
 }
+
+// EvaluateStripEligibility reports whether an item may have its regenerable
+// subtrees stripped. Strip is a separate disposition from deletion: it only
+// applies to worktree units that deletion refuses for protective reasons
+// (active-worktree protection or minimum-age retention) and that carry an
+// inventoried strippable subtree set. Strip eligibility never authorizes
+// deletion, and a deletion-eligible unit is left to the deletion route.
+func EvaluateStripEligibility(item types.DebrisInfo, deleteEligible bool, deleteReason EligibilityReason) bool {
+	if deleteEligible {
+		return false
+	}
+	if item.Category != types.CategoryWorktree || item.Status != types.WorktreeActive {
+		return false
+	}
+	if item.StrippableBytes <= 0 || len(item.StrippablePaths) == 0 {
+		return false
+	}
+	switch deleteReason {
+	case EligibilityReasonActiveWorktree, EligibilityReasonAge:
+		return true
+	default:
+		return false
+	}
+}

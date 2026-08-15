@@ -425,9 +425,9 @@ func (a *WorktreeAdapter) scanEntry(ctx context.Context, entryPath, source strin
 	}
 	switch direct.state {
 	case worktreeMarkerValid:
-		return []types.DebrisInfo{
-			newWorktreeItem(entryPath, entryPath, source, direct.status, "", entryInfo.ModTime()),
-		}, nil
+		item := newWorktreeItem(entryPath, entryPath, source, direct.status, "", entryInfo.ModTime())
+		item.StrippableBytes, item.StrippablePaths = a.strippableSubtrees(ctx, entryPath, direct.status)
+		return []types.DebrisInfo{item}, nil
 	case worktreeMarkerInvalid:
 		return []types.DebrisInfo{
 			newWorktreeItem(entryPath, entryPath, source, types.WorktreePlain, direct.reason, entryInfo.ModTime()),
@@ -455,14 +455,16 @@ func (a *WorktreeAdapter) scanEntry(ctx context.Context, entryPath, source strin
 		}
 		switch inspection.state {
 		case worktreeMarkerValid:
-			valid = append(valid, newWorktreeItem(
+			item := newWorktreeItem(
 				entryPath,
 				worktreePath,
 				source,
 				inspection.status,
 				"",
 				entryInfo.ModTime(),
-			))
+			)
+			item.StrippableBytes, item.StrippablePaths = a.strippableSubtrees(ctx, worktreePath, inspection.status)
+			valid = append(valid, item)
 		case worktreeMarkerMissing:
 			invalidReasons = append(invalidReasons, fmt.Sprintf("%s: missing .git marker", entry.Name()))
 		case worktreeMarkerInvalid:

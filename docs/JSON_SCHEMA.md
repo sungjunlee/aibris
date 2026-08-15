@@ -182,6 +182,8 @@ item list, not as a worktree-only list.
 | `reason` | string | Short derived explanation for cleanup review |
 | `cleanup_kind` | string | Cleanup strategy (`remove-path` or `command`) |
 | `cleanup_command` | array | Argv command used when `cleanup_kind` is `command`; empty for path removal |
+| `strippable_bytes` | integer | Bytes in regenerable subtrees (dependency directories and platform build output) inventoried at fixed known-relative positions inside a `worktree` unit. Omitted when zero. Reported separately from `size` so protected worktrees do not read as unrecoverable; only `clean --strip` removes them, and strip eligibility never authorizes deletion. |
+| `strippable_paths` | array | Absolute paths of those regenerable subtrees. Omitted when empty. |
 
 `risk` and `reason` are presentation fields derived from `category`, `status`,
 and `classification`; they are intended for human and AI-assisted cleanup
@@ -213,6 +215,7 @@ protected.
 | ------- | ------ | ------------- |
 | `total_count` | integer | Total number of debris items |
 | `total_size` | integer | Total size in bytes |
+| `total_strippable_bytes` | integer | Sum of `strippable_bytes` across all items. Omitted when zero. Reported separately from `total_size`; it never changes deletion totals. |
 | `by_category` | object | Per-category counts and sizes |
 | `by_tool` | object | Per-tool counts and sizes |
 
@@ -244,6 +247,7 @@ Exclusions affect discovery only: excluded items are absent from `items` and
 | ----- | ---- | ----------- |
 | `count` | integer | Number of items |
 | `size` | integer | Total size in bytes |
+| `strippable_bytes` | integer | Sum of `strippable_bytes` for the items in this group. Omitted when zero. |
 
 ## Diagnostics (experimental)
 

@@ -92,6 +92,13 @@ type DebrisInfo struct {
 	Reason         string
 	CleanupKind    CleanupKind
 	CleanupCommand []string
+	// StrippableBytes and StrippablePaths inventory regenerable subtrees
+	// (dependency dirs, platform build output) found at fixed known-relative
+	// positions inside a worktree unit. They are a separate disposition from
+	// Size: stripping removes only these subtrees and never the unit itself,
+	// and strip eligibility never authorizes deletion.
+	StrippableBytes int64
+	StrippablePaths []string
 	// ScanPathIdentity, ScanPathType, and ScanPathEvidenceRequired are transient
 	// cleanup safety evidence.
 	// They are deliberately excluded from persisted ScanResult JSON.
@@ -102,12 +109,15 @@ type DebrisInfo struct {
 
 // ScanResult aggregates all debris found by all adapters.
 type ScanResult struct {
-	Worktrees      []DebrisInfo
-	TotalCount     int
-	TotalSize      int64
-	ByCategory     map[Category]CategorySummary
-	ByTool         map[Tool]ToolSummary
-	ProviderErrors []ScanProviderError
+	Worktrees  []DebrisInfo
+	TotalCount int
+	TotalSize  int64
+	// TotalStrippableBytes sums regenerable-subtree bytes reported separately
+	// from deletable Size, so protected worktrees stop reading as unrecoverable.
+	TotalStrippableBytes int64
+	ByCategory           map[Category]CategorySummary
+	ByTool               map[Tool]ToolSummary
+	ProviderErrors       []ScanProviderError
 	// Diagnostics is opt-in per-provider timing and accounting
 	// (ScanOptions.Diagnostics). It stays nil when not collected.
 	Diagnostics []ProviderDiagnostic
@@ -250,12 +260,16 @@ type ScanProgressEvent struct {
 type CategorySummary struct {
 	Count int
 	Size  int64
+	// StrippableBytes reports regenerable-subtree bytes separately from Size.
+	StrippableBytes int64
 }
 
 // ToolSummary reports aggregate stats for a single tool.
 type ToolSummary struct {
 	Count int
 	Size  int64
+	// StrippableBytes reports regenerable-subtree bytes separately from Size.
+	StrippableBytes int64
 }
 
 // PruneOptions configures the filtering and deletion behavior of a clean operation.

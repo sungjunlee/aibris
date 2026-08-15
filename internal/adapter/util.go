@@ -38,6 +38,12 @@ func estimateDirSize(ctx context.Context, path string) int64 {
 	return estimateDirActivityWithOptions(ctx, path, false).Size
 }
 
+// EstimateDirSize measures a path with the same estimator scan uses, for
+// callers that must re-derive a size after the scan (e.g. strip execution).
+func EstimateDirSize(ctx context.Context, path string) int64 {
+	return estimateDirSize(ctx, path)
+}
+
 func estimateDirActivity(ctx context.Context, path string) dirActivity {
 	return estimateDirActivityWithOptions(ctx, path, true)
 }

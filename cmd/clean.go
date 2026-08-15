@@ -33,6 +33,7 @@ var (
 	cleanForce                  bool
 	cleanGuide                  bool
 	cleanNoGuide                bool
+	cleanStrip                  bool
 	cleanRoots                  []string
 	cleanExcludes               []string
 	cleanIncludeActiveWorktrees bool
@@ -63,7 +64,12 @@ an execution run and is not available on the classic route, which already has
 
 Across both routes, selected targets enter the cleanup plan, reviewable targets
 require explicit selection, and protected targets never enter the plan. Guided
-review displays protected targets as locked rows.`,
+review displays protected targets as locked rows.
+
+--strip is a separate disposition from deletion: it removes only the
+regenerable subtrees (dependency directories and platform build output)
+inventoried inside worktree units that deletion protects, recovering space
+without deleting the unit, its branch, or any uncommitted work.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if cleanIncludePaths && !cleanJSON && cleanReceiptFile == "" {
 			fmt.Fprintln(os.Stderr, "error: --include-paths requires --json")
@@ -76,6 +82,14 @@ review displays protected targets as locked rows.`,
 		if cleanGuide && cleanNoGuide {
 			fmt.Fprintln(os.Stderr, "error: cannot use --guide with --no-guide")
 			os.Exit(1)
+		}
+		if cleanStrip {
+			if cleanJSON || cleanInteractive || cleanGuide || cleanReceiptFile != "" {
+				fmt.Fprintln(os.Stderr, "error: --strip cannot be combined with --json, --interactive, --guide, or --receipt-file")
+				os.Exit(1)
+			}
+			runStripClean()
+			return
 		}
 		if cleanReceiptFile != "" && cleanNoGuide && !cleanJSON {
 			fmt.Fprintln(os.Stderr, errClassicRouteReceiptFile)
@@ -496,6 +510,7 @@ func init() {
 	cleanCmd.Flags().BoolVarP(&cleanForce, "force", "f", false, "Skip confirmation prompt")
 	cleanCmd.Flags().BoolVar(&cleanGuide, "guide", false, "Guided Codex worktree cleanup review")
 	cleanCmd.Flags().BoolVar(&cleanNoGuide, "no-guide", false, "Use classic cleanup even when guided Codex review is available")
+	cleanCmd.Flags().BoolVar(&cleanStrip, "strip", false, "Strip regenerable subtrees from protected worktrees instead of deleting units")
 	cleanCmd.Flags().StringArrayVar(&cleanRoots, "root", nil, "Scan root under $HOME (repeatable)")
 	cleanCmd.Flags().StringArrayVar(&cleanExcludes, "exclude", nil, "Exclude a path or glob pattern under scan roots from discovery (repeatable)")
 	cleanCmd.Flags().BoolVar(&cleanIncludeActiveWorktrees, "include-active-worktrees", false, "Include active worktrees in cleanup candidates")

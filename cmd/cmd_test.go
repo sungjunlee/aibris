@@ -281,7 +281,8 @@ func resetCleanFlags() {
 	cleanIncludeActiveWorktrees = false
 	cleanAgentStateGrace = "24h"
 	cleanReceiptFile = ""
-	for _, name := range []string{"age", "category", "tool", "dry-run", "json", "include-paths", "interactive", "risky", "force", "guide", "no-guide", "root", "exclude", "include-active-worktrees", "agent-state-grace", "receipt-file", "help"} {
+	cleanStrip = false
+	for _, name := range []string{"age", "category", "tool", "dry-run", "json", "include-paths", "interactive", "risky", "force", "guide", "no-guide", "root", "exclude", "include-active-worktrees", "agent-state-grace", "receipt-file", "strip", "help"} {
 		if flag := cleanCmd.Flags().Lookup(name); flag != nil {
 			flag.Changed = false
 			if name != "root" && name != "exclude" {

@@ -219,6 +219,7 @@ func (s *Scanner) ScanWithOptions(ctx context.Context, opts types.ScanOptions) (
 	result.TotalCount = len(result.Worktrees)
 	for _, w := range result.Worktrees {
 		result.TotalSize += w.Size
+		result.TotalStrippableBytes += w.StrippableBytes
 		cat := w.Category
 		if cat == "" {
 			cat = catByTool[w.Tool]
@@ -226,11 +227,13 @@ func (s *Scanner) ScanWithOptions(ctx context.Context, opts types.ScanOptions) (
 		s := result.ByCategory[cat]
 		s.Count++
 		s.Size += w.Size
+		s.StrippableBytes += w.StrippableBytes
 		result.ByCategory[cat] = s
 
 		t := result.ByTool[w.Tool]
 		t.Count++
 		t.Size += w.Size
+		t.StrippableBytes += w.StrippableBytes
 		result.ByTool[w.Tool] = t
 	}
 
