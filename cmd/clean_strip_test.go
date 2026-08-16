@@ -74,7 +74,7 @@ func TestStripExecutionRemovesOnlyRegenerableSubtreesAndPreservesCheckout(t *tes
 		filepath.Join(worktree, "node_modules"),
 		filepath.Join(worktree, "android", "build"),
 	)
-	outcomes, err := executeStripTargets(context.Background(), []types.DebrisInfo{target})
+	outcomes, err := executeStripTargets(context.Background(), []types.DebrisInfo{target}, t.TempDir())
 	if err != nil {
 		t.Fatalf("strip failed: %v", err)
 	}
@@ -175,7 +175,7 @@ func TestStripSkipsSubtreesWithUnsafeFiles(t *testing.T) {
 				filepath.Join(worktree, "node_modules"),
 				filepath.Join(worktree, "android", "build"),
 			)
-			outcomes, err := executeStripTargets(context.Background(), []types.DebrisInfo{target})
+			outcomes, err := executeStripTargets(context.Background(), []types.DebrisInfo{target}, t.TempDir())
 			if err != nil {
 				t.Fatalf("strip failed: %v", err)
 			}
@@ -266,7 +266,7 @@ func TestStripEligibleUnitIsNeverAutoDeletedByClean(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			deleteTargets := cleaner.Filter([]types.DebrisInfo{unit}, tt.opts)
-			stripTargets := selectStripTargets([]types.DebrisInfo{unit}, tt.opts)
+			stripTargets, _ := selectStripTargets([]types.DebrisInfo{unit}, tt.opts, t.TempDir())
 			if len(deleteTargets) != tt.wantDelete {
 				t.Errorf("deletion targets = %d; want %d (%+v)", len(deleteTargets), tt.wantDelete, deleteTargets)
 			}
@@ -405,7 +405,7 @@ func TestStripSkipsSubtreeContainingTrackedCleanFiles(t *testing.T) {
 		filepath.Join(worktree, "node_modules"),
 		filepath.Join(worktree, "android", "build"),
 	)
-	outcomes, err := executeStripTargets(context.Background(), []types.DebrisInfo{target})
+	outcomes, err := executeStripTargets(context.Background(), []types.DebrisInfo{target}, t.TempDir())
 	if err != nil {
 		t.Fatalf("strip failed: %v", err)
 	}
@@ -464,7 +464,7 @@ func TestStripReportsNoErrorWhenEverySubtreeWasSkipped(t *testing.T) {
 	writeGitFixtureFile(t, unit, "node_modules/dep/index.js", "untracked\n")
 
 	target := stripFixtureTarget(unit, filepath.Join(unit, "node_modules"))
-	outcomes, err := executeStripTargets(context.Background(), []types.DebrisInfo{target})
+	outcomes, err := executeStripTargets(context.Background(), []types.DebrisInfo{target}, t.TempDir())
 	if err != nil {
 		t.Fatalf("strip reported an error for an all-skipped unit: %v", err)
 	}
@@ -483,5 +483,70 @@ func TestStripReportsNoErrorWhenEverySubtreeWasSkipped(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(unit, "node_modules", "dep", "index.js")); err != nil {
 		t.Errorf("skipped subtree was removed: %v", err)
+	}
+}
+
+// TestStripRefusesUnitHoldingWorkingDirectory pins the working-directory
+// barrier at selection. Strip proves its subtrees hold nothing Git can see,
+// so the checkout's content is safe either way; what the barrier protects is
+// the live process running from inside the unit, exactly as the deletion
+// route already protects it.
+func TestStripRefusesUnitHoldingWorkingDirectory(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	_, worktree := newStripFixtureWorktree(t, home, "feature", stripFixtureIgnore)
+	// A real working directory always exists on disk; create the ones this
+	// test stands in so path canonicalization matches the runtime case.
+	writeGitFixtureFile(t, worktree, "src/main.js", "console.log('kept');\n")
+	writeGitFixtureFile(t, worktree, "node_modules/dep/index.js", "module.exports = 1;\n")
+	unit := stripFixtureTarget(worktree, filepath.Join(worktree, "node_modules"))
+	opts := types.PruneOptions{Age: 7 * 24 * time.Hour}
+
+	outside, refusedOutside := selectStripTargets([]types.DebrisInfo{unit}, opts, t.TempDir())
+	if len(outside) != 1 || len(refusedOutside) != 0 {
+		t.Fatalf("from outside: targets=%d refused=%d; want 1 and 0", len(outside), len(refusedOutside))
+	}
+
+	for _, cwd := range []string{
+		worktree,
+		filepath.Join(worktree, "src"),
+		filepath.Join(worktree, "node_modules", "dep"),
+	} {
+		targets, refused := selectStripTargets([]types.DebrisInfo{unit}, opts, cwd)
+		if len(targets) != 0 {
+			t.Errorf("cwd %s: targets = %d; want 0", cwd, len(targets))
+		}
+		if len(refused) != 1 {
+			t.Errorf("cwd %s: refused = %d; want 1 (a refusal must be reported, not dropped)", cwd, len(refused))
+		}
+	}
+}
+
+// TestStripExecutionRefusesUnitHoldingWorkingDirectory pins the barrier at
+// the mutation boundary too. Targets can reach execution from a reused scan
+// cache, so execution never trusts selection to have made this call.
+func TestStripExecutionRefusesUnitHoldingWorkingDirectory(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	_, worktree := newStripFixtureWorktree(t, home, "feature", stripFixtureIgnore)
+	writeGitFixtureFile(t, worktree, "node_modules/dep/index.js", "module.exports = 1;\n")
+	subtree := filepath.Join(worktree, "node_modules")
+	target := stripFixtureTarget(worktree, subtree)
+
+	outcomes, err := executeStripTargets(context.Background(), []types.DebrisInfo{target}, worktree)
+	if err != nil {
+		t.Fatalf("strip returned error: %v", err)
+	}
+	if len(outcomes) != 1 {
+		t.Fatalf("outcomes = %d; want 1", len(outcomes))
+	}
+	if freed := outcomes[0].Freed; freed != 0 {
+		t.Errorf("Freed = %d; want 0", freed)
+	}
+	if len(outcomes[0].Subtrees) != 1 || outcomes[0].Subtrees[0].Skipped == "" {
+		t.Errorf("subtrees = %+v; want one itemized skip", outcomes[0].Subtrees)
+	}
+	if _, err := os.Stat(subtree); err != nil {
+		t.Fatalf("subtree removed while the working directory was inside the unit: %v", err)
 	}
 }

@@ -81,8 +81,13 @@ func runStripClean() {
 		IncludeActiveWorktrees: cleanIncludeActiveWorktrees,
 		AgentStateMinIdleAge:   agentStateGrace,
 	}
-	targets := selectStripTargets(result.Worktrees, opts)
-	printStripPlan(targets, opts)
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: getting current working directory: %v\n", err)
+		os.Exit(1)
+	}
+	targets, refusedForCWD := selectStripTargets(result.Worktrees, opts, cwd)
+	printStripPlan(targets, refusedForCWD, opts)
 	if len(targets) == 0 {
 		fmt.Println("No strip-eligible worktrees.")
 		return
@@ -94,7 +99,7 @@ func runStripClean() {
 	if !opts.Force && !confirmCleanExecution() {
 		return
 	}
-	outcomes, err := executeStripTargets(ctx, targets)
+	outcomes, err := executeStripTargets(ctx, targets, cwd)
 	printStripOutcomes(outcomes)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error during strip: %v\n", err)
@@ -106,10 +111,16 @@ func runStripClean() {
 // for protective reasons and that carry inventoried regenerable subtrees.
 // Deletion-eligible units are left to the ordinary deletion route, so strip
 // eligibility can never double as a deletion authorization.
-func selectStripTargets(items []types.DebrisInfo, opts types.PruneOptions) []types.DebrisInfo {
+//
+// A unit containing the current working directory is refused and returned
+// separately. Strip proves its subtrees hold nothing Git can see, so removing
+// them is safe for the checkout's content, but it is not safe for whatever is
+// running from inside it: a dev server or build reading node_modules loses its
+// files underfoot. Deletion already hard-locks this case, and strip refuses it
+// for the same reason rather than silently dropping the unit.
+func selectStripTargets(items []types.DebrisInfo, opts types.PruneOptions, cwd string) (targets, refusedForCWD []types.DebrisInfo) {
 	observedAt := time.Now()
 	seen := make(map[string]bool)
-	var targets []types.DebrisInfo
 	for _, item := range items {
 		deleteEligible, deleteReason := cleaner.EvaluateEligibility(item, opts, observedAt)
 		if !cleaner.EvaluateStripEligibility(item, deleteEligible, deleteReason) {
@@ -120,12 +131,52 @@ func selectStripTargets(items []types.DebrisInfo, opts types.PruneOptions) []typ
 			continue
 		}
 		seen[key] = true
+		if stripUnitContainsCWD(item, cwd) {
+			refusedForCWD = append(refusedForCWD, item)
+			continue
+		}
 		targets = append(targets, item)
 	}
-	return targets
+	return targets, refusedForCWD
 }
 
-func printStripPlan(targets []types.DebrisInfo, opts types.PruneOptions) {
+// stripUnitContainsCWD reports whether the working directory sits inside the
+// unit or inside any subtree the unit would strip. The subtree check matters
+// when a unit root holds several checkouts: only the one being stripped needs
+// to contain the working directory for the strip to pull files out from under
+// a live process.
+func stripUnitContainsCWD(item types.DebrisInfo, cwd string) bool {
+	if guidedCodexWorktreeContainsCWD(item.Path, cwd) {
+		return true
+	}
+	for _, subtreePath := range item.StrippablePaths {
+		if guidedCodexWorktreeContainsCWD(subtreePath, cwd) {
+			return true
+		}
+	}
+	return false
+}
+
+// printStripCWDRefusals states every unit strip refused because the working
+// directory is inside it. A refused unit is reported rather than omitted, so
+// a missing candidate never reads as "nothing to reclaim here".
+func printStripCWDRefusals(refusedForCWD []types.DebrisInfo, home string) {
+	if len(refusedForCWD) == 0 {
+		return
+	}
+	var total int64
+	for _, item := range refusedForCWD {
+		total += item.StrippableBytes
+	}
+	fmt.Printf("  refused  %d %s   %s held by current working directory\n",
+		len(refusedForCWD), candidateNoun(len(refusedForCWD)), cleaner.FormatSize(total))
+	for _, item := range refusedForCWD {
+		fmt.Printf("    kept %s — run from outside the worktree to strip it\n",
+			displayHomePath(home, item.Path))
+	}
+}
+
+func printStripPlan(targets, refusedForCWD []types.DebrisInfo, opts types.PruneOptions) {
 	var total int64
 	for _, target := range targets {
 		total += target.StrippableBytes
@@ -138,16 +189,17 @@ func printStripPlan(targets []types.DebrisInfo, opts types.PruneOptions) {
 	fmt.Printf("  mode     %s\n", mode)
 	fmt.Printf("  targets  %d %s   %s strippable\n",
 		len(targets), candidateNoun(len(targets)), cleaner.FormatSize(total))
-	if len(targets) == 0 {
-		fmt.Println()
-		return
-	}
-	fmt.Println()
 
 	home := ""
 	if userHome, err := os.UserHomeDir(); err == nil {
 		home = resolvedDisplayHome(userHome)
 	}
+	printStripCWDRefusals(refusedForCWD, home)
+	if len(targets) == 0 {
+		fmt.Println()
+		return
+	}
+	fmt.Println()
 	for _, target := range targets {
 		fmt.Printf("  %8s  %-13s %-12s %-18s %s\n",
 			cleaner.FormatSize(target.StrippableBytes),
@@ -169,6 +221,17 @@ type stripSubtreeOutcome struct {
 	Skipped string // reason; empty when the subtree was stripped
 }
 
+// skippedStripSubtrees marks every inventoried subtree of one unit as kept
+// for a single unit-wide reason, so a refusal is still itemized in the run
+// output instead of collapsing to an empty result.
+func skippedStripSubtrees(paths []string, reason string) []stripSubtreeOutcome {
+	outcomes := make([]stripSubtreeOutcome, 0, len(paths))
+	for _, path := range paths {
+		outcomes = append(outcomes, stripSubtreeOutcome{Path: path, Skipped: reason})
+	}
+	return outcomes
+}
+
 type stripUnitOutcome struct {
 	Item     types.DebrisInfo
 	Subtrees []stripSubtreeOutcome
@@ -176,7 +239,7 @@ type stripUnitOutcome struct {
 	Error    string
 }
 
-func executeStripTargets(ctx context.Context, targets []types.DebrisInfo) ([]stripUnitOutcome, error) {
+func executeStripTargets(ctx context.Context, targets []types.DebrisInfo, cwd string) ([]stripUnitOutcome, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("getting home dir: %w", err)
@@ -190,7 +253,7 @@ func executeStripTargets(ctx context.Context, targets []types.DebrisInfo) ([]str
 		}
 		fmt.Printf("stripping %d/%d: %s (%s) ...\n",
 			i+1, len(targets), itemName(target), target.Category)
-		outcome := stripWorktreeUnit(ctx, home, target)
+		outcome := stripWorktreeUnit(ctx, home, target, cwd)
 		outcomes = append(outcomes, outcome)
 		if outcome.Error != "" {
 			err := fmt.Errorf("strip %s: %s", target.Path, outcome.Error)
@@ -205,10 +268,21 @@ func executeStripTargets(ctx context.Context, targets []types.DebrisInfo) ([]str
 // one protected worktree; it never removes the unit itself. Every subtree
 // must pass Git safety individually, and the checkout's recoverability
 // evidence is re-checked after the mutation.
-func stripWorktreeUnit(ctx context.Context, home string, target types.DebrisInfo) stripUnitOutcome {
+//
+// The working-directory barrier is re-derived here rather than trusted from
+// selection, matching how the deletion executor re-checks its own safety
+// evidence immediately before mutating. Targets can reach execution from a
+// reused scan cache, so the last word on whether a unit is live belongs at
+// the mutation boundary.
+func stripWorktreeUnit(ctx context.Context, home string, target types.DebrisInfo, cwd string) stripUnitOutcome {
 	outcome := stripUnitOutcome{Item: target}
 	if !cleaner.IsSafeTarget(home, target) {
 		outcome.Error = fmt.Sprintf("unsafe path %q rejected", target.Path)
+		return outcome
+	}
+	if stripUnitContainsCWD(target, cwd) {
+		outcome.Subtrees = skippedStripSubtrees(target.StrippablePaths,
+			"current working directory is inside the unit")
 		return outcome
 	}
 
@@ -252,6 +326,11 @@ func stripWorktreeUnit(ctx context.Context, home string, target types.DebrisInfo
 		}
 		if reason, safe := stripSubtreeGitSafe(ctx, checkoutDir, subtreePath); !safe {
 			subtree.Skipped = reason
+			outcome.Subtrees = append(outcome.Subtrees, subtree)
+			continue
+		}
+		if guidedCodexWorktreeContainsCWD(subtreePath, cwd) {
+			subtree.Skipped = "current working directory is inside the subtree"
 			outcome.Subtrees = append(outcome.Subtrees, subtree)
 			continue
 		}

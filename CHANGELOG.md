@@ -19,6 +19,12 @@
   longer read as unrecoverable. Strip eligibility is a separate disposition
   from deletion eligibility: a strip-eligible unit is never selected for
   deletion by that eligibility, and existing deletion behavior is unchanged.
+  A unit holding the current working directory is refused, matching the hard
+  lock deletion already applies: the Git proof covers the checkout's content,
+  but not a dev server or build reading those files from inside the unit. The
+  refusal is reported in the strip plan with its reclaimable bytes rather
+  than dropped, and it is re-derived at the mutation boundary so a target
+  arriving from a reused scan cache cannot bypass it.
 
 - `aibris scan --root` accepts the resolved system temp dir
   (`os.TempDir()` / `TMPDIR`) as an explicit opt-in root outside `$HOME`;
