@@ -92,8 +92,8 @@ Flags:
 | `--include-active-worktrees` | `false` | Include active Git worktrees in cleanup candidates. |
 | `--agent-state-grace` | `24h` | Minimum idle age before a proof-classified orphaned `agent-state` entry joins the default selection. `0` disables the floor; the value must be non-negative. It gates only default selection of orphaned `agent-state` and is independent of `--age`, which never applies to that category. An entry inside the floor is excluded from the candidate set, so cleaning it requires rerunning with a lower or zero value. |
 | `--force`, `-f` | `false` | Skip the final confirmation prompt. It does not bypass hard locks or force Git worktree removal. |
-| `--guide` | `false` | Force the guided Codex worktree cleanup flow. When category/tool filters are omitted, it implies `--category worktree --tool codex`. When age is omitted, guided cleanup uses a 3-day minimum idle age; explicit `--age` changes only that value. With `--json`, it is supported only with `--dry-run`; execution JSON rejects it. |
-| `--no-guide` | `false` | Keep the classic cleanup audit/executor route even when active Codex pressure would open guided review. |
+| `--guide` | `false` | Force the guided worktree cleanup flow. When category/tool filters are omitted, it implies `--category worktree` and leaves the tool filter empty, so every tool's active worktrees are admitted. When age is omitted, guided cleanup uses a 3-day minimum idle age; explicit `--age` changes only that value. With `--json`, it is supported only with `--dry-run`; execution JSON rejects it. |
+| `--no-guide` | `false` | Keep the classic cleanup audit/executor route even when active worktree pressure would open guided review. |
 
 The planned repeatable `--retention-bucket <store_id>@<YYYY-MM>` spelling is
 reserved by `docs/PROTECTED_RETENTION.md` but remains parked (no execution
@@ -265,7 +265,8 @@ Default guided Codex worktree cleanup:
 - Dry-run target normalization treats selected guided cleanup units as parents,
   so nested classic candidates are reported as covered evidence and never
   double-counted.
-- The planner must fail closed when Codex activity or git safety evidence is
+- The planner must fail closed when git safety evidence, or a registered
+  activity reader that exists and failed, is
   unavailable or unsafe.
 - Codex activity uses metadata only: session metadata, working-directory paths,
   timestamps, and cache file metadata. It must not read conversation bodies.
@@ -286,13 +287,23 @@ Guided cleanup unit and policy contract:
   project names do not control retention, and a multi-repository unit is
   retained when any member repository retains it.
 - Member activity is the maximum trusted timestamp from matching Codex session
-  metadata, per-worktree HEAD reflog, and scanner metadata fallback. Codex
-  activity availability remains a separate required signal.
+  metadata, per-worktree HEAD reflog, and scanner metadata fallback. The
+  reflog and scanner sources are tool-independent, so every worktree carries a
+  usable activity timestamp.
+- A registered activity reader exists only for Codex. For any other tool the
+  unit reports `not-registered`, which is distinct from an outage: there is no
+  reader to fail. A missing reader is not a hard lock; a registered reader
+  that failed still is.
 - Policy order is hard lock, recent-three repository retention, minimum idle
-  age, minimum size, then recommendation.
+  age, minimum size, no registered activity source, then recommendation.
 - Hard locks are: current working directory containment; dirty or untracked
-  members; unavailable Git or Codex activity evidence; detached HEAD not
-  reachable from a named local or remote ref; and activity within 6 hours.
+  members; unavailable Git evidence; a failed registered activity reader;
+  detached HEAD not reachable from a named local or remote ref; and activity
+  within 6 hours. The 6-hour window applies to every tool.
+- A unit whose tool has no registered activity reader is reviewable with
+  reason `activity_source_not_registered`, never recommended: Git evidence can
+  carry a review row, but idleness resting on reflog and scanner mtime alone
+  does not justify an automatic recommendation.
 - The three most recent units per canonical repository are reviewable. Ranking
   includes locked units and is deterministic by activity then stable unit key.
 - The guided minimum idle age defaults to 3 days and the recommendation size to

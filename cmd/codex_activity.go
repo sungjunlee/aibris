@@ -206,6 +206,19 @@ func activeCodexWorktrees(items []types.DebrisInfo) []types.DebrisInfo {
 	return candidates
 }
 
+// activeWorktrees admits every tool's active worktree units. Guided review is
+// built on Git evidence, which every worktree carries; the Codex activity
+// index refines a decision but is not what makes a row possible.
+func activeWorktrees(items []types.DebrisInfo) []types.DebrisInfo {
+	var candidates []types.DebrisInfo
+	for _, item := range items {
+		if item.Category == types.CategoryWorktree && item.Status == types.WorktreeActive {
+			candidates = append(candidates, item)
+		}
+	}
+	return candidates
+}
+
 func isActiveCodexWorktree(item types.DebrisInfo) bool {
 	return item.Category == types.CategoryWorktree &&
 		item.Tool == types.ToolCodex &&
