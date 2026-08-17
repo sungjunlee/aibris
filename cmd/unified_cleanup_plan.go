@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -42,6 +43,7 @@ type CleanupPlanReasonCode string
 
 const (
 	CleanupPlanReasonClassicEligible        CleanupPlanReasonCode = "classic_eligible"
+	CleanupPlanReasonVolumePressure         CleanupPlanReasonCode = "volume_pressure"
 	CleanupPlanReasonAgentStateOrphaned     CleanupPlanReasonCode = "agent_state_orphaned"
 	CleanupPlanReasonContainsLockedTarget   CleanupPlanReasonCode = "contains_locked_target"
 	CleanupPlanReasonOverlapsLockedTarget   CleanupPlanReasonCode = "overlaps_locked_target"
@@ -252,28 +254,42 @@ func BuildUnifiedCleanupPlan(ctx context.Context, candidates []CleanupPlanCandid
 }
 
 // ClassicCleanupPlanCandidates adapts already-filtered classic targets.
-func ClassicCleanupPlanCandidates(targets []types.DebrisInfo) []CleanupPlanCandidate {
+func ClassicCleanupPlanCandidates(targets []types.DebrisInfo, opts types.PruneOptions) []CleanupPlanCandidate {
 	candidates := make([]CleanupPlanCandidate, 0, len(targets))
+	observedAt := time.Now()
 	for _, target := range targets {
-		reason := CleanupPlanReason{
-			Code:        CleanupPlanReasonClassicEligible,
-			Description: "eligible under classic cleanup filters",
-		}
-		if target.Category == types.CategoryAgentState {
-			reason = CleanupPlanReason{
-				Code:        CleanupPlanReasonAgentStateOrphaned,
-				Description: "recorded working directory is absent",
-			}
-		}
-		candidates = append(candidates, CleanupPlanCandidate{
-			RowKey:         "classic:" + cleanTargetStableKey(target),
-			Item:           target,
-			PolicyDecision: CleanupPlanPolicyEligible,
-			Selection:      CleanupPlanSelected,
-			Reasons:        []CleanupPlanReason{reason},
-		})
+		candidates = append(candidates, classicCleanupPlanCandidate(target, opts, observedAt))
 	}
 	return candidates
+}
+
+func classicCleanupPlanCandidate(target types.DebrisInfo, opts types.PruneOptions, observedAt time.Time) CleanupPlanCandidate {
+	return CleanupPlanCandidate{
+		RowKey:         "classic:" + cleanTargetStableKey(target),
+		Item:           target,
+		PolicyDecision: CleanupPlanPolicyEligible,
+		Selection:      CleanupPlanSelected,
+		Reasons:        []CleanupPlanReason{classicCleanupPlanReason(target, opts, observedAt)},
+	}
+}
+
+func classicCleanupPlanReason(target types.DebrisInfo, opts types.PruneOptions, observedAt time.Time) CleanupPlanReason {
+	if _, reason := cleaner.EvaluateEligibility(target, opts, observedAt); reason == cleaner.EligibilityReasonVolumePressure {
+		return CleanupPlanReason{
+			Code:        CleanupPlanReasonVolumePressure,
+			Description: string(cleaner.EligibilityReasonVolumePressure),
+		}
+	}
+	if target.Category == types.CategoryAgentState {
+		return CleanupPlanReason{
+			Code:        CleanupPlanReasonAgentStateOrphaned,
+			Description: "recorded working directory is absent",
+		}
+	}
+	return CleanupPlanReason{
+		Code:        CleanupPlanReasonClassicEligible,
+		Description: "eligible under classic cleanup filters",
+	}
 }
 
 // WorktreeCleanupPlanCandidates adapts the existing deterministic worktree

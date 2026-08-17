@@ -218,6 +218,22 @@ func TestBuildCleanAudit_WorktreeMainReasonShowsPlainDirBesideActive(t *testing.
 	}
 }
 
+func TestCleanAuditReasonTextReportsVolumePressure(t *testing.T) {
+	if got := cleanAuditReasonText(cleanReasonVolumePressure, types.PruneOptions{}); got != "selected because of volume pressure" {
+		t.Fatalf("pressure reason = %q", got)
+	}
+}
+
+func TestShouldRelaxCacheAgeHonorsExplicitPressure(t *testing.T) {
+	relax, device := shouldRelaxCacheAge(true)
+	if !relax {
+		t.Fatal("--pressure must relax official cache age even when the volume is not critical")
+	}
+	if device != "" {
+		t.Fatalf("explicit --pressure must not pin a volume device; got %q", device)
+	}
+}
+
 func TestCleanAuditReasonTextReportsAgentStateMinIdleAge(t *testing.T) {
 	opts := types.PruneOptions{
 		Age:                  7 * 24 * time.Hour,
@@ -258,10 +274,13 @@ func TestCleanJSONPolicyForAuditItemMarksFreshOrphanedAgentStateReviewable(t *te
 
 func TestCleanAuditPolicyLine(t *testing.T) {
 	got := cleanAuditPolicyLine(types.PruneOptions{Age: 7 * 24 * time.Hour})
-	for _, want := range []string{"age>7d", "risky=false", "active-worktrees=protected"} {
+	for _, want := range []string{"age>7d", "risky=false", "active-worktrees=protected", "pressure=off"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("policy %q missing %q", got, want)
 		}
+	}
+	if got := cleanAuditPolicyLine(types.PruneOptions{RelaxCacheAge: true}); !strings.Contains(got, "pressure=caches") {
+		t.Fatalf("pressure policy %q missing pressure=caches", got)
 	}
 
 	got = cleanAuditPolicyLine(types.PruneOptions{

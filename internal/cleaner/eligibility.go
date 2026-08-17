@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/types"
+	"github.com/sungjunlee/aibris/internal/volume"
 )
 
 // DefaultAgentStateMinIdleAge is the default recency floor applied to orphaned
@@ -24,6 +25,7 @@ const (
 	EligibilityReasonAgentStateLive         EligibilityReason = "live agent-state protected"
 	EligibilityReasonAgentStateUndetermined EligibilityReason = "undetermined agent-state protected"
 	EligibilityReasonAgentStateMinIdleAge   EligibilityReason = "orphaned agent-state within minimum idle age"
+	EligibilityReasonVolumePressure         EligibilityReason = "selected because of volume pressure"
 	EligibilityReasonEligible               EligibilityReason = "eligible for cleanup"
 )
 
@@ -74,9 +76,33 @@ func EvaluateEligibility(item types.DebrisInfo, opts types.PruneOptions, observe
 		}
 	}
 	if !item.ModTime.Before(observedAt.Add(-opts.Age)) {
+		if ShouldRelaxCacheAge(item, opts) {
+			return true, EligibilityReasonVolumePressure
+		}
 		return false, EligibilityReasonAge
 	}
 	return true, EligibilityReasonEligible
+}
+
+// ShouldRelaxCacheAge reports whether this official cache may ignore --age
+// because of volume pressure. Explicit --pressure leaves PressureDevice
+// empty and applies to every official cache; automatic critical mode pins
+// the home-volume device so off-volume caches keep the age floor.
+func ShouldRelaxCacheAge(item types.DebrisInfo, opts types.PruneOptions) bool {
+	return opts.RelaxCacheAge && cacheAgeMayRelax(item.Category) &&
+		itemOnPressureVolume(item.Path, opts.PressureDevice)
+}
+
+func cacheAgeMayRelax(category types.Category) bool {
+	return category == types.CategoryBuildCache || category == types.CategoryOtherCache
+}
+
+func itemOnPressureVolume(path, device string) bool {
+	if device == "" {
+		return true
+	}
+	got, err := volume.PathDevice(path)
+	return err == nil && got == device
 }
 
 // EvaluateStripEligibility reports whether an item may have its regenerable

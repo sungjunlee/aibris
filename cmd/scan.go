@@ -510,6 +510,7 @@ func printHumanScanResult(ctx context.Context, r *types.ScanResult) {
 			Age:                  7 * 24 * time.Hour,
 			AgentStateMinIdleAge: cleaner.DefaultAgentStateMinIdleAge,
 		}
+		defaultPolicy.RelaxCacheAge, defaultPolicy.PressureDevice = shouldRelaxCacheAge(false)
 		diagnostics := summarizeCleanup(r.Worktrees, defaultPolicy)
 		fmt.Printf("  default clean (estimate) %s\n", cleaner.FormatSize(diagnostics.EligibleSize))
 		printCleanupDiagnostics(diagnostics, defaultPolicy)

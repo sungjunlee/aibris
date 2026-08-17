@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
+	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -122,7 +123,8 @@ func captureCleanupTargetSnapshot(
 		info = current
 	}
 	minimumAge := time.Duration(0)
-	if item.Category != types.CategoryAgentState && !isActiveWorktreeTarget(item) {
+	if item.Category != types.CategoryAgentState && !isActiveWorktreeTarget(item) &&
+		!cleaner.ShouldRelaxCacheAge(item, opts) {
 		minimumAge = opts.Age
 	}
 	snapshot := &cleanupTargetSnapshot{

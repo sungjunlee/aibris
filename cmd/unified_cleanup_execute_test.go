@@ -206,6 +206,7 @@ func TestUnifiedCleanupPlanForCleanMergesGuidedAndClassicCandidates(t *testing.T
 		&guided,
 		classic,
 		CleanupPlanEvidence{ObservedAt: time.Now()},
+		types.PruneOptions{},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -260,7 +261,7 @@ func TestValidateAndSelectForExecutionGatesPartialAndStaleEvidence(t *testing.T)
 func TestUnifiedCleanupPlanEvidenceRejectsCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := unifiedCleanupPlanForClean(ctx, nil, nil, CleanupPlanEvidence{})
+	_, err := unifiedCleanupPlanForClean(ctx, nil, nil, CleanupPlanEvidence{}, types.PruneOptions{})
 	if err == nil {
 		t.Fatal("cancelled context must abort plan construction")
 	}

@@ -596,6 +596,49 @@ func TestEvaluateEligibility_AgentStateMinIdleAgeLeavesOtherCategoriesOnTheAgeGa
 	}
 }
 
+func TestEvaluateEligibility_VolumePressureRelaxesOfficialCachesOnly(t *testing.T) {
+	observedAt := time.Now()
+	young := observedAt.Add(-time.Hour)
+	opts := types.PruneOptions{Age: 7 * 24 * time.Hour, RelaxCacheAge: true}
+
+	gradle := types.DebrisInfo{ID: "gradle", Category: types.CategoryBuildCache, Tool: types.ToolBuildCache, ModTime: young}
+	uv := types.DebrisInfo{ID: "uv", Category: types.CategoryOtherCache, Tool: types.ToolPipCache, ModTime: young}
+	node := types.DebrisInfo{ID: "node", Category: types.CategoryNodeModules, Tool: types.ToolNodeModules, ModTime: young}
+	active := types.DebrisInfo{
+		ID: "active", Category: types.CategoryWorktree, Tool: types.ToolUnknown,
+		Status: types.WorktreeActive, ModTime: young,
+	}
+	logs := types.DebrisInfo{ID: "logs", Category: types.CategoryAILogs, Tool: types.ToolAILogs, ModTime: young}
+
+	if eligible, reason := EvaluateEligibility(gradle, opts, observedAt); !eligible || reason != EligibilityReasonVolumePressure {
+		t.Fatalf("build-cache = %t/%q; want true/%q", eligible, reason, EligibilityReasonVolumePressure)
+	}
+	if eligible, reason := EvaluateEligibility(uv, opts, observedAt); !eligible || reason != EligibilityReasonVolumePressure {
+		t.Fatalf("other-cache = %t/%q; want true/%q", eligible, reason, EligibilityReasonVolumePressure)
+	}
+	if eligible, reason := EvaluateEligibility(node, opts, observedAt); eligible || reason != EligibilityReasonAge {
+		t.Fatalf("node_modules = %t/%q; want false/%q", eligible, reason, EligibilityReasonAge)
+	}
+	if eligible, reason := EvaluateEligibility(active, opts, observedAt); eligible || reason != EligibilityReasonActiveWorktree {
+		t.Fatalf("active worktree = %t/%q; want false/%q", eligible, reason, EligibilityReasonActiveWorktree)
+	}
+	if eligible, reason := EvaluateEligibility(logs, opts, observedAt); eligible || reason != EligibilityReasonRisky {
+		t.Fatalf("ai-logs = %t/%q; want false/%q", eligible, reason, EligibilityReasonRisky)
+	}
+
+	off := opts
+	off.RelaxCacheAge = false
+	if eligible, reason := EvaluateEligibility(gradle, off, observedAt); eligible || reason != EligibilityReasonAge {
+		t.Fatalf("without pressure, young cache = %t/%q; want false/%q", eligible, reason, EligibilityReasonAge)
+	}
+
+	pinned := opts
+	pinned.PressureDevice = "device:other"
+	if eligible, reason := EvaluateEligibility(gradle, pinned, observedAt); eligible || reason != EligibilityReasonAge {
+		t.Fatalf("off-volume cache under auto pressure = %t/%q; want false/%q", eligible, reason, EligibilityReasonAge)
+	}
+}
+
 // TestEvaluateEligibility_AgentStateMinIdleAgeBoundaryIsHeld pins the exact
 // boundary rather than a comfortably-inside case: an entry whose ModTime lands
 // exactly on observedAt-grace is held, not selected. That matches the classic

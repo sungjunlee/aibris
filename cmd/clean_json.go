@@ -207,6 +207,7 @@ func runCleanJSON(cmd *cobra.Command) {
 		IncludeActiveWorktrees: cleanIncludeActiveWorktrees,
 		AgentStateMinIdleAge:   agentStateGrace,
 	}
+	opts.RelaxCacheAge, opts.PressureDevice = shouldRelaxCacheAge(cleanPressure)
 	var guidedStatePtr *guidedCleanState
 	if experience == cleanExperienceGuided {
 		guidedState.Reason = reason
@@ -282,6 +283,7 @@ func runCleanJSON(cmd *cobra.Command) {
 		guidedStatePtr,
 		overlapSelection.Targets,
 		cleanupPlanEvidence(result, source, time.Now()),
+		opts,
 	)
 	if err != nil {
 		failCleanJSON("cleanup plan preparation failed")
@@ -360,7 +362,7 @@ func buildCleanJSONPlan(
 		observedAt = time.Now()
 	}
 	evidence := cleanupPlanEvidence(result, source, observedAt)
-	candidates := cleanJSONPlanCandidates(guidedState, classicTargets)
+	candidates := cleanJSONPlanCandidates(guidedState, classicTargets, opts)
 	plan, err := BuildUnifiedCleanupPlan(ctx, candidates, evidence)
 	if err != nil {
 		return cleanJSONPlan{}, err
@@ -406,13 +408,14 @@ func encodeCleanJSON(output io.Writer, document cleanJSONPlan) error {
 func cleanJSONPlanCandidates(
 	guidedState *guidedCleanState,
 	classicTargets []types.DebrisInfo,
+	opts types.PruneOptions,
 ) []CleanupPlanCandidate {
 	classicTargets = normalizeCleanTargets(classicTargets)
 	candidates := make([]CleanupPlanCandidate, 0, guidedCandidateCount(guidedState)+len(classicTargets))
 	if guidedState != nil {
 		candidates = append(candidates, guidedCleanupPlanCandidates(*guidedState)...)
 	}
-	candidates = append(candidates, ClassicCleanupPlanCandidates(classicTargets)...)
+	candidates = append(candidates, ClassicCleanupPlanCandidates(classicTargets, opts)...)
 
 	return candidates
 }
@@ -435,6 +438,8 @@ func cleanJSONReasonCodeForEligibility(reason cleaner.EligibilityReason) string 
 		return "agent_state_undetermined"
 	case cleaner.EligibilityReasonAgentStateMinIdleAge:
 		return "agent_state_min_idle_age"
+	case cleaner.EligibilityReasonVolumePressure:
+		return "volume_pressure"
 	case cleaner.EligibilityReasonEligible:
 		return "eligible"
 	default:
@@ -452,6 +457,8 @@ func cleanJSONReasonCodeForAuditReason(reason cleanAuditReason) string {
 		return "active_worktree"
 	case cleanReasonAge:
 		return "minimum_age"
+	case cleanReasonVolumePressure:
+		return "volume_pressure"
 	case cleanReasonAgentStateLive:
 		return "agent_state_live"
 	case cleanReasonAgentStateUndetermined:
@@ -1103,7 +1110,7 @@ func cleanJSONReasonCode(code string) string {
 	switch code {
 	case "classic_eligible", "agent_state_orphaned", "contains_locked_target", "overlaps_locked_target", "worktree_policy_decision",
 		"current_working_directory", "git_dirty_or_untracked", "git_evidence_unavailable", "git_detached_head_unreferenced", "activity_evidence_unavailable", "recent_activity", "retained_per_repository", "younger_than_min_idle_age", "below_min_size", "cleanup_recommended", "git_attached_local_branch", "git_detached_head_reachable",
-		"filtered", "risky_requires_opt_in", "active_worktree", "worktree_requires_review", "minimum_age", "agent_state_live", "agent_state_undetermined", "agent_state_min_idle_age", "eligible", "missing_path", "duplicate_path", "nested_target", "overlap_target", "protected_agent_state_ancestor", "protected_agent_state_descendant", "ambiguous_overlap_identity", "command_overlap", "nested_revalidation", "nested_revalidation_required", "scan_evidence_unavailable", "protected_overlap", "not_selected", "policy_protected", "policy_decision", "git_dirty_files", "git_upstream_unavailable", "git_unpushed_commits",
+		"filtered", "risky_requires_opt_in", "active_worktree", "worktree_requires_review", "minimum_age", "agent_state_live", "agent_state_undetermined", "agent_state_min_idle_age", "volume_pressure", "eligible", "missing_path", "duplicate_path", "nested_target", "overlap_target", "protected_agent_state_ancestor", "protected_agent_state_descendant", "ambiguous_overlap_identity", "command_overlap", "nested_revalidation", "nested_revalidation_required", "scan_evidence_unavailable", "protected_overlap", "not_selected", "policy_protected", "policy_decision", "git_dirty_files", "git_upstream_unavailable", "git_unpushed_commits",
 		"removed", "partial_failure", "execution_failed", "cancelled", "physical_owner_present", "command_fallback_path_removal", "safety_refused", "execution_set_mismatch", "plan_validation_failed", "cancelled_before_execution", "cancelled_after_confirmation", "cancelled_after_execution", "cancelled_during_confirmation", "confirmation_cancelled", "invalid_confirmation", "not_confirmed", "execution_not_recorded", "execution_state":
 		return code
 	default:

@@ -19,6 +19,7 @@ import (
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/types"
+	"github.com/sungjunlee/aibris/internal/volume"
 )
 
 var (
@@ -40,6 +41,7 @@ var (
 	cleanAgentStateGrace        string
 	cleanReceiptFile            string
 	cleanAPFSSnapshots          bool
+	cleanPressure               bool
 )
 
 // errClassicRouteReceiptFile is shared by the pre-scan flag check and the
@@ -214,6 +216,7 @@ without deleting the unit, its branch, or any uncommitted work.`,
 			IncludeActiveWorktrees: cleanIncludeActiveWorktrees,
 			AgentStateMinIdleAge:   agentStateGrace,
 		}
+		opts.RelaxCacheAge, opts.PressureDevice = shouldRelaxCacheAge(cleanPressure)
 
 		// The route is only settled after the scan. A receipt file requested on
 		// a run that resolved to classic fails here, before any mutation.
@@ -525,6 +528,7 @@ func init() {
 	cleanCmd.Flags().BoolVar(&cleanNoGuide, "no-guide", false, "Use classic cleanup even when guided worktree review is available")
 	cleanCmd.Flags().BoolVar(&cleanStrip, "strip", false, "Strip regenerable subtrees from protected worktrees instead of deleting units")
 	cleanCmd.Flags().BoolVar(&cleanAPFSSnapshots, "apfs-snapshots", false, "Opt-in APFS local-snapshot thinning (macOS only; never default)")
+	cleanCmd.Flags().BoolVar(&cleanPressure, "pressure", false, "Select official regenerable caches younger than --age (also auto when the home volume is critical, ≥95% used)")
 	cleanCmd.Flags().StringArrayVar(&cleanRoots, "root", nil, "Scan root under $HOME (repeatable)")
 	cleanCmd.Flags().StringArrayVar(&cleanExcludes, "exclude", nil, "Exclude a path or glob pattern under scan roots from discovery (repeatable)")
 	cleanCmd.Flags().BoolVar(&cleanIncludeActiveWorktrees, "include-active-worktrees", false, "Include active worktrees in cleanup candidates")
@@ -612,6 +616,28 @@ func chooseCleanExperience(input cleanExperienceInput) (cleanExperience, string,
 		return cleanExperienceGuided, guidedCleanReasonAuto, nil
 	}
 	return cleanExperienceClassic, "", nil
+}
+
+// shouldRelaxCacheAge reports whether official regenerable caches may ignore
+// --age. --pressure always enables it for every official cache. Automatic
+// critical-volume mode only relaxes caches on the home volume.
+func shouldRelaxCacheAge(explicit bool) (bool, string) {
+	if explicit {
+		return true, ""
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return false, ""
+	}
+	report, err := volume.Inspect(home)
+	if err != nil || report.Band != volume.BandCritical {
+		return false, ""
+	}
+	dev, err := volume.PathDevice(home)
+	if err != nil {
+		return false, ""
+	}
+	return true, dev
 }
 
 func (input cleanExperienceInput) hasClassicSelector() bool {

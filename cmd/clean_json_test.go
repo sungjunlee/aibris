@@ -553,6 +553,7 @@ func TestCleanJSONReasonCodeAllowListPreservesKnownCodes(t *testing.T) {
 		{cleanReasonRisky, "risky_requires_opt_in"},
 		{cleanReasonActiveWorktree, "active_worktree"},
 		{cleanReasonAge, "minimum_age"},
+		{cleanReasonVolumePressure, "volume_pressure"},
 		{cleanReasonAgentStateLive, "agent_state_live"},
 		{cleanReasonAgentStateUndetermined, "agent_state_undetermined"},
 		{cleanReasonAgentStateMinIdleAge, "agent_state_min_idle_age"},
