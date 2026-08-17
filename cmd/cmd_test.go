@@ -258,9 +258,46 @@ func TestActiveToolsSortsAndTruncates(t *testing.T) {
 		types.ToolNodeModules: true,
 		types.ToolBuildCache:  true,
 	})
-	want := "build-cache, codex, node_modules..."
+	want := "build-cache, node_modules, windsurf..."
 	if got != want {
 		t.Errorf("activeTools() = %q; want %q", got, want)
+	}
+}
+
+func TestScanProgressLabel_WorktreeAdapterIsNotCodex(t *testing.T) {
+	if got := scanProgressLabel(types.ToolCodex); got != "worktree" {
+		t.Fatalf("scanProgressLabel(codex) = %q; want worktree", got)
+	}
+	if got := scanProgressLabel(types.ToolNodeModules); got != "node_modules" {
+		t.Fatalf("scanProgressLabel(node_modules) = %q; want node_modules", got)
+	}
+
+	output := captureOutput(func() {
+		printScanProgress(types.ScanProgressEvent{
+			State: types.ScanProgressDone,
+			Tool:  types.ToolCodex,
+			Count: 4,
+			Size:  1024,
+		})
+	})
+	if !strings.Contains(output, "found    worktree") {
+		t.Fatalf("progress missing worktree label; got: %q", output)
+	}
+	if strings.Contains(output, "found    codex") {
+		t.Fatalf("progress still attributes worktree rows to codex; got: %q", output)
+	}
+}
+
+func TestValidCleanToolsStillAcceptCodex(t *testing.T) {
+	found := false
+	for _, tool := range validCleanTools {
+		if tool == types.ToolCodex {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("validCleanTools dropped the codex --tool selector")
 	}
 }
 
@@ -663,8 +700,8 @@ func TestCleanCmd_DryRunDefaultsToGuidedWhenUsefulCodexReviewExists(t *testing.T
 	})
 
 	for _, want := range []string{
-		"guided codex worktree cleanup",
-		"reason     active Codex worktrees are the largest cleanup decision",
+		"guided worktree cleanup",
+		"reason     active worktrees are the largest cleanup decision",
 		"selected   1 item",
 		"cleanup review",
 		"[DRY-RUN] No files were removed.",
@@ -695,7 +732,7 @@ func TestCleanCmd_NoGuideKeepsClassicCleanRoute(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	if strings.Contains(output, "guided codex worktree cleanup") {
+	if strings.Contains(output, "guided worktree cleanup") {
 		t.Fatalf("--no-guide should not enter guided route; got: %s", output)
 	}
 	for _, want := range []string{"scan summary", "active worktree protected", "No items to clean."} {
@@ -732,7 +769,7 @@ func TestCleanCmd_ExplicitSelectorsKeepClassicRouteUnlessGuideSupplied(t *testin
 				rootCmd.Execute()
 			})
 
-			if strings.Contains(output, "guided codex worktree cleanup") {
+			if strings.Contains(output, "guided worktree cleanup") {
 				t.Fatalf("explicit selector %v should keep classic route; got: %s", tt.args, output)
 			}
 			if !strings.Contains(output, "scan summary") {
@@ -751,7 +788,7 @@ func TestCleanCmd_ExplicitSelectorsKeepClassicRouteUnlessGuideSupplied(t *testin
 		rootCmd.SetArgs([]string{"clean", "--dry-run", "--tool=codex", "--guide"})
 		rootCmd.Execute()
 	})
-	for _, want := range []string{"guided codex worktree cleanup", "reason     requested by --guide"} {
+	for _, want := range []string{"guided worktree cleanup", "reason     requested by --guide"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("--guide should override explicit selector; missing %q in: %s", want, output)
 		}
@@ -771,7 +808,7 @@ func TestCleanCmd_DefaultGuidedNonTTYCleanDoesNotBlockOrDelete(t *testing.T) {
 	})
 
 	for _, want := range []string{
-		"guided codex worktree cleanup",
+		"guided worktree cleanup",
 		"cleanup review",
 		"No confirmation received; rerun with --dry-run to review or --force to delete selected targets.",
 	} {

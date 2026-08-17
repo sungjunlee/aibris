@@ -554,7 +554,7 @@ const (
 	guidedCodexCleanupPressureMinSize       int64 = 256 * 1024 * 1024
 	guidedCodexCleanupPressureUnitThreshold       = 3
 
-	guidedCleanReasonAuto     = "active Codex worktrees are the largest cleanup decision"
+	guidedCleanReasonAuto     = "active worktrees are the largest cleanup decision"
 	guidedCleanReasonExplicit = "requested by --guide"
 )
 
