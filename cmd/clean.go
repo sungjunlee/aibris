@@ -745,17 +745,20 @@ func scanForCleanQuiet(ctx context.Context, roots, excludes []string) (*types.Sc
 
 func scanForCleanWithProgress(ctx context.Context, roots, excludes []string, showProgress bool) (*types.ScanResult, scanSource, error) {
 	cacheReadAt := time.Now()
-	if len(excludes) == 0 {
-		if result, age, ok := readFreshLastScanCache(roots); ok && !scanResultHasExclusions(result) {
-			if err := requireCompleteScan(result); err != nil {
-				return nil, scanSource{}, err
-			}
-			return result, scanSource{
-				Kind:       scanSourceCached,
-				Age:        age,
-				ObservedAt: cacheReadAt.Add(-age),
-			}, nil
+	if result, age, reason := lastScanCacheReuseDecision(roots, excludes); result != nil {
+		if err := requireCompleteScan(result); err != nil {
+			return nil, scanSource{}, err
 		}
+		if showProgress {
+			fmt.Printf("using last scan from %s ago\n", shortDurationString(age))
+		}
+		return result, scanSource{
+			Kind:       scanSourceCached,
+			Age:        age,
+			ObservedAt: cacheReadAt.Add(-age),
+		}, nil
+	} else if showProgress && reason != "" {
+		fmt.Println(reason)
 	}
 
 	var result *types.ScanResult

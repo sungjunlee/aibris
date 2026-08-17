@@ -17,12 +17,27 @@ const (
 	// behavior changes without a concrete provider-membership change.
 	lastScanCacheSchemaVersion = 7
 	lastScanCacheMaxAge        = 5 * time.Minute
+
+	lastScanSelectorDelete   = "delete"
+	lastScanSelectorStrip    = "strip"
+	lastScanSelectorPressure = "pressure"
+
+	lastScanRescanProvider   = "scanning again: provider set changed"
+	lastScanRescanActivity   = "scanning again: activity evidence missing"
+	lastScanRescanEvidence   = "scanning again: target evidence failed"
+	lastScanRescanStale      = "scanning again: last scan is stale"
+	lastScanRescanSelector   = "scanning again: selector does not match"
+	lastScanRescanExclusions = "scanning again: exclusions differ"
+	lastScanRescanIncomplete = "scanning again: last scan is incomplete"
+	lastScanRescanSchema     = "scanning again: cache schema differs"
+	lastScanRescanRoots      = "scanning again: scan roots differ"
 )
 
 type lastScanCache struct {
 	SchemaVersion             int                               `json:"schema_version"`
 	ProviderIdentity          string                            `json:"provider_identity"`
 	RetentionProviderIdentity string                            `json:"retention_provider_identity"`
+	Selector                  string                            `json:"selector,omitempty"`
 	CreatedAt                 time.Time                         `json:"created_at"`
 	Roots                     []string                          `json:"roots"`
 	Result                    types.ScanResult                  `json:"result"`
@@ -46,11 +61,29 @@ func writeLastScanCache(roots []string, identity string, result *types.ScanResul
 		SchemaVersion:             lastScanCacheSchemaVersion,
 		ProviderIdentity:          identity,
 		RetentionProviderIdentity: retention.DefaultProviderIdentity(),
+		Selector:                  lastScanSelectorIdentity(),
 		CreatedAt:                 time.Now(),
 		Roots:                     append([]string(nil), roots...),
 		Result:                    *result,
 		TargetEvidence:            evidence,
 	})
+}
+
+func lastScanSelectorIdentity() string {
+	if cleanStrip {
+		return lastScanSelectorStrip
+	}
+	if cleanPressure {
+		return lastScanSelectorPressure
+	}
+	return lastScanSelectorDelete
+}
+
+func lastScanSelectorValue(selector string) string {
+	if selector == "" {
+		return lastScanSelectorDelete
+	}
+	return selector
 }
 
 func invalidateLastScanCache() {
@@ -96,31 +129,64 @@ func saveLastScanCache(cache lastScanCache) error {
 }
 
 func readFreshLastScanCache(roots []string) (*types.ScanResult, time.Duration, bool) {
+	result, age, reason := evaluateLastScanCache(roots)
+	return result, age, reason == "" && result != nil
+}
+
+// lastScanCacheReuseDecision reports a reusable last-scan inventory or a
+// one-line reason to scan again. An empty reason with a nil result means
+// there is no cache to reuse or explain.
+func lastScanCacheReuseDecision(roots, excludes []string) (*types.ScanResult, time.Duration, string) {
+	if len(excludes) > 0 {
+		if _, ok := readLastScanCache(); ok {
+			return nil, 0, lastScanRescanExclusions
+		}
+		return nil, 0, ""
+	}
+	result, age, reason := evaluateLastScanCache(roots)
+	if result != nil && scanResultHasExclusions(result) {
+		return nil, age, lastScanRescanExclusions
+	}
+	return result, age, reason
+}
+
+func evaluateLastScanCache(roots []string) (*types.ScanResult, time.Duration, string) {
 	cache, ok := readLastScanCache()
 	if !ok {
-		return nil, 0, false
+		return nil, 0, ""
 	}
 	age := time.Since(cache.CreatedAt)
-	if cache.SchemaVersion != lastScanCacheSchemaVersion || age < 0 || age > lastScanCacheMaxAge {
-		return nil, age, false
+	if cache.SchemaVersion != lastScanCacheSchemaVersion {
+		return nil, age, lastScanRescanSchema
+	}
+	if age < 0 || age > lastScanCacheMaxAge {
+		return nil, age, lastScanRescanStale
 	}
 	if cache.ProviderIdentity == "" || cache.ProviderIdentity != adapter.DefaultProviderIdentity() {
-		return nil, age, false
+		return nil, age, lastScanRescanProvider
 	}
 	if cache.RetentionProviderIdentity == "" ||
 		cache.RetentionProviderIdentity != retention.DefaultProviderIdentity() {
-		return nil, age, false
+		return nil, age, lastScanRescanProvider
 	}
 	if !slices.Equal(cache.Roots, roots) {
-		return nil, age, false
+		return nil, age, lastScanRescanRoots
+	}
+	if lastScanSelectorValue(cache.Selector) != lastScanSelectorIdentity() {
+		return nil, age, lastScanRescanSelector
 	}
 	if cache.Result.Partial() {
-		return nil, age, false
+		return nil, age, lastScanRescanIncomplete
+	}
+	for _, item := range cache.Result.Worktrees {
+		if treeActivityCategory(item.Category) && item.PathModTime.IsZero() {
+			return nil, age, lastScanRescanActivity
+		}
 	}
 	if !validateLastScanTargetEvidence(cache.Result.Worktrees, cache.TargetEvidence) {
-		return nil, age, false
+		return nil, age, lastScanRescanEvidence
 	}
-	return &cache.Result, age, true
+	return &cache.Result, age, ""
 }
 
 func readLastScanCache() (lastScanCache, bool) {

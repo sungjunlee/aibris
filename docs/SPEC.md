@@ -145,12 +145,23 @@ Behavior:
     truthful freed bytes, protected/skipped totals, and nested obligation
     lineage for every prepared overlap component.
 
-Last-scan cache reuse requires all four compatibility axes:
+Last-scan cache reuse requires these compatibility axes:
 
 - exact normalized scan roots
 - freshness no older than 5 minutes, with future timestamps rejected
 - the explicit cache revision stored as `schema_version`
 - a deterministic identity of the concrete provider registry membership
+- the same clean selector identity (`delete`, `strip`, or `pressure`)
+
+A documented same-selector `clean --dry-run` then `clean` pair may reuse a
+fresh compatible last-scan inventory. Human output then prints a one-line
+notice that it is using the last scan, without the home path. When reuse is
+refused, `clean` prints exactly one reason line naming the failed axis
+(provider set, activity or target evidence, stale cache, selector mismatch,
+exclusions, incomplete scan, schema, or roots) and takes the live-scan path.
+Reasons never include the home path. Different selector sets never share an
+inventory silently. Reuse does not skip mutation-time identity, age, Git, or
+cwd barriers.
 
 The provider identity is a sorted multiset of concrete registered Go types:
 provider order does not affect it, while adding, removing, or registering a

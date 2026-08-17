@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- Same-selector `clean --dry-run` then `clean` reuses a fresh last-scan
+  inventory, or prints a one-line reason that it is scanning again. The cache
+  records selector identity (`delete`, `strip`, `--pressure`) so those
+  inventories are not shared silently. Human reuse/rescan lines never include
+  the home path. Mutation-time identity, age, Git, and cwd barriers are
+  unchanged.
+
 ## [0.11.0] - 2026-08-17
 
 ### Changed
