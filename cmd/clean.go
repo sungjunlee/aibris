@@ -328,7 +328,7 @@ without deleting the unit, its branch, or any uncommitted work.`,
 				fmt.Fprintf(os.Stderr, "error during cleanup: %v\n", err)
 				os.Exit(1)
 			}
-			maybeHintAPFSSnapshots()
+			hintAPFSSnapshotsAfterReclaim(receipt.FreedBytes)
 			return
 		}
 
@@ -346,7 +346,7 @@ without deleting the unit, its branch, or any uncommitted work.`,
 			fmt.Fprintf(os.Stderr, "error during cleanup: %v\n", err)
 			os.Exit(1)
 		}
-		maybeHintAPFSSnapshots()
+		hintAPFSSnapshotsAfterReclaim(receipt.FreedBytes)
 	},
 }
 

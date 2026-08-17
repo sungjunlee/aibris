@@ -4,6 +4,13 @@ import "fmt"
 
 var listLocalAPFSSnapshots = apfsListLocalSnapshots
 
+func hintAPFSSnapshotsAfterReclaim(freed int64) {
+	if freed <= 0 {
+		return
+	}
+	maybeHintAPFSSnapshots()
+}
+
 func maybeHintAPFSSnapshots() {
 	count, err := listLocalAPFSSnapshots()
 	if err != nil || count < 1 {

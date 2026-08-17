@@ -71,3 +71,17 @@ func TestMaybeHintAPFSSnapshotsPrintsWhenSnapshotsExist(t *testing.T) {
 		t.Fatalf("missing snapshot count:\n%s", output)
 	}
 }
+
+func TestHintAPFSSnapshotsAfterReclaimRequiresFreedBytes(t *testing.T) {
+	orig := listLocalAPFSSnapshots
+	t.Cleanup(func() { listLocalAPFSSnapshots = orig })
+	listLocalAPFSSnapshots = func() (int, error) { return 3, nil }
+
+	if output := captureOutput(func() { hintAPFSSnapshotsAfterReclaim(0) }); output != "" {
+		t.Fatalf("zero-freed run leaked hint:\n%s", output)
+	}
+	output := captureOutput(func() { hintAPFSSnapshotsAfterReclaim(1024) })
+	if !strings.Contains(output, "aibris clean --apfs-snapshots") {
+		t.Fatalf("successful reclaim missing hint:\n%s", output)
+	}
+}
