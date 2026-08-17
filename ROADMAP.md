@@ -9,18 +9,17 @@ are cut only after the relevant behavior is dogfooded and explicitly approved.
 
 ## Current: 0.11.x Protected-Weight Reclamation
 
-Recover bytes from worktree units that protection correctly refuses to delete,
-and make every agent tool's worktrees reachable by review. Strip is a third
-option beside protect and delete, not a widened delete.
+Implementation for this milestone is on `main` and unreleased. The remaining
+item is a decision, not more code:
 
-- admit worktree units from any agent tool into guided review (#141, shipped
-  on main via #228; next tag)
-- strip regenerable subtrees from protected worktrees (#221, PRs #226 / #227)
+- admit worktree units from any agent tool into guided review (#141, #228)
+- strip regenerable subtrees from protected worktrees (`clean --strip`,
+  #221 / #226, with the cwd barrier from #227)
 - decide whether `node_modules` and `ai-logs` should follow the in-tree
   activity signal (#218)
 
 `--guide` no longer implying `--tool codex` is a documented 0.x default
-change. The next release must carry upgrade notes.
+change. The next tag should be v0.11.0 after dogfood, with upgrade notes.
 
 ## Shipped
 

@@ -42,9 +42,11 @@
   `--tool codex`. The parked branch `issue-141-guided-review-all-worktree-tools`
   at `0a47323` is obsolete. The next release must note the documented default
   change.
-- 0.11.x Protected-Weight Reclamation is the current track. #221 strip is in
-  review (PRs #226 / #227). #218 is a decision, not an implementation, about
-  whether `node_modules` and `ai-logs` follow in-tree activity.
+- #221 shipped on main via PR #226 (2026-08-17), including the #227 cwd
+  barrier. `clean --strip` is a third disposition beside protect and delete.
+- 0.11.x has no open implementation PRs. #218 is a decision, not an
+  implementation, about whether `node_modules` and `ai-logs` follow in-tree
+  activity. Do not start that change without an explicit call.
 - Milestone #9 `0.x Automation & Schema` is closed. Milestone #8 `0.x OSS
   Distribution & Release Trust` remains open (#118, #120, #121, #122).
   Long-horizon work stays in the existing `Future` milestone.
@@ -58,5 +60,5 @@
   release is cut only after its behavior is dogfooded and explicitly approved.
 - Open release-gate issues may outlive their implementation sprint. Never mark
   one complete merely to close a sprint; carry it as explicitly deferred work.
-- Do not cut v0.10.1 while #221 is still in flight; the next tag should be
-  v0.11.0 after strip lands, or a later call if that review slips.
+- The next tag should be v0.11.0 after a dogfood pass of guided all-tools
+  review and `clean --strip`. Do not cut v0.10.1 from this main.
