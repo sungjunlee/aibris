@@ -1195,7 +1195,7 @@ func TestCleanJSONCLIContractGuidedDefaultsDoNotPrompt(t *testing.T) {
 	if stderr != "" {
 		t.Fatalf("guided clean JSON stderr = %q", stderr)
 	}
-	if strings.Contains(stdout, "Enter numbers") || strings.Contains(stdout, "guided codex worktree cleanup") {
+	if strings.Contains(stdout, "Enter numbers") || strings.Contains(stdout, "guided worktree cleanup") {
 		t.Fatalf("guided clean JSON prompted or emitted human UI:\n%s", stdout)
 	}
 	var document cleanJSONPlan

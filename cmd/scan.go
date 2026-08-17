@@ -45,11 +45,11 @@ var scanCmd = &cobra.Command{
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
 			}
-		result, err := scanner.DefaultScanner.ScanWithOptions(ctx, types.ScanOptions{
-			Roots:       roots,
-			Diagnostics: scanDiagnostics,
-			Excludes:    scanExcludes,
-		})
+			result, err := scanner.DefaultScanner.ScanWithOptions(ctx, types.ScanOptions{
+				Roots:       roots,
+				Diagnostics: scanDiagnostics,
+				Excludes:    scanExcludes,
+			})
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
@@ -307,15 +307,26 @@ func printScanHeader(roots []string) {
 }
 
 func printScanProgress(event types.ScanProgressEvent) {
+	label := scanProgressLabel(event.Tool)
 	switch event.State {
 	case types.ScanProgressStart:
-		fmt.Printf("  scanning %-12s\n", event.Tool)
+		fmt.Printf("  scanning %-12s\n", label)
 	case types.ScanProgressDone:
 		fmt.Printf("  found    %-12s %3d items   %s\n\n",
-			event.Tool, event.Count, cleaner.FormatSize(event.Size))
+			label, event.Count, cleaner.FormatSize(event.Size))
 	case types.ScanProgressError:
-		fmt.Printf("  error    %-12s %s\n\n", event.Tool, event.Err)
+		fmt.Printf("  error    %-12s %s\n\n", label, event.Err)
 	}
+}
+
+// scanProgressLabel is the human name for a provider in scan progress.
+// The worktree adapter keeps Name() == "codex" for cache identity and
+// --tool selectors; progress must not label every worktree row as Codex.
+func scanProgressLabel(tool types.Tool) string {
+	if tool == types.ToolCodex {
+		return "worktree"
+	}
+	return string(tool)
 }
 
 type scanProgressPrinter struct {
@@ -439,7 +450,7 @@ func activeTools(active map[types.Tool]bool) string {
 	}
 	tools := make([]string, 0, len(active))
 	for tool := range active {
-		tools = append(tools, string(tool))
+		tools = append(tools, scanProgressLabel(tool))
 	}
 	sort.Strings(tools)
 	if len(tools) > 3 {

@@ -323,7 +323,7 @@ func renderGuidedClean(output io.Writer, state guidedCleanState, status string, 
 	protectedCount, protectedSize := guidedProtectedTotals(state)
 	projectedFreed := guidedProjectedFreedSize(state)
 
-	fmt.Fprintln(output, "guided codex worktree cleanup")
+	fmt.Fprintln(output, "guided worktree cleanup")
 	if mode == guidedCleanPromptTTY {
 		fmt.Fprintf(output, "  mode       %s\n", mode)
 	}

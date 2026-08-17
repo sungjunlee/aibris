@@ -128,7 +128,7 @@ func TestCleanCmd_ProtectedOnlyPressureOpensGuidedDryRun(t *testing.T) {
 	})
 
 	for _, want := range []string{
-		"guided codex worktree cleanup",
+		"guided worktree cleanup",
 		"selected   0 items",
 		"cleanup review",
 		"node_modules",
@@ -166,7 +166,7 @@ func TestCleanCmd_ProtectedOnlyEnterDoesNotPreviewOrDelete(t *testing.T) {
 	})
 
 	for _, want := range []string{
-		"guided codex worktree cleanup",
+		"guided worktree cleanup",
 		"selected   0 items",
 		"cleanup review",
 		"No items to clean.",
@@ -198,7 +198,7 @@ func TestCleanCmd_ProtectedOnlyNonTTYReturnsWithoutDeleting(t *testing.T) {
 		rootCmd.Execute()
 	})
 
-	for _, want := range []string{"guided codex worktree cleanup", "cleanup review", "No items to clean."} {
+	for _, want := range []string{"guided worktree cleanup", "cleanup review", "No items to clean."} {
 		if !strings.Contains(output, want) {
 			t.Errorf("non-TTY protected-only output missing %q; got: %s", want, output)
 		}
@@ -237,7 +237,7 @@ func TestCleanCmd_GuidedDryRunContinuesWithMixedCategoryCandidates(t *testing.T)
 	})
 
 	for _, want := range []string{
-		"guided codex worktree cleanup",
+		"guided worktree cleanup",
 		"selected   1 item",
 		"cleanup review",
 		"node_modules",
@@ -379,7 +379,7 @@ func TestCleanCmd_ProtectedOnlyPressureRespectsClassicOverrides(t *testing.T) {
 				rootCmd.Execute()
 			})
 
-			if strings.Contains(output, "guided codex worktree cleanup") {
+			if strings.Contains(output, "guided worktree cleanup") {
 				t.Fatalf("classic override %v entered guided review: %s", tt.args, output)
 			}
 			if !strings.Contains(output, "scan summary") {

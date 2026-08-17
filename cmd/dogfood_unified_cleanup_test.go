@@ -91,7 +91,7 @@ func TestDogfoodUnifiedJourneyRepresentativeHome(t *testing.T) {
 	})
 
 	for _, want := range []string{
-		"guided codex worktree cleanup",
+		"guided worktree cleanup",
 		"cleanup review",
 		"node_modules",
 		"go-build",

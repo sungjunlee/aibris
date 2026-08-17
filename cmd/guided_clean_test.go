@@ -33,7 +33,7 @@ func TestPromptGuidedCleanRendersAndTogglesSelection(t *testing.T) {
 		t.Fatalf("targets = %#v; want toggled row two", targets)
 	}
 	text := output.String()
-	for _, want := range []string{"guided codex worktree cleanup", "selected   1 item", "[x]  2"} {
+	for _, want := range []string{"guided worktree cleanup", "selected   1 item", "[x]  2"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("output missing %q:\n%s", want, text)
 		}
@@ -386,6 +386,9 @@ func TestChooseCleanExperienceRoutesDefaultGuidedOnlyWhenUseful(t *testing.T) {
 	}
 	if reason != guidedCleanReasonAuto {
 		t.Fatalf("reason = %q; want %q", reason, guidedCleanReasonAuto)
+	}
+	if strings.Contains(reason, "Codex") || strings.Contains(reason, "codex") {
+		t.Fatalf("auto-enter reason still claims Codex-only pressure: %q", reason)
 	}
 
 	got, reason, err = chooseCleanExperience(cleanExperienceInput{})
