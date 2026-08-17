@@ -5,7 +5,6 @@ package cmd
 import (
 	"fmt"
 	"os/exec"
-	"strings"
 )
 
 var lookPath = exec.LookPath
@@ -13,7 +12,7 @@ var runTMUtil = func(args ...string) ([]byte, error) {
 	cmd := exec.Command("tmutil", args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return out, fmt.Errorf("tmutil %s: %w\n%s", strings.Join(args, " "), err, string(out))
+		return out, formatTMUtilError(args, err, out)
 	}
 	return out, nil
 }
