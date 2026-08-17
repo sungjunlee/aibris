@@ -45,7 +45,8 @@
 - #221 shipped on main via PR #226 (2026-08-17), including the #227 cwd
   barrier. `clean --strip` is a third disposition beside protect and delete.
 - The post-v0.11.0 reclaim UX sprint is active (`cmd/**`). Batch 1 shipped
-  (#253/#254/#256 via PRs #260/#261/#259). Remaining: #255+#258, then #257.
+  (#253/#254/#256 via PRs #260/#261/#259). Batch 2 shipped (#255/#258 via
+  PRs #263/#264). Remaining: Batch 3 #257.
   #218 is a decision, not an implementation, about whether `node_modules`
   and `ai-logs` follow in-tree activity. Do not start that change without
   an explicit call.
