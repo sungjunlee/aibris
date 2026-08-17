@@ -340,7 +340,7 @@ install_from_main() {
   TMP_ROOT="$tmp"
   src="${tmp}/src"
   log "Building ${BINARY} from ${REPO}@main..."
-  git clone --depth 1 "https://github.com/${REPO}.git" "$src"
+  git clone --depth 1 --branch main "https://github.com/${REPO}.git" "$src"
   # Clone the same commit go would build; stamp it so --version is not "dev".
   GOBIN="${tmp}/bin" go -C "$src" install -ldflags "$(main_version_ldflags "$src")" .
   install_binary "${tmp}/bin/${BINARY}"
