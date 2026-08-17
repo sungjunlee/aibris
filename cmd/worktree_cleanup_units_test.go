@@ -98,6 +98,31 @@ func TestBuildWorktreeCleanupUnits(t *testing.T) {
 			wantSources: []string{".codex", ".codex"},
 		},
 		{
+			name: "two-level registered members",
+			buildItems: func(t *testing.T, root string) []types.DebrisInfo {
+				target := filepath.Join(root, "worktrees", "owner")
+				createCleanupUnitGitFile(t, filepath.Join(target, "leaf", "checkout"), "checkout")
+				return []types.DebrisInfo{cleanupUnitItem(target, 250, ".relay")}
+			},
+			wantUnits:   1,
+			wantTargets: []string{"worktrees/owner"},
+			wantMembers: [][]string{{"worktrees/owner/leaf/checkout"}},
+			wantSizes:   []int64{250},
+			wantSources: []string{".relay"},
+		},
+		{
+			name: "two-level mixed sibling is dropped",
+			buildItems: func(t *testing.T, root string) []types.DebrisInfo {
+				target := filepath.Join(root, "worktrees", "mixed")
+				createCleanupUnitGitFile(t, filepath.Join(target, "leaf", "checkout"), "checkout")
+				if err := os.MkdirAll(filepath.Join(target, "leaf", "sibling"), 0755); err != nil {
+					t.Fatal(err)
+				}
+				return []types.DebrisInfo{cleanupUnitItem(target, 250, ".relay")}
+			},
+			wantUnits: 0,
+		},
+		{
 			name: "irrelevant non-worktree input",
 			buildItems: func(t *testing.T, root string) []types.DebrisInfo {
 				target := filepath.Join(root, "node_modules")
