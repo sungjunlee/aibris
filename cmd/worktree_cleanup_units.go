@@ -15,23 +15,24 @@ import (
 // WorktreeCleanupUnit is one canonical physical deletion target. A unit may
 // contain more than one Git worktree member, but its size is counted once.
 type WorktreeCleanupUnit struct {
-	TargetPath             string
-	Size                   int64
-	Source                 string
-	Members                []GitWorktreeMember
-	LastActivity           time.Time
-	ActivitySource         WorktreeActivitySource
-	ActivityMember         string
-	ActivityAvailable      bool
+	TargetPath                  string
+	Size                        int64
+	Source                      string
+	Members                     []GitWorktreeMember
+	LastActivity                time.Time
+	ActivitySource              WorktreeActivitySource
+	ActivityMember              string
+	ActivityAvailable           bool
 	RegisteredActivityAvailable bool
 	RegisteredActivitySource    string
 	RegisteredActivityError     string
-	HardLocked             bool
-	HardLockReasons        []GitEvidenceReason
+	HardLocked                  bool
+	HardLockReasons             []GitEvidenceReason
 }
 
-// GitWorktreeMember identifies an actual direct or one-level nested Git
-// worktree contained by a cleanup unit.
+// GitWorktreeMember identifies an actual Git worktree contained by a cleanup
+// unit: direct, one-level nested, or registered two-level
+// <owner>/<leaf>/<checkout>.
 type GitWorktreeMember struct {
 	WorktreePath         string
 	RepositoryID         string
@@ -48,14 +49,14 @@ type GitWorktreeMember struct {
 	// EvidenceAvailable reports whether repository identity metadata resolved.
 	// GitEvidenceAvailable separately reports whether the recoverability
 	// inspection completed; both are required for a member to pass hard safety.
-	EvidenceAvailable      bool
-	EvidenceError          string
-	GitEvidenceAvailable   bool
-	GitEvidenceError       string
-	LastActivity           time.Time
-	ActivitySource         WorktreeActivitySource
-	ActivityAvailable      bool
-	ActivityEvidence       []WorktreeActivityEvidence
+	EvidenceAvailable           bool
+	EvidenceError               string
+	GitEvidenceAvailable        bool
+	GitEvidenceError            string
+	LastActivity                time.Time
+	ActivitySource              WorktreeActivitySource
+	ActivityAvailable           bool
+	ActivityEvidence            []WorktreeActivityEvidence
 	RegisteredActivityAvailable bool
 	RegisteredActivitySource    string
 	RegisteredActivityError     string
@@ -146,12 +147,27 @@ func discoverGitWorktreeMembers(ctx context.Context, targetPath string) ([]GitWo
 			continue
 		}
 		memberPath := filepath.Join(targetPath, entry.Name())
-		if !hasGitWorktreeMetadata(memberPath) {
+		if hasGitWorktreeMetadata(memberPath) {
+			if canonicalPath, ok := cleanTargetPathKey(memberPath); ok {
+				memberPaths[canonicalPath] = true
+			}
 			continue
 		}
-		canonicalPath, ok := cleanTargetPathKey(memberPath)
-		if ok {
-			memberPaths[canonicalPath] = true
+		// Registered two-level layout: <owner>/<leaf>/<checkout>/.git.
+		// A mixed leaf fail-closes the whole owner; empty leftover leaves
+		// are ignored.
+		nested, mixed, err := twoLevelGitWorktreePaths(ctx, memberPath)
+		if err != nil {
+			return nil, err
+		}
+		if mixed {
+			return nil, nil
+		}
+		if len(nested) == 0 {
+			continue
+		}
+		for _, nestedPath := range nested {
+			memberPaths[nestedPath] = true
 		}
 	}
 
@@ -169,6 +185,37 @@ func discoverGitWorktreeMembers(ctx context.Context, targetPath string) ([]GitWo
 		members = append(members, buildGitWorktreeMember(ctx, path))
 	}
 	return members, nil
+}
+
+func twoLevelGitWorktreePaths(ctx context.Context, leafPath string) ([]string, bool, error) {
+	entries, err := os.ReadDir(leafPath)
+	if err != nil {
+		return nil, false, err
+	}
+	var paths []string
+	missing := false
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+		if !entry.IsDir() {
+			continue
+		}
+		checkout := filepath.Join(leafPath, entry.Name())
+		if !hasGitWorktreeMetadata(checkout) {
+			missing = true
+			continue
+		}
+		canonical, ok := cleanTargetPathKey(checkout)
+		if ok {
+			paths = append(paths, canonical)
+		}
+	}
+	if missing {
+		return nil, true, nil
+	}
+	sort.Strings(paths)
+	return paths, false, nil
 }
 
 func hasGitWorktreeMetadata(path string) bool {

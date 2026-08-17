@@ -368,7 +368,7 @@ Cross-category containment uses the same physical-component contract:
 
 | Category | Default clean | Tools | Default locations |
 | ---------- | --------------- | ------- | ------------------- |
-| `worktree` | orphaned only | `codex`, `claude`, `unknown` | Finite exact registry plus depth-4 convention fallback for directories named `worktrees`, `worktree`, `worktree-*`, or `worktrees-*`; units are validated only at direct or one-level nested `.git` markers |
+| `worktree` | orphaned only | `codex`, `claude`, `unknown` | Finite exact registry plus depth-4 convention fallback for directories named `worktrees`, `worktree`, `worktree-*`, or `worktrees-*`; units are validated at direct or one-level nested `.git` markers, and at two-level `<owner>/<leaf>/<checkout>/.git` only inside a registered container |
 | `node_modules` | yes | `node_modules` | `$HOME/**/node_modules`, with noisy system/media/cache directories pruned |
 | `build-cache` | yes | `build-cache` | `~/.cache/go-build`, `~/.gradle/caches`, `~/.npm/_cacache`, `~/.cargo/registry`, `~/Library/Caches/Xcode` |
 | `other-cache` | yes | `pip-cache` | `~/.cache/pip`, `~/.cache/uv` |
@@ -429,13 +429,15 @@ not recursively traverse every descendant looking for arbitrarily deep
 worktree owners.
 
 Within every discovered container, one outer entry is one physical mutation
-owner. Only `<entry>/.git` and `<entry>/<project>/.git` are inspected; member
-traversal never goes deeper than one nested level. Multiple valid nested
-members produce logical rows sharing the outer owner path. If any candidate
-marker is missing, a directory, empty, or malformed, the owner produces one
-explicit `plain-dir` row and no valid sibling can be executed. Metadata I/O
-failures instead make the provider scan partial. A syntactically valid marker
-whose referenced gitdir is missing remains `orphaned`.
+owner. Convention fallback inspects only `<entry>/.git` and
+`<entry>/<project>/.git`. Registered containers also inspect
+`<entry>/<leaf>/<checkout>/.git`. Multiple valid nested members produce
+logical rows sharing the outer owner path. If any candidate marker is
+missing, a directory, empty, or malformed, the owner produces one explicit
+`plain-dir` row and no valid sibling can be executed. Metadata I/O failures
+instead make the provider scan partial. A syntactically valid marker whose
+referenced gitdir is missing remains `orphaned`. Traversal never walks the
+whole `$HOME` or hidden owners unbounded.
 
 ## Scan Roots
 

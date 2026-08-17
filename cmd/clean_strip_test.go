@@ -491,6 +491,45 @@ func TestStripReportsNoErrorWhenEverySubtreeWasSkipped(t *testing.T) {
 // so the checkout's content is safe either way; what the barrier protects is
 // the live process running from inside the unit, exactly as the deletion
 // route already protects it.
+func TestSelectStripTargetsMergesTwoLevelInventories(t *testing.T) {
+	owner := "/home/u/.codex/worktrees/owner"
+	first := types.DebrisInfo{
+		Tool:            types.ToolCodex,
+		Category:        types.CategoryWorktree,
+		ID:              "a",
+		Path:            owner,
+		Status:          types.WorktreeActive,
+		ModTime:         time.Now().Add(-time.Hour),
+		StrippableBytes: 10,
+		StrippablePaths: []string{owner + "/leaf/a/node_modules"},
+	}
+	second := first
+	second.ID = "b"
+	second.StrippableBytes = 20
+	second.StrippablePaths = []string{owner + "/leaf/b/venv"}
+
+	targets, refused := selectStripTargets(
+		[]types.DebrisInfo{first, second},
+		types.PruneOptions{Age: 7 * 24 * time.Hour},
+		t.TempDir(),
+	)
+	if len(refused) != 0 {
+		t.Fatalf("refused = %d; want 0", len(refused))
+	}
+	if len(targets) != 1 {
+		t.Fatalf("targets = %d; want 1 merged owner", len(targets))
+	}
+	got := targets[0]
+	if got.StrippableBytes != 30 {
+		t.Errorf("StrippableBytes = %d; want 30", got.StrippableBytes)
+	}
+	for _, want := range []string{owner + "/leaf/a/node_modules", owner + "/leaf/b/venv"} {
+		if !slices.Contains(got.StrippablePaths, want) {
+			t.Errorf("missing %q in %v", want, got.StrippablePaths)
+		}
+	}
+}
+
 func TestStripRefusesUnitHoldingWorkingDirectory(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)

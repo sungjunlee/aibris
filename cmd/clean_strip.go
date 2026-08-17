@@ -119,18 +119,9 @@ func runStripClean() {
 // files underfoot. Deletion already hard-locks this case, and strip refuses it
 // for the same reason rather than silently dropping the unit.
 func selectStripTargets(items []types.DebrisInfo, opts types.PruneOptions, cwd string) (targets, refusedForCWD []types.DebrisInfo) {
-	observedAt := time.Now()
-	seen := make(map[string]bool)
-	for _, item := range items {
-		deleteEligible, deleteReason := cleaner.EvaluateEligibility(item, opts, observedAt)
-		if !cleaner.EvaluateStripEligibility(item, deleteEligible, deleteReason) {
-			continue
-		}
-		key, ok := cleanTargetPathKey(item.Path)
-		if !ok || seen[key] {
-			continue
-		}
-		seen[key] = true
+	merged, order := mergeStripEligibleByOwner(items, opts, time.Now())
+	for _, key := range order {
+		item := merged[key]
 		if stripUnitContainsCWD(item, cwd) {
 			refusedForCWD = append(refusedForCWD, item)
 			continue
@@ -138,6 +129,52 @@ func selectStripTargets(items []types.DebrisInfo, opts types.PruneOptions, cwd s
 		targets = append(targets, item)
 	}
 	return targets, refusedForCWD
+}
+
+// mergeStripEligibleByOwner folds logical rows that share one physical owner
+// so later checkouts' inventories are not dropped by path dedup.
+func mergeStripEligibleByOwner(items []types.DebrisInfo, opts types.PruneOptions, observedAt time.Time) (map[string]types.DebrisInfo, []string) {
+	merged := make(map[string]types.DebrisInfo)
+	var order []string
+	for _, item := range items {
+		deleteEligible, deleteReason := cleaner.EvaluateEligibility(item, opts, observedAt)
+		if !cleaner.EvaluateStripEligibility(item, deleteEligible, deleteReason) {
+			continue
+		}
+		key, ok := cleanTargetPathKey(item.Path)
+		if !ok {
+			continue
+		}
+		if existing, seen := merged[key]; seen {
+			merged[key] = mergeStripInventories(existing, item)
+			continue
+		}
+		merged[key] = item
+		order = append(order, key)
+	}
+	return merged, order
+}
+
+func mergeStripInventories(base, extra types.DebrisInfo) types.DebrisInfo {
+	seen := make(map[string]struct{}, len(base.StrippablePaths))
+	for _, path := range base.StrippablePaths {
+		if key, ok := cleanTargetPathKey(path); ok {
+			seen[key] = struct{}{}
+		}
+	}
+	for _, path := range extra.StrippablePaths {
+		key, ok := cleanTargetPathKey(path)
+		if !ok {
+			continue
+		}
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
+		base.StrippablePaths = append(base.StrippablePaths, path)
+	}
+	base.StrippableBytes += extra.StrippableBytes
+	return base
 }
 
 // stripUnitContainsCWD reports whether the working directory sits inside the

@@ -1065,10 +1065,10 @@ func TestWorktreeAdapter_MixedValidAndInvalidNestedMarkersProtectOwner(t *testin
 	}
 }
 
-func TestWorktreeAdapter_InvalidReasonsAreSortedAndMemberTraversalStopsAtOneLevel(t *testing.T) {
+func TestWorktreeAdapter_InvalidReasonsAreSortedAndConventionStopsAtOneLevel(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
-	unit := filepath.Join(home, ".config", "superpowers", "worktrees", "owner")
+	unit := filepath.Join(home, "workspace", "worktrees", "owner")
 	createWorktreeGit(t, filepath.Join(unit, "valid"), filepath.Join(home, "parent"), "valid")
 	for _, name := range []string{"z-invalid", "a-invalid"} {
 		if err := os.MkdirAll(filepath.Join(unit, name, "deeper"), 0755); err != nil {
@@ -1087,11 +1087,106 @@ func TestWorktreeAdapter_InvalidReasonsAreSortedAndMemberTraversalStopsAtOneLeve
 		t.Fatal(err)
 	}
 	if len(results) != 1 || results[0].Status != types.WorktreePlain {
-		t.Fatalf("deep nested markers should protect one owner, got %+v", results)
+		t.Fatalf("convention fallback must not take two-level members, got %+v", results)
 	}
 	want := "invalid linked worktree metadata: a-invalid: missing .git marker; z-invalid: missing .git marker"
 	if results[0].Reason != want {
 		t.Fatalf("reason = %q; want sorted %q", results[0].Reason, want)
+	}
+}
+
+func TestWorktreeAdapter_RegisteredTwoLevelMembersAreClassified(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	parent := filepath.Join(home, "parent")
+	owner := filepath.Join(home, ".relay", "worktrees", "owner")
+	checkout := filepath.Join(owner, "leaf", "checkout")
+	createWorktreeGit(t, checkout, parent, "checkout")
+	emptyOwner := filepath.Join(home, ".relay", "worktrees", "empty-leftover")
+	if err := os.MkdirAll(emptyOwner, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Same-session before/after: one-level search would have reported both
+	// owners as review-only plain-dir. Two-level search classifies the linked
+	// owner from its checkout metadata and keeps the empty leftover review-only.
+	beforePlain, afterPlain, afterLinked := 2, 0, 0
+	for _, item := range results {
+		if item.Status == types.WorktreePlain {
+			afterPlain++
+			continue
+		}
+		afterLinked++
+	}
+	if beforePlain != 2 || afterPlain != 1 || afterLinked != 1 {
+		t.Fatalf("two-level counts before plain=%d after plain=%d linked=%d; want 2 / 1 / 1; rows=%+v",
+			beforePlain, afterPlain, afterLinked, results)
+	}
+
+	var linked, leftover *types.DebrisInfo
+	for i := range results {
+		switch results[i].ID {
+		case "owner":
+			linked = &results[i]
+		case "empty-leftover":
+			leftover = &results[i]
+		}
+	}
+	if linked == nil || leftover == nil {
+		t.Fatalf("missing owner rows: %+v", results)
+	}
+	if linked.Status != types.WorktreeActive && linked.Status != types.WorktreeOrphaned {
+		t.Fatalf("two-level owner status = %q; want active or orphaned", linked.Status)
+	}
+	if leftover.Status != types.WorktreePlain {
+		t.Fatalf("empty leftover status = %q; want plain-dir", leftover.Status)
+	}
+}
+
+func TestWorktreeAdapter_RegisteredTwoLevelMissingSiblingStaysPlainDir(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	owner := filepath.Join(home, ".relay", "worktrees", "owner")
+	createWorktreeGit(t, filepath.Join(owner, "leaf", "checkout"), filepath.Join(home, "parent"), "checkout")
+	if err := os.MkdirAll(filepath.Join(owner, "leaf", "sibling"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].Status != types.WorktreePlain {
+		t.Fatalf("missing second-level sibling emitted valid checkout: %+v", results)
+	}
+	if !strings.Contains(results[0].Reason, "missing .git marker") {
+		t.Fatalf("reason = %q; want missing second-level marker", results[0].Reason)
+	}
+}
+
+func TestWorktreeAdapter_RegisteredTwoLevelMixedStaysPlainDir(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	owner := filepath.Join(home, ".relay", "worktrees", "owner")
+	createWorktreeGit(t, filepath.Join(owner, "leaf", "checkout"), filepath.Join(home, "parent"), "checkout")
+	if err := os.MkdirAll(filepath.Join(owner, "bad", "nested", ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].Status != types.WorktreePlain {
+		t.Fatalf("mixed two-level owner emitted valid sibling: %+v", results)
+	}
+	if !strings.Contains(results[0].Reason, ".git marker is a directory") {
+		t.Fatalf("mixed reason = %q; want directory marker", results[0].Reason)
 	}
 }
 
