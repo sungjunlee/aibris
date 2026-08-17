@@ -63,8 +63,10 @@ Docker는 없으면 (command not found) 무시한다.
 aibris JSON과 Docker 출력을 파싱해 **크기 순으로 정렬**하여 사용자에게 보여준다.
 - worktree는 `source`, `project`, `status`로 그룹핑하고 `risk`, `reason`도 함께 본다
 - scan의 `active`는 상위 Git metadata가 연결되어 있다는 뜻이지 최근 사용 중이라는 뜻이 아니다. classic clean에서는 제외되므로 일반 정리 제안에서는 `orphaned`를 우선한다
-- `.codex` active worktree가 큰 비중을 차지하면 `aibris clean --dry-run` 경로를 우선 제안한다. 필터가 없고 검증된 active Codex cleanup unit이 256 MB 이상이거나 3개 이상이면, 추천이 0개여도 기본 guided review가 열린다.
+- 검증된 **active** worktree가 큰 비중을 차지하면 `aibris clean --dry-run` 경로를 우선 제안한다. 도구가 Codex가 아니어도 같다. 필터가 없고 검증된 active cleanup unit이 256 MB 이상이거나 3개 이상이면, 추천이 0개여도 기본 guided review가 열린다. 등록된 session-activity reader는 Codex만 있다. 다른 도구의 active unit은 `reviewable` + `activity_source_not_registered`이고 자동 추천되지 않는다.
 - guided 결과는 `recommended`(기본 선택), `reviewable`(사용자 선택 가능), `locked`(선택 불가)로 해석한다. scan JSON의 project label만으로 active 항목의 안전을 추정하지 않는다
+- `plain-dir` / review-only owner는 절대 선택·삭제·strip 대상이 아니다. metadata를 검사하라고만 안내한다.
+- 삭제하면 안 되는 **protected active** 체크아웃에서 regenerable subtree만 걷어내려면 `aibris clean --strip --dry-run`을 제안한다. strip은 세 번째 disposition이다. unit을 지우지 않는다. cwd가 unit 또는 그 subtree 안이면 거부한다.
 - Codex activity 판단은 session metadata, cwd, timestamp만 사용한다. 대화 본문은 읽거나 요약하지 않는다.
 - `by_category`에 없는 카테고리는 출력에서 제외한다
 - Docker가 있으면 별도 섹션으로 추가한다
@@ -97,9 +99,11 @@ aibris JSON과 Docker 출력을 파싱해 **크기 순으로 정렬**하여 사�
 
 > ai-logs 계열은 기본적으로 clean 대상에서 제외된다.
 > 삭제하려면 `--risky` 플래그가 필요하다.
-> active worktree는 classic clean에서 기본 제외된다. guided Codex review는
-> 별도 증거 정책을 통과한 unit만 추천한다. `--include-active-worktrees`는
-> classic 경로에서만 의도적으로 포함할 때 사용한다.
+> active worktree는 classic clean에서 기본 제외된다. guided review는
+> 모든 도구의 **active** unit을 받는다. 별도 증거 정책을 통과한 unit만
+> 추천한다. `--include-active-worktrees`는 classic 경로에서만 의도적으로
+> 포함할 때 쓴다. non-Codex active의 첫 제안은 guided review이지
+> `--include-active-worktrees`가 아니다.
 
 실제 프로젝트명과 수치를 위 템플릿에 채워서 보여준다.
 
@@ -109,8 +113,9 @@ aibris JSON과 Docker 출력을 파싱해 **크기 순으로 정렬**하여 사�
 아래 질문 형식을 참고하되, 카테고리 순서가 아닌 크기 순서로 질문한다:
 
 - **worktree(orphaned)**: "{source}/{project} orphaned 워크트리가 {count}개 ({size}) 있습니다. 상위 repo metadata가 없어서 정리 후보입니다. 지워도 될까요?"
-- **worktree(active, codex)**: "{source}/{project}에 연결된 Codex 워크트리가 {count}개 ({size}) 있습니다. `active`는 최근 사용 의미가 아니므로 `aibris clean --dry-run`의 recommended/reviewable/locked 근거를 확인해야 합니다. guided preview를 열까요?"
-- **worktree(active, non-codex)**: "{source}/{project} active 워크트리가 {count}개 ({size}) 있습니다. 기본적으로 보호됩니다. 정말 지우려면 `--include-active-worktrees`가 필요한데, 이 작업물이 필요 없는 게 맞나요?"
+- **worktree(active)**: "{source}/{project}에 연결된 active 워크트리가 {count}개 ({size}) 있습니다. `active`는 최근 사용 의미가 아닙니다. `aibris clean --dry-run`의 recommended/reviewable/locked 근거를 확인해야 합니다. guided preview를 열까요?"
+- **worktree(plain-dir)**: "{source}/{project} review-only 항목이 {count}개 ({size}) 있습니다. valid metadata가 없거나 mixed marker라 삭제·strip 후보가 아닙니다. 지우지 마세요."
+- **worktree(protected, strip)**: "보호된 active 체크아웃 안에 regenerable subtree가 {size} 있습니다. 체크아웃은 유지하고 `aibris clean --strip --dry-run`으로만 걷어낼 수 있습니다. 그 워크트리 안에서 실행 중이면 cwd 거부로 건너뜁니다."
 - **node_modules**: "{path}의 node_modules가 {size}인데, 이 프로젝트 아직 사용 중인가요?"
 - **build-cache**: "{cache_name} 캐시가 {size} 쌓였는데, 지우시겠어요? (단, 다음 빌드 시 다시 다운로드)"
 - **pip-cache**: "{cache_name} 캐시 {size} — 지우시겠어요?"
@@ -128,8 +133,8 @@ aibris JSON과 Docker 출력을 파싱해 **크기 순으로 정렬**하여 사�
 - 승인받은 `--category`, `--tool`, 반복 가능한 `--root`, `--age` 값은 모두
   동일하게 유지한다
 - `--guide`, `--no-guide`, `--risky`, `--include-active-worktrees`,
-  `--interactive`, `--force` 같은 적용 가능한 routing/safety flag도 동일하게
-  유지한다
+  `--interactive`, `--force`, `--strip` 같은 적용 가능한 routing/safety flag도
+  동일하게 유지한다
 - 실제 실행에서는 preview 명령에서 `--dry-run`만 제거한다
 - scoped preview 뒤에 plain `aibris clean`을 실행해서는 안 된다
 
@@ -140,8 +145,8 @@ aibris clean --no-guide --root ~/path/to/project --category node_modules --tool 
 aibris clean --no-guide --root ~/path/to/project --category node_modules --tool node_modules --age 30d
 ```
 
-아래 plain-command guided flow는 사용자가 selector나 safety flag 없는 Codex
-정리를 승인한 경우에만 사용하는 별도 분기다:
+아래 plain-command guided flow는 사용자가 selector나 safety flag 없는
+guided 정리를 승인한 경우에만 사용하는 별도 분기다:
 
 ```bash
 # evidence-based 추천 기본 선택 + 번호 토글 + 삭제 없는 미리보기
@@ -228,8 +233,11 @@ aibris clean --category node_modules,build-cache --dry-run
 # tool 필터
 aibris clean --tool codex --dry-run
 
-# guided Codex worktree cleanup 강제 실행
+# guided worktree cleanup 강제 실행 (모든 도구의 active unit)
 aibris clean --guide --dry-run
+
+# 보호된 worktree에서 regenerable subtree만 제거 (unit은 유지)
+aibris clean --strip --dry-run
 
 # category + tool AND 조합
 aibris clean --category worktree --tool codex --dry-run
@@ -280,7 +288,9 @@ aibris clean --category node_modules
 - `$HOME` 스캔 중 `.Trash`, `Library`, `Applications`, `Pictures`, `Movies`, `Music`, `.git`, `vendor`, 중첩 `node_modules` 등은 가지치기함
 - `Desktop`, `Downloads`는 기본 스캔에 포함됨
 - classic 기본 `--age`는 `7d`; guided 기본 minimum idle age는 `3d`다
-- 필터 없는 `aibris clean --dry-run`은 검증된 active Codex pressure가 256 MB 이상이거나 3 unit 이상이면 추천 0개여도 guided review를 연다. `--no-guide`와 명시적 classic selector는 classic 경로를 강제하고, `--guide`는 Codex review를 명시적으로 강제한다
+- 필터 없는 `aibris clean --dry-run`은 검증된 active worktree pressure가 256 MB 이상이거나 3 unit 이상이면 추천 0개여도 guided review를 연다. `--no-guide`와 명시적 classic selector는 classic 경로를 강제하고, `--guide`는 모든 도구의 guided review를 명시적으로 강제한다
+- `plain-dir`은 age/`--risky`/`--include-active-worktrees`와 무관하게 절대 정리 후보가 아니다
+- `clean --strip`은 보호된 worktree의 regenerable subtree만 제거한다. unit·branch·uncommitted work는 유지한다. cwd가 그 unit 안이면 거부한다
 - `--dry-run` 없이 실행하면 confirm 필요. `--force`는 confirm만 생략하며 locked row를 풀거나 `git worktree remove --force`로 전달되지 않는다
 - classic에서는 active worktree가 기본 제외된다. `--include-active-worktrees`로 포함해도 Git hard safety 검사를 통과해야 한다
 - active worktree는 실행 직전 모든 member의 repository/HEAD/dirty/ref를 재검사하고 Git-aware removal로 제거한다. branch ref와 parent `git worktree` metadata를 검증하며 실패 시 raw recursive deletion으로 fallback하지 않는다

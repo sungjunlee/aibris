@@ -15,12 +15,20 @@ Source of truth:
 
 ## Entry And Routing
 
-Plain `clean` and `clean --dry-run` enter guided Codex review when all of these
-are true:
+Plain `clean` and `clean --dry-run` enter guided worktree review when all of
+these are true:
 
 - no explicit classic selector or `--no-guide` is present;
-- at least one validated active `.codex` cleanup unit exists; and
-- active Codex pressure is at least 256 MB or three units.
+- at least one validated **active** cleanup unit exists, from any tool; and
+- active worktree pressure is at least 256 MB or three units.
+
+A registered session-activity reader exists only for Codex. Other tools remain
+reviewable with `activity_source_not_registered` and are never
+auto-recommended. `plain-dir` owners never enter the checklist.
+
+`clean --strip` is a third disposition, not a guided-review path. It removes
+inventoried regenerable subtrees from protected units and refuses the unit
+that holds the working directory.
 
 Routing uses physical-unit pressure, not selected-row count. A protected-only
 state therefore opens the checklist with zero selected rows instead of falling
@@ -72,7 +80,9 @@ Hard locks are:
 
 - the current working directory is the unit or below it;
 - any member is dirty or has untracked files;
-- Git identity, recoverability, or Codex activity evidence is unavailable;
+- Git identity, recoverability, or a registered activity reader that exists
+  and failed is unavailable (missing Codex activity is a lock; a tool with no
+  registered reader is reviewable, not locked);
 - a detached HEAD is unreachable from every named local and remote ref; or
 - last activity is within the fixed 6-hour safety window.
 
@@ -176,7 +186,10 @@ Protected-only pressure:
 
 Unavailable activity:
 
-- Lock affected Codex units with `activity evidence unavailable`.
+- Lock affected Codex units with `activity evidence unavailable` when the
+  registered reader exists and failed.
+- Units from tools with no registered reader stay reviewable with
+  `activity_source_not_registered`.
 - Do not inspect conversation bodies or substitute project labels for activity.
 
 Classic override:
