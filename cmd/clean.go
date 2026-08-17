@@ -39,6 +39,7 @@ var (
 	cleanIncludeActiveWorktrees bool
 	cleanAgentStateGrace        string
 	cleanReceiptFile            string
+	cleanAPFSSnapshots          bool
 )
 
 // errClassicRouteReceiptFile is shared by the pre-scan flag check and the
@@ -82,6 +83,18 @@ without deleting the unit, its branch, or any uncommitted work.`,
 		if cleanGuide && cleanNoGuide {
 			fmt.Fprintln(os.Stderr, "error: cannot use --guide with --no-guide")
 			os.Exit(1)
+		}
+		if cleanStrip && cleanAPFSSnapshots {
+			fmt.Fprintln(os.Stderr, "error: --strip cannot be combined with --apfs-snapshots")
+			os.Exit(1)
+		}
+		if cleanAPFSSnapshots {
+			if cleanJSON || cleanInteractive || cleanGuide || cleanReceiptFile != "" {
+				fmt.Fprintln(os.Stderr, "error: --apfs-snapshots cannot be combined with --json, --interactive, --guide, or --receipt-file")
+				os.Exit(1)
+			}
+			runAPFSSnapshotClean()
+			return
 		}
 		if cleanStrip {
 			if cleanJSON || cleanInteractive || cleanGuide || cleanReceiptFile != "" {
@@ -511,6 +524,7 @@ func init() {
 	cleanCmd.Flags().BoolVar(&cleanGuide, "guide", false, "Guided worktree cleanup review")
 	cleanCmd.Flags().BoolVar(&cleanNoGuide, "no-guide", false, "Use classic cleanup even when guided worktree review is available")
 	cleanCmd.Flags().BoolVar(&cleanStrip, "strip", false, "Strip regenerable subtrees from protected worktrees instead of deleting units")
+	cleanCmd.Flags().BoolVar(&cleanAPFSSnapshots, "apfs-snapshots", false, "Opt-in APFS local-snapshot thinning (macOS only; never default)")
 	cleanCmd.Flags().StringArrayVar(&cleanRoots, "root", nil, "Scan root under $HOME (repeatable)")
 	cleanCmd.Flags().StringArrayVar(&cleanExcludes, "exclude", nil, "Exclude a path or glob pattern under scan roots from discovery (repeatable)")
 	cleanCmd.Flags().BoolVar(&cleanIncludeActiveWorktrees, "include-active-worktrees", false, "Include active worktrees in cleanup candidates")
