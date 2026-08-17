@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-08-17
+
 ### Changed
 
 - Guided worktree review admits units from every agent tool, not only Codex.
@@ -147,6 +149,46 @@
 - A barrier age refusal now reports the `minimum_age` reason code on the JSON
   receipt target instead of the generic `execution_failed`, so automation can
   tell "the cache went live again, retry later" from a removal failure.
+- Classic cleanup summaries now list review-only worktrees (`plain-dir`)
+  beside active-protected units, so a mixed owner is not mistaken for a
+  cleanable sibling.
+- Guided review no longer uses leftover Codex-only branding now that every
+  tool's worktrees are admitted.
+
+### Added
+
+- `aibris scan` reports host-volume pressure for the volume that contains
+  `$HOME`: used percent, free bytes, and band (`ok` / `low` / `critical` at
+  85% / 95%). `scan --json` adds an optional top-level `volume` object.
+  `schema_version` stays `1`. The volume `id` is a filesystem type plus a
+  hashed device token; it is not a mount path and does not include a
+  username. Debris on another device is not counted toward the home-volume
+  figure. Volume pressure never deletes anything.
+- `aibris clean --pressure` selects official regenerable caches
+  (`build-cache`, `other-cache`) younger than `--age`. The same relaxation
+  happens automatically when the home volume is in the critical band. Worktree,
+  agent-state, and `--risky` categories keep their existing gates. Automatic
+  critical mode relaxes only caches on the home volume; explicit `--pressure`
+  applies to every official cache. Dry-run policy shows `pressure=caches`, and
+  pressure-selected rows use reason `volume_pressure` /
+  "selected because of volume pressure".
+- `aibris clean --apfs-snapshots` is an opt-in macOS path that asks
+  `tmutil thinlocalsnapshots` to reclaim local APFS snapshot space. It is
+  never the default and never runs as part of ordinary clean.
+- Registered worktree containers classify two-level members at
+  `<owner>/<leaf>/<checkout>/.git`. Convention fallback stays one-level.
+  Mixed or missing markers under one physical owner still fail closed as
+  one review-only `plain-dir`.
+- `clean --strip` also inventories Python venv trees, Flutter/Dart build
+  output, and one-level nested `node_modules`. Multiple two-level checkouts
+  that share one owner path merge their strip inventories before dedup.
+- Official cache discovery now includes Homebrew, Xcode DerivedData, and
+  Dart analysis (`.dartServer`) caches, still under the existing safe-path
+  prefixes.
+- `install.sh` stamps `aibris version main-<shortsha>` when installing from
+  `main`, documents the zsh `fpath` gap for per-user completions, and prints
+  a one-line hint when that directory is not already on the configured
+  `fpath`. The installer never edits shell rc files.
 
 ## [0.10.0] - 2026-08-09
 

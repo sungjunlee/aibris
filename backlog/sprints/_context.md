@@ -60,5 +60,5 @@
   release is cut only after its behavior is dogfooded and explicitly approved.
 - Open release-gate issues may outlive their implementation sprint. Never mark
   one complete merely to close a sprint; carry it as explicitly deferred work.
-- The next tag should be v0.11.0 after a dogfood pass of guided all-tools
-  review and `clean --strip`. Do not cut v0.10.1 from this main.
+- v0.11.0 is the next published tag after the 2026-08-17 dogfood pass.
+  Do not cut v0.10.1 from this main.
