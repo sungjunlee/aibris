@@ -28,6 +28,28 @@
 
 ### Added
 
+- `aibris clean --strip` removes regenerable subtrees (`node_modules`,
+  Android/iOS build output and dependency caches) from worktree units that
+  deletion protects (active-worktree protection or minimum-age retention),
+  recovering space without deleting the unit, its branch, or any uncommitted
+  work. Strippable subtrees are inventoried per detected project type at
+  fixed known-relative positions only (never recursive discovery), and a
+  subtree is skipped unless Git proves it holds no tracked-modified and no
+  non-ignored files; after stripping, the checkout's HEAD and visible Git
+  state are re-verified. `aibris scan` (and `scan --json`) now reports these
+  bytes separately from deletable size via `strippable_bytes`,
+  `strippable_paths`, and the summary `total_strippable_bytes` /
+  per-category/per-tool `strippable_bytes` fields, so protected worktrees no
+  longer read as unrecoverable. Strip eligibility is a separate disposition
+  from deletion eligibility: a strip-eligible unit is never selected for
+  deletion by that eligibility, and existing deletion behavior is unchanged.
+  A unit holding the current working directory is refused, matching the hard
+  lock deletion already applies: the Git proof covers the checkout's content,
+  but not a dev server or build reading those files from inside the unit. The
+  refusal is reported in the strip plan with its reclaimable bytes rather
+  than dropped, and it is re-derived at the mutation boundary so a target
+  arriving from a reused scan cache cannot bypass it.
+
 - `aibris scan --root` accepts the resolved system temp dir
   (`os.TempDir()` / `TMPDIR`) as an explicit opt-in root outside `$HOME`;
   every other root outside `$HOME` is still rejected. A unit discovered under

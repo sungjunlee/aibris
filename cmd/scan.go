@@ -91,32 +91,36 @@ var scanCmd = &cobra.Command{
 }
 
 type jsonWorktree struct {
-	Tool           string   `json:"tool"`
-	Category       string   `json:"category"`
-	ID             string   `json:"id"`
-	Project        string   `json:"project"`
-	Source         string   `json:"source"`
-	Path           string   `json:"path"`
-	Size           int64    `json:"size"`
-	ModTime        string   `json:"mod_time"`
-	Status         string   `json:"status"`
-	Classification string   `json:"classification,omitempty"`
-	Risk           string   `json:"risk"`
-	Reason         string   `json:"reason"`
-	CleanupKind    string   `json:"cleanup_kind"`
-	CleanupCommand []string `json:"cleanup_command"`
+	Tool            string   `json:"tool"`
+	Category        string   `json:"category"`
+	ID              string   `json:"id"`
+	Project         string   `json:"project"`
+	Source          string   `json:"source"`
+	Path            string   `json:"path"`
+	Size            int64    `json:"size"`
+	ModTime         string   `json:"mod_time"`
+	Status          string   `json:"status"`
+	Classification  string   `json:"classification,omitempty"`
+	Risk            string   `json:"risk"`
+	Reason          string   `json:"reason"`
+	CleanupKind     string   `json:"cleanup_kind"`
+	CleanupCommand  []string `json:"cleanup_command"`
+	StrippableBytes int64    `json:"strippable_bytes,omitempty"`
+	StrippablePaths []string `json:"strippable_paths,omitempty"`
 }
 
 type jsonSummaryEntry struct {
-	Count int   `json:"count"`
-	Size  int64 `json:"size"`
+	Count           int   `json:"count"`
+	Size            int64 `json:"size"`
+	StrippableBytes int64 `json:"strippable_bytes,omitempty"`
 }
 
 type jsonSummary struct {
-	TotalCount int                         `json:"total_count"`
-	TotalSize  int64                       `json:"total_size"`
-	ByCategory map[string]jsonSummaryEntry `json:"by_category"`
-	ByTool     map[string]jsonSummaryEntry `json:"by_tool"`
+	TotalCount           int                         `json:"total_count"`
+	TotalSize            int64                       `json:"total_size"`
+	TotalStrippableBytes int64                       `json:"total_strippable_bytes,omitempty"`
+	ByCategory           map[string]jsonSummaryEntry `json:"by_category"`
+	ByTool               map[string]jsonSummaryEntry `json:"by_tool"`
 }
 
 type jsonProviderError struct {
@@ -199,10 +203,11 @@ func printJSON(r *types.ScanResult) {
 			ProviderErrors: make([]jsonRetentionProviderError, len(r.Retention.ProviderErrors)),
 		},
 		Summary: jsonSummary{
-			TotalCount: r.TotalCount,
-			TotalSize:  r.TotalSize,
-			ByCategory: make(map[string]jsonSummaryEntry, len(r.ByCategory)),
-			ByTool:     make(map[string]jsonSummaryEntry, len(r.ByTool)),
+			TotalCount:           r.TotalCount,
+			TotalSize:            r.TotalSize,
+			TotalStrippableBytes: r.TotalStrippableBytes,
+			ByCategory:           make(map[string]jsonSummaryEntry, len(r.ByCategory)),
+			ByTool:               make(map[string]jsonSummaryEntry, len(r.ByTool)),
 		},
 	}
 	for _, providerErr := range r.ProviderErrors {
@@ -249,20 +254,22 @@ func printJSON(r *types.ScanResult) {
 			cleanupCommand = []string{}
 		}
 		items[i] = jsonWorktree{
-			Tool:           string(w.Tool),
-			Category:       string(w.Category),
-			ID:             w.ID,
-			Project:        w.Project,
-			Source:         w.Source,
-			Path:           w.Path,
-			Size:           w.Size,
-			ModTime:        w.ModTime.Format(time.RFC3339),
-			Status:         string(w.Status),
-			Classification: string(w.Classification),
-			Risk:           itemRisk(w),
-			Reason:         itemReason(w),
-			CleanupKind:    string(cleanupKind(w)),
-			CleanupCommand: cleanupCommand,
+			Tool:            string(w.Tool),
+			Category:        string(w.Category),
+			ID:              w.ID,
+			Project:         w.Project,
+			Source:          w.Source,
+			Path:            w.Path,
+			Size:            w.Size,
+			ModTime:         w.ModTime.Format(time.RFC3339),
+			Status:          string(w.Status),
+			Classification:  string(w.Classification),
+			Risk:            itemRisk(w),
+			Reason:          itemReason(w),
+			CleanupKind:     string(cleanupKind(w)),
+			CleanupCommand:  cleanupCommand,
+			StrippableBytes: w.StrippableBytes,
+			StrippablePaths: append([]string(nil), w.StrippablePaths...),
 		}
 	}
 	for i, bucket := range r.Retention.Buckets {
@@ -283,10 +290,10 @@ func printJSON(r *types.ScanResult) {
 		}
 	}
 	for cat, s := range r.ByCategory {
-		out.Summary.ByCategory[string(cat)] = jsonSummaryEntry{Count: s.Count, Size: s.Size}
+		out.Summary.ByCategory[string(cat)] = jsonSummaryEntry{Count: s.Count, Size: s.Size, StrippableBytes: s.StrippableBytes}
 	}
 	for tool, s := range r.ByTool {
-		out.Summary.ByTool[string(tool)] = jsonSummaryEntry{Count: s.Count, Size: s.Size}
+		out.Summary.ByTool[string(tool)] = jsonSummaryEntry{Count: s.Count, Size: s.Size, StrippableBytes: s.StrippableBytes}
 	}
 
 	enc := json.NewEncoder(os.Stdout)
@@ -459,6 +466,10 @@ func printHumanScanResult(ctx context.Context, r *types.ScanResult) {
 	}
 	fmt.Printf("  found       %d %s\n", r.TotalCount, itemNoun(r.TotalCount))
 	fmt.Printf("  found size  %s\n", cleaner.FormatSize(r.TotalSize))
+	if r.TotalStrippableBytes > 0 {
+		fmt.Printf("  strippable  %s regenerable subtrees inside worktrees (clean --strip)\n",
+			cleaner.FormatSize(r.TotalStrippableBytes))
+	}
 	if r.Partial() {
 		fmt.Println("  default clean unavailable until a complete scan succeeds")
 	} else {
