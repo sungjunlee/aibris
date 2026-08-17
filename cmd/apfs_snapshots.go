@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/spf13/cobra"
 	"github.com/sungjunlee/aibris/internal/cleaner"
 )
 
@@ -13,6 +14,18 @@ import (
 // Time Machine backups on an external disk.
 const apfsSnapshotPurgeBytes = 20 * 1024 * 1024 * 1024
 const apfsSnapshotUrgency = "4"
+
+func apfsSnapshotFlagConflict(cmd *cobra.Command) string {
+	if cleanJSON || cleanInteractive || cleanGuide || cleanReceiptFile != "" || cleanNoGuide {
+		return "error: --apfs-snapshots cannot be combined with --json, --interactive, --guide, --no-guide, or --receipt-file"
+	}
+	if cmd.Flags().Changed("category") || cmd.Flags().Changed("tool") ||
+		cmd.Flags().Changed("risky") || cmd.Flags().Changed("include-active-worktrees") ||
+		cmd.Flags().Changed("age") || cmd.Flags().Changed("agent-state-grace") {
+		return "error: --apfs-snapshots cannot be combined with classic selectors (--category, --tool, --age, --risky, --include-active-worktrees, --agent-state-grace)"
+	}
+	return ""
+}
 
 func runAPFSSnapshotClean() {
 	if err := runAPFSSnapshotAction(cleanDryRun, cleanForce); err != nil {

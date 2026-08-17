@@ -89,8 +89,8 @@ without deleting the unit, its branch, or any uncommitted work.`,
 			os.Exit(1)
 		}
 		if cleanAPFSSnapshots {
-			if cleanJSON || cleanInteractive || cleanGuide || cleanReceiptFile != "" {
-				fmt.Fprintln(os.Stderr, "error: --apfs-snapshots cannot be combined with --json, --interactive, --guide, or --receipt-file")
+			if err := apfsSnapshotFlagConflict(cmd); err != "" {
+				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
 			runAPFSSnapshotClean()

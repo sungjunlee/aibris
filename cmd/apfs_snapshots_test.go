@@ -16,6 +16,24 @@ func TestParseLocalSnapshotCount(t *testing.T) {
 	}
 }
 
+func TestAPFSSnapshotFlagConflictRejectsClassicSelectors(t *testing.T) {
+	resetCleanFlags()
+	cleanCmd.SetArgs([]string{"--apfs-snapshots", "--category", "node_modules"})
+	if err := cleanCmd.ParseFlags([]string{"--apfs-snapshots", "--category", "node_modules"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := apfsSnapshotFlagConflict(cleanCmd); got == "" {
+		t.Fatal("expected conflict with --category")
+	}
+	resetCleanFlags()
+	if err := cleanCmd.ParseFlags([]string{"--apfs-snapshots", "--dry-run"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := apfsSnapshotFlagConflict(cleanCmd); got != "" {
+		t.Fatalf("dry-run should be allowed: %s", got)
+	}
+}
+
 func TestCleanHelpDocumentsAPFSSnapshotsOptIn(t *testing.T) {
 	resetCleanFlags()
 	output := captureOutput(func() {
