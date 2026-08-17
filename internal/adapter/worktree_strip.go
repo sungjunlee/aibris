@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -17,6 +18,12 @@ var jsProjectManifestMarkers = []string{
 	"pnpm-lock.yaml",
 	"package-lock.json",
 	"bun.lockb",
+}
+
+var pythonProjectMarkers = []string{
+	"pyproject.toml",
+	"requirements.txt",
+	"uv.lock",
 }
 
 // worktreeStripCandidates returns regenerable subtree candidates at fixed
@@ -43,6 +50,37 @@ func worktreeStripCandidates(checkoutPath string) []string {
 			filepath.Join(checkoutPath, "ios", "build"),
 		)
 	}
+	for _, marker := range pythonProjectMarkers {
+		if stripMarkerFileExists(filepath.Join(checkoutPath, marker)) {
+			candidates = append(candidates, filepath.Join(checkoutPath, ".venv"))
+			break
+		}
+	}
+	if stripMarkerFileExists(filepath.Join(checkoutPath, "pubspec.yaml")) {
+		candidates = append(candidates, filepath.Join(checkoutPath, "build"))
+	}
+	candidates = append(candidates, nestedJSNodeModules(checkoutPath)...)
+	return candidates
+}
+
+// nestedJSNodeModules inventories node_modules under a direct child that has
+// its own package.json. One extra level only; no recursive manifest walk.
+func nestedJSNodeModules(checkoutPath string) []string {
+	entries, err := os.ReadDir(checkoutPath)
+	if err != nil {
+		return nil
+	}
+	var candidates []string
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Name() == "node_modules" || isHiddenDir(entry.Name()) {
+			continue
+		}
+		child := filepath.Join(checkoutPath, entry.Name())
+		if stripMarkerFileExists(filepath.Join(child, "package.json")) {
+			candidates = append(candidates, filepath.Join(child, "node_modules"))
+		}
+	}
+	sort.Strings(candidates)
 	return candidates
 }
 
