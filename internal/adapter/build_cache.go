@@ -45,9 +45,13 @@ func (a *BuildCacheAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([
 	}{
 		{id: "go-build", path: filepath.Join(home, ".cache", "go-build"), command: []string{"go", "clean", "-cache"}},
 		{id: "xcode", path: filepath.Join(home, "Library", "Caches", "Xcode"), os: "darwin"},
+		{id: "xcode-deriveddata", path: filepath.Join(home, "Library", "Developer", "Xcode", "DerivedData"), os: "darwin"},
+		{id: "homebrew", path: filepath.Join(home, "Library", "Caches", "Homebrew"), os: "darwin", command: []string{"brew", "cleanup", "--prune=all"}},
+		{id: "cocoapods", path: filepath.Join(home, "Library", "Caches", "CocoaPods"), os: "darwin"},
 		{id: "gradle", path: filepath.Join(home, ".gradle", "caches")},
 		{id: "npm", path: filepath.Join(home, ".npm", "_cacache"), command: []string{"npm", "cache", "clean", "--force"}},
 		{id: "cargo", path: filepath.Join(home, ".cargo", "registry")},
+		{id: "dart-analysis", path: filepath.Join(home, ".dartServer")},
 	}
 
 	for _, c := range candidates {
