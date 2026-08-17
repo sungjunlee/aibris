@@ -340,6 +340,9 @@ func TestBuiltCLI_StripSeparatesScanBytesAndPreservesUnit(t *testing.T) {
 			t.Errorf("dry-run output missing %q:\n%s", want, dryOutput)
 		}
 	}
+	if strings.Contains(dryOutput, "stripped  ") {
+		t.Errorf("dry-run printed an execution closer:\n%s", dryOutput)
+	}
 	for _, kept := range []string{nodeModules, androidBuild, unit} {
 		if _, statErr := os.Stat(kept); statErr != nil {
 			t.Fatalf("dry-run removed %q: %v", kept, statErr)
@@ -483,6 +486,99 @@ func TestStripReportsNoErrorWhenEverySubtreeWasSkipped(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(unit, "node_modules", "dep", "index.js")); err != nil {
 		t.Errorf("skipped subtree was removed: %v", err)
+	}
+}
+
+func TestPrintStripOutcomesAccountsPlanAndKeepReasons(t *testing.T) {
+	outcomes := []stripUnitOutcome{
+		{
+			Item:  types.DebrisInfo{ID: "ok", Category: types.CategoryWorktree, StrippableBytes: 2000},
+			Freed: 2000,
+			Subtrees: []stripSubtreeOutcome{
+				{Path: "ok/node_modules", Bytes: 2000},
+			},
+		},
+		{
+			Item: types.DebrisInfo{ID: "blocked", Category: types.CategoryWorktree, StrippableBytes: 400},
+			Subtrees: []stripSubtreeOutcome{
+				{Path: "blocked/.venv", Skipped: "git evidence unavailable"},
+			},
+		},
+	}
+
+	got := summarizeStripOutcomes(outcomes)
+	if got.planned != 2 || got.stripped != 1 || got.freed != 2000 {
+		t.Fatalf("plan = %d/%d freed %d; want 1/2 freed 2000", got.stripped, got.planned, got.freed)
+	}
+	if got.kept != 1 || got.keptBytes != 400 {
+		t.Fatalf("kept = %d/%d; want 1/400", got.kept, got.keptBytes)
+	}
+	if len(got.keepReasons) != 1 || got.keepReasons[0] != "git evidence unavailable" {
+		t.Fatalf("keep reasons = %v", got.keepReasons)
+	}
+
+	output := captureOutput(func() { printStripOutcomes(outcomes) })
+	assertStripCloserReportsKeep(t, output, "stripped  1/2 units", "kept      1 unit")
+	if strings.Contains(output, "failed") {
+		t.Errorf("keep labeled as a failed deletion:\n%s", output)
+	}
+}
+
+func TestExecuteStripMixedGitKeepIsSkipNotFailure(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	_, worktree := newStripFixtureWorktree(t, home, "feature", stripFixtureIgnore)
+	writeGitFixtureFile(t, worktree, "node_modules/dep/index.js", "module.exports = 1;\n")
+	keptUnit := newStripNoEvidenceUnit(t, home)
+	targets := []types.DebrisInfo{
+		stripFixtureTarget(worktree, filepath.Join(worktree, "node_modules")),
+		stripFixtureTarget(keptUnit, filepath.Join(keptUnit, "node_modules")),
+	}
+
+	outcomes, err := executeStripTargets(context.Background(), targets, t.TempDir())
+	if err != nil {
+		t.Fatalf("mixed strip treated a Git keep as failure: %v", err)
+	}
+	assertMixedStripKeep(t, outcomes, worktree, keptUnit)
+	output := captureOutput(func() { printStripOutcomes(outcomes) })
+	assertStripCloserReportsKeep(t, output, "stripped  1/2 units", "kept      1 unit")
+}
+
+func newStripNoEvidenceUnit(t *testing.T, home string) string {
+	t.Helper()
+	unit := filepath.Join(home, ".codex", "worktrees", "noevidence")
+	writeGitFixtureFile(t, unit, ".git",
+		"gitdir: "+filepath.Join(home, "missing-git-dir", "worktrees", "noevidence")+"\n")
+	writeGitFixtureFile(t, unit, "node_modules/dep/index.js", "untracked\n")
+	return unit
+}
+
+func assertMixedStripKeep(t *testing.T, outcomes []stripUnitOutcome, stripped, kept string) {
+	t.Helper()
+	if len(outcomes) != 2 {
+		t.Fatalf("outcomes = %d; want 2", len(outcomes))
+	}
+	if outcomes[0].Error != "" || outcomes[1].Error != "" {
+		t.Fatalf("keep/skip reported as outcome.Error: %+v", outcomes)
+	}
+	if outcomes[0].Item.Path != stripped || outcomes[0].Freed <= 0 {
+		t.Fatalf("stripped unit = %+v", outcomes[0])
+	}
+	if outcomes[1].Item.Path != kept || outcomes[1].Freed != 0 {
+		t.Fatalf("kept unit = %+v", outcomes[1])
+	}
+	if len(outcomes[1].Subtrees) != 1 || outcomes[1].Subtrees[0].Skipped != "git evidence unavailable" {
+		t.Fatalf("kept reason = %+v", outcomes[1].Subtrees)
+	}
+}
+
+func assertStripCloserReportsKeep(t *testing.T, output string, want ...string) {
+	t.Helper()
+	want = append(want, "git evidence unavailable")
+	for _, line := range want {
+		if !strings.Contains(output, line) {
+			t.Errorf("closer missing %q:\n%s", line, output)
+		}
 	}
 }
 
