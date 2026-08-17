@@ -285,4 +285,8 @@ type PruneOptions struct {
 	// AgentStateMinIdleAge is the recency floor for default-selecting an orphaned
 	// agent-state entry. A value <= 0 disables the floor.
 	AgentStateMinIdleAge time.Duration
+	// RelaxCacheAge selects official/global regenerable caches (build-cache,
+	// other-cache) even when they are newer than Age. Worktree, agent-state,
+	// and risky categories keep their existing gates.
+	RelaxCacheAge bool
 }

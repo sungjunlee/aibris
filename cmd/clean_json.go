@@ -206,6 +206,7 @@ func runCleanJSON(cmd *cobra.Command) {
 		Force:                  cleanForce,
 		IncludeActiveWorktrees: cleanIncludeActiveWorktrees,
 		AgentStateMinIdleAge:   agentStateGrace,
+		RelaxCacheAge:          shouldRelaxCacheAge(cleanPressure),
 	}
 	var guidedStatePtr *guidedCleanState
 	if experience == cleanExperienceGuided {
@@ -435,6 +436,8 @@ func cleanJSONReasonCodeForEligibility(reason cleaner.EligibilityReason) string 
 		return "agent_state_undetermined"
 	case cleaner.EligibilityReasonAgentStateMinIdleAge:
 		return "agent_state_min_idle_age"
+	case cleaner.EligibilityReasonVolumePressure:
+		return "volume_pressure"
 	case cleaner.EligibilityReasonEligible:
 		return "eligible"
 	default:

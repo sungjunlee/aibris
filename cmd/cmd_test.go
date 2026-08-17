@@ -334,7 +334,8 @@ func resetCleanFlags() {
 	cleanAgentStateGrace = "24h"
 	cleanReceiptFile = ""
 	cleanStrip = false
-	for _, name := range []string{"age", "category", "tool", "dry-run", "json", "include-paths", "interactive", "risky", "force", "guide", "no-guide", "root", "exclude", "include-active-worktrees", "agent-state-grace", "receipt-file", "strip", "help"} {
+	cleanPressure = false
+	for _, name := range []string{"age", "category", "tool", "dry-run", "json", "include-paths", "interactive", "risky", "force", "guide", "no-guide", "root", "exclude", "include-active-worktrees", "agent-state-grace", "receipt-file", "strip", "pressure", "help"} {
 		if flag := cleanCmd.Flags().Lookup(name); flag != nil {
 			flag.Changed = false
 			if name != "root" && name != "exclude" {
@@ -856,6 +857,8 @@ func TestCleanCmd_HelpDocumentsDefaultGuidedCleanAndNoGuide(t *testing.T) {
 		"Minimum idle age",
 		"--no-guide",
 		"Use classic cleanup even when guided worktree review is available",
+		"--pressure",
+		"official regenerable caches",
 	} {
 		if !strings.Contains(output, want) {
 			t.Errorf("help output missing %q; got: %s", want, output)

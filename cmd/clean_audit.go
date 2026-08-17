@@ -63,6 +63,7 @@ const (
 	cleanReasonAgentStateLive                cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonAgentStateLive)
 	cleanReasonAgentStateUndetermined        cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonAgentStateUndetermined)
 	cleanReasonAgentStateMinIdleAge          cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonAgentStateMinIdleAge)
+	cleanReasonVolumePressure                cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonVolumePressure)
 	cleanReasonMissingPath                   cleanAuditReason = "path no longer exists"
 	cleanReasonDuplicatePath                 cleanAuditReason = "duplicate cleanup target path"
 	cleanReasonNestedTarget                  cleanAuditReason = "covered by selected parent"
@@ -96,6 +97,8 @@ func cleanupOverlapLogicalInputsForAudit(
 			reason = cleanAuditReasonText(protected, opts)
 		} else if eligible, eligibilityReason := cleaner.EvaluateEligibility(item, opts, observedAt); !eligible {
 			reason = cleanAuditReasonText(cleanAuditReason(eligibilityReason), opts)
+		} else if eligibilityReason == cleaner.EligibilityReasonVolumePressure {
+			reason = cleanAuditReasonText(cleanReasonVolumePressure, opts)
 		} else if item.Category == types.CategoryAgentState &&
 			item.Classification == types.EntryClassOrphaned {
 			reason = "recorded working directory is absent"
@@ -128,6 +131,9 @@ func cleanJSONPolicyForAuditItem(
 	}
 	eligible, reason := cleaner.EvaluateEligibility(item, opts, observedAt)
 	if eligible {
+		if reason == cleaner.EligibilityReasonVolumePressure {
+			return cleanJSONPolicyEligible, []string{"volume_pressure"}
+		}
 		if item.Category == types.CategoryAgentState && item.Classification == types.EntryClassOrphaned {
 			return cleanJSONPolicyEligible, []string{"agent_state_orphaned"}
 		}
@@ -617,6 +623,8 @@ func cleanAuditReasonText(reason cleanAuditReason, opts types.PruneOptions) stri
 		return "active worktree protected"
 	case cleanReasonAgentStateMinIdleAge:
 		return "idle less than " + cleanAgeDisplay(opts.AgentStateMinIdleAge)
+	case cleanReasonVolumePressure:
+		return "selected because of volume pressure"
 	case cleanReasonFiltered:
 		return "outside category/tool filters"
 	case cleanReasonMissingPath:
@@ -649,7 +657,11 @@ func cleanAuditPolicyLine(opts types.PruneOptions) string {
 	if opts.IncludeActiveWorktrees {
 		activePolicy = "included"
 	}
-	return fmt.Sprintf("age>%s, risky=%t, active-worktrees=%s", cleanAgeDisplay(opts.Age), opts.Risky, activePolicy)
+	pressure := "off"
+	if opts.RelaxCacheAge {
+		pressure = "caches"
+	}
+	return fmt.Sprintf("age>%s, risky=%t, active-worktrees=%s, pressure=%s", cleanAgeDisplay(opts.Age), opts.Risky, activePolicy, pressure)
 }
 
 func cleanAuditScanSourceLine(source scanSource) string {
