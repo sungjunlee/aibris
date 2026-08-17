@@ -105,6 +105,7 @@ func runStripClean() {
 		fmt.Fprintf(os.Stderr, "error during strip: %v\n", err)
 		os.Exit(1)
 	}
+	maybeHintAPFSSnapshots()
 }
 
 // selectStripTargets returns reported worktree units that deletion refuses
