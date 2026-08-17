@@ -18,6 +18,7 @@ import (
 var safePathPrefixes = []string{
 	".codex", ".claude", ".cursor", ".cache", ".npm", ".gradle", ".cargo",
 	"Caches", "projects", ".codeium", "node_modules",
+	"DerivedData", ".dartServer",
 }
 
 var (

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -195,6 +196,104 @@ func TestBuildCacheAdapter_Multiple(t *testing.T) {
 	}
 	if !found["npm"] {
 		t.Error("npm not found")
+	}
+}
+
+func TestBuildCacheAdapter_HomebrewDerivedDataAndDartAnalysis(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	brewDir := filepath.Join(home, "Library", "Caches", "Homebrew")
+	derived := filepath.Join(home, "Library", "Developer", "Xcode", "DerivedData")
+	dart := filepath.Join(home, ".dartServer")
+	pub := filepath.Join(home, ".pub-cache")
+	sim := filepath.Join(home, "Library", "Developer", "CoreSimulator")
+	for _, dir := range []string{brewDir, derived, dart, pub, sim} {
+		if err := os.MkdirAll(filepath.Join(dir, "entry"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "entry", "blob"), []byte("x"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	results, err := (&BuildCacheAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := map[string]types.DebrisInfo{}
+	for _, item := range results {
+		found[item.ID] = item
+	}
+	if runtime.GOOS == "darwin" {
+		brew, ok := found["homebrew"]
+		if !ok {
+			t.Fatal("homebrew cache not found")
+		}
+		if brew.Size <= 0 {
+			t.Errorf("homebrew Size = %d; want > 0", brew.Size)
+		}
+		if brew.CleanupKind != types.CleanupCommand {
+			t.Errorf("homebrew CleanupKind = %q; want command", brew.CleanupKind)
+		}
+		if got := brew.CleanupCommand; len(got) != 3 || got[0] != "brew" || got[1] != "cleanup" || got[2] != "--prune=all" {
+			t.Errorf("homebrew CleanupCommand = %v; want [brew cleanup --prune=all]", got)
+		}
+		if _, ok := found["xcode-deriveddata"]; !ok {
+			t.Error("xcode-deriveddata not found")
+		}
+	}
+	if _, ok := found["dart-analysis"]; !ok {
+		t.Fatal("dart-analysis not found")
+	}
+	if found["dart-analysis"].Path != dart {
+		t.Errorf("dart-analysis path = %q; want %q", found["dart-analysis"].Path, dart)
+	}
+	if _, ok := found["pub-cache"]; ok {
+		t.Fatal("must not report ~/.pub-cache as a dart/homebrew row")
+	}
+	if _, ok := found["core-simulator"]; ok {
+		t.Fatal("must not report simulator runtimes")
+	}
+}
+
+func TestBuildCacheAdapter_MissingHomebrewDirAndMissingBrewBinary(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+
+	results, err := (&BuildCacheAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range results {
+		if item.ID == "homebrew" || item.ID == "xcode-deriveddata" || item.ID == "dart-analysis" {
+			t.Fatalf("missing directory reported as %q", item.ID)
+		}
+	}
+
+	brewDir := filepath.Join(home, "Library", "Caches", "Homebrew")
+	if err := os.MkdirAll(filepath.Join(brewDir, "downloads"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	results, err = (&BuildCacheAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "darwin" {
+		return
+	}
+	var brew types.DebrisInfo
+	found := false
+	for _, item := range results {
+		if item.ID == "homebrew" {
+			brew = item
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("homebrew dir should be reported even when brew is not on PATH")
+	}
+	if len(brew.CleanupCommand) == 0 || brew.CleanupCommand[0] != "brew" {
+		t.Fatalf("homebrew must keep argv-only brew cleanup; got %v", brew.CleanupCommand)
 	}
 }
 
