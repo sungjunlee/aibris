@@ -19,6 +19,13 @@ const maxWorktreeContainerDepth = 4
 
 const noWorktreeMetadataReason = "no direct or one-level nested linked worktree metadata"
 
+// registeredWorktreeMemberDepth allows <owner>/<leaf>/<checkout>/.git inside
+// a registered container only. Convention fallback stays at one level.
+const (
+	defaultWorktreeMemberDepth    = 1
+	registeredWorktreeMemberDepth = 2
+)
+
 type registeredWorktreeContainer struct {
 	base         string
 	relativePath string
@@ -51,8 +58,9 @@ func registeredWorktreeContainers(home string) ([]registeredWorktreeContainer, e
 }
 
 type worktreeRoot struct {
-	path   string
-	source string
+	path        string
+	source      string
+	memberDepth int
 }
 
 // WorktreeAdapter discovers Git worktrees created by AI coding tools and
@@ -228,8 +236,9 @@ func discoverRegisteredWorktreeRoots(ctx context.Context, containers []registere
 		}
 		seen[resolved] = true
 		results = append(results, worktreeRoot{
-			path:   resolved,
-			source: registered.source,
+			path:        resolved,
+			source:      registered.source,
+			memberDepth: registeredWorktreeMemberDepth,
 		})
 	}
 	sort.Slice(results, func(i, j int) bool {
@@ -370,7 +379,7 @@ func (a *WorktreeAdapter) scanWorktreeRootWithSource(ctx context.Context, root w
 		if source == "" {
 			source = detectWorktreeSource(entryPath)
 		}
-		items, err := a.scanEntry(ctx, canonicalEntry, source)
+		items, err := a.scanEntry(ctx, canonicalEntry, source, root.memberDepth)
 		if err != nil {
 			return nil, err
 		}
@@ -409,7 +418,7 @@ type worktreeMarkerInspection struct {
 // place .git in the unit itself; nested-style tools place it in one or more
 // immediate project directories. Any invalid nested marker protects the whole
 // outer unit, so no valid sibling can become a separate cleanup target.
-func (a *WorktreeAdapter) scanEntry(ctx context.Context, entryPath, source string) ([]types.DebrisInfo, error) {
+func (a *WorktreeAdapter) scanEntry(ctx context.Context, entryPath, source string, memberDepth int) ([]types.DebrisInfo, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -466,6 +475,17 @@ func (a *WorktreeAdapter) scanEntry(ctx context.Context, entryPath, source strin
 			item.StrippableBytes, item.StrippablePaths = a.strippableSubtrees(ctx, worktreePath, inspection.status)
 			valid = append(valid, item)
 		case worktreeMarkerMissing:
+			if memberDepth >= registeredWorktreeMemberDepth {
+				nestedValid, nestedInvalid, err := a.inspectTwoLevelMembers(ctx, entryPath, worktreePath, entry.Name(), source, entryInfo.ModTime())
+				if err != nil {
+					return nil, err
+				}
+				if len(nestedValid) > 0 || len(nestedInvalid) > 0 {
+					valid = append(valid, nestedValid...)
+					invalidReasons = append(invalidReasons, nestedInvalid...)
+					continue
+				}
+			}
 			invalidReasons = append(invalidReasons, fmt.Sprintf("%s: missing .git marker", entry.Name()))
 		case worktreeMarkerInvalid:
 			invalidReasons = append(invalidReasons, fmt.Sprintf("%s: %s", entry.Name(), inspection.reason))
@@ -498,6 +518,43 @@ func (a *WorktreeAdapter) scanEntry(ctx context.Context, entryPath, source strin
 		return valid[i].Status < valid[j].Status
 	})
 	return valid, nil
+}
+
+// inspectTwoLevelMembers looks at <owner>/<leaf>/<checkout>/.git. Only
+// registered containers request this. Empty leftover leaves are ignored.
+func (a *WorktreeAdapter) inspectTwoLevelMembers(
+	ctx context.Context,
+	ownerPath, leafPath, leafName, source string,
+	ownerMod time.Time,
+) ([]types.DebrisInfo, []string, error) {
+	entries, err := os.ReadDir(leafPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("reading worktree leaf %q: %w", leafPath, err)
+	}
+	var valid []types.DebrisInfo
+	var invalid []string
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return nil, nil, err
+		}
+		if !entry.IsDir() {
+			continue
+		}
+		checkoutPath := filepath.Join(leafPath, entry.Name())
+		inspection, err := inspectWorktreeMarker(ctx, filepath.Join(checkoutPath, ".git"))
+		if err != nil {
+			return nil, nil, err
+		}
+		switch inspection.state {
+		case worktreeMarkerValid:
+			item := newWorktreeItem(ownerPath, checkoutPath, source, inspection.status, "", ownerMod)
+			item.StrippableBytes, item.StrippablePaths = a.strippableSubtrees(ctx, checkoutPath, inspection.status)
+			valid = append(valid, item)
+		case worktreeMarkerInvalid:
+			invalid = append(invalid, fmt.Sprintf("%s/%s: %s", leafName, entry.Name(), inspection.reason))
+		}
+	}
+	return valid, invalid, nil
 }
 
 func inspectWorktreeMarker(ctx context.Context, gitFilePath string) (worktreeMarkerInspection, error) {

@@ -368,7 +368,7 @@ Cross-category containment uses the same physical-component contract:
 
 | Category | Default clean | Tools | Default locations |
 | ---------- | --------------- | ------- | ------------------- |
-| `worktree` | orphaned only | `codex`, `claude`, `unknown` | Finite exact registry plus depth-4 convention fallback for directories named `worktrees`, `worktree`, `worktree-*`, or `worktrees-*`; units are validated only at direct or one-level nested `.git` markers |
+| `worktree` | orphaned only | `codex`, `claude`, `unknown` | Finite exact registry plus depth-4 convention fallback for directories named `worktrees`, `worktree`, `worktree-*`, or `worktrees-*`; units are validated at direct or one-level nested `.git` markers, and at two-level `<owner>/<leaf>/<checkout>/.git` only inside a registered container |
 | `node_modules` | yes | `node_modules` | `$HOME/**/node_modules`, with noisy system/media/cache directories pruned |
 | `build-cache` | yes | `build-cache` | `~/.cache/go-build`, `~/.gradle/caches`, `~/.npm/_cacache`, `~/.cargo/registry`, `~/Library/Caches/Xcode` |
 | `other-cache` | yes | `pip-cache` | `~/.cache/pip`, `~/.cache/uv` |

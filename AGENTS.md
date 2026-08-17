@@ -47,8 +47,8 @@ registry를 함께 사용하고 `.git` metadata로 검증한다.
 - generic fallback은 `$HOME` 아래 `worktrees`, `worktree`, `worktree-*`, `worktrees-*` 디렉토리를 찾고 `maxWorktreeContainerDepth=4`를 유지한다
 - hidden owner 디렉토리(`.codex`, `.somename` 등)는 worktree source일 수 있으므로 일반적으로 숨김이라는 이유만으로 prune하지 않는다
 - 전체 `$HOME`이나 hidden owner를 무제한 재귀 탐색하지 않는다. hidden owner는 immediate convention child까지만 확인한다
-- 후보는 direct `<entry>/.git` 또는 nested `<entry>/<project>/.git` 파일이 있어야 한다
-- member 탐색은 direct 또는 one-level nested까지만 허용한다
+- 후보는 direct `<entry>/.git` 또는 nested `<entry>/<project>/.git` 파일이 있어야 한다. registered container owner는 `<owner>/<leaf>/<checkout>/.git` 두 단계까지 허용한다
+- member 탐색은 convention fallback에서 direct 또는 one-level nested까지만 허용한다. registered container만 two-level member를 본다. 전체 `$HOME` 재귀는 하지 않는다
 - outer `<entry>` 하나가 물리 mutation owner 하나다. valid/invalid marker가 섞이면 valid sibling을 내보내지 않고 owner 하나를 `plain-dir`로 보고한다
 - readable missing/empty/malformed/directory marker는 explicit `Reason`이 있는 review-only `plain-dir`; I/O 실패는 provider error/partial scan이다
 - `.git` 파일의 `gitdir:`를 읽어 `active`/`orphaned`를 판정한다. referenced gitdir가 없으면 `orphaned`
@@ -93,7 +93,7 @@ skills/
 
 | Tool | Category | clean 기본 | 기본 경로 |
 |------|----------|-----------|---------|
-| worktree (registry + convention) | worktree | orphaned만 ✅ | finite exact registry + depth-4 `{worktrees,worktree,worktree-*,worktrees-*}/<entry>/` fallback; direct/one-level nested `.git` only |
+| worktree (registry + convention) | worktree | orphaned만 ✅ | finite exact registry + depth-4 `{worktrees,worktree,worktree-*,worktrees-*}/<entry>/` fallback; direct/one-level `.git`, plus two-level `<owner>/<leaf>/<checkout>/.git` inside registered containers only |
 | claude | agent-state | orphaned만 ✅ (분류는 증명 기반; `--age` 미적용; `--agent-state-grace`가 기본 선택을 지연; live/undetermined 보호) | `~/.claude/projects/<name>/` |
 | cursor | agent-state | orphaned만 ✅ (분류는 증명 기반; `--age` 미적용; `--agent-state-grace`가 기본 선택을 지연; live/undetermined 보호) | `~/.cursor/projects/<name>/` |
 | windsurf | ai-logs | 🚫 `--risky` | `~/.codeium/windsurf/` |
