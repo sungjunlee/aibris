@@ -105,6 +105,15 @@ func runStripClean() {
 		fmt.Fprintf(os.Stderr, "error during strip: %v\n", err)
 		os.Exit(1)
 	}
+	hintAPFSSnapshotsAfterReclaim(stripFreedBytes(outcomes))
+}
+
+func stripFreedBytes(outcomes []stripUnitOutcome) int64 {
+	var total int64
+	for _, outcome := range outcomes {
+		total += outcome.Freed
+	}
+	return total
 }
 
 // selectStripTargets returns reported worktree units that deletion refuses
