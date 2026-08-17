@@ -1148,6 +1148,27 @@ func TestWorktreeAdapter_RegisteredTwoLevelMembersAreClassified(t *testing.T) {
 	}
 }
 
+func TestWorktreeAdapter_RegisteredTwoLevelMissingSiblingStaysPlainDir(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	owner := filepath.Join(home, ".relay", "worktrees", "owner")
+	createWorktreeGit(t, filepath.Join(owner, "leaf", "checkout"), filepath.Join(home, "parent"), "checkout")
+	if err := os.MkdirAll(filepath.Join(owner, "leaf", "sibling"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].Status != types.WorktreePlain {
+		t.Fatalf("missing second-level sibling emitted valid checkout: %+v", results)
+	}
+	if !strings.Contains(results[0].Reason, "missing .git marker") {
+		t.Fatalf("reason = %q; want missing second-level marker", results[0].Reason)
+	}
+}
+
 func TestWorktreeAdapter_RegisteredTwoLevelMixedStaysPlainDir(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)

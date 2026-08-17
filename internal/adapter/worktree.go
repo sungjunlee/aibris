@@ -552,6 +552,8 @@ func (a *WorktreeAdapter) inspectTwoLevelMembers(
 			valid = append(valid, item)
 		case worktreeMarkerInvalid:
 			invalid = append(invalid, fmt.Sprintf("%s/%s: %s", leafName, entry.Name(), inspection.reason))
+		case worktreeMarkerMissing:
+			invalid = append(invalid, fmt.Sprintf("%s/%s: missing .git marker", leafName, entry.Name()))
 		}
 	}
 	return valid, invalid, nil
