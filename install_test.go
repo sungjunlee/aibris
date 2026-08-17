@@ -173,6 +173,49 @@ print_path_hint
 	}
 }
 
+func TestInstallFromMainStampsCommitIdentifyingVersion(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(t.TempDir(), "src")
+	if err := os.MkdirAll(repo, 0755); err != nil {
+		t.Fatal(err)
+	}
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = repo
+		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=aibris", "GIT_AUTHOR_EMAIL=dev@example.com",
+			"GIT_COMMITTER_NAME=aibris", "GIT_COMMITTER_EMAIL=dev@example.com")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("%v: %v\n%s", args, err, out)
+		}
+	}
+	run("git", "init", "-q")
+	run("git", "checkout", "-q", "-b", "main")
+	if err := os.WriteFile(filepath.Join(repo, "README"), []byte("stamp"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	run("git", "add", "README")
+	run("git", "commit", "-q", "-m", "stamp")
+	shaOut, err := exec.Command("git", "-C", repo, "rev-parse", "--short=12", "HEAD").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sha := strings.TrimSpace(string(shaOut))
+
+	output := runInstallSnippet(t, home, `
+source ./install.sh
+main_version_ldflags "$1"
+`, repo)
+	want := "-X github.com/sungjunlee/aibris/cmd.version=main-" + sha
+	if !strings.Contains(output, want) {
+		t.Fatalf("ldflags missing %q; output:\n%s", want, output)
+	}
+	if strings.Contains(output, "cmd.version=dev") {
+		t.Fatalf("main install still stamps bare dev; output:\n%s", output)
+	}
+}
+
 func TestInstallScriptInstallBinaryToDefaultDirWithoutSudo(t *testing.T) {
 	home := t.TempDir()
 	source := filepath.Join(t.TempDir(), "aibris")
