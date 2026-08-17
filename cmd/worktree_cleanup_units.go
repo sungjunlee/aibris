@@ -23,9 +23,9 @@ type WorktreeCleanupUnit struct {
 	ActivitySource         WorktreeActivitySource
 	ActivityMember         string
 	ActivityAvailable      bool
-	CodexActivityAvailable bool
-	CodexActivitySource    string
-	CodexActivityError     string
+	RegisteredActivityAvailable bool
+	RegisteredActivitySource    string
+	RegisteredActivityError     string
 	HardLocked             bool
 	HardLockReasons        []GitEvidenceReason
 }
@@ -56,9 +56,9 @@ type GitWorktreeMember struct {
 	ActivitySource         WorktreeActivitySource
 	ActivityAvailable      bool
 	ActivityEvidence       []WorktreeActivityEvidence
-	CodexActivityAvailable bool
-	CodexActivitySource    string
-	CodexActivityError     string
+	RegisteredActivityAvailable bool
+	RegisteredActivitySource    string
+	RegisteredActivityError     string
 }
 
 type worktreeCleanupUnitRows struct {

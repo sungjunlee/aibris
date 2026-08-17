@@ -216,7 +216,7 @@ func TestPlanWorktreeCleanupOrdersHardLockReasonsAndDecisions(t *testing.T) {
 	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
 	unit := cleanupPolicyUnit("zeta", now.Add(-time.Hour), 512*cleanupPolicyMiB, "/repos/zeta/.git")
 	unit.HardLocked = true
-	unit.CodexActivityAvailable = false
+	unit.RegisteredActivityAvailable = false
 	unit.Members[0].EvidenceAvailable = false
 	unit.Members[0].RepositoryID = ""
 	unit.Members[0].Dirty = true
@@ -311,7 +311,7 @@ func cleanupPolicyUnit(name string, activity time.Time, size int64, repositoryID
 			GitEvidenceAvailable:   true,
 			LastActivity:           activity,
 			ActivityAvailable:      true,
-			CodexActivityAvailable: true,
+			RegisteredActivityAvailable: true,
 			Reason: GitEvidenceReason{
 				Code: GitReasonAttachedBranch,
 			},
@@ -324,7 +324,7 @@ func cleanupPolicyUnit(name string, activity time.Time, size int64, repositoryID
 		Members:                members,
 		LastActivity:           activity,
 		ActivityAvailable:      true,
-		CodexActivityAvailable: true,
+		RegisteredActivityAvailable: true,
 	}
 }
 
@@ -348,10 +348,10 @@ func cleanupPolicyMissingGitUnit(unit WorktreeCleanupUnit) WorktreeCleanupUnit {
 }
 
 func cleanupPolicyMissingActivityUnit(unit WorktreeCleanupUnit) WorktreeCleanupUnit {
-	unit.CodexActivityAvailable = false
-	unit.CodexActivityError = "fixture activity index unavailable"
+	unit.RegisteredActivityAvailable = false
+	unit.RegisteredActivityError = "fixture activity index unavailable"
 	for i := range unit.Members {
-		unit.Members[i].CodexActivityAvailable = false
+		unit.Members[i].RegisteredActivityAvailable = false
 	}
 	return unit
 }

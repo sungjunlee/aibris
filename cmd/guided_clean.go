@@ -55,7 +55,7 @@ type guidedCleanState struct {
 }
 
 func buildGuidedCleanState(ctx context.Context, result *types.ScanResult, source scanSource, minIdleAge time.Duration, reason string) (guidedCleanState, error) {
-	items := activeCodexWorktrees(result.Worktrees)
+	items := activeWorktrees(result.Worktrees)
 	units, err := buildWorktreeCleanupUnits(ctx, items)
 	if err != nil {
 		return guidedCleanState{}, err
@@ -134,8 +134,10 @@ func guidedCleanupUnitItem(unit WorktreeCleanupUnit, items []types.DebrisInfo) t
 		}
 		return candidates[i].Path < candidates[j].Path
 	})
+	// Fallback identity for a unit no scanner row named. The tool stays
+	// unknown rather than assuming Codex now that review admits every tool.
 	item := types.DebrisInfo{
-		Tool:     types.ToolCodex,
+		Tool:     types.ToolUnknown,
 		Category: types.CategoryWorktree,
 		Status:   types.WorktreeActive,
 	}

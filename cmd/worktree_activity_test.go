@@ -5,8 +5,8 @@ import (
 	"errors"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -123,11 +123,11 @@ func TestEnrichWorktreeCleanupActivityMakesCodexOutageExplicit(t *testing.T) {
 
 	unit := units[0]
 	member := unit.Members[0]
-	if unit.CodexActivityAvailable || unit.CodexActivitySource != codexActivitySourceUnavailable || unit.CodexActivityError != indexErr.Error() {
-		t.Errorf("unit Codex availability = (%t, %q, %q); want explicit outage", unit.CodexActivityAvailable, unit.CodexActivitySource, unit.CodexActivityError)
+	if unit.RegisteredActivityAvailable || unit.RegisteredActivitySource != codexActivitySourceUnavailable || unit.RegisteredActivityError != indexErr.Error() {
+		t.Errorf("unit Codex availability = (%t, %q, %q); want explicit outage", unit.RegisteredActivityAvailable, unit.RegisteredActivitySource, unit.RegisteredActivityError)
 	}
-	if member.CodexActivityAvailable || member.CodexActivityError != indexErr.Error() {
-		t.Errorf("member Codex availability = (%t, %q); want explicit outage", member.CodexActivityAvailable, member.CodexActivityError)
+	if member.RegisteredActivityAvailable || member.RegisteredActivityError != indexErr.Error() {
+		t.Errorf("member Codex availability = (%t, %q); want explicit outage", member.RegisteredActivityAvailable, member.RegisteredActivityError)
 	}
 	session := activityEvidenceForSource(member, WorktreeActivityCodexSession)
 	if session.Available || session.Error != indexErr.Error() || !session.Timestamp.IsZero() {
@@ -138,7 +138,12 @@ func TestEnrichWorktreeCleanupActivityMakesCodexOutageExplicit(t *testing.T) {
 	}
 }
 
-func TestEnrichWorktreeCleanupActivityFailsClosedForNonCodexSource(t *testing.T) {
+// TestEnrichWorktreeCleanupActivityReviewsToolWithoutRegisteredSource pins the
+// behavior #141 asked for: a worktree from a tool aibris has no session reader
+// for is judged on Git evidence and reaches a review row, instead of being
+// locked out of every default path. It stays reviewable rather than
+// recommended, and says why.
+func TestEnrichWorktreeCleanupActivityReviewsToolWithoutRegisteredSource(t *testing.T) {
 	now := time.Date(2026, 7, 12, 12, 0, 0, 0, time.UTC)
 	target := filepath.Join(t.TempDir(), ".claude", "worktrees", "session")
 	memberPath := filepath.Join(target, "project-a")
@@ -160,15 +165,15 @@ func TestEnrichWorktreeCleanupActivityFailsClosedForNonCodexSource(t *testing.T)
 
 	unit := units[0]
 	member := unit.Members[0]
-	if unit.CodexActivityAvailable || unit.CodexActivitySource != codexActivitySourceUnavailable || !strings.Contains(unit.CodexActivityError, ".claude") {
-		t.Errorf("unit Codex availability = (%t, %q, %q); want unsupported source", unit.CodexActivityAvailable, unit.CodexActivitySource, unit.CodexActivityError)
+	if unit.RegisteredActivityAvailable || unit.RegisteredActivitySource != worktreeActivitySourceNotRegistered {
+		t.Errorf("unit registered availability = (%t, %q, %q); want not-registered", unit.RegisteredActivityAvailable, unit.RegisteredActivitySource, unit.RegisteredActivityError)
 	}
-	if member.CodexActivityAvailable || member.CodexActivitySource != codexActivitySourceUnavailable || !strings.Contains(member.CodexActivityError, ".claude") {
-		t.Errorf("member Codex availability = (%t, %q, %q); want unsupported source", member.CodexActivityAvailable, member.CodexActivitySource, member.CodexActivityError)
+	if member.RegisteredActivityAvailable || member.RegisteredActivitySource != worktreeActivitySourceNotRegistered {
+		t.Errorf("member registered availability = (%t, %q, %q); want not-registered", member.RegisteredActivityAvailable, member.RegisteredActivitySource, member.RegisteredActivityError)
 	}
 	session := activityEvidenceForSource(member, WorktreeActivityCodexSession)
-	if session.Available || !session.Timestamp.IsZero() || !strings.Contains(session.Error, ".claude") {
-		t.Errorf("session evidence = %+v; want unsupported source", session)
+	if session.Available || !session.Timestamp.IsZero() || session.Error != worktreeActivityNotRegisteredReason {
+		t.Errorf("session evidence = %+v; want not-registered", session)
 	}
 	if !unit.ActivityAvailable || !unit.LastActivity.Equal(now.Add(-time.Hour)) || unit.ActivitySource != WorktreeActivityHeadReflog {
 		t.Errorf("unit activity = (%t, %s, %q); want reflog retained without complete session evidence", unit.ActivityAvailable, unit.LastActivity, unit.ActivitySource)
@@ -191,8 +196,55 @@ func TestEnrichWorktreeCleanupActivityFailsClosedForNonCodexSource(t *testing.T)
 			break
 		}
 	}
-	if decision.Class != DecisionLocked || !reflect.DeepEqual(cleanupPolicyReasonCodes(decision), []DecisionReasonCode{DecisionReasonActivityUnavailable}) {
-		t.Errorf("decision = (%q, %v); want fail-closed activity lock", decision.Class, cleanupPolicyReasonCodes(decision))
+	if decision.Class != DecisionReviewable {
+		t.Fatalf("decision class = %q; want reviewable (a tool without a session reader must still reach review)", decision.Class)
+	}
+	if codes := cleanupPolicyReasonCodes(decision); len(codes) == 0 || codes[0] != DecisionReasonActivityNotRegistered {
+		t.Errorf("reason codes = %v; want %q first (the weaker evidence must be stated, not implied)",
+			codes, DecisionReasonActivityNotRegistered)
+	}
+}
+
+// TestRecentActivityWindowAppliesWithoutRegisteredSource pins the hard lock
+// #141 must not trade away. Reflog dates any worktree, so a unit touched
+// inside the recent-activity window stays locked even though its tool has no
+// registered session reader.
+func TestRecentActivityWindowAppliesWithoutRegisteredSource(t *testing.T) {
+	now := time.Date(2026, 7, 12, 12, 0, 0, 0, time.UTC)
+	target := filepath.Join(t.TempDir(), ".claude", "worktrees", "session")
+	memberPath := filepath.Join(target, "project-a")
+	units := []WorktreeCleanupUnit{{
+		TargetPath: target,
+		Source:     ".claude",
+		Members:    []GitWorktreeMember{{WorktreePath: memberPath}},
+	}}
+	items := []types.DebrisInfo{{Category: types.CategoryWorktree, Source: ".claude", Path: target, ModTime: now.Add(-90 * 24 * time.Hour)}}
+	index := availableActivityIndex("session", "project-a", now)
+
+	// Reflog says the checkout was touched one minute ago.
+	err := enrichWorktreeCleanupActivity(context.Background(), units, items, worktreeActivityOptions{
+		index:  &index,
+		runner: reflogRunner(map[string]time.Time{memberPath: now.Add(-time.Minute)}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	unit := units[0]
+	unit.Size = 512 * cleanupPolicyMiB
+	unit.Members[0].RepositoryID = "/repos/claude/.git"
+	unit.Members[0].EvidenceAvailable = true
+	unit.Members[0].GitEvidenceAvailable = true
+	unit.Members[0].Recoverable = true
+	unit.Members[0].Reason = GitEvidenceReason{Code: GitReasonAttachedBranch}
+
+	plan := PlanWorktreeCleanup([]WorktreeCleanupUnit{unit}, DefaultCleanupPolicy(now))
+	decision := plan.Decisions[0]
+	if decision.Class != DecisionLocked {
+		t.Fatalf("decision class = %q; want locked", decision.Class)
+	}
+	if !slices.Contains(cleanupPolicyReasonCodes(decision), DecisionReasonRecentActivity) {
+		t.Errorf("reason codes = %v; want %q", cleanupPolicyReasonCodes(decision), DecisionReasonRecentActivity)
 	}
 }
 
@@ -322,8 +374,8 @@ func TestEnrichWorktreeCleanupActivityReusesFreshCodexCache(t *testing.T) {
 	if err := enrichWorktreeCleanupActivity(context.Background(), first, items, options); err != nil {
 		t.Fatal(err)
 	}
-	if first[0].CodexActivitySource != codexActivitySourceRefresh {
-		t.Fatalf("first Codex source = %q; want refresh", first[0].CodexActivitySource)
+	if first[0].RegisteredActivitySource != codexActivitySourceRefresh {
+		t.Fatalf("first Codex source = %q; want refresh", first[0].RegisteredActivitySource)
 	}
 
 	writeCodexSession(t, sessionPath, now.Add(time.Hour), memberPath, "cached-session", "DO-NOT-READ-new-body")
@@ -332,8 +384,8 @@ func TestEnrichWorktreeCleanupActivityReusesFreshCodexCache(t *testing.T) {
 	if err := enrichWorktreeCleanupActivity(context.Background(), second, items, options); err != nil {
 		t.Fatal(err)
 	}
-	if second[0].CodexActivitySource != codexActivitySourceCache {
-		t.Errorf("second Codex source = %q; want cache", second[0].CodexActivitySource)
+	if second[0].RegisteredActivitySource != codexActivitySourceCache {
+		t.Errorf("second Codex source = %q; want cache", second[0].RegisteredActivitySource)
 	}
 	if got := second[0].Members[0].LastActivity; !got.Equal(cachedTimestamp) {
 		t.Errorf("cached activity = %s; want %s", got, cachedTimestamp)

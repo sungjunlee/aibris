@@ -517,9 +517,9 @@ func applyGuidedCleanDefaults(cmd *cobra.Command, age time.Duration) time.Durati
 	if cleanCategory == "" {
 		cleanCategory = string(types.CategoryWorktree)
 	}
-	if cleanTools == "" {
-		cleanTools = string(types.ToolCodex)
-	}
+	// --guide no longer narrows to Codex. Guided review is built on Git
+	// evidence, which every tool's worktree carries, so leaving the tool
+	// filter empty admits them all; --tool still narrows when asked.
 	return guidedCleanAge(cmd, age)
 }
 
@@ -614,12 +614,9 @@ func isGuidedCodexCleanupPressureValuable(unitCount int, totalSize int64) bool {
 }
 
 func guidedCodexCleanupPressure(ctx context.Context, items []types.DebrisInfo) (int, int64) {
-	candidates := make([]types.DebrisInfo, 0, len(items))
-	for _, item := range items {
-		if isActiveCodexWorktree(item) && item.Source == ".codex" {
-			candidates = append(candidates, item)
-		}
-	}
+	// Pressure is measured over every tool's active worktrees, matching what
+	// guided review will actually show once it opens.
+	candidates := activeWorktrees(items)
 
 	units, err := buildWorktreeCleanupUnits(ctx, candidates)
 	if err != nil || len(units) == 0 {

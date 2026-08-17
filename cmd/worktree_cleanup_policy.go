@@ -58,6 +58,7 @@ const (
 	DecisionReasonDetachedUnreferenced    DecisionReasonCode = "git_detached_head_unreferenced"
 	DecisionReasonActivityUnavailable     DecisionReasonCode = "activity_evidence_unavailable"
 	DecisionReasonRecentActivity          DecisionReasonCode = "recent_activity"
+	DecisionReasonActivityNotRegistered   DecisionReasonCode = "activity_source_not_registered"
 	DecisionReasonRepositoryRetention     DecisionReasonCode = "retained_per_repository"
 	DecisionReasonMinimumIdleAge          DecisionReasonCode = "younger_than_min_idle_age"
 	DecisionReasonMinimumSize             DecisionReasonCode = "below_min_size"
@@ -108,6 +109,13 @@ func PlanWorktreeCleanup(units []WorktreeCleanupUnit, policy CleanupPolicy) Clea
 		case unit.Size < policy.MinSize:
 			decision.Class = DecisionReviewable
 			decision.Reasons = decisionReasons(DecisionReasonMinimumSize)
+		case !cleanupUnitHasRegisteredActivitySource(unit):
+			// Git evidence alone can carry a review row, but it cannot carry an
+			// automatic recommendation: without a session log, "idle" rests on
+			// reflog and scanner mtime only. Say so instead of recommending.
+			decision.Class = DecisionReviewable
+			decision.Reasons = decisionReasons(DecisionReasonActivityNotRegistered)
+			decision.Reasons = append(decision.Reasons, cleanupUnitRecoverabilityReasons(unit)...)
 		default:
 			decision.Class = DecisionRecommended
 			decision.Reasons = decisionReasons(DecisionReasonEligible)
@@ -212,9 +220,17 @@ func cleanupUnitHardLockReasonCodes(unit WorktreeCleanupUnit, policy CleanupPoli
 	if unit.HardLocked && !present[DecisionReasonGitEvidenceUnavailable] && !present[DecisionReasonDirtyWorktree] && !present[DecisionReasonDetachedUnreferenced] {
 		present[DecisionReasonGitEvidenceUnavailable] = true
 	}
-	if !unit.ActivityAvailable || !unit.CodexActivityAvailable {
+	// A missing registered reader is no longer a hard lock on its own: it says
+	// aibris has no session log for this tool, not that the unit is unknown.
+	// A reader that exists and failed still is — an outage means the evidence
+	// we normally rely on is missing rather than absent by design.
+	if !unit.ActivityAvailable ||
+		(cleanupUnitHasRegisteredActivitySource(unit) && !unit.RegisteredActivityAvailable) {
 		present[DecisionReasonActivityUnavailable] = true
 	}
+	// The recent-activity window stays tool-independent. HEAD reflog and
+	// scanner metadata date any worktree, so a unit touched inside the window
+	// is locked whether or not its tool has a registered reader.
 	if unit.ActivityAvailable && unit.LastActivity.After(policy.Now.Add(-policy.RecentActivityWindow)) {
 		present[DecisionReasonRecentActivity] = true
 	}
@@ -234,6 +250,12 @@ func cleanupUnitHardLockReasonCodes(unit WorktreeCleanupUnit, policy CleanupPoli
 		}
 	}
 	return reasons
+}
+
+// cleanupUnitHasRegisteredActivitySource reports whether aibris ships a
+// session-activity reader for the tool that produced this unit.
+func cleanupUnitHasRegisteredActivitySource(unit WorktreeCleanupUnit) bool {
+	return unit.RegisteredActivitySource != worktreeActivitySourceNotRegistered
 }
 
 func cleanupUnitContainsPath(target, path string) bool {
@@ -315,6 +337,8 @@ func decisionReasonDescription(code DecisionReasonCode) string {
 		return "activity evidence unavailable"
 	case DecisionReasonRecentActivity:
 		return "activity within recent safety window"
+	case DecisionReasonActivityNotRegistered:
+		return worktreeActivityNotRegisteredReason
 	case DecisionReasonRepositoryRetention:
 		return "retained among the most recent units for a repository"
 	case DecisionReasonMinimumIdleAge:

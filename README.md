@@ -225,7 +225,7 @@ aibris clean --no-guide --dry-run --json  # machine-readable cleanup plan
 
 | Category | Examples | Default clean |
 | ---------- | ---------- | --------------- |
-| AI worktrees | Finite known containers plus `$HOME` conventions such as `.tool/worktrees` and project-local `worktrees` | Classic: orphaned; guided Codex: evidence-based |
+| AI worktrees | Finite known containers plus `$HOME` conventions such as `.tool/worktrees` and project-local `worktrees` | Classic: orphaned; guided: evidence-based, any tool |
 | Agent state | Claude and Cursor project stores | Orphaned only by proof; default selection waits for `--agent-state-grace` (24h) |
 | AI logs | Codex, Claude, Windsurf logs | Only with `--risky` |
 | Dependencies | project `node_modules` directories | Yes |
@@ -259,7 +259,7 @@ aibris clean --interactive     # confirm each item
 aibris clean --include-active-worktrees # include active worktrees
 aibris clean --agent-state-grace 0      # drop the orphaned agent-state idle floor (default 24h)
 aibris clean --no-guide        # force the classic cleanup audit
-aibris clean --guide           # force guided Codex worktree review
+aibris clean --guide           # force guided worktree review (any tool)
 aibris clean --force           # skip the confirmation prompt only
 aibris clean --guide --force --receipt-file cleanup.json  # machine-readable execution receipt
 ```
@@ -281,7 +281,7 @@ scan transcripts used to validate release behavior.
 - **Agent state is proof-classified** (`live` / `orphaned` / `undetermined`);
   only proven-orphaned entries can be selected, and only after the
   `--agent-state-grace` idle floor (24h default)
-- **Guided Codex review** locks dirty, active, or recently used worktree
+- **Guided review** locks dirty, active, or recently used worktree
   units and keeps protected rows visible but unselectable
 - **Home-scoped roots**: scans start at `$HOME`; `--root` only narrows to
   existing directories under it. Deletions outside `$HOME`, symlink escapes,
