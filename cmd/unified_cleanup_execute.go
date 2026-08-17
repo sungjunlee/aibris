@@ -80,12 +80,13 @@ func unifiedCleanupPlanForClean(
 	guidedState *guidedCleanState,
 	classicTargets []types.DebrisInfo,
 	evidence CleanupPlanEvidence,
+	opts types.PruneOptions,
 ) (UnifiedCleanupPlan, error) {
 	candidates := make([]CleanupPlanCandidate, 0, len(classicTargets)+guidedCandidateCount(guidedState))
 	if guidedState != nil {
 		candidates = append(candidates, guidedCleanupPlanCandidates(*guidedState)...)
 	}
-	candidates = append(candidates, ClassicCleanupPlanCandidates(classicTargets)...)
+	candidates = append(candidates, ClassicCleanupPlanCandidates(classicTargets, opts)...)
 	return BuildUnifiedCleanupPlan(ctx, candidates, evidence)
 }
 
@@ -149,7 +150,7 @@ func runUnifiedGuidedClean(
 	stdout *os.File,
 ) {
 	evidence := cleanupPlanEvidence(result, source, time.Now())
-	plan, err := unifiedCleanupPlanForClean(ctx, guidedState, classicTargets, evidence)
+	plan, err := unifiedCleanupPlanForClean(ctx, guidedState, classicTargets, evidence, opts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)

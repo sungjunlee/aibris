@@ -283,6 +283,7 @@ func runCleanJSON(cmd *cobra.Command) {
 		guidedStatePtr,
 		overlapSelection.Targets,
 		cleanupPlanEvidence(result, source, time.Now()),
+		opts,
 	)
 	if err != nil {
 		failCleanJSON("cleanup plan preparation failed")
@@ -361,7 +362,7 @@ func buildCleanJSONPlan(
 		observedAt = time.Now()
 	}
 	evidence := cleanupPlanEvidence(result, source, observedAt)
-	candidates := cleanJSONPlanCandidates(guidedState, classicTargets)
+	candidates := cleanJSONPlanCandidates(guidedState, classicTargets, opts)
 	plan, err := BuildUnifiedCleanupPlan(ctx, candidates, evidence)
 	if err != nil {
 		return cleanJSONPlan{}, err
@@ -407,13 +408,14 @@ func encodeCleanJSON(output io.Writer, document cleanJSONPlan) error {
 func cleanJSONPlanCandidates(
 	guidedState *guidedCleanState,
 	classicTargets []types.DebrisInfo,
+	opts types.PruneOptions,
 ) []CleanupPlanCandidate {
 	classicTargets = normalizeCleanTargets(classicTargets)
 	candidates := make([]CleanupPlanCandidate, 0, guidedCandidateCount(guidedState)+len(classicTargets))
 	if guidedState != nil {
 		candidates = append(candidates, guidedCleanupPlanCandidates(*guidedState)...)
 	}
-	candidates = append(candidates, ClassicCleanupPlanCandidates(classicTargets)...)
+	candidates = append(candidates, ClassicCleanupPlanCandidates(classicTargets, opts)...)
 
 	return candidates
 }

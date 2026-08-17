@@ -134,7 +134,7 @@ func TestUnifiedCleanupPlanAdaptersShareOnePolicyNeutralModel(t *testing.T) {
 			Description: "most recent units",
 		}},
 	}}}
-	candidates := ClassicCleanupPlanCandidates([]types.DebrisInfo{classic})
+	candidates := ClassicCleanupPlanCandidates([]types.DebrisInfo{classic}, types.PruneOptions{})
 	candidates = append(candidates, WorktreeCleanupPlanCandidates(worktreePlan, nil)...)
 
 	plan, err := BuildUnifiedCleanupPlan(context.Background(), candidates, CleanupPlanEvidence{})
@@ -186,7 +186,7 @@ func TestUnifiedCleanupPlanAbsorbsAgeIndependentAgentState(t *testing.T) {
 		Unit:  unit,
 		Class: DecisionReviewable,
 	}}}
-	candidates := ClassicCleanupPlanCandidates(classicTargets)
+	candidates := ClassicCleanupPlanCandidates(classicTargets, types.PruneOptions{})
 	candidates = append(candidates, WorktreeCleanupPlanCandidates(worktreePlan, nil)...)
 
 	plan, err := BuildUnifiedCleanupPlan(context.Background(), candidates, CleanupPlanEvidence{})
@@ -237,7 +237,7 @@ func TestUnifiedCleanupPlanCountsNestedAgentStateOnce(t *testing.T) {
 	})
 	plan, err := BuildUnifiedCleanupPlan(
 		context.Background(),
-		ClassicCleanupPlanCandidates(targets),
+		ClassicCleanupPlanCandidates(targets, types.PruneOptions{Age: 30 * 24 * time.Hour}),
 		CleanupPlanEvidence{},
 	)
 	if err != nil {
@@ -266,7 +266,7 @@ func TestUnifiedCleanupPlanDescendantLockDominatesSelectedAgentState(t *testing.
 	selected := ClassicCleanupPlanCandidates(cleaner.Filter(
 		[]types.DebrisInfo{agentState},
 		types.PruneOptions{Age: 365 * 24 * time.Hour},
-	))
+	), types.PruneOptions{Age: 365 * 24 * time.Hour})
 	if got, want := len(selected), 1; got != want {
 		t.Fatalf("selected candidates = %d, want %d", got, want)
 	}
@@ -293,6 +293,27 @@ func TestUnifiedCleanupPlanDescendantLockDominatesSelectedAgentState(t *testing.
 	if totals.SelectedTargets != 0 || totals.SelectedBytes != 0 ||
 		totals.HardLockedTargets != 1 || totals.HardLockedBytes != 500 {
 		t.Fatalf("totals = %#v, descendant lock must dominate selected agent-state parent", totals)
+	}
+}
+
+func TestClassicCleanupPlanCandidatesPreserveVolumePressure(t *testing.T) {
+	cache := types.DebrisInfo{
+		Tool:     types.ToolBuildCache,
+		Category: types.CategoryBuildCache,
+		Path:     "/home/u/.cache/go-build",
+		Size:     100,
+		ModTime:  time.Now().Add(-time.Hour),
+	}
+	opts := types.PruneOptions{Age: 7 * 24 * time.Hour, RelaxCacheAge: true}
+	candidates := ClassicCleanupPlanCandidates([]types.DebrisInfo{cache}, opts)
+	if len(candidates) != 1 {
+		t.Fatalf("candidates = %d; want 1", len(candidates))
+	}
+	if !hasCleanupPlanReason(candidates[0].Reasons, CleanupPlanReasonVolumePressure) {
+		t.Fatalf("reasons = %#v; want volume_pressure", candidates[0].Reasons)
+	}
+	if hasCleanupPlanReason(candidates[0].Reasons, CleanupPlanReasonClassicEligible) {
+		t.Fatalf("reasons = %#v; pressure selection must not look like ordinary classic eligibility", candidates[0].Reasons)
 	}
 }
 
