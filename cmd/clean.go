@@ -765,22 +765,40 @@ func cleanScanSelector() string {
 }
 
 func tryCachedCleanScan(roots, excludes []string, selector string, showProgress bool) (*types.ScanResult, scanSource, bool) {
-	if len(excludes) != 0 {
+	if reason, skip := excludedCleanScanReason(roots, selector, excludes); skip {
+		printLastScanRescan(reason, showProgress)
 		return nil, scanSource{}, false
 	}
 	readAt := time.Now()
 	result, age, reason, ok := inspectCachedCleanScan(roots, selector)
-	if !ok {
-		printLastScanRescan(reason, showProgress)
+	if !ok || !claimLastScanSelector(selector) {
+		printLastScanRescan(cachedScanMissReason(ok, reason), showProgress)
 		return nil, scanSource{}, false
 	}
 	printLastScanReuse(age, showProgress)
-	stampLastScanSelector(selector)
 	return result, scanSource{
 		Kind:       scanSourceCached,
 		Age:        age,
 		ObservedAt: readAt.Add(-age),
 	}, true
+}
+
+func excludedCleanScanReason(roots []string, selector string, excludes []string) (string, bool) {
+	if len(excludes) == 0 {
+		return "", false
+	}
+	_, _, reason, ok := inspectLastScanCache(roots, selector)
+	if !ok && reason == "" {
+		return "", true
+	}
+	return "cleanup exclusions requested", true
+}
+
+func cachedScanMissReason(ok bool, reason string) string {
+	if !ok {
+		return reason
+	}
+	return "cache selector unavailable"
 }
 
 func inspectCachedCleanScan(roots []string, selector string) (*types.ScanResult, time.Duration, string, bool) {
@@ -818,14 +836,18 @@ func liveCleanScan(ctx context.Context, roots, excludes []string, selector strin
 }
 
 func runCleanScan(ctx context.Context, roots, excludes []string, showProgress bool) (*types.ScanResult, error) {
-	if !showProgress {
-		quietScanner := scanner.NewWithRetentionProviders(
-			scanner.DefaultScanner.Providers,
-			scanner.DefaultScanner.RetentionProviders,
-		)
-		quietScanner.ErrorWriter = io.Discard
-		return quietScanner.ScanWithOptions(ctx, types.ScanOptions{Roots: roots, Excludes: excludes})
+	if showProgress {
+		return runLiveCleanScan(ctx, roots, excludes)
 	}
+	quietScanner := scanner.NewWithRetentionProviders(
+		scanner.DefaultScanner.Providers,
+		scanner.DefaultScanner.RetentionProviders,
+	)
+	quietScanner.ErrorWriter = io.Discard
+	return quietScanner.ScanWithOptions(ctx, types.ScanOptions{Roots: roots, Excludes: excludes})
+}
+
+func runLiveCleanScan(ctx context.Context, roots, excludes []string) (*types.ScanResult, error) {
 	progress := newScanProgressPrinter(os.Stdout)
 	result, err := scanner.ScanWithOptions(ctx, types.ScanOptions{
 		Roots:      roots,

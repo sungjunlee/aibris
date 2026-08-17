@@ -16,71 +16,41 @@ import (
 )
 
 func TestMatchingCleanReusesLastScanAndSaysSo(t *testing.T) {
-	resetScanFlags()
-	resetCleanFlags()
-	home, workspace := reuseScanFixture(t)
-	testutil.SetHome(t, home)
-
-	captureOutput(func() {
-		rootCmd.SetArgs([]string{"scan", "--root", workspace})
-		rootCmd.Execute()
-	})
-	output := captureOutput(func() {
-		resetCleanFlags()
-		rootCmd.SetArgs([]string{"clean", "--dry-run", "--age=1h", "--root", workspace, "--category=node_modules"})
-		rootCmd.Execute()
-	})
-	if !strings.Contains(output, "using last scan from") {
-		t.Fatalf("same-selector clean missing reuse line:\n%s", output)
-	}
-	if strings.Contains(output, "scanning again:") {
-		t.Fatalf("same-selector clean rescanned:\n%s", output)
-	}
-	assertReuseReasonHasNoHome(t, output, home)
+	home, workspace := seededReuseWorkspace(t)
+	output := runCleanDryRun(t, workspace, "--category=node_modules")
+	assertReuseLine(t, output, "using last scan from", home)
 }
 
 func TestDifferentSelectorRescansWithReason(t *testing.T) {
-	resetCleanFlags()
 	home, workspace := reuseScanFixture(t)
-	testutil.SetHome(t, home)
-	resolved, err := scanner.NormalizeRoots([]string{workspace})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := saveLastScanCache(validReuseCache(resolved, "strip")); err != nil {
-		t.Fatal(err)
-	}
+	mustSaveReuseCache(t, workspace, "strip")
+	output := runCleanDryRun(t, workspace, "--category=node_modules")
+	assertReuseLine(t, output, "scanning again: different cleanup selectors", home)
+}
 
-	output := captureOutput(func() {
-		rootCmd.SetArgs([]string{"clean", "--dry-run", "--age=1h", "--root", workspace, "--category=node_modules"})
-		rootCmd.Execute()
-	})
-	if !strings.Contains(output, "scanning again: different cleanup selectors") {
-		t.Fatalf("cross-selector clean missing rescan reason:\n%s", output)
+func TestExcludeCleanSaysWhyItScansAgain(t *testing.T) {
+	home, workspace := seededReuseWorkspace(t)
+	output := runCleanDryRun(t, workspace, "--exclude", "workspace/tmp")
+	assertReuseLine(t, output, "scanning again: cleanup exclusions requested", home)
+}
+
+func TestPreSelectorSchemaLastScanCacheIsStale(t *testing.T) {
+	_, workspace := reuseScanFixture(t)
+	cache := validReuseCache(mustNormalizeRoots(t, workspace), "delete")
+	cache.SchemaVersion = 7
+	if err := saveLastScanCache(cache); err != nil {
+		t.Fatal(err)
 	}
-	if strings.Contains(output, "using last scan from") {
-		t.Fatalf("cross-selector clean reused silently:\n%s", output)
-	}
-	assertReuseReasonHasNoHome(t, output, home)
+	output := runCleanDryRun(t, workspace, "--category=node_modules")
+	assertReuseLine(t, output, "scanning again: cache stale", "")
 }
 
 func TestCachedStripStillRefusesWorkingDirectory(t *testing.T) {
-	resetCleanFlags()
 	home, worktree, unit := cachedStripCWDFixture(t)
-	resolved, err := scanner.NormalizeRoots([]string{home})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := saveLastScanCache(validReuseCache(resolved, "strip")); err != nil {
-		t.Fatal(err)
-	}
+	mustSaveReuseCache(t, home, "strip")
 	cleanStrip = true
 	defer resetCleanFlags()
-	if _, source, err := scanForClean(context.Background(), resolved, nil); err != nil {
-		t.Fatal(err)
-	} else if source.Kind != scanSourceCached {
-		t.Fatalf("scan source = %q; want cached", source.Kind)
-	}
+	assertCachedCleanScan(t, home)
 	targets, refused := selectStripTargets([]types.DebrisInfo{unit}, types.PruneOptions{Age: 7 * 24 * time.Hour}, worktree)
 	if len(targets) != 0 || len(refused) != 1 {
 		t.Fatalf("cached strip cwd barrier = %d targets / %d refused; want 0/1", len(targets), len(refused))
@@ -97,9 +67,71 @@ func cachedStripCWDFixture(t *testing.T) (home, worktree string, unit types.Debr
 	return home, worktree, unit
 }
 
+func seededReuseWorkspace(t *testing.T) (home, workspace string) {
+	t.Helper()
+	home, workspace = reuseScanFixture(t)
+	captureOutput(func() {
+		resetScanFlags()
+		rootCmd.SetArgs([]string{"scan", "--root", workspace})
+		rootCmd.Execute()
+	})
+	return home, workspace
+}
+
+func runCleanDryRun(t *testing.T, workspace string, extra ...string) string {
+	t.Helper()
+	resetCleanFlags()
+	args := append([]string{"clean", "--dry-run", "--age=1h", "--root", workspace}, extra...)
+	return captureOutput(func() {
+		rootCmd.SetArgs(args)
+		rootCmd.Execute()
+	})
+}
+
+func mustSaveReuseCache(t *testing.T, root, selector string) {
+	t.Helper()
+	if err := saveLastScanCache(validReuseCache(mustNormalizeRoots(t, root), selector)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func mustNormalizeRoots(t *testing.T, root string) []string {
+	t.Helper()
+	resolved, err := scanner.NormalizeRoots([]string{root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resolved
+}
+
+func assertCachedCleanScan(t *testing.T, root string) {
+	t.Helper()
+	_, source, err := scanForClean(context.Background(), mustNormalizeRoots(t, root), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if source.Kind != scanSourceCached {
+		t.Fatalf("scan source = %q; want cached", source.Kind)
+	}
+}
+
+func assertReuseLine(t *testing.T, output, want, home string) {
+	t.Helper()
+	if !strings.Contains(output, want) {
+		t.Fatalf("missing %q:\n%s", want, output)
+	}
+	if want != "using last scan from" && strings.Contains(output, "using last scan from") {
+		t.Fatalf("unexpected reuse:\n%s", output)
+	}
+	if home != "" {
+		assertReuseReasonHasNoHome(t, output, home)
+	}
+}
+
 func reuseScanFixture(t *testing.T) (home, workspace string) {
 	t.Helper()
 	home = t.TempDir()
+	testutil.SetHome(t, home)
 	workspace = filepath.Join(home, "workspace")
 	modules := filepath.Join(workspace, "app", "node_modules")
 	if err := os.MkdirAll(filepath.Join(modules, "pkg"), 0755); err != nil {

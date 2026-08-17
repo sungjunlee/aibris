@@ -15,7 +15,7 @@ import (
 const (
 	// Bump this explicit compatibility revision when cache format or provider
 	// behavior changes without a concrete provider-membership change.
-	lastScanCacheSchemaVersion = 7
+	lastScanCacheSchemaVersion = 8
 	lastScanCacheMaxAge        = 5 * time.Minute
 )
 
@@ -38,13 +38,8 @@ func writeLastScanCacheForSelector(roots []string, identity, selector string, re
 	if result == nil {
 		return
 	}
-	if result.Partial() {
-		invalidateLastScanCache()
-		return
-	}
-	evidence, err := captureLastScanTargetEvidence(result.Worktrees)
-	if err != nil {
-		invalidateLastScanCache()
+	evidence, ok := lastScanWriteEvidence(result)
+	if !ok {
 		return
 	}
 	_ = saveLastScanCache(lastScanCache{
@@ -57,6 +52,19 @@ func writeLastScanCacheForSelector(roots []string, identity, selector string, re
 		Result:                    *result,
 		TargetEvidence:            evidence,
 	})
+}
+
+func lastScanWriteEvidence(result *types.ScanResult) (map[string]lastScanTargetEvidence, bool) {
+	if result.Partial() {
+		invalidateLastScanCache()
+		return nil, false
+	}
+	evidence, err := captureLastScanTargetEvidence(result.Worktrees)
+	if err != nil {
+		invalidateLastScanCache()
+		return nil, false
+	}
+	return evidence, true
 }
 
 func invalidateLastScanCache() {
@@ -163,16 +171,31 @@ func lastScanSelectorReason(cached, want string) string {
 	return ""
 }
 
-func stampLastScanSelector(selector string) {
+func claimLastScanSelector(selector string) bool {
 	if selector == "" {
-		return
+		return true
 	}
 	cache, ok := readLastScanCache()
 	if !ok || cache.Selector == selector {
-		return
+		return ok
 	}
+	if cache.Selector != "" {
+		return false
+	}
+	return persistLastScanSelector(cache, selector)
+}
+
+func persistLastScanSelector(cache lastScanCache, selector string) bool {
 	cache.Selector = selector
-	_ = saveLastScanCache(cache)
+	if err := saveLastScanCache(cache); err != nil {
+		return false
+	}
+	return lastScanSelectorHeld(selector)
+}
+
+func lastScanSelectorHeld(selector string) bool {
+	cache, ok := readLastScanCache()
+	return ok && cache.Selector == selector
 }
 
 func readLastScanCache() (lastScanCache, bool) {
