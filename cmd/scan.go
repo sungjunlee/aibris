@@ -17,6 +17,7 @@ import (
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/types"
+	"github.com/sungjunlee/aibris/internal/volume"
 )
 
 var (
@@ -45,11 +46,11 @@ var scanCmd = &cobra.Command{
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
 			}
-		result, err := scanner.DefaultScanner.ScanWithOptions(ctx, types.ScanOptions{
-			Roots:       roots,
-			Diagnostics: scanDiagnostics,
-			Excludes:    scanExcludes,
-		})
+			result, err := scanner.DefaultScanner.ScanWithOptions(ctx, types.ScanOptions{
+				Roots:       roots,
+				Diagnostics: scanDiagnostics,
+				Excludes:    scanExcludes,
+			})
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
@@ -178,12 +179,26 @@ type jsonExclusions struct {
 	Rejected      []jsonRejectedExclude `json:"rejected"`
 }
 
+type jsonVolume struct {
+	Role                   string  `json:"role"`
+	FSType                 string  `json:"fs_type"`
+	ID                     string  `json:"id"`
+	TotalBytes             uint64  `json:"total_bytes"`
+	UsedBytes              uint64  `json:"used_bytes"`
+	AvailableBytes         uint64  `json:"available_bytes"`
+	UsedPercent            float64 `json:"used_percent"`
+	Band                   string  `json:"band"`
+	DebrisBytes            int64   `json:"debris_bytes"`
+	OtherVolumeDebrisBytes int64   `json:"other_volume_debris_bytes,omitempty"`
+}
+
 type jsonOutput struct {
 	SchemaVersion  int                      `json:"schema_version"`
 	Items          []jsonWorktree           `json:"items"`
 	Worktrees      []jsonWorktree           `json:"worktrees"`
 	Summary        jsonSummary              `json:"summary"`
 	Retention      jsonRetention            `json:"retention"`
+	Volume         *jsonVolume              `json:"volume,omitempty"`
 	Exclusions     *jsonExclusions          `json:"exclusions,omitempty"`
 	Partial        bool                     `json:"partial,omitempty"`
 	ProviderErrors []jsonProviderError      `json:"provider_errors,omitempty"`
@@ -288,6 +303,9 @@ func printJSON(r *types.ScanResult) {
 			StoreID: string(providerErr.StoreID),
 			Message: providerErr.Message,
 		}
+	}
+	if report := homeVolumeReport(r.Worktrees); report != nil {
+		out.Volume = jsonVolumeFromReport(*report)
 	}
 	for cat, s := range r.ByCategory {
 		out.Summary.ByCategory[string(cat)] = jsonSummaryEntry{Count: s.Count, Size: s.Size, StrippableBytes: s.StrippableBytes}
@@ -466,6 +484,7 @@ func printHumanScanResult(ctx context.Context, r *types.ScanResult) {
 	}
 	fmt.Printf("  found       %d %s\n", r.TotalCount, itemNoun(r.TotalCount))
 	fmt.Printf("  found size  %s\n", cleaner.FormatSize(r.TotalSize))
+	printVolumePressure(r.Worktrees)
 	if r.TotalStrippableBytes > 0 {
 		fmt.Printf("  strippable  %s regenerable subtrees inside worktrees (clean --strip)\n",
 			cleaner.FormatSize(r.TotalStrippableBytes))
@@ -499,6 +518,58 @@ func printHumanScanResult(ctx context.Context, r *types.ScanResult) {
 		fmt.Println("  aibris clean --dry-run")
 	}
 	fmt.Println("  aibris scan --json")
+}
+
+func homeVolumeReport(items []types.DebrisInfo) *volume.Report {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return nil
+	}
+	report, err := volume.Inspect(home)
+	if err != nil {
+		return nil
+	}
+	report.Role = "home"
+	dev, err := volume.PathDevice(home)
+	if err != nil {
+		dev = ""
+	}
+	on, other := volume.SplitDebris(dev, items)
+	report.DebrisBytes = on
+	report.OtherVolumeDebrisBytes = other
+	return &report
+}
+
+func jsonVolumeFromReport(report volume.Report) *jsonVolume {
+	return &jsonVolume{
+		Role:                   report.Role,
+		FSType:                 report.FSType,
+		ID:                     report.ID,
+		TotalBytes:             report.TotalBytes,
+		UsedBytes:              report.UsedBytes,
+		AvailableBytes:         report.AvailableBytes,
+		UsedPercent:            report.UsedPercent,
+		Band:                   string(report.Band),
+		DebrisBytes:            report.DebrisBytes,
+		OtherVolumeDebrisBytes: report.OtherVolumeDebrisBytes,
+	}
+}
+
+func printVolumePressure(items []types.DebrisInfo) {
+	report := homeVolumeReport(items)
+	if report == nil {
+		return
+	}
+	fmt.Printf("  volume     %s  %s  %.0f%% used   %s free   %s\n",
+		report.Role, report.FSType, report.UsedPercent,
+		cleaner.FormatSize(int64(report.AvailableBytes)), report.Band)
+	if report.OtherVolumeDebrisBytes > 0 {
+		fmt.Printf("  debris     %s on this volume   %s other volumes\n",
+			cleaner.FormatSize(report.DebrisBytes),
+			cleaner.FormatSize(report.OtherVolumeDebrisBytes))
+		return
+	}
+	fmt.Printf("  debris     %s on this volume\n", cleaner.FormatSize(report.DebrisBytes))
 }
 
 func printExclusionDiagnostics(r *types.ScanResult) {

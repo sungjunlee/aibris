@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -99,6 +100,57 @@ func TestScanCmd_NoWorktrees(t *testing.T) {
 		if !strings.Contains(output, want) {
 			t.Errorf("output missing %q; got: %s", want, output)
 		}
+	}
+}
+
+func TestScanReportsHomeVolumeWithoutMountPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("volume pressure is omitted on Windows")
+	}
+	resetScanFlags()
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	if err := os.WriteFile(filepath.Join(home, "marker"), []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	human := captureOutput(func() {
+		rootCmd.SetArgs([]string{"scan"})
+		rootCmd.Execute()
+	})
+	if !strings.Contains(human, "volume") || !strings.Contains(human, "% used") ||
+		!strings.Contains(human, "free") || !strings.Contains(human, "on this volume") {
+		t.Fatalf("human scan missing volume pressure:\n%s", human)
+	}
+	for _, line := range strings.Split(human, "\n") {
+		if !strings.Contains(line, "volume") && !strings.Contains(line, "debris") {
+			continue
+		}
+		if strings.Contains(line, home) || strings.Contains(line, "/Users/") {
+			t.Fatalf("volume stanza leaked a path: %q", line)
+		}
+	}
+
+	resetScanFlags()
+	raw := captureOutput(func() {
+		rootCmd.SetArgs([]string{"scan", "--json"})
+		rootCmd.Execute()
+	})
+	var out jsonOutput
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Volume == nil {
+		t.Fatal("scan JSON omitted volume on a unix home")
+	}
+	if out.Volume.Role != "home" || out.Volume.Band == "" || out.Volume.FSType == "" {
+		t.Fatalf("volume JSON incomplete: %+v", out.Volume)
+	}
+	if strings.Contains(out.Volume.ID, home) || strings.Contains(out.Volume.ID, "/") {
+		t.Fatalf("volume id leaked a path: %q", out.Volume.ID)
+	}
+	if out.SchemaVersion != scanJSONSchemaVersion {
+		t.Fatalf("schema_version = %d; want %d", out.SchemaVersion, scanJSONSchemaVersion)
 	}
 }
 
