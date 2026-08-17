@@ -49,7 +49,7 @@ var cleanCmd = &cobra.Command{
 	Short: "Clean up old AI tool debris",
 	Long: `Clean up old AI tool debris.
 
-With no classic cleanup filters, clean uses guided Codex worktree review by default when useful.
+With no classic cleanup filters, clean uses guided worktree review by default when useful.
 Guided worktree choices and classic candidates merge into one unified review and execution plan.
 Use --no-guide, or pass an explicit classic selector such as --category, --tool,
 --risky, --force, --include-active-worktrees, or --interactive to keep the
@@ -494,8 +494,8 @@ func init() {
 	cleanCmd.Flags().BoolVarP(&cleanInteractive, "interactive", "i", false, "Confirm each deletion")
 	cleanCmd.Flags().BoolVar(&cleanRisky, "risky", false, "Include risky categories (ai-logs)")
 	cleanCmd.Flags().BoolVarP(&cleanForce, "force", "f", false, "Skip confirmation prompt")
-	cleanCmd.Flags().BoolVar(&cleanGuide, "guide", false, "Guided Codex worktree cleanup review")
-	cleanCmd.Flags().BoolVar(&cleanNoGuide, "no-guide", false, "Use classic cleanup even when guided Codex review is available")
+	cleanCmd.Flags().BoolVar(&cleanGuide, "guide", false, "Guided worktree cleanup review")
+	cleanCmd.Flags().BoolVar(&cleanNoGuide, "no-guide", false, "Use classic cleanup even when guided worktree review is available")
 	cleanCmd.Flags().StringArrayVar(&cleanRoots, "root", nil, "Scan root under $HOME (repeatable)")
 	cleanCmd.Flags().StringArrayVar(&cleanExcludes, "exclude", nil, "Exclude a path or glob pattern under scan roots from discovery (repeatable)")
 	cleanCmd.Flags().BoolVar(&cleanIncludeActiveWorktrees, "include-active-worktrees", false, "Include active worktrees in cleanup candidates")
