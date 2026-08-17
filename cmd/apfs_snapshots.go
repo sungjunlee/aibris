@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/sungjunlee/aibris/internal/cleaner"
 )
 
 // apfsSnapshotPurgeBytes is the bounded thin request. It is not a delete of
@@ -39,9 +38,7 @@ func runAPFSSnapshotAction(dryRun, force bool) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("apfs snapshots")
-	fmt.Printf("  local     %d\n", count)
-	fmt.Printf("  request   %s at urgency %s\n", cleaner.FormatSize(apfsSnapshotPurgeBytes), apfsSnapshotUrgency)
+	printAPFSSnapshotPlan(count)
 	if dryRun {
 		fmt.Println("[DRY-RUN] No snapshots were thinned.")
 		return nil
@@ -50,19 +47,35 @@ func runAPFSSnapshotAction(dryRun, force bool) error {
 		fmt.Println("No local snapshots to thin.")
 		return nil
 	}
-	if !force {
-		fmt.Print("Thin local APFS snapshots? [y/N]: ")
-		var answer string
-		_, _ = fmt.Scanln(&answer)
-		if !strings.EqualFold(strings.TrimSpace(answer), "y") {
-			fmt.Println("Aborted.")
-			return nil
-		}
+	if !force && !confirmAPFSSnapshotThin() {
+		fmt.Println("Aborted.")
+		return nil
 	}
+	return thinAndReportAPFSSnapshots()
+}
+
+func printAPFSSnapshotPlan(count int) {
+	fmt.Println("apfs snapshots")
+	fmt.Printf("  local     %d\n", count)
+	fmt.Println("  Local snapshots are not Time Machine backups on an external disk.")
+	fmt.Println("  Finder / df free space may change only after thinning.")
+}
+
+func confirmAPFSSnapshotThin() bool {
+	fmt.Print("Thin local APFS snapshots? [y/N]: ")
+	var answer string
+	_, _ = fmt.Scanln(&answer)
+	return strings.EqualFold(strings.TrimSpace(answer), "y")
+}
+
+func thinAndReportAPFSSnapshots() error {
 	if err := apfsThinLocalSnapshots(); err != nil {
 		return err
 	}
 	fmt.Println("thinned local APFS snapshots")
+	if remaining, err := apfsListLocalSnapshots(); err == nil {
+		fmt.Printf("  remaining %d\n", remaining)
+	}
 	return nil
 }
 

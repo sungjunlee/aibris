@@ -53,3 +53,29 @@ func TestRunAPFSSnapshotActionUnavailableOffDarwin(t *testing.T) {
 		t.Fatalf("non-macOS = %v; want unavailable", err)
 	}
 }
+
+func TestPrintAPFSSnapshotPlanOmitsUrgencyAndPaths(t *testing.T) {
+	output := captureOutput(func() {
+		printAPFSSnapshotPlan(6)
+	})
+	for _, want := range []string{
+		"local     6",
+		"not Time Machine backups",
+		"Finder / df",
+		"after thinning",
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("plan missing %q:\n%s", want, output)
+		}
+	}
+	for _, leak := range []string{
+		"urgency",
+		"tmutil",
+		"/Users",
+		"2026-08-17",
+	} {
+		if strings.Contains(output, leak) {
+			t.Errorf("plan leaked %q:\n%s", leak, output)
+		}
+	}
+}
