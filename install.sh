@@ -208,7 +208,7 @@ zsh_fpath_contains() {
   local dir="$1"
   command -v zsh >/dev/null 2>&1 || return 1
   local listed
-  listed="$(zsh -fc 'print -rl -- $fpath' 2>/dev/null)" || return 1
+  listed="$(zsh -ic 'print -rl -- $fpath' 2>/dev/null)" || return 1
   printf '%s\n' "$listed" | grep -Fqx "$dir"
 }
 
