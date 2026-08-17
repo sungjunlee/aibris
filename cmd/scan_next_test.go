@@ -101,6 +101,33 @@ func TestScanReclaimPathsOmitsZeroAndPlainDir(t *testing.T) {
 	}
 }
 
+func TestStripEstimateMatchesCleanCWDRefusal(t *testing.T) {
+	base := t.TempDir()
+	active := filepath.Join(base, "active")
+	subtree := filepath.Join(active, "node_modules")
+	if err := os.MkdirAll(subtree, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-30 * 24 * time.Hour)
+	items := []types.DebrisInfo{{
+		ID: "active", Tool: types.ToolCodex, Category: types.CategoryWorktree,
+		Status: types.WorktreeActive, Path: active, Size: 3 * 1024 * 1024 * 1024, ModTime: old,
+		StrippableBytes: 2 * 1024 * 1024 * 1024,
+		StrippablePaths: []string{subtree},
+	}}
+	policy := scanNextPolicy()
+	if got := stripEstimateForCWD(items, policy, base); got != 2*1024*1024*1024 {
+		t.Fatalf("outside cwd strip = %d; want 2 GiB", got)
+	}
+	if got := stripEstimateForCWD(items, policy, active); got != 0 {
+		t.Fatalf("cwd-inside strip = %d; want 0 (clean --strip would refuse)", got)
+	}
+	targets, refused := selectStripTargets(items, policy, active)
+	if len(targets) != 0 || len(refused) != 1 {
+		t.Fatalf("clean strip plan = %d targets / %d refused; want 0/1", len(targets), len(refused))
+	}
+}
+
 func TestScanReclaimPathsOmitsPressureWhenItAddsNothing(t *testing.T) {
 	base := t.TempDir()
 	cache := filepath.Join(base, "go-build")

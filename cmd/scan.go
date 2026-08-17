@@ -573,10 +573,15 @@ func appendReclaimPath(paths []reclaimPath, label string, size int64, command st
 }
 
 func scanStripEstimate(items []types.DebrisInfo, opts types.PruneOptions) int64 {
-	merged, order := mergeStripEligibleByOwner(items, opts, time.Now())
+	cwd, _ := os.Getwd()
+	return stripEstimateForCWD(items, opts, cwd)
+}
+
+func stripEstimateForCWD(items []types.DebrisInfo, opts types.PruneOptions, cwd string) int64 {
+	targets, _ := selectStripTargets(items, opts, cwd)
 	var total int64
-	for _, key := range order {
-		total += merged[key].StrippableBytes
+	for _, target := range targets {
+		total += target.StrippableBytes
 	}
 	return total
 }
