@@ -59,6 +59,7 @@ const (
 	cleanReasonFiltered                      cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonFiltered)
 	cleanReasonRisky                         cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonRisky)
 	cleanReasonActiveWorktree                cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonActiveWorktree)
+	cleanReasonWorktreeReview                cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonWorktreeReview)
 	cleanReasonAge                           cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonAge)
 	cleanReasonAgentStateLive                cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonAgentStateLive)
 	cleanReasonAgentStateUndetermined        cleanAuditReason = cleanAuditReason(cleaner.EligibilityReasonAgentStateUndetermined)
@@ -593,6 +594,9 @@ func cleanAuditMainReason(row cleanAuditCategory, stats map[cleanAuditReason]cle
 	if row.BlockedCount == 0 && len(stats) == 0 {
 		return string(cleanReasonEligible)
 	}
+	if mixed := mixedWorktreeSkipReason(row, stats, opts); mixed != "" {
+		return mixed
+	}
 	var best cleanAuditReason
 	var bestStat cleanAuditReasonStat
 	for reason, stat := range stats {
@@ -607,6 +611,21 @@ func cleanAuditMainReason(row cleanAuditCategory, stats map[cleanAuditReason]cle
 	return cleanAuditReasonText(best, opts)
 }
 
+// mixedWorktreeSkipReason keeps review-only plain-dir visible when larger
+// active units would otherwise own the single main-reason column.
+func mixedWorktreeSkipReason(row cleanAuditCategory, stats map[cleanAuditReason]cleanAuditReasonStat, opts types.PruneOptions) string {
+	if row.Category != types.CategoryWorktree {
+		return ""
+	}
+	active := stats[cleanReasonActiveWorktree]
+	review := stats[cleanReasonWorktreeReview]
+	if active.Count == 0 || review.Count == 0 {
+		return ""
+	}
+	return cleanAuditReasonText(cleanReasonWorktreeReview, opts) + "; " +
+		cleanAuditReasonText(cleanReasonActiveWorktree, opts)
+}
+
 func cleanAuditReasonText(reason cleanAuditReason, opts types.PruneOptions) string {
 	switch reason {
 	case cleanReasonAge:
@@ -615,6 +634,8 @@ func cleanAuditReasonText(reason cleanAuditReason, opts types.PruneOptions) stri
 		return "requires --risky"
 	case cleanReasonActiveWorktree:
 		return "active worktree protected"
+	case cleanReasonWorktreeReview:
+		return "worktree status requires review"
 	case cleanReasonAgentStateMinIdleAge:
 		return "idle less than " + cleanAgeDisplay(opts.AgentStateMinIdleAge)
 	case cleanReasonFiltered:
