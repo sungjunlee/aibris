@@ -185,6 +185,14 @@ func TestCaptureCleanupTargetSnapshotRefusesLiveActivityDerivedTarget(t *testing
 	if _, err := captureCleanupTargetSnapshot(item, types.PruneOptions{Age: 7 * 24 * time.Hour, RelaxCacheAge: true}); err != nil {
 		t.Fatalf("pressure-selected young cache must pass preflight: %v", err)
 	}
+	pinned := types.PruneOptions{
+		Age:            7 * 24 * time.Hour,
+		RelaxCacheAge:  true,
+		PressureDevice: "other-volume",
+	}
+	if _, err := captureCleanupTargetSnapshot(item, pinned); err == nil {
+		t.Fatal("off-volume cache must keep the age preflight when automatic pressure is pinned")
+	}
 
 	item.ModTime = time.Now().Add(-8 * 24 * time.Hour)
 	if _, err := captureCleanupTargetSnapshot(item, types.PruneOptions{Age: 7 * 24 * time.Hour}); err != nil {

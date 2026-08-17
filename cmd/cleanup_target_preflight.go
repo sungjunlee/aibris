@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
+	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -123,7 +124,7 @@ func captureCleanupTargetSnapshot(
 	}
 	minimumAge := time.Duration(0)
 	if item.Category != types.CategoryAgentState && !isActiveWorktreeTarget(item) &&
-		!(opts.RelaxCacheAge && cacheAgeMayRelaxCategory(item.Category)) {
+		!cleaner.ShouldRelaxCacheAge(item, opts) {
 		minimumAge = opts.Age
 	}
 	snapshot := &cleanupTargetSnapshot{
@@ -142,10 +143,6 @@ func captureCleanupTargetSnapshot(
 		return nil, fmt.Errorf("cleanup target changed since scan: %w", err)
 	}
 	return snapshot, nil
-}
-
-func cacheAgeMayRelaxCategory(category types.Category) bool {
-	return category == types.CategoryBuildCache || category == types.CategoryOtherCache
 }
 
 // validate is the last line of defence: it runs inside the pre-mutation

@@ -76,13 +76,21 @@ func EvaluateEligibility(item types.DebrisInfo, opts types.PruneOptions, observe
 		}
 	}
 	if !item.ModTime.Before(observedAt.Add(-opts.Age)) {
-		if opts.RelaxCacheAge && cacheAgeMayRelax(item.Category) &&
-			itemOnPressureVolume(item.Path, opts.PressureDevice) {
+		if ShouldRelaxCacheAge(item, opts) {
 			return true, EligibilityReasonVolumePressure
 		}
 		return false, EligibilityReasonAge
 	}
 	return true, EligibilityReasonEligible
+}
+
+// ShouldRelaxCacheAge reports whether this official cache may ignore --age
+// because of volume pressure. Explicit --pressure leaves PressureDevice
+// empty and applies to every official cache; automatic critical mode pins
+// the home-volume device so off-volume caches keep the age floor.
+func ShouldRelaxCacheAge(item types.DebrisInfo, opts types.PruneOptions) bool {
+	return opts.RelaxCacheAge && cacheAgeMayRelax(item.Category) &&
+		itemOnPressureVolume(item.Path, opts.PressureDevice)
 }
 
 func cacheAgeMayRelax(category types.Category) bool {
