@@ -86,6 +86,42 @@ func TestWorktreeAdapter_StripInventoryDirectWorktree(t *testing.T) {
 	}
 }
 
+func TestWorktreeAdapter_StripInventoryPythonVenvFlutterAndNestedNodeModules(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	checkout := filepath.Join(home, ".codex", "worktrees", "multi", "proj")
+	createWorktreeGit(t, checkout, filepath.Join(home, "main-repo"), "multi")
+	writeStripFixtureFile(t, checkout, "pyproject.toml", 8)
+	writeStripFixtureFile(t, checkout, ".venv/lib/python/site.py", 4096)
+	writeStripFixtureFile(t, checkout, "pubspec.yaml", 8)
+	writeStripFixtureFile(t, checkout, "build/app.dill", 2048)
+	writeStripFixtureFile(t, checkout, "functions/package.json", 16)
+	writeStripFixtureFile(t, checkout, "functions/node_modules/dep/index.js", 1024)
+	// Deeper than one child must stay out of inventory.
+	writeStripFixtureFile(t, checkout, "apps/web/package.json", 16)
+	writeStripFixtureFile(t, checkout, "apps/web/node_modules/dep/index.js", 512)
+
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	canonicalCheckout := canonicalExistingPath(checkout)
+	wantPaths := []string{
+		filepath.Join(canonicalCheckout, ".venv"),
+		filepath.Join(canonicalCheckout, "build"),
+		filepath.Join(canonicalCheckout, "functions", "node_modules"),
+	}
+	if !reflect.DeepEqual(results[0].StrippablePaths, wantPaths) {
+		t.Fatalf("StrippablePaths = %v; want %v", results[0].StrippablePaths, wantPaths)
+	}
+	if min := int64(4096 + 2048 + 1024); results[0].StrippableBytes < min {
+		t.Errorf("StrippableBytes = %d; want at least %d", results[0].StrippableBytes, min)
+	}
+}
+
 func TestWorktreeAdapter_StripInventoryRequiresMarkersAndFixedPositions(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
