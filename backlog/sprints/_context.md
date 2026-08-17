@@ -44,9 +44,11 @@
   change.
 - #221 shipped on main via PR #226 (2026-08-17), including the #227 cwd
   barrier. `clean --strip` is a third disposition beside protect and delete.
-- 0.11.x has no open implementation PRs. #218 is a decision, not an
-  implementation, about whether `node_modules` and `ai-logs` follow in-tree
-  activity. Do not start that change without an explicit call.
+- The post-v0.11.0 reclaim UX sprint is active (`cmd/**`). Batch 1 shipped
+  (#253/#254/#256 via PRs #260/#261/#259). Remaining: #255+#258, then #257.
+  #218 is a decision, not an implementation, about whether `node_modules`
+  and `ai-logs` follow in-tree activity. Do not start that change without
+  an explicit call.
 - Milestone #9 `0.x Automation & Schema` is closed. Milestone #8 `0.x OSS
   Distribution & Release Trust` remains open (#118, #120, #121, #122).
   Long-horizon work stays in the existing `Future` milestone.
