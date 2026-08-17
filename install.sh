@@ -320,13 +320,29 @@ $(shell_path_hint)
 EOF
 }
 
+# main_version_ldflags stamps cmd.version with a commit-identifying
+# main-<shortsha> so `install.sh main` is not the bare string "dev".
+main_version_ldflags() {
+  local src="$1"
+  local sha
+  sha="$(git -C "$src" rev-parse --short=12 HEAD)" || {
+    err "could not resolve main commit"
+    exit 1
+  }
+  printf '%s\n' "-s -w -X github.com/sungjunlee/aibris/cmd.version=main-${sha}"
+}
+
 install_from_main() {
   need go
-  local tmp
+  need git
+  local tmp src
   tmp="$(mktemp -d)"
   TMP_ROOT="$tmp"
+  src="${tmp}/src"
   log "Building ${BINARY} from ${REPO}@main..."
-  GOBIN="${tmp}/bin" go install "github.com/${REPO}@main"
+  git clone --depth 1 "https://github.com/${REPO}.git" "$src"
+  # Clone the same commit go would build; stamp it so --version is not "dev".
+  GOBIN="${tmp}/bin" go -C "$src" install -ldflags "$(main_version_ldflags "$src")" .
   install_binary "${tmp}/bin/${BINARY}"
 }
 
