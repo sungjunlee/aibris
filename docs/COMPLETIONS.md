@@ -19,6 +19,21 @@ install. **The installer never edits shell profile files** (`.bashrc`,
 `.zshrc`, `config.fish`); if a completion file is not picked up automatically,
 wire up the directory yourself.
 
+### zsh `fpath`
+
+Stock macOS zsh and Oh My Zsh include Homebrew and system `site-functions` on
+`fpath`, but they do **not** include `~/.local/share/zsh/site-functions`.
+`install.sh` still writes `_aibris` there (it never edits `.zshrc`). Add the
+directory yourself, **before** `compinit`:
+
+```zsh
+# ~/.zshrc — before autoload -U compinit && compinit
+fpath=("$HOME/.local/share/zsh/site-functions" $fpath)
+```
+
+Then open a new shell or run `compinit`. `install.sh` prints a one-line hint
+when it cannot see that path on the current `fpath`.
+
 PowerShell completions are not auto-installed. Load them manually from the
 release archive:
 

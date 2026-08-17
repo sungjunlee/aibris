@@ -198,6 +198,36 @@ install_one_completion() {
   fi
 }
 
+zsh_site_functions_dir() {
+  printf '%s\n' "${HOME}/.local/share/zsh/site-functions"
+}
+
+# zsh_fpath_contains reports whether dir is already on the current zsh fpath.
+# Probe with login+interactive zsh so both .zprofile and .zshrc are read.
+# Missing zsh is "cannot detect", not success.
+zsh_fpath_contains() {
+  local dir="$1"
+  command -v zsh >/dev/null 2>&1 || return 1
+  local listed
+  listed="$(zsh -lic 'print -rl -- $fpath' 2>/dev/null)" || return 1
+  printf '%s\n' "$listed" | grep -Fqx "$dir"
+}
+
+print_zsh_fpath_hint() {
+  local dir
+  dir="$(zsh_site_functions_dir)"
+  log "zsh: add $(display_path "$dir") to fpath before compinit; see docs/COMPLETIONS.md"
+}
+
+maybe_hint_zsh_fpath() {
+  local dir
+  dir="$(zsh_site_functions_dir)"
+  if zsh_fpath_contains "$dir"; then
+    return 0
+  fi
+  print_zsh_fpath_hint
+}
+
 install_completions() {
   # Install shell completions into standard per-user locations. Best-effort:
   # failures warn and never abort the install. This never edits shell profile
@@ -212,8 +242,9 @@ install_completions() {
     "${HOME}/.local/share/bash-completion/completions" \
     "${HOME}/.local/share/bash-completion/completions/aibris"
   install_one_completion zsh \
-    "${HOME}/.local/share/zsh/site-functions" \
-    "${HOME}/.local/share/zsh/site-functions/_aibris"
+    "$(zsh_site_functions_dir)" \
+    "$(zsh_site_functions_dir)/_aibris"
+  maybe_hint_zsh_fpath
   install_one_completion fish \
     "${HOME}/.config/fish/completions" \
     "${HOME}/.config/fish/completions/aibris.fish"

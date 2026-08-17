@@ -216,6 +216,40 @@ main_version_ldflags "$1"
 	}
 }
 
+func TestInstallScriptZshFpathHintWhenNotOnFpath(t *testing.T) {
+	home := t.TempDir()
+	output := runInstallSnippet(t, home, `
+source ./install.sh
+print_zsh_fpath_hint
+`)
+	want := "zsh: add ~/.local/share/zsh/site-functions to fpath before compinit; see docs/COMPLETIONS.md"
+	if !strings.Contains(output, want) {
+		t.Fatalf("zsh fpath hint missing %q; output:\n%s", want, output)
+	}
+	if strings.Contains(output, ".zshrc") {
+		t.Fatalf("installer must not edit or instruct writing .zshrc; output:\n%s", output)
+	}
+}
+
+func TestCompletionsDocDocumentsZshFpathSnippet(t *testing.T) {
+	data, err := os.ReadFile("docs/COMPLETIONS.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	for _, want := range []string{
+		"fpath",
+		`fpath=("$HOME/.local/share/zsh/site-functions" $fpath)`,
+		"before",
+		"compinit",
+		"never edits",
+	} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("COMPLETIONS.md missing %q", want)
+		}
+	}
+}
+
 func TestInstallScriptInstallBinaryToDefaultDirWithoutSudo(t *testing.T) {
 	home := t.TempDir()
 	source := filepath.Join(t.TempDir(), "aibris")
