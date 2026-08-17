@@ -490,37 +490,25 @@ func TestStripReportsNoErrorWhenEverySubtreeWasSkipped(t *testing.T) {
 }
 
 func TestPrintStripOutcomesAccountsPlanAndKeepReasons(t *testing.T) {
-	outcomes := []stripUnitOutcome{
-		{
-			Item:  types.DebrisInfo{ID: "ok", Category: types.CategoryWorktree, StrippableBytes: 2000},
-			Freed: 2000,
-			Subtrees: []stripSubtreeOutcome{
-				{Path: "ok/node_modules", Bytes: 2000},
-			},
-		},
-		{
-			Item: types.DebrisInfo{ID: "blocked", Category: types.CategoryWorktree, StrippableBytes: 400},
-			Subtrees: []stripSubtreeOutcome{
-				{Path: "blocked/.venv", Skipped: "git evidence unavailable"},
-			},
-		},
-	}
-
-	got := summarizeStripOutcomes(outcomes)
-	if got.planned != 2 || got.stripped != 1 || got.freed != 2000 {
-		t.Fatalf("plan = %d/%d freed %d; want 1/2 freed 2000", got.stripped, got.planned, got.freed)
-	}
-	if got.kept != 1 || got.keptBytes != 400 {
-		t.Fatalf("kept = %d/%d; want 1/400", got.kept, got.keptBytes)
-	}
-	if len(got.keepReasons) != 1 || got.keepReasons[0] != "git evidence unavailable" {
-		t.Fatalf("keep reasons = %v", got.keepReasons)
-	}
-
-	output := captureOutput(func() { printStripOutcomes(outcomes) })
+	outcomes := mixedStripCloserOutcomes()
+	got := summarizeStripOutcomes(outcomes, 2)
+	assertStripCloserCounts(t, got, 2, 1, 2000, 1, 400)
+	output := captureOutput(func() { printStripOutcomes(outcomes, 2) })
 	assertStripCloserReportsKeep(t, output, "stripped  1/2 units", "kept      1 unit")
 	if strings.Contains(output, "failed") {
 		t.Errorf("keep labeled as a failed deletion:\n%s", output)
+	}
+}
+
+func TestPrintStripCloserKeepsPlannedCountOnPartialRun(t *testing.T) {
+	outcomes := mixedStripCloserOutcomes()[:1]
+	got := summarizeStripOutcomes(outcomes, 5)
+	if got.planned != 5 || got.stripped != 1 || got.kept != 0 {
+		t.Fatalf("partial closer = %+v; want planned 5 stripped 1 kept 0", got)
+	}
+	output := captureOutput(func() { printStripOutcomes(outcomes, 5) })
+	if !strings.Contains(output, "stripped  1/5 units") {
+		t.Fatalf("partial closer missing planned count:\n%s", output)
 	}
 }
 
@@ -540,8 +528,40 @@ func TestExecuteStripMixedGitKeepIsSkipNotFailure(t *testing.T) {
 		t.Fatalf("mixed strip treated a Git keep as failure: %v", err)
 	}
 	assertMixedStripKeep(t, outcomes, worktree, keptUnit)
-	output := captureOutput(func() { printStripOutcomes(outcomes) })
+	output := captureOutput(func() { printStripOutcomes(outcomes, len(targets)) })
 	assertStripCloserReportsKeep(t, output, "stripped  1/2 units", "kept      1 unit")
+}
+
+func mixedStripCloserOutcomes() []stripUnitOutcome {
+	return []stripUnitOutcome{
+		{
+			Item:  types.DebrisInfo{ID: "ok", Category: types.CategoryWorktree, StrippableBytes: 2000},
+			Freed: 2000,
+			Subtrees: []stripSubtreeOutcome{
+				{Path: "ok/node_modules", Bytes: 2000},
+			},
+		},
+		{
+			Item: types.DebrisInfo{ID: "blocked", Category: types.CategoryWorktree, StrippableBytes: 400},
+			Subtrees: []stripSubtreeOutcome{
+				{Path: "blocked/.venv", Skipped: "git evidence unavailable"},
+			},
+		},
+	}
+}
+
+func assertStripCloserCounts(t *testing.T, got stripCloser, planned, stripped int, freed int64, kept int, keptBytes int64) {
+	t.Helper()
+	if got.planned != planned || got.stripped != stripped || got.freed != freed {
+		t.Fatalf("plan = %d/%d freed %d; want %d/%d freed %d",
+			got.stripped, got.planned, got.freed, stripped, planned, freed)
+	}
+	if got.kept != kept || got.keptBytes != keptBytes {
+		t.Fatalf("kept = %d/%d; want %d/%d", got.kept, got.keptBytes, kept, keptBytes)
+	}
+	if len(got.keepReasons) != 1 || got.keepReasons[0] != "git evidence unavailable" {
+		t.Fatalf("keep reasons = %v", got.keepReasons)
+	}
 }
 
 func newStripNoEvidenceUnit(t *testing.T, home string) string {

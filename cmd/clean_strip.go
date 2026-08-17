@@ -101,7 +101,7 @@ func runStripClean() {
 		return
 	}
 	outcomes, err := executeStripTargets(ctx, targets, cwd)
-	printStripOutcomes(outcomes)
+	printStripOutcomes(outcomes, len(targets))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error during strip: %v\n", err)
 		os.Exit(1)
@@ -471,11 +471,11 @@ func stripSubtreeGitSafe(ctx context.Context, checkoutDir, subtreePath string) (
 	return "", true
 }
 
-func printStripOutcomes(outcomes []stripUnitOutcome) {
+func printStripOutcomes(outcomes []stripUnitOutcome, planned int) {
 	for _, outcome := range outcomes {
 		printStripUnitOutcome(outcome)
 	}
-	printStripCloser(summarizeStripOutcomes(outcomes))
+	printStripCloser(summarizeStripOutcomes(outcomes, planned))
 }
 
 func printStripUnitOutcome(outcome stripUnitOutcome) {
@@ -506,9 +506,12 @@ type stripCloser struct {
 	keepReasons []string
 }
 
-func summarizeStripOutcomes(outcomes []stripUnitOutcome) stripCloser {
+func summarizeStripOutcomes(outcomes []stripUnitOutcome, planned int) stripCloser {
 	var closer stripCloser
-	closer.planned = len(outcomes)
+	closer.planned = planned
+	if closer.planned < len(outcomes) {
+		closer.planned = len(outcomes)
+	}
 	reasons := make(map[string]struct{})
 	for _, outcome := range outcomes {
 		accountStripUnit(outcome, &closer, reasons)
