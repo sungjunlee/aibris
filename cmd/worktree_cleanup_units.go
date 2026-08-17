@@ -154,12 +154,16 @@ func discoverGitWorktreeMembers(ctx context.Context, targetPath string) ([]GitWo
 			continue
 		}
 		// Registered two-level layout: <owner>/<leaf>/<checkout>/.git.
-		// Only accept a leaf when every checkout sibling has a marker.
+		// A mixed leaf fail-closes the whole owner; empty leftover leaves
+		// are ignored.
 		nested, mixed, err := twoLevelGitWorktreePaths(ctx, memberPath)
 		if err != nil {
 			return nil, err
 		}
-		if mixed || len(nested) == 0 {
+		if mixed {
+			return nil, nil
+		}
+		if len(nested) == 0 {
 			continue
 		}
 		for _, nestedPath := range nested {

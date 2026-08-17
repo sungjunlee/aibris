@@ -123,6 +123,19 @@ func TestBuildWorktreeCleanupUnits(t *testing.T) {
 			wantUnits: 0,
 		},
 		{
+			name: "mixed leaf drops the whole owner",
+			buildItems: func(t *testing.T, root string) []types.DebrisInfo {
+				target := filepath.Join(root, "worktrees", "owner")
+				createCleanupUnitGitFile(t, filepath.Join(target, "good", "checkout"), "good")
+				createCleanupUnitGitFile(t, filepath.Join(target, "bad", "checkout"), "bad")
+				if err := os.MkdirAll(filepath.Join(target, "bad", "sibling"), 0755); err != nil {
+					t.Fatal(err)
+				}
+				return []types.DebrisInfo{cleanupUnitItem(target, 250, ".relay")}
+			},
+			wantUnits: 0,
+		},
+		{
 			name: "irrelevant non-worktree input",
 			buildItems: func(t *testing.T, root string) []types.DebrisInfo {
 				target := filepath.Join(root, "node_modules")
