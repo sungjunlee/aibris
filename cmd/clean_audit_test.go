@@ -163,6 +163,61 @@ func TestBuildCleanAudit_EligibilityMatchesFilterForMixedCategories(t *testing.T
 	}
 }
 
+func TestBuildCleanAudit_WorktreeMainReasonShowsPlainDirBesideActive(t *testing.T) {
+	now := time.Now()
+	old := now.Add(-48 * time.Hour)
+	opts := types.PruneOptions{Age: 24 * time.Hour}
+	items := []types.DebrisInfo{
+		{
+			ID: "active-large", Tool: types.ToolUnknown, Category: types.CategoryWorktree,
+			Size: 3 << 30, ModTime: old, Status: types.WorktreeActive,
+			Path: "/tmp/home/.relay/worktrees/active-large",
+		},
+		{
+			ID: "plain-a", Tool: types.ToolUnknown, Category: types.CategoryWorktree,
+			Size: 400 << 20, ModTime: old, Status: types.WorktreePlain,
+			Path: "/tmp/home/.relay/worktrees/plain-a",
+		},
+		{
+			ID: "plain-b", Tool: types.ToolUnknown, Category: types.CategoryWorktree,
+			Size: 200 << 20, ModTime: old, Status: types.WorktreePlain,
+			Path: "/tmp/home/.relay/worktrees/plain-b",
+		},
+		{
+			ID: "orphaned", Tool: types.ToolUnknown, Category: types.CategoryWorktree,
+			Size: 50 << 20, ModTime: old, Status: types.WorktreeOrphaned,
+			Path: "/tmp/home/.relay/worktrees/orphaned",
+		},
+	}
+	targets := cleaner.Filter(items, opts)
+	if len(targets) != 1 || targets[0].ID != "orphaned" {
+		t.Fatalf("selection changed: %+v", targets)
+	}
+
+	audit := buildCleanAudit(items, targets, opts, 1, scanSource{Kind: scanSourceLive}, nil)
+	row := findAuditCategory(t, audit, types.CategoryWorktree)
+	if row.EligibleCount != 1 || row.BlockedCount != 3 {
+		t.Fatalf("worktree counts = eligible %d blocked %d; want 1/3", row.EligibleCount, row.BlockedCount)
+	}
+	if !strings.Contains(row.MainReason, "worktree status requires review") {
+		t.Fatalf("main reason hid review-only skips: %q", row.MainReason)
+	}
+	if !strings.Contains(row.MainReason, "active worktree protected") {
+		t.Fatalf("main reason hid skipped-active: %q", row.MainReason)
+	}
+	if row.MainReason == "active worktree protected" {
+		t.Fatalf("main reason reported active-protected as the sole skip class")
+	}
+
+	output := captureOutput(func() {
+		printCleanAudit(audit, opts)
+	})
+	if !strings.Contains(output, "worktree status requires review") ||
+		!strings.Contains(output, "active worktree protected") {
+		t.Fatalf("classic summary hid a skip class:\n%s", output)
+	}
+}
+
 func TestCleanAuditReasonTextReportsAgentStateMinIdleAge(t *testing.T) {
 	opts := types.PruneOptions{
 		Age:                  7 * 24 * time.Hour,
