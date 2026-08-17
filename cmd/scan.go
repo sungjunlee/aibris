@@ -544,7 +544,40 @@ func printScanNext(r *types.ScanResult) {
 	} else {
 		printReclaimLadder(scanReclaimPaths(r.Worktrees, scanDefaultCleanPolicy()))
 	}
+	printReviewOnlyWorktrees(r.Worktrees)
 	fmt.Println("  aibris scan --json")
+}
+
+func isReviewOnlyWorktree(item types.DebrisInfo) bool {
+	return item.Category == types.CategoryWorktree &&
+		item.Status != types.WorktreeActive &&
+		item.Status != types.WorktreeOrphaned
+}
+
+func countReviewOnlyWorktrees(items []types.DebrisInfo) int {
+	n := 0
+	for _, item := range items {
+		if isReviewOnlyWorktree(item) {
+			n++
+		}
+	}
+	return n
+}
+
+func printReviewOnlyWorktrees(items []types.DebrisInfo) {
+	printReviewOnlyWorktreeCount(countReviewOnlyWorktrees(items))
+}
+
+func printReviewOnlyWorktreeCount(n int) {
+	if n == 0 {
+		return
+	}
+	noun := "units"
+	if n == 1 {
+		noun = "unit"
+	}
+	fmt.Printf("  review-only worktrees  %d %s   not cleanable; inspect mixed/missing .git markers\n",
+		n, noun)
 }
 
 func printReclaimLadder(paths []reclaimPath) {

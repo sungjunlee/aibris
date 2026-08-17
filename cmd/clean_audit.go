@@ -34,6 +34,7 @@ type cleanAudit struct {
 	TotalEligibleSize  int64
 	TotalBlockedCount  int
 	TotalBlockedSize   int64
+	ReviewOnlyCount    int
 	Categories         []cleanAuditCategory
 	// Components is the route-neutral physical inventory projection used by
 	// machine-readable dry-run output. It is deliberately not rendered by the
@@ -320,6 +321,7 @@ func buildPhysicalCleanAuditWithLogicalInputs(
 		}
 		return left.FoundSize > right.FoundSize
 	})
+	audit.ReviewOnlyCount = countReviewOnlyWorktrees(items)
 	return audit
 }
 
@@ -695,7 +697,14 @@ func cleanAuditScanSourceLine(source scanSource) string {
 func printCleanAudit(audit cleanAudit, opts types.PruneOptions) {
 	fmt.Printf("  policy  %s\n", cleanAuditPolicyLine(opts))
 	fmt.Printf("  scan    %s\n\n", cleanAuditScanSourceLine(audit.Source))
+	printCleanAuditSummary(audit)
+	if len(audit.Categories) > 0 {
+		printCleanAuditCategories(audit)
+	}
+	printReviewOnlyWorktreeCount(audit.ReviewOnlyCount)
+}
 
+func printCleanAuditSummary(audit cleanAudit) {
 	fmt.Println("scan summary")
 	fmt.Printf("  scanned    %d sources   %d physical %s   %s   %d evidence rows\n",
 		audit.ScannedSources,
@@ -707,10 +716,9 @@ func printCleanAudit(audit cleanAudit, opts types.PruneOptions) {
 		audit.TotalEligibleCount, itemNoun(audit.TotalEligibleCount), cleaner.FormatSize(audit.TotalEligibleSize))
 	fmt.Printf("  protected/skipped %d %s   %s\n\n",
 		audit.TotalBlockedCount, itemNoun(audit.TotalBlockedCount), cleaner.FormatSize(audit.TotalBlockedSize))
+}
 
-	if len(audit.Categories) == 0 {
-		return
-	}
+func printCleanAuditCategories(audit cleanAudit) {
 	fmt.Println("by category")
 	fmt.Printf("  %-13s %12s %12s %18s %8s  %s\n",
 		"category", "found", "eligible", "protected/skipped", "evidence", "main reason")

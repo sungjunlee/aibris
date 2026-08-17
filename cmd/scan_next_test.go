@@ -96,6 +96,10 @@ func TestScanReclaimPathsOmitsZeroAndPlainDir(t *testing.T) {
 	if strings.Contains(output, plain) || strings.Contains(output, "plain-dir") {
 		t.Errorf("next leaked review-only path or status:\n%s", output)
 	}
+	if !strings.Contains(output, "review-only worktrees  1 unit") ||
+		!strings.Contains(output, "not cleanable") {
+		t.Fatalf("next missing review-only inspection line:\n%s", output)
+	}
 	if !strings.Contains(output, "aibris scan --json") {
 		t.Fatalf("next missing scan --json:\n%s", output)
 	}
@@ -176,6 +180,56 @@ func TestPrintHumanScanResultNextUsesReclaimLadder(t *testing.T) {
 	}
 	if strings.Contains(output, "aibris clean --strip --dry-run") {
 		t.Fatalf("zero strip path should be omitted:\n%s", output)
+	}
+	if strings.Contains(output, "review-only worktrees") {
+		t.Fatalf("review-only line should be omitted when the count is zero:\n%s", output)
+	}
+}
+
+func TestReviewOnlyWorktreesStayOffCleanupFlags(t *testing.T) {
+	plain, items := reviewOnlyScanFixture(t)
+	wide := types.PruneOptions{Age: time.Nanosecond, Risky: true, IncludeActiveWorktrees: true}
+	if paths := scanReclaimPaths(items, wide); len(paths) != 0 {
+		t.Fatalf("review-only opened reclaim paths: %+v", paths)
+	}
+	output := captureOutput(func() {
+		printScanNext(&types.ScanResult{Worktrees: items, TotalCount: 1})
+	})
+	assertReviewOnlyNextLine(t, output, plain)
+}
+
+func reviewOnlyScanFixture(t *testing.T) (string, []types.DebrisInfo) {
+	t.Helper()
+	plain := filepath.Join(t.TempDir(), "plain")
+	if err := os.MkdirAll(filepath.Join(plain, "node_modules"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	item := types.DebrisInfo{
+		ID: "plain", Tool: types.ToolCodex, Category: types.CategoryWorktree,
+		Status: types.WorktreePlain, Path: plain, Size: 9 << 30,
+		ModTime:         time.Now().Add(-30 * 24 * time.Hour),
+		StrippableBytes: 1 << 30, StrippablePaths: []string{filepath.Join(plain, "node_modules")},
+	}
+	return plain, []types.DebrisInfo{item}
+}
+
+func assertReviewOnlyNextLine(t *testing.T, output, path string) {
+	t.Helper()
+	if !strings.Contains(output, "review-only worktrees  1 unit") ||
+		!strings.Contains(output, "not cleanable") {
+		t.Fatalf("missing review-only next:\n%s", output)
+	}
+	if strings.Contains(output, path) || strings.Contains(output, "plain-dir") {
+		t.Fatalf("review-only next leaked path or status:\n%s", output)
+	}
+	for _, command := range []string{
+		"aibris clean --dry-run",
+		"aibris clean --strip",
+		"--fix-markers",
+	} {
+		if strings.Contains(output, command) {
+			t.Fatalf("review-only listed %q:\n%s", command, output)
+		}
 	}
 }
 

@@ -216,6 +216,13 @@ func TestBuildCleanAudit_WorktreeMainReasonShowsPlainDirBesideActive(t *testing.
 		!strings.Contains(output, "active worktree protected") {
 		t.Fatalf("classic summary hid a skip class:\n%s", output)
 	}
+	if !strings.Contains(output, "review-only worktrees  2 units") ||
+		!strings.Contains(output, "not cleanable") {
+		t.Fatalf("classic summary missing review-only next:\n%s", output)
+	}
+	if strings.Contains(output, "plain-a") || strings.Contains(output, "plain-b") {
+		t.Fatalf("classic summary leaked review-only unit ids:\n%s", output)
+	}
 }
 
 func TestCleanAuditReasonTextReportsVolumePressure(t *testing.T) {
