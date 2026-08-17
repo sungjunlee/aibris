@@ -631,6 +631,12 @@ func TestEvaluateEligibility_VolumePressureRelaxesOfficialCachesOnly(t *testing.
 	if eligible, reason := EvaluateEligibility(gradle, off, observedAt); eligible || reason != EligibilityReasonAge {
 		t.Fatalf("without pressure, young cache = %t/%q; want false/%q", eligible, reason, EligibilityReasonAge)
 	}
+
+	pinned := opts
+	pinned.PressureDevice = "device:other"
+	if eligible, reason := EvaluateEligibility(gradle, pinned, observedAt); eligible || reason != EligibilityReasonAge {
+		t.Fatalf("off-volume cache under auto pressure = %t/%q; want false/%q", eligible, reason, EligibilityReasonAge)
+	}
 }
 
 // TestEvaluateEligibility_AgentStateMinIdleAgeBoundaryIsHeld pins the exact

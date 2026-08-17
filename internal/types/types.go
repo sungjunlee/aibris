@@ -289,4 +289,7 @@ type PruneOptions struct {
 	// other-cache) even when they are newer than Age. Worktree, agent-state,
 	// and risky categories keep their existing gates.
 	RelaxCacheAge bool
+	// PressureDevice, when set, limits RelaxCacheAge to items on that volume.
+	// Empty means every official cache may relax (explicit --pressure).
+	PressureDevice string
 }

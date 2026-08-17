@@ -225,8 +225,12 @@ func TestCleanAuditReasonTextReportsVolumePressure(t *testing.T) {
 }
 
 func TestShouldRelaxCacheAgeHonorsExplicitPressure(t *testing.T) {
-	if !shouldRelaxCacheAge(true) {
+	relax, device := shouldRelaxCacheAge(true)
+	if !relax {
 		t.Fatal("--pressure must relax official cache age even when the volume is not critical")
+	}
+	if device != "" {
+		t.Fatalf("explicit --pressure must not pin a volume device; got %q", device)
 	}
 }
 
