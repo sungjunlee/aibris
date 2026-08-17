@@ -921,3 +921,54 @@ with exit status 1, empty stdout, and the stable route error. No real-home
 deletion was attempted, and no local paths were recorded; the pre-tag
 real-home evidence remains the read-only evidence captured in the release
 notes.
+
+## 2026-08-17 v0.11.0 pre-tag protected-weight dogfood
+
+Installed from `main` with `install.sh main`. The binary reported
+`aibris version main-4283c7884f40`. The installer printed the zsh `fpath`
+hint and did not edit rc files.
+
+Real `$HOME` work was read-only: `scan`, `clean --no-guide --dry-run --json`,
+`clean --strip --dry-run`, and `clean --no-guide --pressure --dry-run --json`.
+No deletion-mode command ran against the real home. Recorded figures are
+aggregates only.
+
+Human `scan` reported:
+
+| Field | Value |
+| --- | ---: |
+| found | 236 items / 20.1 GB |
+| volume | home, apfs, 90% used, 46.8 GB free, band `low` |
+| debris on that volume | 20.1 GB |
+| strippable | 2.5 GB |
+| default clean estimate | 42.3 MB |
+
+The path-redacted default plan (`schema_version: 1`, `document_type:
+clean_plan`, `mode: dry_run`, `paths_included: false`) had complete live
+evidence and no home-path leak:
+
+| Plan state | Physical targets | Bytes |
+| --- | ---: | ---: |
+| physical | 236 | 21,560,411,530 B |
+| selected | 4 | 44,380,160 B |
+| reviewable | 2 | 3,510,272 B |
+| protected | 131 | 6,424,588,288 B |
+| skipped | 99 | 15,087,932,810 B |
+
+Worktree safety held: 85 rows `worktree_requires_review` (plain-dir /
+mixed-marker owners) and 12 `active_worktree` protected. `--pressure` raised
+selected targets from 4 to 10 and labeled 6 official-cache rows
+`volume_pressure`; 3 rows stayed `minimum_age`. Volume band was `low`, so
+automatic critical relaxation did not apply.
+
+`clean --strip --dry-run` listed 5 candidates / 2.5 GB, including a
+registered two-level checkout under a non-Codex owner, and ended
+`[DRY-RUN] No files were removed.`
+
+An isolated temporary HOME then verified mutation. Default dry-run selected
+one 4,096-byte `node_modules` target and skipped a 1-byte young official
+cache as `minimum_age`. `--pressure --category=build-cache` selected that
+young cache as `volume_pressure`. Classic execution with
+`--no-guide --json --force --category=node_modules` emitted a
+`clean_receipt` schema version 1 with status `succeeded`, `requested: 1`,
+`removed: 1`, and `freed_bytes: 4096`. Only the fixture target was deleted.

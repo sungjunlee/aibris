@@ -7,21 +7,24 @@ date, or compatibility promise.
 Milestones are capability and quality gates rather than schedules. Releases
 are cut only after the relevant behavior is dogfooded and explicitly approved.
 
-## Current: 0.11.x Protected-Weight Reclamation
+## Current: after v0.11.0
 
-Implementation for this milestone is on `main` and unreleased. The remaining
-item is a decision, not more code:
-
-- admit worktree units from any agent tool into guided review (#141, #228)
-- strip regenerable subtrees from protected worktrees (`clean --strip`,
-  #221 / #226, with the cwd barrier from #227)
-- decide whether `node_modules` and `ai-logs` should follow the in-tree
-  activity signal (#218)
-
-`--guide` no longer implying `--tool codex` is a documented 0.x default
-change. The next tag should be v0.11.0 after dogfood, with upgrade notes.
+v0.11.0 is the next published tag after dogfood. Remaining 0.x work is the
+open OSS distribution track (#118, #120, #121, #122), not more 0.11
+implementation. #218 stays a keep-current decision: `node_modules` still
+uses container mtime, and `ai-logs` stay behind `--risky`.
 
 ## Shipped
+
+### 0.11.0 Protected-Weight Reclamation
+
+Published after the 2026-08-17 dogfood pass:
+
+- all-tools guided worktree review (`--guide` no longer implies `--tool codex`)
+- `clean --strip` for regenerable subtrees in protected worktrees
+- home-volume pressure on scan and optional `--pressure` cache-age relaxation
+- registered two-level worktree members, opt-in APFS snapshot thinning, and
+  expanded official caches
 
 ### 0.10.0 / 0.10.x Agent State Store Coverage
 
