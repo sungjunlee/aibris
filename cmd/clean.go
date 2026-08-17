@@ -202,8 +202,8 @@ without deleting the unit, its branch, or any uncommitted work.`,
 			Force:                  cleanForce,
 			IncludeActiveWorktrees: cleanIncludeActiveWorktrees,
 			AgentStateMinIdleAge:   agentStateGrace,
-			RelaxCacheAge:          shouldRelaxCacheAge(cleanPressure),
 		}
+		opts.RelaxCacheAge, opts.PressureDevice = shouldRelaxCacheAge(cleanPressure)
 
 		// The route is only settled after the scan. A receipt file requested on
 		// a run that resolved to classic fails here, before any mutation.
@@ -605,21 +605,25 @@ func chooseCleanExperience(input cleanExperienceInput) (cleanExperience, string,
 }
 
 // shouldRelaxCacheAge reports whether official regenerable caches may ignore
-// --age. --pressure always enables it. Otherwise the home volume must be in
-// the documented critical band (≥95% used).
-func shouldRelaxCacheAge(explicit bool) bool {
+// --age. --pressure always enables it for every official cache. Automatic
+// critical-volume mode only relaxes caches on the home volume.
+func shouldRelaxCacheAge(explicit bool) (bool, string) {
 	if explicit {
-		return true
+		return true, ""
 	}
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
-		return false
+		return false, ""
 	}
 	report, err := volume.Inspect(home)
-	if err != nil {
-		return false
+	if err != nil || report.Band != volume.BandCritical {
+		return false, ""
 	}
-	return report.Band == volume.BandCritical
+	dev, err := volume.PathDevice(home)
+	if err != nil {
+		return false, ""
+	}
+	return true, dev
 }
 
 func (input cleanExperienceInput) hasClassicSelector() bool {

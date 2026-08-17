@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/types"
+	"github.com/sungjunlee/aibris/internal/volume"
 )
 
 // DefaultAgentStateMinIdleAge is the default recency floor applied to orphaned
@@ -75,7 +76,8 @@ func EvaluateEligibility(item types.DebrisInfo, opts types.PruneOptions, observe
 		}
 	}
 	if !item.ModTime.Before(observedAt.Add(-opts.Age)) {
-		if opts.RelaxCacheAge && cacheAgeMayRelax(item.Category) {
+		if opts.RelaxCacheAge && cacheAgeMayRelax(item.Category) &&
+			itemOnPressureVolume(item.Path, opts.PressureDevice) {
 			return true, EligibilityReasonVolumePressure
 		}
 		return false, EligibilityReasonAge
@@ -85,6 +87,14 @@ func EvaluateEligibility(item types.DebrisInfo, opts types.PruneOptions, observe
 
 func cacheAgeMayRelax(category types.Category) bool {
 	return category == types.CategoryBuildCache || category == types.CategoryOtherCache
+}
+
+func itemOnPressureVolume(path, device string) bool {
+	if device == "" {
+		return true
+	}
+	got, err := volume.PathDevice(path)
+	return err == nil && got == device
 }
 
 // EvaluateStripEligibility reports whether an item may have its regenerable

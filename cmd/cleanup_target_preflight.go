@@ -122,7 +122,8 @@ func captureCleanupTargetSnapshot(
 		info = current
 	}
 	minimumAge := time.Duration(0)
-	if item.Category != types.CategoryAgentState && !isActiveWorktreeTarget(item) {
+	if item.Category != types.CategoryAgentState && !isActiveWorktreeTarget(item) &&
+		!(opts.RelaxCacheAge && cacheAgeMayRelaxCategory(item.Category)) {
 		minimumAge = opts.Age
 	}
 	snapshot := &cleanupTargetSnapshot{
@@ -141,6 +142,10 @@ func captureCleanupTargetSnapshot(
 		return nil, fmt.Errorf("cleanup target changed since scan: %w", err)
 	}
 	return snapshot, nil
+}
+
+func cacheAgeMayRelaxCategory(category types.Category) bool {
+	return category == types.CategoryBuildCache || category == types.CategoryOtherCache
 }
 
 // validate is the last line of defence: it runs inside the pre-mutation

@@ -206,8 +206,8 @@ func runCleanJSON(cmd *cobra.Command) {
 		Force:                  cleanForce,
 		IncludeActiveWorktrees: cleanIncludeActiveWorktrees,
 		AgentStateMinIdleAge:   agentStateGrace,
-		RelaxCacheAge:          shouldRelaxCacheAge(cleanPressure),
 	}
+	opts.RelaxCacheAge, opts.PressureDevice = shouldRelaxCacheAge(cleanPressure)
 	var guidedStatePtr *guidedCleanState
 	if experience == cleanExperienceGuided {
 		guidedState.Reason = reason

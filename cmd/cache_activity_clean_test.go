@@ -182,6 +182,9 @@ func TestCaptureCleanupTargetSnapshotRefusesLiveActivityDerivedTarget(t *testing
 	if _, err := captureCleanupTargetSnapshot(item, types.PruneOptions{Age: 7 * 24 * time.Hour}); err == nil {
 		t.Fatal("captureCleanupTargetSnapshot() error = nil; want a minimum-age refusal for live in-tree activity")
 	}
+	if _, err := captureCleanupTargetSnapshot(item, types.PruneOptions{Age: 7 * 24 * time.Hour, RelaxCacheAge: true}); err != nil {
+		t.Fatalf("pressure-selected young cache must pass preflight: %v", err)
+	}
 
 	item.ModTime = time.Now().Add(-8 * 24 * time.Hour)
 	if _, err := captureCleanupTargetSnapshot(item, types.PruneOptions{Age: 7 * 24 * time.Hour}); err != nil {
