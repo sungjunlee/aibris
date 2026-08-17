@@ -79,6 +79,17 @@ func thinAndReportAPFSSnapshots() error {
 	return nil
 }
 
+func formatTMUtilError(args []string, err error, out []byte) error {
+	name := "tmutil"
+	if len(args) > 0 {
+		name += " " + args[0]
+	}
+	if trimmed := bytes.TrimSpace(out); len(trimmed) > 0 {
+		return fmt.Errorf("%s: %w\n%s", name, err, trimmed)
+	}
+	return fmt.Errorf("%s: %w", name, err)
+}
+
 func parseLocalSnapshotCount(output []byte) int {
 	n := 0
 	for _, line := range bytes.Split(output, []byte("\n")) {
