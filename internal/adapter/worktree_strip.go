@@ -29,7 +29,10 @@ var pythonProjectMarkers = []string{
 // worktreeStripCandidates returns regenerable subtree candidates at fixed
 // known-relative positions inside the checkout rooted at checkoutPath, gated
 // by detected project-type markers. Candidates may not exist; callers filter.
-func worktreeStripCandidates(checkoutPath string) []string {
+func worktreeStripCandidates(ctx context.Context, checkoutPath string) []string {
+	if err := ctx.Err(); err != nil {
+		return nil
+	}
 	var candidates []string
 	for _, marker := range jsProjectManifestMarkers {
 		if stripMarkerFileExists(filepath.Join(checkoutPath, marker)) {
@@ -59,19 +62,22 @@ func worktreeStripCandidates(checkoutPath string) []string {
 	if stripMarkerFileExists(filepath.Join(checkoutPath, "pubspec.yaml")) {
 		candidates = append(candidates, filepath.Join(checkoutPath, "build"))
 	}
-	candidates = append(candidates, nestedJSNodeModules(checkoutPath)...)
+	candidates = append(candidates, nestedJSNodeModules(ctx, checkoutPath)...)
 	return candidates
 }
 
 // nestedJSNodeModules inventories node_modules under a direct child that has
 // its own package.json. One extra level only; no recursive manifest walk.
-func nestedJSNodeModules(checkoutPath string) []string {
+func nestedJSNodeModules(ctx context.Context, checkoutPath string) []string {
 	entries, err := os.ReadDir(checkoutPath)
 	if err != nil {
 		return nil
 	}
 	var candidates []string
 	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return candidates
+		}
 		if !entry.IsDir() || entry.Name() == "node_modules" || isHiddenDir(entry.Name()) {
 			continue
 		}
@@ -97,7 +103,7 @@ func (a *WorktreeAdapter) strippableSubtrees(ctx context.Context, checkoutPath s
 		return 0, nil
 	}
 	var paths []string
-	for _, candidate := range worktreeStripCandidates(checkoutPath) {
+	for _, candidate := range worktreeStripCandidates(ctx, checkoutPath) {
 		if stripMarkerDirExists(candidate) {
 			paths = append(paths, candidate)
 		}
