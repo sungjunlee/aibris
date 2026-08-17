@@ -50,7 +50,7 @@ var cleanCmd = &cobra.Command{
 	Short: "Clean up old AI tool debris",
 	Long: `Clean up old AI tool debris.
 
-With no classic cleanup filters, clean uses guided Codex worktree review by default when useful.
+With no classic cleanup filters, clean uses guided worktree review by default when useful.
 Guided worktree choices and classic candidates merge into one unified review and execution plan.
 Use --no-guide, or pass an explicit classic selector such as --category, --tool,
 --risky, --force, --include-active-worktrees, or --interactive to keep the
@@ -508,8 +508,8 @@ func init() {
 	cleanCmd.Flags().BoolVarP(&cleanInteractive, "interactive", "i", false, "Confirm each deletion")
 	cleanCmd.Flags().BoolVar(&cleanRisky, "risky", false, "Include risky categories (ai-logs)")
 	cleanCmd.Flags().BoolVarP(&cleanForce, "force", "f", false, "Skip confirmation prompt")
-	cleanCmd.Flags().BoolVar(&cleanGuide, "guide", false, "Guided Codex worktree cleanup review")
-	cleanCmd.Flags().BoolVar(&cleanNoGuide, "no-guide", false, "Use classic cleanup even when guided Codex review is available")
+	cleanCmd.Flags().BoolVar(&cleanGuide, "guide", false, "Guided worktree cleanup review")
+	cleanCmd.Flags().BoolVar(&cleanNoGuide, "no-guide", false, "Use classic cleanup even when guided worktree review is available")
 	cleanCmd.Flags().BoolVar(&cleanStrip, "strip", false, "Strip regenerable subtrees from protected worktrees instead of deleting units")
 	cleanCmd.Flags().StringArrayVar(&cleanRoots, "root", nil, "Scan root under $HOME (repeatable)")
 	cleanCmd.Flags().StringArrayVar(&cleanExcludes, "exclude", nil, "Exclude a path or glob pattern under scan roots from discovery (repeatable)")
@@ -532,9 +532,9 @@ func applyGuidedCleanDefaults(cmd *cobra.Command, age time.Duration) time.Durati
 	if cleanCategory == "" {
 		cleanCategory = string(types.CategoryWorktree)
 	}
-	if cleanTools == "" {
-		cleanTools = string(types.ToolCodex)
-	}
+	// --guide no longer narrows to Codex. Guided review is built on Git
+	// evidence, which every tool's worktree carries, so leaving the tool
+	// filter empty admits them all; --tool still narrows when asked.
 	return guidedCleanAge(cmd, age)
 }
 
@@ -629,12 +629,9 @@ func isGuidedCodexCleanupPressureValuable(unitCount int, totalSize int64) bool {
 }
 
 func guidedCodexCleanupPressure(ctx context.Context, items []types.DebrisInfo) (int, int64) {
-	candidates := make([]types.DebrisInfo, 0, len(items))
-	for _, item := range items {
-		if isActiveCodexWorktree(item) && item.Source == ".codex" {
-			candidates = append(candidates, item)
-		}
-	}
+	// Pressure is measured over every tool's active worktrees, matching what
+	// guided review will actually show once it opens.
+	candidates := activeWorktrees(items)
 
 	units, err := buildWorktreeCleanupUnits(ctx, candidates)
 	if err != nil || len(units) == 0 {

@@ -3,8 +3,8 @@
 ## Architecture Decisions
 
 - `aibris` remains a conservative scanner/executor, while plain no-filter
-  `clean` may choose the guided Codex decision path. Explicit cleanup selectors
-  and `--no-guide` preserve the classic executor path.
+  `clean` may choose the guided worktree review path. Explicit cleanup
+  selectors and `--no-guide` preserve the classic executor path.
 - `active` worktree status is structural linked health, not recent liveness.
   Automatic recommendations must combine Git recoverability, activity,
   retention, age, and size rather than age-only filtering.
@@ -13,6 +13,10 @@
   final confirmation.
 - `$HOME` scan coverage is the product promise, but it must prune high-noise
   personal/system directories and reject roots outside `$HOME`.
+- Guided review admits every tool's active worktrees. A registered
+  session-activity reader exists only for Codex; other tools are reviewable
+  with `activity_source_not_registered` and are never auto-recommended. The
+  6-hour recent-activity hard lock is tool-independent.
 
 ## Known Follow-Ups
 
@@ -33,11 +37,17 @@
   dogfood recorded in `docs/DOGFOOD.md`.
 - The 0.10.x agent-state coverage sprint closed with its actionable scope
   shipped. #142 L2/L3 remain externally blocked on producer identity and
-  all-writer fencing; do not manufacture a local cleanup proof. #141 remains
-  parked at `0a47323` and requires a fresh-main audit before publication.
-- Planned follow-on milestones have no due dates: #8 `0.x OSS Distribution &
-  Release Trust` and #9 `0.x Automation & Schema`. Long-horizon configuration
-  and performance work stays in the existing `Future` milestone.
+  all-writer fencing; do not manufacture a local cleanup proof.
+- #141 shipped on main via PR #228 (2026-08-17). `--guide` no longer implies
+  `--tool codex`. The parked branch `issue-141-guided-review-all-worktree-tools`
+  at `0a47323` is obsolete. The next release must note the documented default
+  change.
+- 0.11.x Protected-Weight Reclamation is the current track. #221 strip is in
+  review (PRs #226 / #227). #218 is a decision, not an implementation, about
+  whether `node_modules` and `ai-logs` follow in-tree activity.
+- Milestone #9 `0.x Automation & Schema` is closed. Milestone #8 `0.x OSS
+  Distribution & Release Trust` remains open (#118, #120, #121, #122).
+  Long-horizon work stays in the existing `Future` milestone.
 
 ## Release Posture
 
@@ -48,3 +58,5 @@
   release is cut only after its behavior is dogfooded and explicitly approved.
 - Open release-gate issues may outlive their implementation sprint. Never mark
   one complete merely to close a sprint; carry it as explicitly deferred work.
+- Do not cut v0.10.1 while #221 is still in flight; the next tag should be
+  v0.11.0 after strip lands, or a later call if that review slips.

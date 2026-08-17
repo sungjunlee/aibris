@@ -795,7 +795,7 @@ func TestCleanCmd_HelpDocumentsDefaultGuidedCleanAndNoGuide(t *testing.T) {
 	})
 
 	for _, want := range []string{
-		"With no classic cleanup filters, clean uses guided Codex worktree review by default when useful.",
+		"With no classic cleanup filters, clean uses guided worktree review by default when useful.",
 		"Guided worktree choices and classic candidates merge into one unified review and execution plan.",
 		"selected targets enter the cleanup plan",
 		"reviewable targets",
@@ -803,7 +803,7 @@ func TestCleanCmd_HelpDocumentsDefaultGuidedCleanAndNoGuide(t *testing.T) {
 		"review displays protected targets as locked rows",
 		"Minimum idle age",
 		"--no-guide",
-		"Use classic cleanup even when guided Codex review is available",
+		"Use classic cleanup even when guided worktree review is available",
 	} {
 		if !strings.Contains(output, want) {
 			t.Errorf("help output missing %q; got: %s", want, output)

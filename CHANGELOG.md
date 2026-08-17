@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Guided worktree review admits units from every agent tool, not only Codex.
+  The 2026-07-26 coverage audit found the audited home's largest worktree was
+  a 1.5 GB claude unit idle 93 days that no default path could reach: the
+  classic route protects it as active, and guided review skipped it because
+  admission was keyed on the tool rather than on the Git evidence every
+  worktree carries. `--guide` no longer implies `--tool codex` — it still
+  implies `--category worktree`, but leaves the tool filter empty, and
+  `--tool` still narrows when passed.
+- A registered session-activity reader exists only for Codex. Units from any
+  other tool now report `not-registered`, which is distinct from an outage:
+  there is no reader to fail, so a missing reader no longer hard-locks the
+  unit out of review. A registered reader that exists and failed still does.
+  Such a unit is reviewable with the new `activity_source_not_registered`
+  reason and is never recommended automatically, because idleness resting on
+  HEAD reflog and scanner mtime alone does not justify a recommendation.
+- The 6-hour recent-activity hard lock now applies to every tool. HEAD reflog
+  and scanner metadata date any worktree, so a unit touched inside the window
+  stays locked whether or not its tool has a registered reader. Every other
+  existing hard lock is unchanged: working-directory containment, dirty or
+  untracked members, unreadable Git evidence, and a detached HEAD unreachable
+  from a named ref.
+
 ### Added
 
 - `aibris clean --strip` removes regenerable subtrees (`node_modules`,

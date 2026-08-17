@@ -468,8 +468,10 @@ func TestApplyGuidedCleanDefaultsUsesMinimumIdleAgeOnlyWhenAgeOmitted(t *testing
 	if cleanCategory != string(types.CategoryWorktree) {
 		t.Fatalf("cleanCategory = %q; want worktree", cleanCategory)
 	}
-	if cleanTools != string(types.ToolCodex) {
-		t.Fatalf("cleanTools = %q; want codex", cleanTools)
+	// --guide no longer narrows to Codex: an empty tool filter admits every
+	// tool's worktrees into review.
+	if cleanTools != "" {
+		t.Fatalf("cleanTools = %q; want empty so --guide admits every tool", cleanTools)
 	}
 
 	resetCleanFlags()
@@ -587,4 +589,33 @@ func guidedCleanItem(id string, size int64) types.DebrisInfo {
 
 func guidedCleanTestActivity() codexActivityIndex {
 	return codexActivityIndex{Available: true, Source: codexActivitySourceCache}
+}
+
+// TestActiveWorktreesAdmitsEveryTool pins the admission rule #141 changed.
+// The audited home's largest worktree was a claude unit at
+// .claude/worktrees/<unit>; guided review skipped it because admission was
+// keyed on the tool rather than on the Git evidence every worktree carries.
+func TestActiveWorktreesAdmitsEveryTool(t *testing.T) {
+	items := []types.DebrisInfo{
+		{Tool: types.ToolCodex, Category: types.CategoryWorktree, Status: types.WorktreeActive, Path: "/h/.codex/worktrees/a"},
+		{Tool: types.ToolClaude, Category: types.CategoryWorktree, Status: types.WorktreeActive, Path: "/h/.claude/worktrees/b"},
+		{Tool: types.ToolCursor, Category: types.CategoryWorktree, Status: types.WorktreeActive, Path: "/h/.cursor/worktrees/c"},
+		{Tool: types.ToolUnknown, Category: types.CategoryWorktree, Status: types.WorktreeActive, Path: "/h/other/worktrees/d"},
+		// Excluded for reasons that are not the tool.
+		{Tool: types.ToolClaude, Category: types.CategoryWorktree, Status: types.WorktreeOrphaned, Path: "/h/.claude/worktrees/e"},
+		{Tool: types.ToolClaude, Category: types.CategoryNodeModules, Status: types.WorktreeActive, Path: "/h/proj/node_modules"},
+	}
+
+	got := activeWorktrees(items)
+	if len(got) != 4 {
+		t.Fatalf("admitted %d units; want 4 (every tool's active worktree)", len(got))
+	}
+	for _, item := range got {
+		if item.Category != types.CategoryWorktree || item.Status != types.WorktreeActive {
+			t.Errorf("admitted %+v; want only active worktrees", item)
+		}
+	}
+	if admitted := activeCodexWorktrees(items); len(admitted) != 1 {
+		t.Errorf("codex-only admission = %d; want 1 (the narrow helper must keep its meaning)", len(admitted))
+	}
 }

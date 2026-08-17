@@ -7,77 +7,70 @@ date, or compatibility promise.
 Milestones are capability and quality gates rather than schedules. Releases
 are cut only after the relevant behavior is dogfooded and explicitly approved.
 
-## Current: 0.8.x Reliability & Trust
+## Current: 0.11.x Protected-Weight Reclamation
 
-- make default cleanup show all relevant categories
-- make selector, execution-failure, and partial-scan outcomes unambiguous
-- lock user-visible CLI contracts with compiled-process tests
-- keep security and community documentation aligned with shipped behavior
+Recover bytes from worktree units that protection correctly refuses to delete,
+and make every agent tool's worktrees reachable by review. Strip is a third
+option beside protect and delete, not a widened delete.
 
-The milestone may produce a 0.8.x patch release, but it has no promised date.
+- admit worktree units from any agent tool into guided review (#141, shipped
+  on main via #228; next tag)
+- strip regenerable subtrees from protected worktrees (#221, PRs #226 / #227)
+- decide whether `node_modules` and `ai-logs` should follow the in-tree
+  activity signal (#218)
 
-## Next: 0.9.x Unified Cleanup Experience
+`--guide` no longer implying `--tool codex` is a documented 0.x default
+change. The next release must carry upgrade notes.
 
-- represent guided and classic cleanup candidates in one plan
-- review mixed categories through one selection experience
-- execute one normalized selection with one receipt and confirmation contract
-- dogfood the complete journey before any release decision
+## Shipped
 
-## Then: 0.10.x Agent State Store Coverage
+### 0.10.0 / 0.10.x Agent State Store Coverage
 
-The 2026-07-26 coverage audit in `docs/DOGFOOD.md` measured one real developer
-home and found aibris discovering about 15% of the agent-produced debris surface
-while fully covering generic build debris that general-purpose cleaners already
-handle. The gap is provider coverage, not policy or rendering.
-
-The milestone is substantially covered. Shipped since the audit:
+Published 2026-08-09. Actionable provider coverage shipped; remaining leaves
+are parked or blocked:
 
 - proof-based orphan cleanup for Claude and Cursor recorded-cwd project stores
-  (#138) — the first no-age-gate category
-- worktree container coverage from any agent tool via the finite exact registry
-  plus the bounded `$HOME` convention fallback (#140)
-- store-nature classification for the uncovered byproduct stores (#142 L1)
-- a read-only `codex-sessions` retention inventory with UTC-month buckets and
-  orphan statistics (#139, re-scoped 2026-08-06; execution layer parked)
+  (#138)
+- worktree container coverage via the finite exact registry plus the bounded
+  `$HOME` convention fallback (#140)
+- store-nature classification for uncovered byproduct stores (#142 L1)
+- a read-only `codex-sessions` retention inventory (#139; execution parked)
+- #142 L2/L3 stay blocked on producer-documented layouts and fencing
+- session / transcript / run-manifest stores beyond Codex stay future work
 
-Most remaining work is either parked with the execution layer or blocked on
-upstream producer cooperation:
+Unreleased on `main` since the tag: `--exclude`, packaged completions and man
+pages, explicit system-temp-dir roots, `--diagnostics`, README first-cleanup
+restructure, `CODEX_HOME` / `AIBRIS_CODEX_HOMES`, `--receipt-file`,
+`--agent-state-grace`, in-tree cache activity, and #141.
 
-- inventory session, transcript, and run-manifest stores beyond codex-sessions
-  (cursor chats, relay runs, gstack projects) — future provider leaves under
-  the same root/unit/timestamp discipline
-- retention execution (selector, manifest, executor) stays parked per #139
-  re-scope
-- cover agent byproduct stores (#142 L2/L3; blocked on producer-documented
-  versioned layouts and cooperative exclusion protocols)
+### 0.9.0 Unified Cleanup Experience
 
-Locally implementable leaves remain:
+One plan, one mixed-category review, one confirmation and receipt contract.
 
-- find worktree containers regardless of nesting depth and member layout
-- admit worktree units from any agent tool into guided review
+### 0.8.x Reliability & Trust
 
-Transcripts are user content. Surfacing them is in scope; reclaiming them by
-default is not.
+Selector, execution-failure, and partial-scan outcomes made unambiguous;
+CLI contracts locked with compiled-process tests.
 
 ## Parallel 0.x Tracks
 
 ### OSS Distribution & Release Trust
 
-- verified Homebrew installation
-- packaged completions and manual pages
-- an explicit Windows support contract
-- SBOM and artifact provenance
-- curated release notes and public link checks
+- packaged completions and manual pages (shipped, #119)
+- verified Homebrew installation (#118)
+- an explicit Windows support contract (#120)
+- SBOM and artifact provenance (#121)
+- curated release notes and public link checks (#122)
 
 ### Automation & Schema
 
-- a versioned scan JSON schema
-- machine-readable clean plans and receipts
-- provider timing and diagnostics
-- a documented 0.x compatibility and deprecation policy
+Complete and closed 2026-08-17. Shipped a versioned scan JSON schema,
+machine-readable clean plans and receipts, provider diagnostics, and
+`docs/COMPATIBILITY.md`.
 
 ## Future
 
-Configuration, exclusions, ignore rules, and repeatable full-home performance
-budgets remain future work. Priorities may change based on dogfooding and user
-feedback; none of these tracks schedules v1.0.0.
+Repeatable full-home performance budgets, parked retention execution, and
+further session-store providers remain future work. Exclusions and project
+ignore rules already shipped (#128). Priorities may change based on
+dogfooding and user feedback; none of these tracks schedules v1.0.0.

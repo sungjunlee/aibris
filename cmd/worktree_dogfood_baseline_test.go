@@ -116,7 +116,7 @@ func baselineCleanupUnit(name, repository string, size int64, activity time.Time
 		Members:                []GitWorktreeMember{baselineCleanupMember(target, repository)},
 		LastActivity:           activity,
 		ActivityAvailable:      true,
-		CodexActivityAvailable: true,
+		RegisteredActivityAvailable: true,
 	}
 }
 
