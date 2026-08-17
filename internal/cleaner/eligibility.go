@@ -24,6 +24,7 @@ const (
 	EligibilityReasonAgentStateLive         EligibilityReason = "live agent-state protected"
 	EligibilityReasonAgentStateUndetermined EligibilityReason = "undetermined agent-state protected"
 	EligibilityReasonAgentStateMinIdleAge   EligibilityReason = "orphaned agent-state within minimum idle age"
+	EligibilityReasonVolumePressure         EligibilityReason = "selected because of volume pressure"
 	EligibilityReasonEligible               EligibilityReason = "eligible for cleanup"
 )
 
@@ -74,9 +75,16 @@ func EvaluateEligibility(item types.DebrisInfo, opts types.PruneOptions, observe
 		}
 	}
 	if !item.ModTime.Before(observedAt.Add(-opts.Age)) {
+		if opts.RelaxCacheAge && cacheAgeMayRelax(item.Category) {
+			return true, EligibilityReasonVolumePressure
+		}
 		return false, EligibilityReasonAge
 	}
 	return true, EligibilityReasonEligible
+}
+
+func cacheAgeMayRelax(category types.Category) bool {
+	return category == types.CategoryBuildCache || category == types.CategoryOtherCache
 }
 
 // EvaluateStripEligibility reports whether an item may have its regenerable
