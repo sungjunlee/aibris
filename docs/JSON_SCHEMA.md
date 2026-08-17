@@ -142,6 +142,33 @@ The top-level `retention` object is present on every scan:
 a retention-local partial state (`retention.partial: true`) does not set the
 top-level `partial` flag or change the exit status.
 
+The optional top-level `volume` object reports host-volume pressure for the
+volume that contains `$HOME` (the default scan roots). It is omitted when
+volume inspection is unavailable (including Windows). Existing summary fields
+keep their meaning and still count every item. `debris_bytes` is only the
+debris that sits on that volume; `other_volume_debris_bytes` is the rest.
+
+```json
+{
+  "volume": {
+    "role": "home",
+    "fs_type": "apfs",
+    "id": "apfs-a1b2c3d4",
+    "total_bytes": 500000000000,
+    "used_bytes": 475000000000,
+    "available_bytes": 25000000000,
+    "used_percent": 95.0,
+    "band": "critical",
+    "debris_bytes": 30000000000,
+    "other_volume_debris_bytes": 2000000000
+  }
+}
+```
+
+`id` is filesystem type plus a hashed device token. It is not a mount path and
+must not include a username. Bands are `ok` (used &lt; 85%), `low` (85–95%),
+and `critical` (≥ 95%). Volume pressure never deletes anything.
+
 ## Fields
 
 ### `schema_version`
