@@ -203,12 +203,13 @@ zsh_site_functions_dir() {
 }
 
 # zsh_fpath_contains reports whether dir is already on the current zsh fpath.
+# Probe with login+interactive zsh so both .zprofile and .zshrc are read.
 # Missing zsh is "cannot detect", not success.
 zsh_fpath_contains() {
   local dir="$1"
   command -v zsh >/dev/null 2>&1 || return 1
   local listed
-  listed="$(zsh -ic 'print -rl -- $fpath' 2>/dev/null)" || return 1
+  listed="$(zsh -lic 'print -rl -- $fpath' 2>/dev/null)" || return 1
   printf '%s\n' "$listed" | grep -Fqx "$dir"
 }
 
