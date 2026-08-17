@@ -506,11 +506,7 @@ func printHumanScanResult(ctx context.Context, r *types.ScanResult) {
 		// Mirror clean's own defaults, including the agent-state idle floor:
 		// the AI workflow starts from this estimate, so a figure that counts
 		// entries clean would not select is worse than no figure.
-		defaultPolicy := types.PruneOptions{
-			Age:                  7 * 24 * time.Hour,
-			AgentStateMinIdleAge: cleaner.DefaultAgentStateMinIdleAge,
-		}
-		defaultPolicy.RelaxCacheAge, defaultPolicy.PressureDevice = shouldRelaxCacheAge(false)
+		defaultPolicy := scanDefaultCleanPolicy()
 		diagnostics := summarizeCleanup(r.Worktrees, defaultPolicy)
 		fmt.Printf("  default clean (estimate) %s\n", cleaner.FormatSize(diagnostics.EligibleSize))
 		printCleanupDiagnostics(diagnostics, defaultPolicy)
@@ -523,13 +519,73 @@ func printHumanScanResult(ctx context.Context, r *types.ScanResult) {
 	printCodexActivityRecommendations(ctx, r.Worktrees)
 	printProviderDiagnostics(r)
 
+	printScanNext(r)
+}
+
+func scanDefaultCleanPolicy() types.PruneOptions {
+	opts := types.PruneOptions{
+		Age:                  7 * 24 * time.Hour,
+		AgentStateMinIdleAge: cleaner.DefaultAgentStateMinIdleAge,
+	}
+	opts.RelaxCacheAge, opts.PressureDevice = shouldRelaxCacheAge(false)
+	return opts
+}
+
+type reclaimPath struct {
+	label   string
+	size    int64
+	command string
+}
+
+func printScanNext(r *types.ScanResult) {
 	fmt.Println("\nnext")
 	if r.Partial() {
 		fmt.Println("  retry aibris scan; cleanup is disabled for this result")
-	} else if r.TotalCount > 0 {
-		fmt.Println("  aibris clean --dry-run")
+	} else {
+		printReclaimLadder(scanReclaimPaths(r.Worktrees, scanDefaultCleanPolicy()))
 	}
 	fmt.Println("  aibris scan --json")
+}
+
+func printReclaimLadder(paths []reclaimPath) {
+	for _, path := range paths {
+		fmt.Printf("  %-20s %10s   %s\n", path.label, cleaner.FormatSize(path.size), path.command)
+	}
+}
+
+func scanReclaimPaths(items []types.DebrisInfo, defaultPolicy types.PruneOptions) []reclaimPath {
+	var paths []reclaimPath
+	defaultSize := summarizeCleanup(items, defaultPolicy).EligibleSize
+	paths = appendReclaimPath(paths, "default delete", defaultSize, "aibris clean --dry-run")
+	stripSize := scanStripEstimate(items, defaultPolicy)
+	paths = appendReclaimPath(paths, "strip (keep trees)", stripSize, "aibris clean --strip --dry-run")
+	if pressure := scanPressureEstimate(items, defaultPolicy); pressure > defaultSize {
+		paths = appendReclaimPath(paths, "pressure caches", pressure, "aibris clean --pressure --dry-run")
+	}
+	return paths
+}
+
+func appendReclaimPath(paths []reclaimPath, label string, size int64, command string) []reclaimPath {
+	if size <= 0 {
+		return paths
+	}
+	return append(paths, reclaimPath{label: label, size: size, command: command})
+}
+
+func scanStripEstimate(items []types.DebrisInfo, opts types.PruneOptions) int64 {
+	merged, order := mergeStripEligibleByOwner(items, opts, time.Now())
+	var total int64
+	for _, key := range order {
+		total += merged[key].StrippableBytes
+	}
+	return total
+}
+
+func scanPressureEstimate(items []types.DebrisInfo, defaultPolicy types.PruneOptions) int64 {
+	pressure := defaultPolicy
+	pressure.RelaxCacheAge = true
+	pressure.PressureDevice = ""
+	return summarizeCleanup(items, pressure).EligibleSize
 }
 
 func homeVolumeReport(items []types.DebrisInfo) *volume.Report {
