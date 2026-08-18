@@ -225,6 +225,7 @@ func TestHomebrewInstallContract(t *testing.T) {
 		"PATH",
 		"brew upgrade",
 		"$HOME",
+		"docs/COMPLETIONS.md",
 	} {
 		if !strings.Contains(readme, required) {
 			t.Errorf("README Homebrew install contract is missing %q", required)
@@ -303,8 +304,11 @@ func TestHomebrewPourWorkflowContract(t *testing.T) {
 	if strings.Contains(releaseWorkflow, "GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}") {
 		t.Error("release workflow must not use HOMEBREW_TAP_TOKEN as GITHUB_TOKEN")
 	}
-	if !strings.Contains(releaseWorkflow, "HOMEBREW_TAP_TOKEN must be set") {
+	if !strings.Contains(releaseWorkflow, "HOMEBREW_TAP_TOKEN must be") {
 		t.Error("release workflow must fail closed when HOMEBREW_TAP_TOKEN is missing")
+	}
+	if !strings.Contains(releaseWorkflow, "HOMEBREW_NO_AUTO_UPDATE") {
+		t.Error("pour job must disable brew auto-update so staged formula revisions stay put")
 	}
 }
 
