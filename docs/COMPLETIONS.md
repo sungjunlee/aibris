@@ -13,7 +13,7 @@ The formula generates completions from the installed binary
 
 | Kind | Homebrew prefix path |
 | ---- | -------------------- |
-| bash | `$(brew --prefix)/share/bash-completion/completions/aibris` |
+| bash | `$(brew --prefix)/etc/bash_completion.d/aibris` |
 | zsh | `$(brew --prefix)/share/zsh/site-functions/_aibris` |
 | fish | `$(brew --prefix)/share/fish/vendor_completions.d/aibris.fish` |
 | man | `$(brew --prefix)/share/man/man1/aibris*.1` |
