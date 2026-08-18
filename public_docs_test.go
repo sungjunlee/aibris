@@ -238,6 +238,35 @@ func TestHomebrewInstallContract(t *testing.T) {
 	}
 }
 
+func TestHomebrewReleaseContract(t *testing.T) {
+	goreleaser := readRepoFile(t, ".goreleaser.yaml")
+	if strings.Contains(goreleaser, "homebrew_casks") {
+		t.Error("GoReleaser must publish a Formula via brews, not homebrew_casks")
+	}
+	for _, required := range []string{
+		"brews:",
+		"name: homebrew-tap",
+		`token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"`,
+		"https://github.com/sungjunlee/aibris/releases/download/{{ .Tag }}/aibris_{{ .Os }}_{{ .Arch }}.tar.gz",
+		`bin.install "aibris"`,
+		"skip_upload:",
+		".IsSnapshot",
+	} {
+		if !strings.Contains(goreleaser, required) {
+			t.Errorf("GoReleaser Homebrew contract is missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		"latest/download",
+		"homebrew_casks",
+		"bottles:",
+	} {
+		if strings.Contains(goreleaser, forbidden) {
+			t.Errorf("GoReleaser Homebrew contract must not contain %q", forbidden)
+		}
+	}
+}
+
 func readRepoFile(t *testing.T, path string) string {
 	t.Helper()
 	data, err := os.ReadFile(path)
