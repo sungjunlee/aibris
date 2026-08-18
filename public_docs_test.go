@@ -227,6 +227,7 @@ func TestHomebrewInstallContract(t *testing.T) {
 		"$HOME",
 		"docs/COMPLETIONS.md",
 		"Homebrew prefix",
+		"brew shellenv",
 	} {
 		if !strings.Contains(readme, required) {
 			t.Errorf("README Homebrew install contract is missing %q", required)
@@ -237,6 +238,20 @@ func TestHomebrewInstallContract(t *testing.T) {
 	}
 	if strings.Contains(readme, "brew tap sungjunlee/tap") {
 		t.Error("README must not document brew tap + short name as the install path")
+	}
+
+	completions := readRepoFile(t, filepath.Join("docs", "COMPLETIONS.md"))
+	for _, required := range []string{
+		"brew shellenv",
+		"$(brew --prefix)/etc/bash_completion.d/aibris",
+		"$(brew --prefix)/share/zsh/site-functions/_aibris",
+	} {
+		if !strings.Contains(completions, required) {
+			t.Errorf("docs/COMPLETIONS.md Homebrew contract is missing %q", required)
+		}
+	}
+	if strings.Contains(completions, "Stock macOS zsh already includes Homebrew") {
+		t.Error("docs/COMPLETIONS.md must not claim stock zsh already has Homebrew site-functions")
 	}
 }
 

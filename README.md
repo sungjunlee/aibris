@@ -45,9 +45,11 @@ The formula `sha256` is published by the same publisher as `checksums.txt`
 
 On Apple Silicon the binary lands in `$(brew --prefix)/bin` (usually
 `/opt/homebrew/bin`). That is not `/usr/local/bin`. The formula also installs
-bash, zsh, and fish completions plus man pages into the Homebrew prefix. Stock
-macOS zsh already has Homebrew `site-functions` on `fpath`. `install.sh` still
-writes only the installing user's `~/.local` (and fish `~/.config`) files; see
+bash, zsh, and fish completions plus man pages into the Homebrew prefix.
+Homebrew's standard setup (`eval "$(brew shellenv)"` in `.zprofile`) puts
+Homebrew `site-functions` on `fpath` before `compinit`, so the brew zsh
+completion needs no extra `.zshrc` line. `install.sh` still writes only the
+installing user's `~/.local` (and fish `~/.config`) files; see
 [completions and man pages](docs/COMPLETIONS.md).
 
 Sharing a Mac does not make aibris multi-user. Keep these facts separate:

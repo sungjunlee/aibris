@@ -18,8 +18,13 @@ The formula generates completions from the installed binary
 | fish | `$(brew --prefix)/share/fish/vendor_completions.d/aibris.fish` |
 | man | `$(brew --prefix)/share/man/man1/aibris*.1` |
 
-Stock macOS zsh already includes Homebrew `site-functions` on `fpath`, so no
-`.zshrc` change is needed for the brew path.
+Homebrew's standard setup (`eval "$(brew shellenv)"` before `compinit`) adds
+Homebrew `site-functions` to `fpath`. Stock macOS zsh without `brew shellenv`
+does not include `/opt/homebrew/share/zsh/site-functions`. After `brew
+shellenv`, the brew zsh completion needs no extra `.zshrc` line.
+
+macOS stock bash does not load `$(brew --prefix)/etc/bash_completion.d`
+unless a bash-completion package is installed and sourced.
 
 ## What install.sh installs
 
@@ -39,8 +44,8 @@ wire up the directory yourself.
 
 ### zsh `fpath`
 
-Stock macOS zsh and Oh My Zsh include Homebrew and system `site-functions` on
-`fpath`, but they do **not** include `~/.local/share/zsh/site-functions`.
+`brew shellenv` puts Homebrew `site-functions` on `fpath`. That still does
+**not** include `~/.local/share/zsh/site-functions`.
 `install.sh` still writes `_aibris` there (it never edits `.zshrc`). Add the
 directory yourself, **before** `compinit`:
 
