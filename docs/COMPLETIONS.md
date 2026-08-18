@@ -1,7 +1,25 @@
 # Shell completions and man pages
 
 aibris packages shell completions (bash, zsh, fish, PowerShell) and man pages
-in every release archive, and `install.sh` installs completions for you.
+in every release archive. `brew install sungjunlee/tap/aibris` installs bash,
+zsh, and fish completions plus man pages into the Homebrew prefix. `install.sh`
+installs completions into the installing user's `~/.local` (and fish
+`~/.config`) files.
+
+## What Homebrew installs
+
+The formula generates completions from the installed binary
+(`aibris completion <shell>`) and copies man pages from the release archive:
+
+| Kind | Homebrew prefix path |
+| ---- | -------------------- |
+| bash | `$(brew --prefix)/share/bash-completion/completions/aibris` |
+| zsh | `$(brew --prefix)/share/zsh/site-functions/_aibris` |
+| fish | `$(brew --prefix)/share/fish/vendor_completions.d/aibris.fish` |
+| man | `$(brew --prefix)/share/man/man1/aibris*.1` |
+
+Stock macOS zsh already includes Homebrew `site-functions` on `fpath`, so no
+`.zshrc` change is needed for the brew path.
 
 ## What install.sh installs
 

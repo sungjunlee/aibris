@@ -226,6 +226,7 @@ func TestHomebrewInstallContract(t *testing.T) {
 		"brew upgrade",
 		"$HOME",
 		"docs/COMPLETIONS.md",
+		"Homebrew prefix",
 	} {
 		if !strings.Contains(readme, required) {
 			t.Errorf("README Homebrew install contract is missing %q", required)
@@ -250,6 +251,8 @@ func TestHomebrewReleaseContract(t *testing.T) {
 		`private_key: '{{ index .Env "HOMEBREW_TAP_TOKEN" }}'`,
 		"https://github.com/sungjunlee/aibris/releases/download/{{ .Tag }}/aibris_{{ .Os }}_{{ .Arch }}.tar.gz",
 		`bin.install "aibris"`,
+		`generate_completions_from_executable(bin/"aibris", "completion")`,
+		`man1.install Dir["release-assets/man/*.1"]`,
 		"skip_upload:",
 		".IsSnapshot",
 	} {

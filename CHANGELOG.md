@@ -6,6 +6,8 @@
 
 - macOS install now recommends `brew install sungjunlee/tap/aibris` from a
   maintained Formula. `install.sh` remains the checksummed Homebrew-free path.
+- The Homebrew formula installs bash/zsh/fish completions and man pages into
+  the Homebrew prefix.
 
 ## [0.11.0] - 2026-08-17
 
