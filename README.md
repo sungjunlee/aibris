@@ -44,9 +44,9 @@ The formula `sha256` is published by the same publisher as `checksums.txt`
 (TOFU, not a second signer).
 
 On Apple Silicon the binary lands in `$(brew --prefix)/bin` (usually
-`/opt/homebrew/bin`). That is not `/usr/local/bin`. Completions and man pages
-from the tap follow the Homebrew prefix and `fpath`. `install.sh` still writes
-only the installing user's `~/.local` files.
+`/opt/homebrew/bin`). That is not `/usr/local/bin`. The tap formula installs
+the `aibris` binary only. Completions and man pages stay with `install.sh`,
+which writes the installing user's `~/.local` files.
 
 Sharing a Mac does not make aibris multi-user. Keep these facts separate:
 
