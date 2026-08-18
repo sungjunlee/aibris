@@ -19,13 +19,46 @@ confirmation.
 
 ## Platforms
 
-- **macOS and Linux**: first-class. The `install.sh` installer downloads
-  verified release binaries; no `sudo` needed by default.
+- **macOS**: first-class. The recommended install is the Homebrew tap below.
+  `install.sh` remains the checksummed Homebrew-free path.
+- **Linux**: first-class via `install.sh`. No `sudo` needed by default.
 - **Windows**: experimental archives. See the canonical
   [Windows support contract](docs/WINDOWS.md) for native installation, tested
   behavior, and unaudited boundaries. `install.sh` remains Unix/Bash-only.
 
 ## Install
+
+### macOS (Homebrew)
+
+```bash
+brew install sungjunlee/tap/aibris
+```
+
+This is a **third-party tap** owned by `sungjunlee`, repository
+https://github.com/sungjunlee/homebrew-tap. It is not reviewed by
+`homebrew/core`. The fully-qualified command trusts **that formula**
+(Homebrew 6.0 item trust), not the whole tap. Do not run
+`brew trust sungjunlee/tap`.
+
+The formula `sha256` is published by the same publisher as `checksums.txt`
+(TOFU, not a second signer).
+
+On Apple Silicon the binary lands in `$(brew --prefix)/bin` (usually
+`/opt/homebrew/bin`). That is not `/usr/local/bin`. The tap formula installs
+the `aibris` binary only. Completions stay with `install.sh`, which writes the
+installing user's `~/.local` files. Man pages ship in the release archive and
+are copied manually; see [completions and man pages](docs/COMPLETIONS.md).
+
+Sharing a Mac does not make aibris multi-user. Keep these facts separate:
+
+1. whether `aibris` is on that account's `PATH`
+2. who owns the Homebrew prefix and can `brew upgrade`
+3. which `$HOME` aibris will scan (the account that runs `aibris`)
+
+### Without Homebrew
+
+`install.sh` remains the unsigned `main` script; only the downloaded archive is
+checked against `checksums.txt`.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.sh | bash
@@ -40,7 +73,7 @@ curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/i
 Install a specific release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.sh | bash -s -- 0.8.1
+curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.sh | bash -s -- 0.11.0
 ```
 
 The installer downloads GitHub Release binaries and verifies `checksums.txt`.
@@ -49,7 +82,7 @@ prebuilt binaries. `main` builds from source with Go.
 
 By default, aibris installs to `~/.local/bin` and does not require `sudo`. If
 that directory is not on your `PATH`, the installer prints the exact command to
-add it for your shell. For a system-wide install, pass an explicit prefix:
+add it for your shell. To install into a shared prefix instead:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.sh | bash -s -- --prefix /usr/local/bin

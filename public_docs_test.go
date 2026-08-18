@@ -209,6 +209,118 @@ func TestWindowsReleaseDocumentationContract(t *testing.T) {
 	}
 }
 
+func TestHomebrewInstallContract(t *testing.T) {
+	readme := readRepoFile(t, "README.md")
+	for _, required := range []string{
+		"brew install sungjunlee/tap/aibris",
+		"third-party",
+		"https://github.com/sungjunlee/homebrew-tap",
+		"item trust",
+		"not the whole tap",
+		"checksums.txt",
+		"TOFU",
+		"~/.local/bin",
+		"install.sh",
+		"--prefix /usr/local/bin",
+		"PATH",
+		"brew upgrade",
+		"$HOME",
+		"docs/COMPLETIONS.md",
+	} {
+		if !strings.Contains(readme, required) {
+			t.Errorf("README Homebrew install contract is missing %q", required)
+		}
+	}
+	if strings.Contains(readme, "system-wide") {
+		t.Error("README must not call --prefix /usr/local/bin \"system-wide\"")
+	}
+	if strings.Contains(readme, "brew tap sungjunlee/tap") {
+		t.Error("README must not document brew tap + short name as the install path")
+	}
+}
+
+func TestHomebrewReleaseContract(t *testing.T) {
+	goreleaser := readRepoFile(t, ".goreleaser.yaml")
+	if strings.Contains(goreleaser, "homebrew_casks:") {
+		t.Error("GoReleaser must publish a Formula via brews, not a cask block")
+	}
+	for _, required := range []string{
+		"brews:",
+		"name: homebrew-tap",
+		`private_key: '{{ index .Env "HOMEBREW_TAP_TOKEN" }}'`,
+		"https://github.com/sungjunlee/aibris/releases/download/{{ .Tag }}/aibris_{{ .Os }}_{{ .Arch }}.tar.gz",
+		`bin.install "aibris"`,
+		"skip_upload:",
+		".IsSnapshot",
+	} {
+		if !strings.Contains(goreleaser, required) {
+			t.Errorf("GoReleaser Homebrew contract is missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		"latest/download",
+		"homebrew_casks:",
+		"bottles:",
+	} {
+		if strings.Contains(goreleaser, forbidden) {
+			t.Errorf("GoReleaser Homebrew contract must not contain %q", forbidden)
+		}
+	}
+}
+
+func TestHomebrewSecurityAuditContract(t *testing.T) {
+	audit := readRepoFile(t, "SECURITY_AUDIT.md")
+	for _, required := range []string{
+		"sungjunlee/tap",
+		"https://github.com/sungjunlee/homebrew-tap",
+		"item-trust",
+		"TOFU",
+		"checksums.txt",
+	} {
+		if !strings.Contains(audit, required) {
+			t.Errorf("SECURITY_AUDIT.md Homebrew contract is missing %q", required)
+		}
+	}
+	if strings.Contains(audit, "Homebrew installation is documented as pending") {
+		t.Error("SECURITY_AUDIT.md must not still describe Homebrew as pending")
+	}
+	if strings.Contains(audit, "Homebrew verifies") {
+		t.Error("SECURITY_AUDIT.md must not claim Homebrew verifies the binary")
+	}
+}
+
+func TestHomebrewPourWorkflowContract(t *testing.T) {
+	releaseWorkflow := readRepoFile(t, filepath.Join(".github", "workflows", "release.yml"))
+	for _, required := range []string{
+		"HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}",
+		"macos-latest",
+		"pour-homebrew-formula.sh",
+		"needs: goreleaser",
+	} {
+		if !strings.Contains(releaseWorkflow, required) {
+			t.Errorf("release workflow Homebrew pour contract is missing %q", required)
+		}
+	}
+	if strings.Contains(releaseWorkflow, "GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}") {
+		t.Error("release workflow must not use HOMEBREW_TAP_TOKEN as GITHUB_TOKEN")
+	}
+	if !strings.Contains(releaseWorkflow, "HOMEBREW_TAP_TOKEN must be") {
+		t.Error("release workflow must fail closed when HOMEBREW_TAP_TOKEN is missing")
+	}
+	if !strings.Contains(releaseWorkflow, "HOMEBREW_NO_AUTO_UPDATE") {
+		t.Error("pour job must disable brew auto-update so staged formula revisions stay put")
+	}
+}
+
+func readRepoFile(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
 func TestWindowsReleaseStatusGate(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("release gate runs in the Ubuntu release job")

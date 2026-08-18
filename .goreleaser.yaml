@@ -27,6 +27,28 @@ archives:
       - CHANGELOG*
       - release-assets/completions/*
       - release-assets/man/*
+# Formula via brews. CLI installs stay a Formula (#118), not a cask.
+brews:
+  - name: aibris
+    homepage: https://github.com/sungjunlee/aibris
+    description: Clean filesystem leftovers from AI coding agents
+    license: MIT
+    directory: Formula
+    skip_upload: "{{ if .IsSnapshot }}true{{ else }}false{{ end }}"
+    url_template: "https://github.com/sungjunlee/aibris/releases/download/{{ .Tag }}/aibris_{{ .Os }}_{{ .Arch }}.tar.gz"
+    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
+    install: |
+      bin.install "aibris"
+    test: |
+      assert_match "aibris version {{ .Version }}", shell_output("#{bin}/aibris --version")
+    repository:
+      owner: sungjunlee
+      name: homebrew-tap
+      git:
+        url: "git@github.com:sungjunlee/homebrew-tap.git"
+        # index keeps snapshots (`make dist`) from failing when the secret is unset.
+        # Tap-only write key contents. Do not use the source-repo GITHUB_TOKEN.
+        private_key: '{{ index .Env "HOMEBREW_TAP_TOKEN" }}'
 checksum:
   name_template: 'checksums.txt'
 snapshot:
