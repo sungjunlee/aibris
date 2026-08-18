@@ -90,6 +90,29 @@ pour_formula_revisions "$3"
 	}
 }
 
+func TestPourScriptStaysInsideTheTap(t *testing.T) {
+	script := readRepoFile(t, filepath.Join(".github", "scripts", "pour-homebrew-formula.sh"))
+	for _, forbidden := range []string{
+		"--depth=",
+		"brew install --formula",
+		"brew upgrade --formula",
+	} {
+		if strings.Contains(script, forbidden) {
+			t.Errorf("pour script must not use %q", forbidden)
+		}
+	}
+	for _, required := range []string{
+		`brew install "${TAP_NAME}/${FORMULA_NAME}"`,
+		`brew upgrade "${TAP_NAME}/${FORMULA_NAME}"`,
+		`brew --repo "${TAP_NAME}"`,
+		`revisions="$(pour_formula_revisions "$tap_dir")"`,
+	} {
+		if !strings.Contains(script, required) {
+			t.Errorf("pour script is missing %q", required)
+		}
+	}
+}
+
 func TestPourResolveTag(t *testing.T) {
 	out := mustRunPourSnippet(t, `
 source .github/scripts/pour-homebrew-formula.sh

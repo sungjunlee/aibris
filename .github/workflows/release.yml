@@ -43,6 +43,8 @@ jobs:
   brew-pour:
     needs: goreleaser
     runs-on: macos-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
       - name: Pour tap formula and assert version

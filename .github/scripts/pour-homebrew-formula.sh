@@ -66,8 +66,7 @@ pour_previous_formula_commit() {
 }
 
 pour_clone_tap() {
-	local dest=$1
-	git clone --depth=50 "$TAP_REPO" "$dest"
+	git clone "$TAP_REPO" "$1"
 }
 
 pour_read_version() {
@@ -78,26 +77,25 @@ pour_install_latest() {
 	brew install "${TAP_NAME}/${FORMULA_NAME}"
 }
 
-pour_write_formula() {
-	local dest=$1
-	cat >"${dest}/${FORMULA_NAME}.rb"
+pour_stage_tap_formula() {
+	cat >"$1/${FORMULA_PATH}"
 }
 
 pour_install_previous_then_upgrade() {
 	local tap_dir=$1
-	local prev old_dir new_dir
+	local prev brew_tap
 	prev="$(pour_previous_formula_commit "$tap_dir")"
-	old_dir="$(mktemp -d)"
-	new_dir="$(mktemp -d)"
+	brew tap "${TAP_NAME}"
+	brew_tap="$(brew --repo "${TAP_NAME}")"
 	git -C "$tap_dir" show "${prev}:${FORMULA_PATH}" |
-		pour_write_formula "$old_dir"
-	pour_write_formula "$new_dir" <"${tap_dir}/${FORMULA_PATH}"
-	brew install --formula "${old_dir}/${FORMULA_NAME}.rb"
-	brew upgrade --formula "${new_dir}/${FORMULA_NAME}.rb"
+		pour_stage_tap_formula "$brew_tap"
+	brew install "${TAP_NAME}/${FORMULA_NAME}"
+	pour_stage_tap_formula "$brew_tap" <"${tap_dir}/${FORMULA_PATH}"
+	brew upgrade "${TAP_NAME}/${FORMULA_NAME}"
 }
 
 pour_main() {
-	local tag want tap_dir
+	local tag want tap_dir revisions
 	tag="$(pour_resolve_tag "${1:-}")" || {
 		pour_usage
 		return 2
@@ -105,7 +103,8 @@ pour_main() {
 	want="$(pour_expected_version_line "$tag")"
 	tap_dir="$(mktemp -d)"
 	pour_clone_tap "$tap_dir"
-	if pour_should_upgrade "$(pour_formula_revisions "$tap_dir")"; then
+	revisions="$(pour_formula_revisions "$tap_dir")"
+	if pour_should_upgrade "$revisions"; then
 		pour_install_previous_then_upgrade "$tap_dir"
 	else
 		pour_install_latest

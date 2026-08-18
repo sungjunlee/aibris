@@ -246,7 +246,7 @@ func TestHomebrewReleaseContract(t *testing.T) {
 	for _, required := range []string{
 		"brews:",
 		"name: homebrew-tap",
-		`private_key: "{{ .Env.HOMEBREW_TAP_TOKEN }}"`,
+		`private_key: '{{ index .Env "HOMEBREW_TAP_TOKEN" }}'`,
 		"https://github.com/sungjunlee/aibris/releases/download/{{ .Tag }}/aibris_{{ .Os }}_{{ .Arch }}.tar.gz",
 		`bin.install "aibris"`,
 		"skip_upload:",

@@ -46,8 +46,9 @@ brews:
       name: homebrew-tap
       git:
         url: "git@github.com:sungjunlee/homebrew-tap.git"
+        # index keeps snapshots (`make dist`) from failing when the secret is unset.
         # Tap-only write key contents. Do not use the source-repo GITHUB_TOKEN.
-        private_key: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+        private_key: '{{ index .Env "HOMEBREW_TAP_TOKEN" }}'
 checksum:
   name_template: 'checksums.txt'
 snapshot:
