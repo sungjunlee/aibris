@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-08-18
+
 ### Added
 
 - macOS install now recommends `brew install sungjunlee/tap/aibris` from a
