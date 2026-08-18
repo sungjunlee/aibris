@@ -209,6 +209,44 @@ func TestWindowsReleaseDocumentationContract(t *testing.T) {
 	}
 }
 
+func TestHomebrewInstallContract(t *testing.T) {
+	readme := readRepoFile(t, "README.md")
+	for _, required := range []string{
+		"brew install sungjunlee/tap/aibris",
+		"third-party",
+		"https://github.com/sungjunlee/homebrew-tap",
+		"item trust",
+		"not the whole tap",
+		"checksums.txt",
+		"TOFU",
+		"~/.local/bin",
+		"install.sh",
+		"--prefix /usr/local/bin",
+		"PATH",
+		"brew upgrade",
+		"$HOME",
+	} {
+		if !strings.Contains(readme, required) {
+			t.Errorf("README Homebrew install contract is missing %q", required)
+		}
+	}
+	if strings.Contains(readme, "system-wide") {
+		t.Error("README must not call --prefix /usr/local/bin \"system-wide\"")
+	}
+	if strings.Contains(readme, "brew tap sungjunlee/tap") {
+		t.Error("README must not document brew tap + short name as the install path")
+	}
+}
+
+func readRepoFile(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
 func TestWindowsReleaseStatusGate(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("release gate runs in the Ubuntu release job")
