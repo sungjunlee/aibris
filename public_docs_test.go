@@ -240,8 +240,8 @@ func TestHomebrewInstallContract(t *testing.T) {
 
 func TestHomebrewReleaseContract(t *testing.T) {
 	goreleaser := readRepoFile(t, ".goreleaser.yaml")
-	if strings.Contains(goreleaser, "homebrew_casks") {
-		t.Error("GoReleaser must publish a Formula via brews, not homebrew_casks")
+	if strings.Contains(goreleaser, "homebrew_casks:") {
+		t.Error("GoReleaser must publish a Formula via brews, not a cask block")
 	}
 	for _, required := range []string{
 		"brews:",
@@ -258,12 +258,32 @@ func TestHomebrewReleaseContract(t *testing.T) {
 	}
 	for _, forbidden := range []string{
 		"latest/download",
-		"homebrew_casks",
+		"homebrew_casks:",
 		"bottles:",
 	} {
 		if strings.Contains(goreleaser, forbidden) {
 			t.Errorf("GoReleaser Homebrew contract must not contain %q", forbidden)
 		}
+	}
+}
+
+func TestHomebrewPourWorkflowContract(t *testing.T) {
+	releaseWorkflow := readRepoFile(t, filepath.Join(".github", "workflows", "release.yml"))
+	for _, required := range []string{
+		"HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}",
+		"macos-latest",
+		"pour-homebrew-formula.sh",
+		"needs: goreleaser",
+	} {
+		if !strings.Contains(releaseWorkflow, required) {
+			t.Errorf("release workflow Homebrew pour contract is missing %q", required)
+		}
+	}
+	if strings.Contains(releaseWorkflow, "GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}") {
+		t.Error("release workflow must not use HOMEBREW_TAP_TOKEN as GITHUB_TOKEN")
+	}
+	if !strings.Contains(releaseWorkflow, "HOMEBREW_TAP_TOKEN must be set") {
+		t.Error("release workflow must fail closed when HOMEBREW_TAP_TOKEN is missing")
 	}
 }
 

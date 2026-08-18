@@ -23,6 +23,14 @@ jobs:
           RELEASE_NOTES: .github/release-notes/${{ github.ref_name }}.md
         run: |
           .github/scripts/validate-windows-release-status.sh "$RELEASE_NOTES"
+      - name: Require tap-only token
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "${HOMEBREW_TAP_TOKEN}" ]; then
+            echo "HOMEBREW_TAP_TOKEN must be set so a failed tap commit fails the release." >&2
+            exit 1
+          fi
       - uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
@@ -30,3 +38,12 @@ jobs:
           args: release --clean --release-notes .github/release-notes/${{ github.ref_name }}.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+  brew-pour:
+    needs: goreleaser
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Pour tap formula and assert version
+        run: .github/scripts/pour-homebrew-formula.sh "${GITHUB_REF_NAME}"

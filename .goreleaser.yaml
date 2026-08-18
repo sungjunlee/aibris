@@ -27,7 +27,7 @@ archives:
       - CHANGELOG*
       - release-assets/completions/*
       - release-assets/man/*
-# Formula via brews, not homebrew_casks. CLI installs stay a Formula (#118).
+# Formula via brews. CLI installs stay a Formula (#118), not a cask.
 brews:
   - name: aibris
     homepage: https://github.com/sungjunlee/aibris
