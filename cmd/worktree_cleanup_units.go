@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -82,7 +83,7 @@ func buildWorktreeCleanupUnits(ctx context.Context, items []types.DebrisInfo) ([
 		if item.Category != types.CategoryWorktree {
 			continue
 		}
-		targetPath, ok := cleanTargetPathKey(item.Path)
+		targetPath, ok := cleaner.TargetPathKey(item.Path)
 		if !ok {
 			continue
 		}
@@ -148,7 +149,7 @@ func discoverGitWorktreeMembers(ctx context.Context, targetPath string) ([]GitWo
 		}
 		memberPath := filepath.Join(targetPath, entry.Name())
 		if hasGitWorktreeMetadata(memberPath) {
-			if canonicalPath, ok := cleanTargetPathKey(memberPath); ok {
+			if canonicalPath, ok := cleaner.TargetPathKey(memberPath); ok {
 				memberPaths[canonicalPath] = true
 			}
 			continue
@@ -206,7 +207,7 @@ func twoLevelGitWorktreePaths(ctx context.Context, leafPath string) ([]string, b
 			missing = true
 			continue
 		}
-		canonical, ok := cleanTargetPathKey(checkout)
+		canonical, ok := cleaner.TargetPathKey(checkout)
 		if ok {
 			paths = append(paths, canonical)
 		}

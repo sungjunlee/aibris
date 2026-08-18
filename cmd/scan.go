@@ -953,7 +953,7 @@ func summarizeCleanup(items []types.DebrisInfo, opts types.PruneOptions) cleanup
 	// Remaining clean-time safety protections (git safety, overlap safety,
 	// scan-evidence filtering, physical owner checks) can only reduce the final
 	// plan, which is why the figure is labelled an estimate.
-	planned := normalizeCleanTargets(filterExistingTargets(eligible))
+	planned := cleaner.NormalizeTargets(cleaner.FilterExistingTargets(eligible))
 	for _, target := range planned {
 		summary.EligibleCount++
 		summary.EligibleSize += target.Size

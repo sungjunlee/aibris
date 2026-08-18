@@ -259,12 +259,12 @@ func applyCleanupOverlapSafetyWithRows(
 	targets []types.DebrisInfo,
 	logicalInputs []cleanupOverlapLogicalInput,
 ) (cleanupOverlapSafetySelection, error) {
-	targets = normalizeCleanTargets(targets)
+	targets = cleaner.NormalizeTargets(targets)
 	sort.Slice(targets, func(i, j int) bool {
-		left, _ := cleanTargetPathKey(targets[i].Path)
-		right, _ := cleanTargetPathKey(targets[j].Path)
+		left, _ := cleaner.TargetPathKey(targets[i].Path)
+		right, _ := cleaner.TargetPathKey(targets[j].Path)
 		if left == right {
-			return cleanTargetStableKey(targets[i]) < cleanTargetStableKey(targets[j])
+			return cleaner.TargetStableKey(targets[i]) < cleaner.TargetStableKey(targets[j])
 		}
 		return left < right
 	})
@@ -317,7 +317,7 @@ func buildCleanupOverlapComponents(
 			Refusal:       safety.Refusal,
 		}
 		for _, input := range logicalInputs {
-			path, ok := cleanTargetPathKey(input.Item.Path)
+			path, ok := cleaner.TargetPathKey(input.Item.Path)
 			if !ok {
 				continue
 			}
@@ -350,7 +350,7 @@ func buildCleanupOverlapComponents(
 	}
 	sort.Slice(components, func(i, j int) bool {
 		if components[i].CanonicalPath == components[j].CanonicalPath {
-			return cleanTargetStableKey(components[i].Owner) < cleanTargetStableKey(components[j].Owner)
+			return cleaner.TargetStableKey(components[i].Owner) < cleaner.TargetStableKey(components[j].Owner)
 		}
 		return components[i].CanonicalPath < components[j].CanonicalPath
 	})
@@ -376,9 +376,9 @@ func cleanupLogicalRelation(ownerPath, rowPath string) (cleanupOverlapRelation, 
 	switch {
 	case ownerPath == rowPath:
 		return cleanupOverlapExact, true
-	case cleanTargetContains(ownerPath, rowPath):
+	case cleaner.PathContains(ownerPath, rowPath):
 		return cleanupOverlapDescendant, true
-	case cleanTargetContains(rowPath, ownerPath):
+	case cleaner.PathContains(rowPath, ownerPath):
 		return cleanupOverlapAncestor, true
 	default:
 		return "", false
@@ -419,7 +419,7 @@ func cleanupLogicalL1Reason(
 			}
 			continue
 		}
-		matchPath, ok := cleanTargetPathKey(match.Item.Path)
+		matchPath, ok := cleaner.TargetPathKey(match.Item.Path)
 		if !ok || matchPath != canonicalPath ||
 			match.Item.Tool != item.Tool ||
 			match.Item.ID != item.ID {
@@ -431,7 +431,7 @@ func cleanupLogicalL1Reason(
 				cleaner.OverlapSafetyAmbiguousIdentity:
 				return string(component.Refusal.Reason)
 			case cleaner.OverlapSafetyNestedRevalidation:
-				refusalPath, refusalOK := cleanTargetPathKey(component.Refusal.AgentStatePath)
+				refusalPath, refusalOK := cleaner.TargetPathKey(component.Refusal.AgentStatePath)
 				if refusalOK && refusalPath == canonicalPath {
 					return string(component.Refusal.Reason)
 				}
@@ -470,7 +470,7 @@ func cleanupLogicalRevalidationRequired(
 		if match.Relation == cleaner.OverlapRelationAmbiguous {
 			continue
 		}
-		matchPath, ok := cleanTargetPathKey(match.Item.Path)
+		matchPath, ok := cleaner.TargetPathKey(match.Item.Path)
 		if ok && matchPath == canonicalPath &&
 			match.Item.Tool == item.Tool &&
 			match.Item.ID == item.ID {
@@ -487,7 +487,7 @@ func ensureCleanupOwnerLogicalRow(
 ) []cleanupOverlapLogicalRow {
 	for _, row := range rows {
 		if row.CanonicalPath == canonicalPath &&
-			cleanTargetStableKey(row.Item) == cleanTargetStableKey(owner) {
+			cleaner.TargetStableKey(row.Item) == cleaner.TargetStableKey(owner) {
 			return rows
 		}
 	}
@@ -515,7 +515,7 @@ func sortCleanupOverlapLogicalRows(
 		rows[i].DiscoveryOrdinal = ordinals[baseKey]
 		if !ownerAssigned &&
 			rows[i].Relation == cleanupOverlapExact &&
-			cleanTargetStableKey(rows[i].Item) == cleanTargetStableKey(owner) {
+			cleaner.TargetStableKey(rows[i].Item) == cleaner.TargetStableKey(owner) {
 			rows[i].Relation = cleanupOverlapOwner
 			ownerAssigned = true
 		}
@@ -529,7 +529,7 @@ func cleanupOverlapLogicalRowStableKey(
 ) string {
 	ownerRank := "1"
 	if row.CanonicalPath != "" &&
-		cleanTargetStableKey(row.Item) == cleanTargetStableKey(owner) {
+		cleaner.TargetStableKey(row.Item) == cleaner.TargetStableKey(owner) {
 		ownerRank = "0"
 	}
 	return strings.Join([]string{

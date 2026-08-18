@@ -42,7 +42,7 @@ func TestApplyPhysicalWorktreeOwnerSafetyProtectsMixedOwnerFromClassicOverrides(
 				t.Fatalf("row-local classic candidates = %+v; want orphaned sibling", classic)
 			}
 
-			targets, protections := applyPhysicalWorktreeOwnerSafety(
+			targets, protections := cleaner.ApplyPhysicalOwnerSafety(
 				inventory,
 				classic,
 				false,
@@ -51,9 +51,9 @@ func TestApplyPhysicalWorktreeOwnerSafetyProtectsMixedOwnerFromClassicOverrides(
 				t.Fatalf("physical owner targets = %+v; want whole owner protected", targets)
 			}
 			for _, row := range inventory {
-				if got := protections[cleanAuditItemKey(row)]; got != cleanReasonActiveWorktree {
+				if got := protections[cleanAuditItemKey(row)]; got != cleaner.EligibilityReasonActiveWorktree {
 					t.Errorf("protection for %s row = %q; want %q",
-						row.Status, got, cleanReasonActiveWorktree)
+						row.Status, got, cleaner.EligibilityReasonActiveWorktree)
 				}
 			}
 		})
@@ -73,7 +73,7 @@ func TestApplyPhysicalWorktreeOwnerSafetyGroupsCanonicalAliases(t *testing.T) {
 
 	inventory := mixedPhysicalOwnerRows(alias, owner)
 	classic := cleaner.Filter(inventory, types.PruneOptions{})
-	targets, protections := applyPhysicalWorktreeOwnerSafety(inventory, classic, false)
+	targets, protections := cleaner.ApplyPhysicalOwnerSafety(inventory, classic, false)
 	if len(targets) != 0 {
 		t.Fatalf("canonical-alias targets = %+v; want whole owner protected", targets)
 	}
@@ -121,12 +121,12 @@ func TestApplyPhysicalWorktreeOwnerSafetyIncludeActiveSelectsActiveRepresentativ
 			// Exercise the dangerous shape directly: row-local policy retained
 			// only the orphaned row even though its physical owner is active.
 			orphanedOnly := []types.DebrisInfo{inventory[1]}
-			targets, protections := applyPhysicalWorktreeOwnerSafety(
+			targets, protections := cleaner.ApplyPhysicalOwnerSafety(
 				inventory,
 				orphanedOnly,
 				true,
 			)
-			targets = normalizeCleanTargets(targets)
+			targets = cleaner.NormalizeTargets(targets)
 			if len(protections) != 0 {
 				t.Fatalf("include-active protections = %+v; want none", protections)
 			}
@@ -142,7 +142,7 @@ func TestApplyPhysicalWorktreeOwnerSafetyIncludeActiveSelectsActiveRepresentativ
 			}
 
 			reversed := []types.DebrisInfo{inventory[1], inventory[0]}
-			normalized := normalizeCleanTargets(reversed)
+			normalized := cleaner.NormalizeTargets(reversed)
 			if len(normalized) != 1 ||
 				normalized[0].Status != types.WorktreeActive ||
 				normalized[0].Path != orphanedPath {
@@ -163,7 +163,7 @@ func TestPhysicalWorktreeOwnerSafetyPreservesPhysicalAuditAccounting(t *testing.
 	inventory[1].Size = 4096
 	opts := types.PruneOptions{}
 	classic := cleaner.Filter(inventory, opts)
-	targets, protections := applyPhysicalWorktreeOwnerSafety(
+	targets, protections := cleaner.ApplyPhysicalOwnerSafety(
 		inventory,
 		classic,
 		false,
@@ -174,7 +174,7 @@ func TestPhysicalWorktreeOwnerSafetyPreservesPhysicalAuditAccounting(t *testing.
 		opts,
 		1,
 		scanSource{Kind: scanSourceLive},
-		protections,
+		cleanAuditReasonsFromEligibility(protections),
 	)
 	if audit.TotalEvidenceCount != 2 ||
 		audit.TotalFoundCount != 1 ||
@@ -213,7 +213,7 @@ func TestPhysicalWorktreeOwnerSafetyAuditPrefersGuidedSelection(t *testing.T) {
 		ModTime:  time.Now().Add(-8 * 24 * time.Hour),
 	}
 	opts := types.PruneOptions{Age: 7 * 24 * time.Hour}
-	_, protections := applyPhysicalWorktreeOwnerSafety(
+	_, protections := cleaner.ApplyPhysicalOwnerSafety(
 		[]types.DebrisInfo{active, child},
 		nil,
 		false,
@@ -228,7 +228,7 @@ func TestPhysicalWorktreeOwnerSafetyAuditPrefersGuidedSelection(t *testing.T) {
 		opts,
 		1,
 		scanSource{Kind: scanSourceCached},
-		protections,
+		cleanAuditReasonsFromEligibility(protections),
 	)
 	if audit.TotalEligibleCount != 1 || audit.TotalBlockedCount != 0 {
 		t.Fatalf("guided physical audit = %+v; want selected owner eligible", audit)

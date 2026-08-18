@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -216,7 +217,7 @@ func cleanupPlanItemsEqual(left, right []types.DebrisInfo) bool {
 		return false
 	}
 	for i := range left {
-		if cleanTargetStableKey(left[i]) != cleanTargetStableKey(right[i]) || left[i].Size != right[i].Size {
+		if cleaner.TargetStableKey(left[i]) != cleaner.TargetStableKey(right[i]) || left[i].Size != right[i].Size {
 			return false
 		}
 	}

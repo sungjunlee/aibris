@@ -218,14 +218,15 @@ func runCleanJSON(cmd *cobra.Command) {
 	}
 
 	targets := cleaner.Filter(result.Worktrees, opts)
-	targets, physicalOwnerProtections := applyPhysicalWorktreeOwnerSafety(
+	targets, physicalOwnerEligibility := cleaner.ApplyPhysicalOwnerSafety(
 		result.Worktrees,
 		targets,
 		opts.IncludeActiveWorktrees,
 	)
-	targets = filterExistingTargets(targets)
+	physicalOwnerProtections := cleanAuditReasonsFromEligibility(physicalOwnerEligibility)
+	targets = cleaner.FilterExistingTargets(targets)
 	targets, scanEvidenceProtections := filterTargetsWithoutScanEvidence(targets)
-	targets = normalizeCleanTargets(targets)
+	targets = cleaner.NormalizeTargets(targets)
 	targets, gitSafetyProtections := filterGitUnsafeActiveWorktreeTargets(ctx, targets)
 	classicProtections := mergeCleanAuditProtections(
 		physicalOwnerProtections,
@@ -410,7 +411,7 @@ func cleanJSONPlanCandidates(
 	classicTargets []types.DebrisInfo,
 	opts types.PruneOptions,
 ) []CleanupPlanCandidate {
-	classicTargets = normalizeCleanTargets(classicTargets)
+	classicTargets = cleaner.NormalizeTargets(classicTargets)
 	candidates := make([]CleanupPlanCandidate, 0, guidedCandidateCount(guidedState)+len(classicTargets))
 	if guidedState != nil {
 		candidates = append(candidates, guidedCleanupPlanCandidates(*guidedState)...)
@@ -642,8 +643,8 @@ func buildCleanJSONSnapshotComponents(
 		components[i].Rows = ensureCleanJSONOwnerRow(components[i])
 	}
 	sort.SliceStable(components, func(i, j int) bool {
-		left := strings.Join([]string{components[i].Key, cleanTargetStableKey(components[i].Owner)}, "\x00")
-		right := strings.Join([]string{components[j].Key, cleanTargetStableKey(components[j].Owner)}, "\x00")
+		left := strings.Join([]string{components[i].Key, cleaner.TargetStableKey(components[i].Owner)}, "\x00")
+		right := strings.Join([]string{components[j].Key, cleaner.TargetStableKey(components[j].Owner)}, "\x00")
 		return left < right
 	})
 	assignCleanJSONAccountingBytes(components)
@@ -666,10 +667,10 @@ func assignCleanJSONAccountingBytes(components []cleanJSONSnapshotComponent) {
 	for child := range components {
 		parentDepth := -1
 		for candidate := range components {
-			if candidate == child || !cleanTargetContains(components[candidate].Key, components[child].Key) {
+			if candidate == child || !cleaner.PathContains(components[candidate].Key, components[child].Key) {
 				continue
 			}
-			depth := cleanTargetPathDepth(components[candidate].Key)
+			depth := cleaner.TargetPathDepth(components[candidate].Key)
 			if depth > parentDepth {
 				parents[child] = candidate
 				parentDepth = depth
@@ -715,7 +716,7 @@ func assignCleanJSONAccountingBytes(components []cleanJSONSnapshotComponent) {
 }
 
 func cleanJSONPlanComponentForPath(path string, components []CleanupPhysicalComponent) (int, bool) {
-	canonical, ok := cleanTargetPathKey(path)
+	canonical, ok := cleaner.TargetPathKey(path)
 	if !ok {
 		return 0, false
 	}
@@ -727,8 +728,8 @@ func cleanJSONPlanComponentForPath(path string, components []CleanupPhysicalComp
 	best := -1
 	bestDepth := -1
 	for i, component := range components {
-		if cleanTargetContains(component.CanonicalPath, canonical) {
-			depth := cleanTargetPathDepth(component.CanonicalPath)
+		if cleaner.PathContains(component.CanonicalPath, canonical) {
+			depth := cleaner.TargetPathDepth(component.CanonicalPath)
 			if depth > bestDepth {
 				best = i
 				bestDepth = depth
@@ -741,8 +742,8 @@ func cleanJSONPlanComponentForPath(path string, components []CleanupPhysicalComp
 	best = -1
 	bestDepth = int(^uint(0) >> 1)
 	for i, component := range components {
-		if cleanTargetContains(canonical, component.CanonicalPath) {
-			depth := cleanTargetPathDepth(component.CanonicalPath)
+		if cleaner.PathContains(canonical, component.CanonicalPath) {
+			depth := cleaner.TargetPathDepth(component.CanonicalPath)
 			if depth < bestDepth {
 				best = i
 				bestDepth = depth
@@ -890,8 +891,8 @@ func cleanJSONRelationForAuditRow(row cleanupOverlapLogicalRow, owner types.Debr
 	case cleanupOverlapDescendant:
 		return string(CleanupPlanRelationNested)
 	}
-	ownerPath, ownerOK := cleanTargetPathKey(owner.Path)
-	rowPath, rowOK := cleanTargetPathKey(row.Item.Path)
+	ownerPath, ownerOK := cleaner.TargetPathKey(owner.Path)
+	rowPath, rowOK := cleaner.TargetPathKey(row.Item.Path)
 	if ownerOK && rowOK && ownerPath == rowPath {
 		return string(CleanupPlanRelationExact)
 	}
@@ -899,8 +900,8 @@ func cleanJSONRelationForAuditRow(row cleanupOverlapLogicalRow, owner types.Debr
 }
 
 func cleanJSONRelationForInventoryItem(item types.DebrisInfo, component *cleanJSONSnapshotComponent) string {
-	ownerPath, ownerOK := cleanTargetPathKey(component.Owner.Path)
-	itemPath, itemOK := cleanTargetPathKey(item.Path)
+	ownerPath, ownerOK := cleaner.TargetPathKey(component.Owner.Path)
+	itemPath, itemOK := cleaner.TargetPathKey(item.Path)
 	if ownerOK && itemOK {
 		switch {
 		case ownerPath == itemPath:
@@ -908,9 +909,9 @@ func cleanJSONRelationForInventoryItem(item types.DebrisInfo, component *cleanJS
 				return string(CleanupPlanRelationOwner)
 			}
 			return string(CleanupPlanRelationExact)
-		case cleanTargetContains(itemPath, ownerPath):
+		case cleaner.PathContains(itemPath, ownerPath):
 			return string(CleanupPlanRelationAncestor)
-		case cleanTargetContains(ownerPath, itemPath):
+		case cleaner.PathContains(ownerPath, itemPath):
 			return string(CleanupPlanRelationNested)
 		}
 	}
@@ -981,7 +982,7 @@ func cleanJSONSnapshotRowSortKey(item types.DebrisInfo, relation string, ordinal
 	}
 	return strings.Join([]string{
 		relationRank,
-		cleanTargetStableKey(item),
+		cleaner.TargetStableKey(item),
 		fmt.Sprintf("%09d", ordinal),
 	}, "\x00")
 }
@@ -1123,10 +1124,10 @@ func cleanJSONReasonCode(code string) string {
 // path, its cleaned raw spelling remains a safe, deterministic fallback.
 func cleanJSONRowIdentityKey(item types.DebrisInfo) string {
 	pathKey := strings.TrimSpace(item.Path)
-	if canonical, ok := cleanTargetPathKey(item.Path); ok {
+	if canonical, ok := cleaner.TargetPathKey(item.Path); ok {
 		pathKey = canonical
 	} else if pathKey != "" {
-		pathKey = cleanTargetRawPathKey(pathKey)
+		pathKey = cleaner.TargetRawPathKey(pathKey)
 	} else {
 		pathKey = "<empty-path>"
 	}

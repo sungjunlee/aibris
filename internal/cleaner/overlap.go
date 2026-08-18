@@ -752,16 +752,16 @@ func canonicalOverlapRelation(target, agentState string) (OverlapSafetyRelation,
 	if target == agentState {
 		return OverlapRelationExact, true
 	}
-	if pathContains(agentState, target) {
+	if PathContains(agentState, target) {
 		return OverlapRelationAgentStateAncestor, true
 	}
-	if pathContains(target, agentState) {
+	if PathContains(target, agentState) {
 		return OverlapRelationAgentStateDescendant, true
 	}
 	return "", false
 }
 
-func pathContains(parent, child string) bool {
+func PathContains(parent, child string) bool {
 	rel, err := filepath.Rel(parent, child)
 	if err != nil || rel == "." || rel == ".." || filepath.IsAbs(rel) {
 		return false

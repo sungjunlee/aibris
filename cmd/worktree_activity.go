@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -264,7 +265,7 @@ func cleanupUnitActivityRows(items []types.DebrisInfo) map[string][]types.Debris
 		if item.Category != types.CategoryWorktree {
 			continue
 		}
-		targetPath, ok := cleanTargetPathKey(item.Path)
+		targetPath, ok := cleaner.TargetPathKey(item.Path)
 		if !ok {
 			continue
 		}

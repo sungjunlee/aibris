@@ -151,7 +151,7 @@ func mergeStripEligibleByOwner(items []types.DebrisInfo, opts types.PruneOptions
 		if !cleaner.EvaluateStripEligibility(item, deleteEligible, deleteReason) {
 			continue
 		}
-		key, ok := cleanTargetPathKey(item.Path)
+		key, ok := cleaner.TargetPathKey(item.Path)
 		if !ok {
 			continue
 		}
@@ -168,12 +168,12 @@ func mergeStripEligibleByOwner(items []types.DebrisInfo, opts types.PruneOptions
 func mergeStripInventories(base, extra types.DebrisInfo) types.DebrisInfo {
 	seen := make(map[string]struct{}, len(base.StrippablePaths))
 	for _, path := range base.StrippablePaths {
-		if key, ok := cleanTargetPathKey(path); ok {
+		if key, ok := cleaner.TargetPathKey(path); ok {
 			seen[key] = struct{}{}
 		}
 	}
 	for _, path := range extra.StrippablePaths {
-		key, ok := cleanTargetPathKey(path)
+		key, ok := cleaner.TargetPathKey(path)
 		if !ok {
 			continue
 		}
