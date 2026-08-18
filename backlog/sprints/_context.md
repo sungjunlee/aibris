@@ -44,10 +44,12 @@
   change.
 - #221 shipped on main via PR #226 (2026-08-17), including the #227 cwd
   barrier. `clean --strip` is a third disposition beside protect and delete.
-- The post-v0.11.0 reclaim UX sprint is active (`cmd/**`). Batch 1 shipped
-  (#253/#254/#256 via PRs #260/#261/#259). Batch 2 shipped (#255/#258 via
-  PRs #263/#264). Remaining: Batch 3 #257.
-  #218 is a decision, not an implementation, about whether `node_modules`
+- The post-v0.11.0 reclaim UX sprint shipped all three batches: #253/#254/#256
+  via PRs #260/#261/#259, #255/#258 via PRs #263/#264, #257 via PR #267.
+  Last-scan schema is 8 and carries a cleanup selector; `scan` writes a
+  selector-neutral inventory and the first matching `clean` claims it.
+  `--json` stays quiet. Hard locks stay closed.
+- #218 is a decision, not an implementation, about whether `node_modules`
   and `ai-logs` follow in-tree activity. Do not start that change without
   an explicit call.
 - Milestone #9 `0.x Automation & Schema` is closed. Milestone #8 `0.x OSS

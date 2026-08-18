@@ -1,6 +1,6 @@
 ---
 milestone: 0.11.x Protected-Weight Reclamation
-status: active
+status: completed
 started: 2026-08-17
 due: TBD
 scope: ["cmd/**"]
@@ -27,7 +27,7 @@ Shipped 0.11 reclaim surfaces tell the operator how to recover remaining bytes w
 
 ### Batch 3 — scan reuse after the copy/ladder lands
 
-- [ ] #257 Reuse last scan between matching dry-run and execute, or say why not (~1hr)
+- [x] #257 Reuse last scan between matching dry-run and execute, or say why not (~1hr)
 
 ## Running Context
 
@@ -38,6 +38,7 @@ Shipped 0.11 reclaim surfaces tell the operator how to recover remaining bytes w
 - Do not implement #218 or #142 L2/L3.
 - #253 is a human stdout hint after bytes are actually freed. It does not run `tmutil thinlocalsnapshots`, and it does not attach to `--json` (versioned receipt stays intact).
 - #254 strip `next` estimate uses `selectStripTargets`, including the CWD refusal `clean --strip` already applies.
+- #257: last-scan schema is 8 and carries a cleanup selector. `scan` writes a selector-neutral inventory; the first matching `clean` claims it. Strip, default delete, and `--pressure` do not share silently. Claim/save failure live-scans with a reason. `--json` stays quiet.
 
 ## Progress
 
@@ -45,3 +46,5 @@ Shipped 0.11 reclaim surfaces tell the operator how to recover remaining bytes w
 - 2026-08-17: #256 in review — human `--apfs-snapshots` copy drops urgency tokens and states local snapshots are not Time Machine backups.
 - 2026-08-17: Batch 1 merged. #256 via PR #259, #253 via PR #260, #254 via PR #261. Independent Sol review requested JSON-route hint (#253) — declined to keep the versioned JSON receipt intact. Next: Batch 2 (#255, #258).
 - 2026-08-17: Batch 2 merged. #255 via PR #263, #258 via PR #264. Sol asked #255 to keep planned count as `len(targets)` on cancel — accepted. Next: Batch 3 (#257).
+- 2026-08-18: Batch 3 merged. #257 via PR #267. Sol asked fail-closed selector claim, schema 8, and an `--exclude` rescan reason — accepted. Sprint plan is complete.
+- 2026-08-18: Sprint closed. 6/6 tasks completed.
