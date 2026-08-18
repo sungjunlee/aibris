@@ -125,9 +125,12 @@ Repository release controls include:
 - GoReleaser builds for Linux, macOS, and Windows
 - GoReleaser checksum generation
 - `install.sh` verifies downloaded release archives against `checksums.txt`
+- the Homebrew path is the third-party tap `sungjunlee/tap/aibris`
+  (https://github.com/sungjunlee/homebrew-tap). Homebrew item-trusts that
+  formula; `sha256` is the same publisher as `checksums.txt` (TOFU), not a
+  second signer
 
-Future hardening should add artifact attestations and documented Homebrew tap
-verification once that distribution path is published.
+Future hardening should add artifact attestations (#121).
 
 ## Testing Coverage
 
@@ -158,7 +161,9 @@ go vet ./...
   there is no standalone `--status` selector.
 - `$HOME` discovery is intentionally bounded and prunes noisy/system
   directories; explicitly excluded or unusually deep layouts may be missed.
-- Homebrew installation is documented as pending until the tap is published.
+- Homebrew installation uses the third-party tap `sungjunlee/tap`; Homebrew
+  item-trusts the formula, and checksums are same-publisher TOFU, not
+  `homebrew/core` review.
 - Release archives have checksums but do not yet publish an SBOM or signed
   provenance.
 - Windows artifacts are experimental. Windows CI runs native recorded-cwd

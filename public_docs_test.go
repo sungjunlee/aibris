@@ -267,6 +267,27 @@ func TestHomebrewReleaseContract(t *testing.T) {
 	}
 }
 
+func TestHomebrewSecurityAuditContract(t *testing.T) {
+	audit := readRepoFile(t, "SECURITY_AUDIT.md")
+	for _, required := range []string{
+		"sungjunlee/tap",
+		"https://github.com/sungjunlee/homebrew-tap",
+		"item-trust",
+		"TOFU",
+		"checksums.txt",
+	} {
+		if !strings.Contains(audit, required) {
+			t.Errorf("SECURITY_AUDIT.md Homebrew contract is missing %q", required)
+		}
+	}
+	if strings.Contains(audit, "Homebrew installation is documented as pending") {
+		t.Error("SECURITY_AUDIT.md must not still describe Homebrew as pending")
+	}
+	if strings.Contains(audit, "Homebrew verifies") {
+		t.Error("SECURITY_AUDIT.md must not claim Homebrew verifies the binary")
+	}
+}
+
 func TestHomebrewPourWorkflowContract(t *testing.T) {
 	releaseWorkflow := readRepoFile(t, filepath.Join(".github", "workflows", "release.yml"))
 	for _, required := range []string{
