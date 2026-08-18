@@ -1,7 +1,30 @@
 # Shell completions and man pages
 
 aibris packages shell completions (bash, zsh, fish, PowerShell) and man pages
-in every release archive, and `install.sh` installs completions for you.
+in every release archive. `brew install sungjunlee/tap/aibris` installs bash,
+zsh, and fish completions plus man pages into the Homebrew prefix. `install.sh`
+installs completions into the installing user's `~/.local` (and fish
+`~/.config`) files.
+
+## What Homebrew installs
+
+The formula generates completions from the installed binary
+(`aibris completion <shell>`) and copies man pages from the release archive:
+
+| Kind | Homebrew prefix path |
+| ---- | -------------------- |
+| bash | `$(brew --prefix)/etc/bash_completion.d/aibris` |
+| zsh | `$(brew --prefix)/share/zsh/site-functions/_aibris` |
+| fish | `$(brew --prefix)/share/fish/vendor_completions.d/aibris.fish` |
+| man | `$(brew --prefix)/share/man/man1/aibris*.1` |
+
+Homebrew's standard setup (`eval "$(brew shellenv)"` before `compinit`) adds
+Homebrew `site-functions` to `fpath`. Stock macOS zsh without `brew shellenv`
+does not include `/opt/homebrew/share/zsh/site-functions`. After `brew
+shellenv`, the brew zsh completion needs no extra `.zshrc` line.
+
+macOS stock bash does not load `$(brew --prefix)/etc/bash_completion.d`
+unless a bash-completion package is installed and sourced.
 
 ## What install.sh installs
 
@@ -21,8 +44,8 @@ wire up the directory yourself.
 
 ### zsh `fpath`
 
-Stock macOS zsh and Oh My Zsh include Homebrew and system `site-functions` on
-`fpath`, but they do **not** include `~/.local/share/zsh/site-functions`.
+`brew shellenv` puts Homebrew `site-functions` on `fpath`. That still does
+**not** include `~/.local/share/zsh/site-functions`.
 `install.sh` still writes `_aibris` there (it never edits `.zshrc`). Add the
 directory yourself, **before** `compinit`:
 

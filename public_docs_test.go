@@ -226,6 +226,8 @@ func TestHomebrewInstallContract(t *testing.T) {
 		"brew upgrade",
 		"$HOME",
 		"docs/COMPLETIONS.md",
+		"Homebrew prefix",
+		"brew shellenv",
 	} {
 		if !strings.Contains(readme, required) {
 			t.Errorf("README Homebrew install contract is missing %q", required)
@@ -236,6 +238,20 @@ func TestHomebrewInstallContract(t *testing.T) {
 	}
 	if strings.Contains(readme, "brew tap sungjunlee/tap") {
 		t.Error("README must not document brew tap + short name as the install path")
+	}
+
+	completions := readRepoFile(t, filepath.Join("docs", "COMPLETIONS.md"))
+	for _, required := range []string{
+		"brew shellenv",
+		"$(brew --prefix)/etc/bash_completion.d/aibris",
+		"$(brew --prefix)/share/zsh/site-functions/_aibris",
+	} {
+		if !strings.Contains(completions, required) {
+			t.Errorf("docs/COMPLETIONS.md Homebrew contract is missing %q", required)
+		}
+	}
+	if strings.Contains(completions, "Stock macOS zsh already includes Homebrew") {
+		t.Error("docs/COMPLETIONS.md must not claim stock zsh already has Homebrew site-functions")
 	}
 }
 
@@ -250,6 +266,8 @@ func TestHomebrewReleaseContract(t *testing.T) {
 		`private_key: '{{ index .Env "HOMEBREW_TAP_TOKEN" }}'`,
 		"https://github.com/sungjunlee/aibris/releases/download/{{ .Tag }}/aibris_{{ .Os }}_{{ .Arch }}.tar.gz",
 		`bin.install "aibris"`,
+		`generate_completions_from_executable(bin/"aibris", "completion")`,
+		`man1.install Dir["release-assets/man/*.1"]`,
 		"skip_upload:",
 		".IsSnapshot",
 	} {
