@@ -44,7 +44,10 @@ brews:
     repository:
       owner: sungjunlee
       name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+      git:
+        url: "git@github.com:sungjunlee/homebrew-tap.git"
+        # Tap-only write key contents. Do not use the source-repo GITHUB_TOKEN.
+        private_key: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
 checksum:
   name_template: 'checksums.txt'
 snapshot:
