@@ -216,8 +216,9 @@ func TestBuildCleanAudit_WorktreeMainReasonShowsPlainDirBesideActive(t *testing.
 		!strings.Contains(output, "active worktree protected") {
 		t.Fatalf("classic summary hid a skip class:\n%s", output)
 	}
-	if !strings.Contains(output, "review-only worktrees  2 units") ||
-		!strings.Contains(output, "not cleanable") {
+	if !strings.Contains(output, "review-only worktrees  2 units  600.0 MB") ||
+		!strings.Contains(output, "not a clean/--strip target") ||
+		strings.Contains(output, "aibris clean") {
 		t.Fatalf("classic summary missing review-only next:\n%s", output)
 	}
 	if strings.Contains(output, "plain-a") || strings.Contains(output, "plain-b") {

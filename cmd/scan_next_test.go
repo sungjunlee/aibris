@@ -96,8 +96,8 @@ func TestScanReclaimPathsOmitsZeroAndPlainDir(t *testing.T) {
 	if strings.Contains(output, plain) || strings.Contains(output, "plain-dir") {
 		t.Errorf("next leaked review-only path or status:\n%s", output)
 	}
-	if !strings.Contains(output, "review-only worktrees  1 unit") ||
-		!strings.Contains(output, "not cleanable") {
+	if !strings.Contains(output, "review-only worktrees  1 unit  9.0 GB") ||
+		!strings.Contains(output, "not a clean/--strip target") {
 		t.Fatalf("next missing review-only inspection line:\n%s", output)
 	}
 	if !strings.Contains(output, "aibris scan --json") {
@@ -215,21 +215,20 @@ func reviewOnlyScanFixture(t *testing.T) (string, []types.DebrisInfo) {
 
 func assertReviewOnlyNextLine(t *testing.T, output, path string) {
 	t.Helper()
-	if !strings.Contains(output, "review-only worktrees  1 unit") ||
-		!strings.Contains(output, "not cleanable") {
-		t.Fatalf("missing review-only next:\n%s", output)
+	if !strings.Contains(output, "review-only worktrees  1 unit  9.0 GB") {
+		t.Fatalf("missing review-only count+size:\n%s", output)
+	}
+	if !strings.Contains(output, "not a clean/--strip target") {
+		t.Fatalf("missing no-clean-target copy:\n%s", output)
+	}
+	if !strings.Contains(output, "inspect mixed/missing .git markers in owner directories") {
+		t.Fatalf("missing owner-directory inspect copy:\n%s", output)
 	}
 	if strings.Contains(output, path) || strings.Contains(output, "plain-dir") {
 		t.Fatalf("review-only next leaked path or status:\n%s", output)
 	}
-	for _, command := range []string{
-		"aibris clean --dry-run",
-		"aibris clean --strip",
-		"--fix-markers",
-	} {
-		if strings.Contains(output, command) {
-			t.Fatalf("review-only listed %q:\n%s", command, output)
-		}
+	if strings.Contains(output, "aibris clean") || strings.Contains(output, "--fix-markers") {
+		t.Fatalf("review-only listed a cleanup command:\n%s", output)
 	}
 }
 

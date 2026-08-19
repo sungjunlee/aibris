@@ -11,6 +11,9 @@
 - Successful `clean --apfs-snapshots` now reprints remaining snapshot count
   and home-volume used% / free / band without running a full scan. Dry-run
   still only prints the plan. A volume re-read failure is a non-fatal warning.
+- `scan` `next` review-only worktrees now include count and size and say they
+  are not a `clean` / `--strip` target. Inspect mixed or missing `.git`
+  markers in the owner directories; `plain-dir` stays non-cleanable.
 
 ## [0.11.1] - 2026-08-18
 
