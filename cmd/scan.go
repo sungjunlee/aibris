@@ -637,30 +637,37 @@ func isReviewOnlyWorktree(item types.DebrisInfo) bool {
 		item.Status != types.WorktreeOrphaned
 }
 
-func countReviewOnlyWorktrees(items []types.DebrisInfo) int {
+func reviewOnlyWorktreeStats(items []types.DebrisInfo) (int, int64) {
 	n := 0
+	var size int64
 	for _, item := range items {
-		if isReviewOnlyWorktree(item) {
-			n++
+		if !isReviewOnlyWorktree(item) {
+			continue
 		}
+		n++
+		size += item.Size
 	}
-	return n
+	return n, size
 }
 
 func printReviewOnlyWorktrees(items []types.DebrisInfo) {
-	printReviewOnlyWorktreeCount(countReviewOnlyWorktrees(items))
+	n, size := reviewOnlyWorktreeStats(items)
+	printReviewOnlyWorktreeLine(n, size)
 }
 
-func printReviewOnlyWorktreeCount(n int) {
+func printReviewOnlyWorktreeLine(n int, size int64) {
 	if n == 0 {
 		return
 	}
-	noun := "units"
+	fmt.Printf("  review-only worktrees  %d %s  %s   not a clean/--strip target; inspect mixed/missing .git markers in owner directories\n",
+		n, reviewOnlyNoun(n), cleaner.FormatSize(size))
+}
+
+func reviewOnlyNoun(n int) string {
 	if n == 1 {
-		noun = "unit"
+		return "unit"
 	}
-	fmt.Printf("  review-only worktrees  %d %s   not cleanable; inspect mixed/missing .git markers\n",
-		n, noun)
+	return "units"
 }
 
 func printReclaimLadder(paths []reclaimPath) {

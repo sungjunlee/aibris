@@ -35,6 +35,7 @@ type cleanAudit struct {
 	TotalBlockedCount  int
 	TotalBlockedSize   int64
 	ReviewOnlyCount    int
+	ReviewOnlySize     int64
 	Categories         []cleanAuditCategory
 	// Components is the route-neutral physical inventory projection used by
 	// machine-readable dry-run output. It is deliberately not rendered by the
@@ -321,7 +322,7 @@ func buildPhysicalCleanAuditWithLogicalInputs(
 		}
 		return left.FoundSize > right.FoundSize
 	})
-	audit.ReviewOnlyCount = countReviewOnlyWorktrees(items)
+	audit.ReviewOnlyCount, audit.ReviewOnlySize = reviewOnlyWorktreeStats(items)
 	return audit
 }
 
@@ -709,7 +710,7 @@ func printCleanAudit(audit cleanAudit, opts types.PruneOptions) {
 	if len(audit.Categories) > 0 {
 		printCleanAuditCategories(audit)
 	}
-	printReviewOnlyWorktreeCount(audit.ReviewOnlyCount)
+	printReviewOnlyWorktreeLine(audit.ReviewOnlyCount, audit.ReviewOnlySize)
 }
 
 func printCleanAuditSummary(audit cleanAudit) {
