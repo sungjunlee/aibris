@@ -111,8 +111,11 @@ func TestPrintAPFSThinResultVolumeFailureIsNonFatal(t *testing.T) {
 	if !strings.Contains(stdout, "remaining 9") {
 		t.Fatalf("volume failure hid remaining count:\n%s", stdout)
 	}
-	if !strings.Contains(stderr, "warning:") || !strings.Contains(stderr, "statfs failed") {
+	if !strings.Contains(stderr, "warning:") || !strings.Contains(stderr, "home volume unavailable") {
 		t.Fatalf("missing non-fatal volume warning:\n%s", stderr)
+	}
+	if strings.Contains(stderr, "statfs failed") {
+		t.Fatalf("volume warning echoed raw error:\n%s", stderr)
 	}
 	if strings.Contains(stdout, "% used") || strings.Contains(stdout, "freed") {
 		t.Fatalf("failed volume read claimed space:\n%s", stdout)
@@ -134,8 +137,56 @@ func TestPrintAPFSThinResultRemainingListFailureIsNonFatal(t *testing.T) {
 	if strings.Contains(stdout, "remaining") {
 		t.Fatalf("failed remaining list still printed a count:\n%s", stdout)
 	}
-	if !strings.Contains(stderr, "warning:") || !strings.Contains(stderr, "list failed") {
+	if !strings.Contains(stderr, "warning:") || !strings.Contains(stderr, "could not list remaining snapshots") {
 		t.Fatalf("missing remaining-list warning:\n%s", stderr)
+	}
+	if strings.Contains(stderr, "list failed") {
+		t.Fatalf("remaining warning echoed raw error:\n%s", stderr)
+	}
+}
+
+func TestPrintAPFSThinResultRedactsHomePathAndSnapshotIDs(t *testing.T) {
+	pathErr := &os.PathError{Op: "stat", Path: "/Users/alice", Err: errors.New("no such file")}
+	tmErr := formatTMUtilError(
+		[]string{"listlocalsnapshots", "/"},
+		errors.New("exit status 1"),
+		[]byte("Snapshots for disk /:\ncom.apple.TimeMachine.2026-08-17-101530.local\ncom.apple.os.update-AAA\n2026-08-17-101530\nfailed\n"),
+	)
+	_, stderr := captureStdStreams(func() {
+		printAPFSThinResult(0, tmErr, nil, pathErr)
+	})
+	if !strings.Contains(stderr, "could not list remaining snapshots") {
+		t.Fatalf("missing remaining warning:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "home volume unavailable after thinning") {
+		t.Fatalf("missing volume warning:\n%s", stderr)
+	}
+	for _, leak := range []string{"/Users", "alice", "2026-08-17-101530", "com.apple.TimeMachine", "com.apple.os.update-AAA"} {
+		if strings.Contains(stderr, leak) {
+			t.Errorf("warning leaked %q:\n%s", leak, stderr)
+		}
+	}
+}
+
+func TestFormatTMUtilErrorDropsSnapshotListing(t *testing.T) {
+	err := formatTMUtilError(
+		[]string{"listlocalsnapshots", "/"},
+		errors.New("exit status 1"),
+		[]byte("Snapshots for disk /:\ncom.apple.TimeMachine.2026-08-17-101530.local\ncom.apple.os.update-AAA\n2026-08-17-101530\nfailed\n"),
+	)
+	msg := err.Error()
+	if !strings.Contains(msg, "tmutil listlocalsnapshots") || !strings.Contains(msg, "failed") {
+		t.Fatalf("missing subcommand/status:\n%s", msg)
+	}
+	for _, leak := range []string{
+		"2026-08-17-101530",
+		"com.apple.TimeMachine",
+		"com.apple.os.update-AAA",
+		"Snapshots for",
+	} {
+		if strings.Contains(msg, leak) {
+			t.Fatalf("error leaked %q: %s", leak, msg)
+		}
 	}
 }
 

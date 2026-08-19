@@ -104,8 +104,10 @@ aibris clean            # 3. review the plan and confirm before deletion
 ### 1. Scan
 
 `aibris scan` inventories debris under `$HOME` (or under `--root` subpaths)
-and reports found space, a default-clean estimate of reclaimable space, and
-what is held back by age, `--risky`, or protection:
+and leads the summary with found size, the largest reclaim path when it beats
+default, and home-volume used% / free / band (`tight` for JSON `low`). It also
+reports a default-clean estimate and what is held back by age, `--risky`, or
+protection:
 
 ### Exclusions
 
@@ -162,6 +164,7 @@ scan
   found    node_modules   2 items   20.0 KB
 
 summary
+  94.2 MB found   92% used   34.0 GB free   tight
   found       3 items
   found size  94.2 MB
   default clean (estimate) 0 B
@@ -187,6 +190,10 @@ next
 
 Reading the summary:
 
+- **headline** — found size plus home-volume used% / free / band. JSON
+  `volume.band` `low` prints as `tight`. When `--pressure` or `--strip` would
+  reclaim more than default, that path is named on the same line. Used% and
+  free bytes in this example are illustrative.
 - **found** — everything on disk in scope (94.2 MB here).
 - **default clean (estimate)** — what a default `aibris clean` would reclaim.
   It is an estimate; run `aibris clean --dry-run` for the exact plan.

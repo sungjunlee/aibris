@@ -17,6 +17,11 @@
 - `scan` `next` review-only worktrees now include count and size and say they
   are not a `clean` / `--strip` target. Inspect mixed or missing `.git`
   markers in the owner directories; `plain-dir` stays non-cleanable.
+- APFS remaining-list and home-volume warnings are status-only. They no
+  longer print a home path or tmutil snapshot identifiers. `formatTMUtilError`
+  drops snapshot listing lines.
+- Human `scan` `--pressure` headline and hint use home-volume debris only.
+  Explicit `clean --pressure` still relaxes official caches on every volume.
 
 ## [0.11.1] - 2026-08-18
 

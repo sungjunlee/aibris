@@ -114,11 +114,59 @@ func TestRunAPFSSnapshotActionVolumeReadFailureKeepsRemaining(t *testing.T) {
 	if !strings.Contains(stdout, "remaining 1") {
 		t.Fatalf("volume failure hid remaining:\n%s", stdout)
 	}
-	if !strings.Contains(stderr, "warning:") || !strings.Contains(stderr, "statfs failed") {
+	if !strings.Contains(stderr, "warning:") || !strings.Contains(stderr, "home volume unavailable") {
 		t.Fatalf("missing volume warning:\n%s", stderr)
+	}
+	if strings.Contains(stderr, "statfs failed") || strings.Contains(stderr, "/Users") {
+		t.Fatalf("volume warning leaked error detail:\n%s", stderr)
 	}
 	if strings.Contains(stdout, "% used") {
 		t.Fatalf("failed volume read printed used%%:\n%s", stdout)
+	}
+}
+
+func TestRunAPFSSnapshotActionRemainingListFailureRedactsSnapshots(t *testing.T) {
+	origLook, origRun, origInspect := lookPath, runTMUtil, inspectHomeCapacityFn
+	t.Cleanup(func() {
+		lookPath, runTMUtil, inspectHomeCapacityFn = origLook, origRun, origInspect
+	})
+	lookPath = func(string) (string, error) { return "/usr/bin/tmutil", nil }
+	lists := 0
+	runTMUtil = func(args ...string) ([]byte, error) {
+		if len(args) > 0 && args[0] == "thinlocalsnapshots" {
+			return nil, nil
+		}
+		lists++
+		out := []byte("Snapshots for disk /:\n2026-08-17-101530\n")
+		if lists > 1 {
+			return out, errors.New("exit status 1")
+		}
+		return out, nil
+	}
+	inspectHomeCapacityFn = func() (*volume.Report, error) {
+		return &volume.Report{
+			Role: "home", FSType: "apfs", UsedPercent: 90,
+			AvailableBytes: 48 * 1024 * 1024 * 1024, Band: volume.BandLow,
+		}, nil
+	}
+	stdout, stderr := captureStdStreams(func() {
+		if err := runAPFSSnapshotAction(false, true); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(stdout, "thinned local APFS snapshots") || !strings.Contains(stdout, "90% used") {
+		t.Fatalf("remaining-list failure hid thin/volume:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "remaining") {
+		t.Fatalf("failed remaining list still printed a count:\n%s", stdout)
+	}
+	if !strings.Contains(stderr, "could not list remaining snapshots") {
+		t.Fatalf("missing remaining warning:\n%s", stderr)
+	}
+	for _, leak := range []string{"2026-08-17-101530", "/Users", "Snapshots for"} {
+		if strings.Contains(stderr, leak) || strings.Contains(stdout, leak) {
+			t.Fatalf("remaining-list failure leaked %q:\n%s\n%s", leak, stdout, stderr)
+		}
 	}
 }
 

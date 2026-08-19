@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -21,6 +22,7 @@ func scanNextPolicy() types.PruneOptions {
 
 func TestScanReclaimPathsListsNonZeroCommands(t *testing.T) {
 	base := t.TempDir()
+	testutil.SetHome(t, base)
 	old := time.Now().Add(-30 * 24 * time.Hour)
 	recent := time.Now().Add(-time.Hour)
 	orphaned := filepath.Join(base, "orphaned")

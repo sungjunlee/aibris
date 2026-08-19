@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/sungjunlee/aibris/internal/volume"
@@ -82,7 +83,7 @@ func thinAndReportAPFSSnapshots() error {
 func printAPFSThinResult(remaining int, remainingErr error, report *volume.Report, volumeErr error) {
 	fmt.Println("thinned local APFS snapshots")
 	if remainingErr != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not list remaining snapshots: %v\n", remainingErr)
+		fmt.Fprintln(os.Stderr, "warning: could not list remaining snapshots")
 	} else {
 		fmt.Printf("  remaining %d\n", remaining)
 	}
@@ -91,7 +92,7 @@ func printAPFSThinResult(remaining int, remainingErr error, report *volume.Repor
 
 func printAPFSVolumeAfterThin(report *volume.Report, err error) {
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: home volume unavailable after thinning: %v\n", err)
+		fmt.Fprintln(os.Stderr, "warning: home volume unavailable after thinning")
 		return
 	}
 	if report == nil {
@@ -105,28 +106,65 @@ var inspectHomeCapacityFn = readHomeVolumeCapacity
 func readHomeVolumeCapacity() (*volume.Report, error) {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
-		if err == nil {
-			err = fmt.Errorf("home directory unavailable")
-		}
-		return nil, err
+		return nil, fmt.Errorf("home directory unavailable")
 	}
 	report, err := volume.Inspect(home)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("home volume inspect failed")
 	}
 	report.Role = "home"
 	return &report, nil
 }
 
 func formatTMUtilError(args []string, err error, out []byte) error {
-	name := "tmutil"
-	if len(args) > 0 {
-		name += " " + args[0]
-	}
-	if trimmed := bytes.TrimSpace(out); len(trimmed) > 0 {
-		return fmt.Errorf("%s: %w\n%s", name, err, trimmed)
+	name := tmutilCommandName(args)
+	if msg := sanitizeTMUtilOutput(out); msg != "" {
+		return fmt.Errorf("%s: %w\n%s", name, err, msg)
 	}
 	return fmt.Errorf("%s: %w", name, err)
+}
+
+func tmutilCommandName(args []string) string {
+	if len(args) == 0 {
+		return "tmutil"
+	}
+	return "tmutil " + args[0]
+}
+
+func sanitizeTMUtilOutput(out []byte) string {
+	var kept []string
+	for _, line := range bytes.Split(out, []byte("\n")) {
+		s := strings.TrimSpace(string(line))
+		if keepTMUtilOutputLine(s) {
+			kept = append(kept, s)
+		}
+	}
+	return strings.Join(kept, "\n")
+}
+
+func keepTMUtilOutputLine(s string) bool {
+	return s != "" && !strings.HasPrefix(s, "Snapshots for") && !isTMUtilSnapshotID(s)
+}
+
+func isTMUtilSnapshotID(s string) bool {
+	if strings.HasPrefix(s, "com.apple.TimeMachine.") || strings.HasPrefix(s, "com.apple.os.update-") {
+		return true
+	}
+	return containsLocalSnapshotStamp(s)
+}
+
+func containsLocalSnapshotStamp(s string) bool {
+	for i := 0; i+17 <= len(s); i++ {
+		if isLocalSnapshotStamp(s[i : i+17]) {
+			return true
+		}
+	}
+	return false
+}
+
+func isLocalSnapshotStamp(s string) bool {
+	_, err := time.Parse("2006-01-02-150405", s)
+	return err == nil && len(s) == 17
 }
 
 func parseLocalSnapshotCount(output []byte) int {
