@@ -493,9 +493,11 @@ func printHumanScanResult(ctx context.Context, r *types.ScanResult) {
 			fmt.Printf("  failed      %-12s %s\n", providerErr.Tool, providerErr.Message)
 		}
 	}
+	report := homeVolumeReport(r.Worktrees)
+	printScanHeadline(r, report)
 	fmt.Printf("  found       %d %s\n", r.TotalCount, itemNoun(r.TotalCount))
 	fmt.Printf("  found size  %s\n", cleaner.FormatSize(r.TotalSize))
-	printVolumePressure(r.Worktrees)
+	printVolumePressureReport(report)
 	if r.TotalStrippableBytes > 0 {
 		fmt.Printf("  strippable  %s regenerable subtrees inside worktrees (clean --strip)\n",
 			cleaner.FormatSize(r.TotalStrippableBytes))
@@ -546,6 +548,87 @@ func printScanNext(r *types.ScanResult) {
 	}
 	printReviewOnlyWorktrees(r.Worktrees)
 	fmt.Println("  aibris scan --json")
+}
+
+func printScanHeadline(r *types.ScanResult, report *volume.Report) {
+	if r.Partial() {
+		return
+	}
+	printScanHeadlinePaths(
+		r.TotalSize,
+		scanReclaimPaths(r.Worktrees, scanDefaultCleanPolicy()),
+		report,
+	)
+}
+
+func printScanHeadlinePaths(found int64, paths []reclaimPath, report *volume.Report) {
+	fmt.Println(scanHeadline(found, paths, report))
+	printPressureHint(paths, report)
+}
+
+func scanHeadline(found int64, paths []reclaimPath, report *volume.Report) string {
+	parts := []string{fmt.Sprintf("%s found", cleaner.FormatSize(found))}
+	if path, ok := largestNonDefaultReclaim(paths); ok {
+		parts = append(parts, fmt.Sprintf("largest reclaim %s (%s)",
+			cleaner.FormatSize(path.size), reclaimFlag(path)))
+	}
+	if report != nil {
+		parts = append(parts, fmt.Sprintf("%.0f%% used   %s free   %s",
+			report.UsedPercent,
+			cleaner.FormatSize(int64(report.AvailableBytes)),
+			volume.HumanWord(report.Band)))
+	}
+	return "  " + strings.Join(parts, "   ")
+}
+
+func largestNonDefaultReclaim(paths []reclaimPath) (reclaimPath, bool) {
+	def := reclaimSizeByLabel(paths, "default delete")
+	var best reclaimPath
+	found := false
+	for _, path := range paths {
+		if path.label == "default delete" || path.size <= def {
+			continue
+		}
+		if !found || path.size > best.size {
+			best = path
+			found = true
+		}
+	}
+	return best, found
+}
+
+func reclaimSizeByLabel(paths []reclaimPath, label string) int64 {
+	for _, path := range paths {
+		if path.label == label {
+			return path.size
+		}
+	}
+	return 0
+}
+
+func reclaimFlag(path reclaimPath) string {
+	switch path.label {
+	case "pressure caches":
+		return "--pressure"
+	case "strip (keep trees)":
+		return "--strip"
+	default:
+		return "default"
+	}
+}
+
+func printPressureHint(paths []reclaimPath, report *volume.Report) {
+	if report == nil || (report.Band != volume.BandLow && report.Band != volume.BandCritical) {
+		return
+	}
+	pressure := reclaimSizeByLabel(paths, "pressure caches")
+	if pressure <= 0 {
+		return
+	}
+	if largest, ok := largestNonDefaultReclaim(paths); ok && reclaimFlag(largest) == "--pressure" {
+		return
+	}
+	fmt.Printf("  reclaim --pressure %s\n", cleaner.FormatSize(pressure))
 }
 
 func isReviewOnlyWorktree(item types.DebrisInfo) bool {
@@ -662,13 +745,14 @@ func jsonVolumeFromReport(report volume.Report) *jsonVolume {
 }
 
 func printVolumePressure(items []types.DebrisInfo) {
-	report := homeVolumeReport(items)
+	printVolumePressureReport(homeVolumeReport(items))
+}
+
+func printVolumePressureReport(report *volume.Report) {
 	if report == nil {
 		return
 	}
-	fmt.Printf("  volume     %s  %s  %.0f%% used   %s free   %s\n",
-		report.Role, report.FSType, report.UsedPercent,
-		cleaner.FormatSize(int64(report.AvailableBytes)), report.Band)
+	printHomeVolumeLine(report)
 	if report.OtherVolumeDebrisBytes > 0 {
 		fmt.Printf("  debris     %s on this volume   %s other volumes\n",
 			cleaner.FormatSize(report.DebrisBytes),
@@ -676,6 +760,12 @@ func printVolumePressure(items []types.DebrisInfo) {
 		return
 	}
 	fmt.Printf("  debris     %s on this volume\n", cleaner.FormatSize(report.DebrisBytes))
+}
+
+func printHomeVolumeLine(report *volume.Report) {
+	fmt.Printf("  volume     %s  %s  %.0f%% used   %s free   %s\n",
+		report.Role, report.FSType, report.UsedPercent,
+		cleaner.FormatSize(int64(report.AvailableBytes)), volume.HumanWord(report.Band))
 }
 
 func printExclusionDiagnostics(r *types.ScanResult) {

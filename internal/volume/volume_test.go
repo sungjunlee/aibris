@@ -27,6 +27,22 @@ func TestClassifyBand(t *testing.T) {
 	}
 }
 
+func TestHumanWordMapsLowToTight(t *testing.T) {
+	tests := []struct {
+		band Band
+		want string
+	}{
+		{BandOK, "ok"},
+		{BandLow, "tight"},
+		{BandCritical, "critical"},
+	}
+	for _, tt := range tests {
+		if got := HumanWord(tt.band); got != tt.want {
+			t.Errorf("HumanWord(%q) = %q; want %q", tt.band, got, tt.want)
+		}
+	}
+}
+
 func TestSplitDebrisKeepsUnknownOnVolume(t *testing.T) {
 	items := []types.DebrisInfo{
 		{Path: filepath.Join(t.TempDir(), "missing-a"), Size: 100},

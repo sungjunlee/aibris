@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Human `scan` summary now leads with found size, the largest reclaim path
+  among default / strip / pressure when that path is larger than default, and
+  home-volume used% / free bytes / band. JSON `volume.band` `low` still means
+  ≥85% used; the human word for that band is `tight`.
+
 ## [0.11.1] - 2026-08-18
 
 ### Added
