@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/sungjunlee/aibris/internal/volume"
 )
 
 // apfsSnapshotPurgeBytes is the bounded thin request. It is not a delete of
@@ -72,11 +73,49 @@ func thinAndReportAPFSSnapshots() error {
 	if err := apfsThinLocalSnapshots(); err != nil {
 		return err
 	}
+	remaining, remainingErr := apfsListLocalSnapshots()
+	report, volumeErr := inspectHomeCapacityFn()
+	printAPFSThinResult(remaining, remainingErr, report, volumeErr)
+	return nil
+}
+
+func printAPFSThinResult(remaining int, remainingErr error, report *volume.Report, volumeErr error) {
 	fmt.Println("thinned local APFS snapshots")
-	if remaining, err := apfsListLocalSnapshots(); err == nil {
+	if remainingErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not list remaining snapshots: %v\n", remainingErr)
+	} else {
 		fmt.Printf("  remaining %d\n", remaining)
 	}
-	return nil
+	printAPFSVolumeAfterThin(report, volumeErr)
+}
+
+func printAPFSVolumeAfterThin(report *volume.Report, err error) {
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: home volume unavailable after thinning: %v\n", err)
+		return
+	}
+	if report == nil {
+		return
+	}
+	printHomeVolumeLine(report)
+}
+
+var inspectHomeCapacityFn = readHomeVolumeCapacity
+
+func readHomeVolumeCapacity() (*volume.Report, error) {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		if err == nil {
+			err = fmt.Errorf("home directory unavailable")
+		}
+		return nil, err
+	}
+	report, err := volume.Inspect(home)
+	if err != nil {
+		return nil, err
+	}
+	report.Role = "home"
+	return &report, nil
 }
 
 func formatTMUtilError(args []string, err error, out []byte) error {
