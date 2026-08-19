@@ -150,7 +150,7 @@ func TestPrintAPFSThinResultRedactsHomePathAndSnapshotIDs(t *testing.T) {
 	tmErr := formatTMUtilError(
 		[]string{"listlocalsnapshots", "/"},
 		errors.New("exit status 1"),
-		[]byte("Snapshots for disk /:\ncom.apple.os.update-AAA\n2026-08-17-101530\nfailed\n"),
+		[]byte("Snapshots for disk /:\ncom.apple.TimeMachine.2026-08-17-101530.local\ncom.apple.os.update-AAA\n2026-08-17-101530\nfailed\n"),
 	)
 	_, stderr := captureStdStreams(func() {
 		printAPFSThinResult(0, tmErr, nil, pathErr)
@@ -161,7 +161,7 @@ func TestPrintAPFSThinResultRedactsHomePathAndSnapshotIDs(t *testing.T) {
 	if !strings.Contains(stderr, "home volume unavailable after thinning") {
 		t.Fatalf("missing volume warning:\n%s", stderr)
 	}
-	for _, leak := range []string{"/Users", "alice", "2026-08-17-101530", "com.apple.os.update-AAA"} {
+	for _, leak := range []string{"/Users", "alice", "2026-08-17-101530", "com.apple.TimeMachine", "com.apple.os.update-AAA"} {
 		if strings.Contains(stderr, leak) {
 			t.Errorf("warning leaked %q:\n%s", leak, stderr)
 		}
@@ -172,13 +172,18 @@ func TestFormatTMUtilErrorDropsSnapshotListing(t *testing.T) {
 	err := formatTMUtilError(
 		[]string{"listlocalsnapshots", "/"},
 		errors.New("exit status 1"),
-		[]byte("Snapshots for disk /:\ncom.apple.os.update-AAA\n2026-08-17-101530\nfailed\n"),
+		[]byte("Snapshots for disk /:\ncom.apple.TimeMachine.2026-08-17-101530.local\ncom.apple.os.update-AAA\n2026-08-17-101530\nfailed\n"),
 	)
 	msg := err.Error()
 	if !strings.Contains(msg, "tmutil listlocalsnapshots") || !strings.Contains(msg, "failed") {
 		t.Fatalf("missing subcommand/status:\n%s", msg)
 	}
-	for _, leak := range []string{"2026-08-17-101530", "com.apple.os.update-AAA", "Snapshots for"} {
+	for _, leak := range []string{
+		"2026-08-17-101530",
+		"com.apple.TimeMachine",
+		"com.apple.os.update-AAA",
+		"Snapshots for",
+	} {
 		if strings.Contains(msg, leak) {
 			t.Fatalf("error leaked %q: %s", leak, msg)
 		}

@@ -147,9 +147,22 @@ func keepTMUtilOutputLine(s string) bool {
 }
 
 func isTMUtilSnapshotID(s string) bool {
-	if strings.HasPrefix(s, "com.apple.os.update-") {
+	if strings.HasPrefix(s, "com.apple.TimeMachine.") || strings.HasPrefix(s, "com.apple.os.update-") {
 		return true
 	}
+	return containsLocalSnapshotStamp(s)
+}
+
+func containsLocalSnapshotStamp(s string) bool {
+	for i := 0; i+17 <= len(s); i++ {
+		if isLocalSnapshotStamp(s[i : i+17]) {
+			return true
+		}
+	}
+	return false
+}
+
+func isLocalSnapshotStamp(s string) bool {
 	_, err := time.Parse("2006-01-02-150405", s)
 	return err == nil && len(s) == 17
 }
