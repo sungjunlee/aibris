@@ -44,6 +44,15 @@ func ClassifyBand(usedPercent float64) Band {
 	}
 }
 
+// HumanWord is the operator-facing band label. JSON keeps BandLow as "low"
+// because that value already shipped in 0.x scan --json.
+func HumanWord(b Band) string {
+	if b == BandLow {
+		return "tight"
+	}
+	return string(b)
+}
+
 // SplitDebris attributes item sizes to the inspected volume versus others.
 // Items whose volume cannot be compared stay on-volume so a failed lookup
 // never hides debris from the home-volume figure.
