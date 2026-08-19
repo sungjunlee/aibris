@@ -8,6 +8,9 @@
   among default / strip / pressure when that path is larger than default, and
   home-volume used% / free bytes / band. JSON `volume.band` `low` still means
   ≥85% used; the human word for that band is `tight`.
+- Successful `clean --apfs-snapshots` now reprints remaining snapshot count
+  and home-volume used% / free / band without running a full scan. Dry-run
+  still only prints the plan. A volume re-read failure is a non-fatal warning.
 
 ## [0.11.1] - 2026-08-18
 
