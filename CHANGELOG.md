@@ -8,6 +8,9 @@
   among default / strip / pressure when that path is larger than default, and
   home-volume used% / free bytes / band. JSON `volume.band` `low` still means
   ≥85% used; the human word for that band is `tight`.
+- Classic `clean --dry-run` target rows print largest-first. Prepared
+  execution order, JSON `clean_plan` order, and guided review order are
+  unchanged.
 - Successful `clean --apfs-snapshots` now reprints remaining snapshot count
   and home-volume used% / free / band without running a full scan. Dry-run
   still only prints the plan. A volume re-read failure is a non-fatal warning.

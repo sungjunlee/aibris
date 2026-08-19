@@ -1064,10 +1064,24 @@ func printCleanPlan(targets []types.DebrisInfo, mode cleanPlanMode) {
 	fmt.Println("targets")
 	fmt.Printf("  %8s  %-13s %-12s %-18s %-14s %-12s %s\n",
 		"size", "category", "name", "project", "age/status", "action", "reason")
-	for _, w := range targets {
+	for _, w := range displayCleanPlanTargets(targets, mode) {
 		printCleanTarget(w, home)
 	}
 	fmt.Println()
+}
+
+func displayCleanPlanTargets(targets []types.DebrisInfo, mode cleanPlanMode) []types.DebrisInfo {
+	if mode != cleanPlanModeDryRun {
+		return targets
+	}
+	displayed := append([]types.DebrisInfo(nil), targets...)
+	sort.SliceStable(displayed, func(i, j int) bool {
+		if displayed[i].Size != displayed[j].Size {
+			return displayed[i].Size > displayed[j].Size
+		}
+		return cleaner.TargetStableKey(displayed[i]) < cleaner.TargetStableKey(displayed[j])
+	})
+	return displayed
 }
 
 func printCleanPlanWithComponents(
