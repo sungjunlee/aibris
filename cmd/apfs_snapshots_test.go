@@ -119,6 +119,26 @@ func TestPrintAPFSThinResultVolumeFailureIsNonFatal(t *testing.T) {
 	}
 }
 
+func TestPrintAPFSThinResultRemainingListFailureIsNonFatal(t *testing.T) {
+	report := &volume.Report{
+		Role: "home", FSType: "apfs", UsedPercent: 90,
+		AvailableBytes: 48 * 1024 * 1024 * 1024, Band: volume.BandLow,
+	}
+	stdout, stderr := captureStdStreams(func() {
+		printAPFSThinResult(0, errors.New("list failed"), report, nil)
+	})
+	if !strings.Contains(stdout, "thinned local APFS snapshots") ||
+		!strings.Contains(stdout, "90% used") {
+		t.Fatalf("remaining-list failure hid thin/volume:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "remaining") {
+		t.Fatalf("failed remaining list still printed a count:\n%s", stdout)
+	}
+	if !strings.Contains(stderr, "warning:") || !strings.Contains(stderr, "list failed") {
+		t.Fatalf("missing remaining-list warning:\n%s", stderr)
+	}
+}
+
 func captureStdStreams(fn func()) (stdout, stderr string) {
 	rOut, wOut, _ := os.Pipe()
 	rErr, wErr, _ := os.Pipe()

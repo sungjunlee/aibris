@@ -81,7 +81,9 @@ func thinAndReportAPFSSnapshots() error {
 
 func printAPFSThinResult(remaining int, remainingErr error, report *volume.Report, volumeErr error) {
 	fmt.Println("thinned local APFS snapshots")
-	if remainingErr == nil {
+	if remainingErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not list remaining snapshots: %v\n", remainingErr)
+	} else {
 		fmt.Printf("  remaining %d\n", remaining)
 	}
 	printAPFSVolumeAfterThin(report, volumeErr)
