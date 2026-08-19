@@ -709,11 +709,48 @@ func stripEstimateForCWD(items []types.DebrisInfo, opts types.PruneOptions, cwd 
 	return total
 }
 
+var lookupPathDevice = volume.PathDevice
+
 func scanPressureEstimate(items []types.DebrisInfo, defaultPolicy types.PruneOptions) int64 {
+	homeItems, ok := itemsOnHomeVolume(items)
+	if !ok {
+		return summarizeCleanup(items, defaultPolicy).EligibleSize
+	}
 	pressure := defaultPolicy
 	pressure.RelaxCacheAge = true
 	pressure.PressureDevice = ""
-	return summarizeCleanup(items, pressure).EligibleSize
+	return summarizeCleanup(homeItems, pressure).EligibleSize
+}
+
+func itemsOnHomeVolume(items []types.DebrisInfo) ([]types.DebrisInfo, bool) {
+	dev, ok := homePressureDevice()
+	if !ok {
+		return nil, false
+	}
+	home := make([]types.DebrisInfo, 0, len(items))
+	for _, item := range items {
+		if itemOnDevice(item.Path, dev) {
+			home = append(home, item)
+		}
+	}
+	return home, true
+}
+
+func homePressureDevice() (string, bool) {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return "", false
+	}
+	dev, err := lookupPathDevice(home)
+	if err != nil || dev == "" {
+		return "", false
+	}
+	return dev, true
+}
+
+func itemOnDevice(path, device string) bool {
+	got, err := lookupPathDevice(path)
+	return err == nil && got == device
 }
 
 func homeVolumeReport(items []types.DebrisInfo) *volume.Report {
