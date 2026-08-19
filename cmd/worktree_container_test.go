@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
+	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/retention"
 	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/testutil"
@@ -231,7 +232,7 @@ func TestBuiltCLI_MixedActiveOrphanedOwnerFailsClosed(t *testing.T) {
 	if err := json.Unmarshal([]byte(scanOutput), &inventory); err != nil {
 		t.Fatalf("decoding mixed-owner scan JSON: %v\n%s", err, scanOutput)
 	}
-	canonicalOwner, ok := cleanTargetPathKey(owner)
+	canonicalOwner, ok := cleaner.TargetPathKey(owner)
 	if !ok {
 		t.Fatalf("canonicalizing fixture owner %q", owner)
 	}

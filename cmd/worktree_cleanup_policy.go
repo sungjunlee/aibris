@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/sungjunlee/aibris/internal/cleaner"
 )
 
 const (
@@ -263,11 +265,11 @@ func cleanupUnitContainsPath(target, path string) bool {
 		return false
 	}
 	var ok bool
-	target, ok = cleanTargetPathKey(target)
+	target, ok = cleaner.TargetPathKey(target)
 	if !ok {
 		return false
 	}
-	path, ok = cleanTargetPathKey(path)
+	path, ok = cleaner.TargetPathKey(path)
 	if !ok {
 		return false
 	}

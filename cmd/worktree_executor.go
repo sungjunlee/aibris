@@ -679,12 +679,12 @@ func repositoryListsWorktree(ctx context.Context, repositoryID, worktreePath str
 	if err != nil {
 		return false, fmt.Errorf("listing repository worktrees: %w", err)
 	}
-	want, _ := cleanTargetPathKey(worktreePath)
+	want, _ := cleaner.TargetPathKey(worktreePath)
 	for _, field := range strings.Split(string(output), "\x00") {
 		if !strings.HasPrefix(field, "worktree ") {
 			continue
 		}
-		listed, ok := cleanTargetPathKey(strings.TrimPrefix(field, "worktree "))
+		listed, ok := cleaner.TargetPathKey(strings.TrimPrefix(field, "worktree "))
 		if ok && listed == want {
 			return true, nil
 		}

@@ -129,7 +129,7 @@ func TestSummarizeCleanup_CollapsesNestedEligibleTargetsLikeClean(t *testing.T) 
 	// The classic clean pipeline runs the same eligibility, existence, and
 	// normalization stages before planning, so it must collapse the pair the
 	// same way.
-	planned := normalizeCleanTargets(filterExistingTargets(cleaner.Filter(items, opts)))
+	planned := cleaner.NormalizeTargets(cleaner.FilterExistingTargets(cleaner.Filter(items, opts)))
 	if len(planned) != 1 || planned[0].Size != 100 {
 		t.Fatalf("clean pipeline planned %d targets; want exactly the parent with size 100", len(planned))
 	}
@@ -160,7 +160,7 @@ func TestSummarizeCleanup_DropsTargetsRemovedBetweenScanAndSummary(t *testing.T)
 	if targets := cleaner.Filter(items, opts); len(targets) != 1 {
 		t.Fatalf("Filter = %d targets; want 1 (eligibility unchanged)", len(targets))
 	}
-	if planned := filterExistingTargets(cleaner.Filter(items, opts)); len(planned) != 0 {
+	if planned := cleaner.FilterExistingTargets(cleaner.Filter(items, opts)); len(planned) != 0 {
 		t.Fatalf("clean pipeline planned %d targets; want vanished target excluded", len(planned))
 	}
 }

@@ -179,7 +179,7 @@ func BuildUnifiedCleanupPlan(ctx context.Context, candidates []CleanupPlanCandid
 		if !validCleanupPlanSelection(candidate.Selection) {
 			return UnifiedCleanupPlan{}, fmt.Errorf("invalid cleanup plan selection %q", candidate.Selection)
 		}
-		path, ok := cleanTargetPathKey(candidate.Item.Path)
+		path, ok := cleaner.TargetPathKey(candidate.Item.Path)
 		if !ok {
 			return UnifiedCleanupPlan{}, fmt.Errorf("cleanup plan row %q has no target path", candidate.RowKey)
 		}
@@ -265,7 +265,7 @@ func ClassicCleanupPlanCandidates(targets []types.DebrisInfo, opts types.PruneOp
 
 func classicCleanupPlanCandidate(target types.DebrisInfo, opts types.PruneOptions, observedAt time.Time) CleanupPlanCandidate {
 	return CleanupPlanCandidate{
-		RowKey:         "classic:" + cleanTargetStableKey(target),
+		RowKey:         "classic:" + cleaner.TargetStableKey(target),
 		Item:           target,
 		PolicyDecision: CleanupPlanPolicyEligible,
 		Selection:      CleanupPlanSelected,
@@ -413,29 +413,29 @@ func cleanupPlanRepresentative(canonicalPath string, candidates []CleanupPlanCan
 	// Exact canonical aliases remain distinct raw mutation paths. A direct
 	// physical candidate owns the component when available, and only duplicate
 	// rows for that raw path may refine its byte estimate.
-	rawSizes := map[string]int64{cleanTargetRawPathKey(item.Path): item.Size}
+	rawSizes := map[string]int64{cleaner.TargetRawPathKey(item.Path): item.Size}
 	for _, candidate := range candidates[1:] {
 		hasActiveWorktree = hasActiveWorktree ||
 			isActiveWorktreeTarget(candidate.Item)
-		rawPath := cleanTargetRawPathKey(candidate.Item.Path)
+		rawPath := cleaner.TargetRawPathKey(candidate.Item.Path)
 		if candidate.Item.Size > rawSizes[rawPath] {
 			rawSizes[rawPath] = candidate.Item.Size
 		}
-		if preferCleanTargetForCanonical(candidate.Item, item, canonicalPath) {
+		if cleaner.PreferTargetForCanonical(candidate.Item, item, canonicalPath) {
 			item = candidate.Item
 		}
 	}
 	if hasActiveWorktree && item.Category == types.CategoryWorktree {
 		item.Status = types.WorktreeActive
 	}
-	item.Size = rawSizes[cleanTargetRawPathKey(item.Path)]
+	item.Size = rawSizes[cleaner.TargetRawPathKey(item.Path)]
 	return item
 }
 
 func cleanupPlanCandidateStableKey(candidate CleanupPlanCandidate) string {
 	return strings.Join([]string{
 		candidate.RowKey,
-		cleanTargetStableKey(candidate.Item),
+		cleaner.TargetStableKey(candidate.Item),
 		string(candidate.Selection),
 	}, "\x00")
 }
@@ -475,8 +475,8 @@ func buildCleanupPhysicalComponents(
 	sort.Slice(ordered, func(i, j int) bool {
 		left := targets[ordered[i]].Key
 		right := targets[ordered[j]].Key
-		leftDepth := cleanTargetPathDepth(left)
-		rightDepth := cleanTargetPathDepth(right)
+		leftDepth := cleaner.TargetPathDepth(left)
+		rightDepth := cleaner.TargetPathDepth(right)
 		if leftDepth == rightDepth {
 			return left < right
 		}
@@ -498,7 +498,7 @@ func buildCleanupPhysicalComponents(
 			// promoted to selected by a nested selected row, and it must
 			// never become the execution owner of that row; the nested target
 			// stays its own physical owner instead.
-			if cleanTargetContains(previous.Key, target.Key) &&
+			if cleaner.PathContains(previous.Key, target.Key) &&
 				previous.PolicySelection != CleanupPlanUnselected {
 				ownerKey = previous.OwnerKey
 				break
@@ -608,7 +608,7 @@ func cleanupPlanOwnerRowKey(
 	}
 	for _, row := range rows {
 		if row.TargetKey == target.Key &&
-			cleanTargetStableKey(row.Item) == cleanTargetStableKey(target.Item) {
+			cleaner.TargetStableKey(row.Item) == cleaner.TargetStableKey(target.Item) {
 			return row.Key
 		}
 	}
@@ -626,7 +626,7 @@ func cleanupPlanRowContainsLockedTarget(
 	for _, target := range targets {
 		if target.OwnerKey == ownerKey &&
 			target.PolicySelection == CleanupPlanLocked &&
-			cleanTargetContains(rowPath, target.Key) {
+			cleaner.PathContains(rowPath, target.Key) {
 			return true
 		}
 	}
@@ -650,7 +650,7 @@ func cleanupPlanRowStableKey(row CleanupPlanRow) string {
 		row.OwnerKey,
 		row.CanonicalPath,
 		row.Key,
-		cleanTargetStableKey(row.Item),
+		cleaner.TargetStableKey(row.Item),
 	}, "\x00")
 }
 

@@ -175,10 +175,10 @@ func cleanAuditComponentsForTargets(
 	protectedTargets map[string]cleanAuditReason,
 ) []cleanupOverlapComponent {
 	inputs := cleanupOverlapLogicalInputsForAudit(items, opts, protectedTargets)
-	owners := normalizeCleanTargets(targets)
+	owners := cleaner.NormalizeTargets(targets)
 	components := make([]cleanupOverlapComponent, 0, len(owners))
 	for _, owner := range owners {
-		path, ok := cleanTargetPathKey(owner.Path)
+		path, ok := cleaner.TargetPathKey(owner.Path)
 		if !ok {
 			continue
 		}
@@ -188,7 +188,7 @@ func cleanAuditComponentsForTargets(
 			Owner:         owner,
 		}
 		for _, input := range inputs {
-			rowPath, rowOK := cleanTargetPathKey(input.Item.Path)
+			rowPath, rowOK := cleaner.TargetPathKey(input.Item.Path)
 			relation, overlaps := cleanupLogicalRelation(path, rowPath)
 			if !rowOK || !overlaps {
 				continue
@@ -384,7 +384,7 @@ func cleanAuditPhysicalComponentsWithLogicalInputs(
 		if attached[i] {
 			continue
 		}
-		path, ok := cleanTargetPathKey(item.Path)
+		path, ok := cleaner.TargetPathKey(item.Path)
 		if !ok {
 			continue
 		}
@@ -414,9 +414,9 @@ func cleanAuditPhysicalComponentsWithLogicalInputs(
 		}
 		remaining = append(remaining, cleanupOverlapLogicalInput{Item: item, PolicyReason: item.Reason})
 	}
-	standaloneOwners := normalizeCleanTargets(cleanupLogicalItems(remaining))
+	standaloneOwners := cleaner.NormalizeTargets(cleanupLogicalItems(remaining))
 	for _, owner := range standaloneOwners {
-		path, ok := cleanTargetPathKey(owner.Path)
+		path, ok := cleaner.TargetPathKey(owner.Path)
 		if !ok {
 			continue
 		}
@@ -426,7 +426,7 @@ func cleanAuditPhysicalComponentsWithLogicalInputs(
 			Owner:         owner,
 		}
 		for i, input := range remaining {
-			rowPath, rowOK := cleanTargetPathKey(input.Item.Path)
+			rowPath, rowOK := cleaner.TargetPathKey(input.Item.Path)
 			relation, overlaps := cleanupLogicalRelation(path, rowPath)
 			if !rowOK || !overlaps {
 				continue
@@ -459,7 +459,7 @@ func cleanAuditPhysicalComponentsWithLogicalInputs(
 	}
 	sort.Slice(components, func(i, j int) bool {
 		if components[i].CanonicalPath == components[j].CanonicalPath {
-			return cleanTargetStableKey(components[i].Owner) < cleanTargetStableKey(components[j].Owner)
+			return cleaner.TargetStableKey(components[i].Owner) < cleaner.TargetStableKey(components[j].Owner)
 		}
 		return components[i].CanonicalPath < components[j].CanonicalPath
 	})
@@ -541,7 +541,7 @@ func newCleanAuditTargetSet(targets []types.DebrisInfo) *cleanAuditTargetSet {
 	seenPaths := make(map[string]bool, len(targets))
 	for _, target := range targets {
 		set.keys[cleanAuditItemKey(target)]++
-		if path, ok := cleanTargetPathKey(target.Path); ok && !seenPaths[path] {
+		if path, ok := cleaner.TargetPathKey(target.Path); ok && !seenPaths[path] {
 			seenPaths[path] = true
 			set.paths = append(set.paths, path)
 		}
@@ -563,7 +563,7 @@ func (s *cleanAuditTargetSet) exclusionReason(item types.DebrisInfo) cleanAuditR
 	if _, err := os.Stat(item.Path); err != nil {
 		return cleanReasonMissingPath
 	}
-	path, ok := cleanTargetPathKey(item.Path)
+	path, ok := cleaner.TargetPathKey(item.Path)
 	if !ok {
 		return cleanReasonMissingPath
 	}
@@ -571,10 +571,10 @@ func (s *cleanAuditTargetSet) exclusionReason(item types.DebrisInfo) cleanAuditR
 		if targetPath == path {
 			return cleanReasonDuplicatePath
 		}
-		if cleanTargetContains(targetPath, path) {
+		if cleaner.PathContains(targetPath, path) {
 			return cleanReasonNestedTarget
 		}
-		if cleanTargetContains(path, targetPath) {
+		if cleaner.PathContains(path, targetPath) {
 			return cleanReasonOverlapTarget
 		}
 	}
@@ -583,6 +583,14 @@ func (s *cleanAuditTargetSet) exclusionReason(item types.DebrisInfo) cleanAuditR
 
 func cleanAuditItemKey(item types.DebrisInfo) string {
 	return string(item.Category) + "\x00" + string(item.Tool) + "\x00" + item.ID + "\x00" + item.Path
+}
+
+func cleanAuditReasonsFromEligibility(reasons map[string]cleaner.EligibilityReason) map[string]cleanAuditReason {
+	converted := make(map[string]cleanAuditReason, len(reasons))
+	for key, reason := range reasons {
+		converted[key] = cleanAuditReason(reason)
+	}
+	return converted
 }
 
 func cleanAuditBlockReason(item types.DebrisInfo, opts types.PruneOptions, observedAt time.Time, targetSet *cleanAuditTargetSet, protectedTargets map[string]cleanAuditReason) cleanAuditReason {

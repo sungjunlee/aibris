@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -190,7 +191,7 @@ func TestBuildWorktreeCleanupUnitsAggregatesMultiMemberHardSafety(t *testing.T) 
 	assertCleanupMemberReason(t, unit.Members[0], true, true, GitReasonDirtyWorktree)
 	assertCleanupMemberReason(t, unit.Members[1], false, true, GitReasonAttachedBranch)
 	assertUnitHardLockReasons(t, unit, []GitEvidenceReasonCode{GitReasonDirtyWorktree})
-	wantDirtyPath, _ := cleanTargetPathKey(dirty)
+	wantDirtyPath, _ := cleaner.TargetPathKey(dirty)
 	if unit.HardLockReasons[0].WorktreePath != wantDirtyPath {
 		t.Errorf("hard lock member = %q; want %q", unit.HardLockReasons[0].WorktreePath, wantDirtyPath)
 	}

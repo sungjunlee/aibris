@@ -120,7 +120,7 @@ func newGuidedCleanStateFromCleanupPlan(source scanSource, reason string, activi
 func guidedCleanupUnitItem(unit WorktreeCleanupUnit, items []types.DebrisInfo) types.DebrisInfo {
 	var candidates []types.DebrisInfo
 	for _, item := range items {
-		path, ok := cleanTargetPathKey(item.Path)
+		path, ok := cleaner.TargetPathKey(item.Path)
 		if ok && path == unit.TargetPath {
 			candidates = append(candidates, item)
 		}
@@ -196,7 +196,7 @@ func applyGuidedPolicyReasons(
 ) []cleanupOverlapLogicalInput {
 	reasonsByPath := make(map[string]string, len(state.Rows))
 	for _, row := range state.Rows {
-		path, ok := cleanTargetPathKey(row.Row.Item.Path)
+		path, ok := cleaner.TargetPathKey(row.Row.Item.Path)
 		if ok {
 			reasonsByPath[path] = row.Row.Reason
 		}
@@ -205,7 +205,7 @@ func applyGuidedPolicyReasons(
 		if !isActiveCodexWorktree(inputs[i].Item) {
 			continue
 		}
-		path, ok := cleanTargetPathKey(inputs[i].Item.Path)
+		path, ok := cleaner.TargetPathKey(inputs[i].Item.Path)
 		if !ok {
 			continue
 		}
@@ -313,7 +313,7 @@ func selectedGuidedCleanTargets(state guidedCleanState) []types.DebrisInfo {
 			targets = append(targets, row.Row.Item)
 		}
 	}
-	return normalizeCleanTargets(targets)
+	return cleaner.NormalizeTargets(targets)
 }
 
 func renderGuidedClean(output io.Writer, state guidedCleanState, status string, mode guidedCleanPromptMode) {

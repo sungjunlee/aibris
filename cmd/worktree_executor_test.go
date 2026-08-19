@@ -937,7 +937,7 @@ func TestPreparePathCleanupRejectsReplacementAfterScanEvidenceValidation(t *test
 func newExecutorWorktree(t *testing.T, branch string) (home, repository, worktree string) {
 	t.Helper()
 	home = t.TempDir()
-	home, _ = cleanTargetPathKey(home)
+	home, _ = cleaner.TargetPathKey(home)
 	repository = filepath.Join(home, "repositories", "repo")
 	newGitFixtureRepoAt(t, repository)
 	worktree = filepath.Join(home, ".codex", "worktrees", branch)
@@ -951,7 +951,7 @@ func newExecutorWorktree(t *testing.T, branch string) (home, repository, worktre
 func newExecutorMultiMemberUnit(t *testing.T) (home, repository, target, first, second string) {
 	t.Helper()
 	home = t.TempDir()
-	home, _ = cleanTargetPathKey(home)
+	home, _ = cleaner.TargetPathKey(home)
 	repository = filepath.Join(home, "repositories", "repo")
 	newGitFixtureRepoAt(t, repository)
 	target = filepath.Join(home, ".codex", "worktrees", "multi")

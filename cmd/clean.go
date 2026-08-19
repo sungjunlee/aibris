@@ -242,14 +242,15 @@ without deleting the unit, its branch, or any uncommitted work.`,
 		}
 
 		targets := cleaner.Filter(result.Worktrees, opts)
-		targets, physicalOwnerProtections := applyPhysicalWorktreeOwnerSafety(
+		targets, physicalOwnerEligibility := cleaner.ApplyPhysicalOwnerSafety(
 			result.Worktrees,
 			targets,
 			opts.IncludeActiveWorktrees,
 		)
-		targets = filterExistingTargets(targets)
+		physicalOwnerProtections := cleanAuditReasonsFromEligibility(physicalOwnerEligibility)
+		targets = cleaner.FilterExistingTargets(targets)
 		targets, scanEvidenceProtections := filterTargetsWithoutScanEvidence(targets)
-		targets = normalizeCleanTargets(targets)
+		targets = cleaner.NormalizeTargets(targets)
 		targets, gitSafetyProtections := filterGitUnsafeActiveWorktreeTargets(ctx, targets)
 		classicProtections := mergeCleanAuditProtections(
 			physicalOwnerProtections,
@@ -351,23 +352,23 @@ without deleting the unit, its branch, or any uncommitted work.`,
 }
 
 func mergeGuidedPreviewWithClassicTargets(guided, classic []types.DebrisInfo) ([]types.DebrisInfo, []types.DebrisInfo) {
-	guidedTargets := normalizeCleanTargets(guided)
+	guidedTargets := cleaner.NormalizeTargets(guided)
 	guidedPaths := make([]string, 0, len(guidedTargets))
 	for _, target := range guidedTargets {
-		if path, ok := cleanTargetPathKey(target.Path); ok {
+		if path, ok := cleaner.TargetPathKey(target.Path); ok {
 			guidedPaths = append(guidedPaths, path)
 		}
 	}
 
 	classicTargets := make([]types.DebrisInfo, 0, len(classic))
 	for _, target := range classic {
-		path, ok := cleanTargetPathKey(target.Path)
+		path, ok := cleaner.TargetPathKey(target.Path)
 		if !ok {
 			continue
 		}
 		overlapsGuided := false
 		for _, guidedPath := range guidedPaths {
-			if path == guidedPath || cleanTargetContains(guidedPath, path) || cleanTargetContains(path, guidedPath) {
+			if path == guidedPath || cleaner.PathContains(guidedPath, path) || cleaner.PathContains(path, guidedPath) {
 				overlapsGuided = true
 				break
 			}
@@ -376,7 +377,7 @@ func mergeGuidedPreviewWithClassicTargets(guided, classic []types.DebrisInfo) ([
 			classicTargets = append(classicTargets, target)
 		}
 	}
-	classicTargets = normalizeCleanTargets(classicTargets)
+	classicTargets = cleaner.NormalizeTargets(classicTargets)
 
 	auditTargets := make([]types.DebrisInfo, 0, len(guidedTargets)+len(classicTargets))
 	auditTargets = append(auditTargets, guidedTargets...)
@@ -406,8 +407,8 @@ func mergeCleanupOverlapComponents(
 	}
 	sort.Slice(merged, func(i, j int) bool {
 		if merged[i].CanonicalPath == merged[j].CanonicalPath {
-			return cleanTargetStableKey(merged[i].Owner) <
-				cleanTargetStableKey(merged[j].Owner)
+			return cleaner.TargetStableKey(merged[i].Owner) <
+				cleaner.TargetStableKey(merged[j].Owner)
 		}
 		return merged[i].CanonicalPath < merged[j].CanonicalPath
 	})
@@ -903,16 +904,6 @@ func candidateNoun(count int) string {
 	return "candidates"
 }
 
-func filterExistingTargets(targets []types.DebrisInfo) []types.DebrisInfo {
-	filtered := targets[:0]
-	for _, target := range targets {
-		if _, err := os.Lstat(target.Path); err == nil {
-			filtered = append(filtered, target)
-		}
-	}
-	return filtered
-}
-
 func filterTargetsWithoutScanEvidence(targets []types.DebrisInfo) ([]types.DebrisInfo, map[string]cleanAuditReason) {
 	filtered := targets[:0]
 	protections := make(map[string]cleanAuditReason)
@@ -921,61 +912,6 @@ func filterTargetsWithoutScanEvidence(targets []types.DebrisInfo) ([]types.Debri
 			protections[cleanAuditItemKey(target)] = cleanReasonScanEvidenceUnavailable
 			continue
 		}
-		filtered = append(filtered, target)
-	}
-	return filtered, protections
-}
-
-// applyPhysicalWorktreeOwnerSafety evaluates worktree eligibility at the
-// physical owner boundary. Scanner compatibility rows may disagree on status
-// while sharing one mutation path, so no orphaned row may independently
-// authorize removal of an owner that also has an active row.
-func applyPhysicalWorktreeOwnerSafety(
-	inventory []types.DebrisInfo,
-	targets []types.DebrisInfo,
-	includeActive bool,
-) ([]types.DebrisInfo, map[string]cleanAuditReason) {
-	activeOwners := make(map[string]bool)
-	for _, item := range inventory {
-		if item.Category != types.CategoryWorktree ||
-			item.Status != types.WorktreeActive {
-			continue
-		}
-		if path, ok := cleanTargetPathKey(item.Path); ok {
-			activeOwners[path] = true
-		}
-	}
-
-	protections := make(map[string]cleanAuditReason)
-	if !includeActive {
-		for _, item := range inventory {
-			if item.Category != types.CategoryWorktree {
-				continue
-			}
-			path, ok := cleanTargetPathKey(item.Path)
-			if ok && activeOwners[path] {
-				protections[cleanAuditItemKey(item)] = cleanReasonActiveWorktree
-			}
-		}
-	}
-
-	filtered := make([]types.DebrisInfo, 0, len(targets))
-	for _, target := range targets {
-		if target.Category != types.CategoryWorktree {
-			filtered = append(filtered, target)
-			continue
-		}
-		path, ok := cleanTargetPathKey(target.Path)
-		if !ok || !activeOwners[path] {
-			filtered = append(filtered, target)
-			continue
-		}
-		if !includeActive {
-			continue
-		}
-		// Preserve the selected raw mutation path and its physical byte
-		// estimate, but force the owner through the active/Git-aware route.
-		target.Status = types.WorktreeActive
 		filtered = append(filtered, target)
 	}
 	return filtered, protections
@@ -1009,183 +945,6 @@ func filterGitUnsafeActiveWorktreeTargetsWithInspector(ctx context.Context, targ
 		protections[cleanAuditItemKey(target)] = cleanAuditReason(reason)
 	}
 	return filtered, protections
-}
-
-type normalizedCleanTarget struct {
-	item     types.DebrisInfo
-	path     string
-	depth    int
-	index    int
-	rawSizes map[string]int64
-}
-
-func normalizeCleanTargets(targets []types.DebrisInfo) []types.DebrisInfo {
-	byPath := make(map[string]normalizedCleanTarget, len(targets))
-	for i, target := range targets {
-		path, ok := cleanTargetPathKey(target.Path)
-		if !ok {
-			continue
-		}
-		candidate := normalizedCleanTarget{
-			item:     target,
-			path:     path,
-			depth:    cleanTargetPathDepth(path),
-			index:    i,
-			rawSizes: map[string]int64{cleanTargetRawPathKey(target.Path): target.Size},
-		}
-		existing, exists := byPath[path]
-		if !exists {
-			byPath[path] = candidate
-			continue
-		}
-		// Canonical aliases share containment identity, but they do not share a
-		// raw mutation target. Keep byte estimates scoped to the selected raw
-		// path so deleting a symlink cannot inherit its referent's accounting.
-		rawPath := cleanTargetRawPathKey(candidate.item.Path)
-		if candidate.item.Size > existing.rawSizes[rawPath] {
-			existing.rawSizes[rawPath] = candidate.item.Size
-		}
-		hasActiveWorktree := isActiveWorktreeTarget(existing.item) ||
-			isActiveWorktreeTarget(candidate.item)
-		if preferCleanTargetForCanonical(candidate.item, existing.item, path) {
-			existing.item = candidate.item
-		}
-		if hasActiveWorktree && existing.item.Category == types.CategoryWorktree {
-			// Canonical aliases still prefer the direct raw mutation owner, but
-			// a mixed active/orphaned owner must retain active execution
-			// semantics regardless of which raw row supplied that owner.
-			existing.item.Status = types.WorktreeActive
-		}
-		existing.item.Size = existing.rawSizes[cleanTargetRawPathKey(existing.item.Path)]
-		if candidate.index < existing.index {
-			existing.index = candidate.index
-		}
-		byPath[path] = existing
-	}
-
-	candidates := make([]normalizedCleanTarget, 0, len(byPath))
-	for _, candidate := range byPath {
-		candidates = append(candidates, candidate)
-	}
-	sort.Slice(candidates, func(i, j int) bool {
-		left := candidates[i]
-		right := candidates[j]
-		if left.depth == right.depth {
-			return left.path < right.path
-		}
-		return left.depth < right.depth
-	})
-
-	kept := make([]normalizedCleanTarget, 0, len(candidates))
-	for _, candidate := range candidates {
-		nested := false
-		for _, parent := range kept {
-			if cleanTargetContains(parent.path, candidate.path) {
-				nested = true
-				break
-			}
-		}
-		if !nested {
-			kept = append(kept, candidate)
-		}
-	}
-	sort.SliceStable(kept, func(i, j int) bool {
-		if kept[i].index == kept[j].index {
-			return kept[i].path < kept[j].path
-		}
-		return kept[i].index < kept[j].index
-	})
-
-	normalized := make([]types.DebrisInfo, 0, len(kept))
-	for _, target := range kept {
-		normalized = append(normalized, target.item)
-	}
-	return normalized
-}
-
-func cleanTargetPathKey(path string) (string, bool) {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return "", false
-	}
-	clean := filepath.Clean(path)
-	if resolved, err := filepath.EvalSymlinks(clean); err == nil {
-		clean = filepath.Clean(resolved)
-	}
-	return clean, true
-}
-
-func cleanTargetRawPathKey(path string) string {
-	return filepath.Clean(strings.TrimSpace(path))
-}
-
-func preferCleanTargetForCanonical(left, right types.DebrisInfo, canonicalPath string) bool {
-	leftIsSymlink := cleanTargetPathIsSymlink(left.Path)
-	rightIsSymlink := cleanTargetPathIsSymlink(right.Path)
-	if leftIsSymlink != rightIsSymlink {
-		return !leftIsSymlink
-	}
-	leftIsCanonical := cleanTargetRawPathKey(left.Path) == canonicalPath
-	rightIsCanonical := cleanTargetRawPathKey(right.Path) == canonicalPath
-	if leftIsCanonical != rightIsCanonical {
-		return leftIsCanonical
-	}
-	return preferCleanTarget(left, right)
-}
-
-func cleanTargetPathIsSymlink(path string) bool {
-	info, err := os.Lstat(cleanTargetRawPathKey(path))
-	return err == nil && info.Mode()&os.ModeSymlink != 0
-}
-
-func preferCleanTarget(left, right types.DebrisInfo) bool {
-	leftRank := cleanTargetRank(left)
-	rightRank := cleanTargetRank(right)
-	if leftRank != rightRank {
-		return leftRank < rightRank
-	}
-	return cleanTargetStableKey(left) < cleanTargetStableKey(right)
-}
-
-func cleanTargetRank(target types.DebrisInfo) int {
-	if target.Category == types.CategoryWorktree {
-		return 0
-	}
-	if cleanupKind(target) == types.CleanupRemovePath {
-		return 1
-	}
-	return 2
-}
-
-func cleanTargetStableKey(target types.DebrisInfo) string {
-	return strings.Join([]string{
-		string(target.Category),
-		string(target.Tool),
-		target.ID,
-		target.Project,
-		target.Source,
-		string(target.Status),
-		string(cleanupKind(target)),
-		strings.Join(target.CleanupCommand, "\x00"),
-		target.Path,
-	}, "\x00")
-}
-
-func cleanTargetPathDepth(path string) int {
-	volume := filepath.VolumeName(path)
-	trimmed := strings.Trim(strings.TrimPrefix(path, volume), string(filepath.Separator))
-	if trimmed == "" {
-		return 0
-	}
-	return strings.Count(trimmed, string(filepath.Separator)) + 1
-}
-
-func cleanTargetContains(parent, child string) bool {
-	rel, err := filepath.Rel(parent, child)
-	if err != nil || rel == "." || rel == ".." || filepath.IsAbs(rel) {
-		return false
-	}
-	return !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func interactiveClean(ctx context.Context, targets []preparedCleanTarget) (cleanExecutionReceipt, error) {
@@ -1319,11 +1078,11 @@ func printCleanPlanWithComponents(
 	printCleanPlan(targets, mode)
 	targetKeys := make(map[string]bool, len(targets))
 	for _, target := range targets {
-		targetKeys[cleanTargetStableKey(target)] = true
+		targetKeys[cleaner.TargetStableKey(target)] = true
 	}
 	printedHeader := false
 	for _, component := range components {
-		if !targetKeys[cleanTargetStableKey(component.Owner)] ||
+		if !targetKeys[cleaner.TargetStableKey(component.Owner)] ||
 			!cleanupComponentHasLineage(component) {
 			continue
 		}

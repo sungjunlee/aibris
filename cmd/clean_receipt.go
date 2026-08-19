@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -420,7 +421,7 @@ func cleanJSONReceiptTargetIDForItem(
 	components []cleanJSONSnapshotComponent,
 	item types.DebrisInfo,
 ) string {
-	path, ok := cleanTargetPathKey(item.Path)
+	path, ok := cleaner.TargetPathKey(item.Path)
 	if !ok {
 		return ""
 	}
@@ -772,11 +773,11 @@ func rejectCleanReceiptSinkOverlap(path string, targets []types.DebrisInfo) erro
 		return fmt.Errorf("resolving receipt file %q: %w", path, err)
 	}
 	for _, target := range targets {
-		targetPath, ok := cleanTargetPathKey(target.Path)
+		targetPath, ok := cleaner.TargetPathKey(target.Path)
 		if !ok {
 			continue
 		}
-		if sink == targetPath || cleanTargetContains(targetPath, sink) {
+		if sink == targetPath || cleaner.PathContains(targetPath, sink) {
 			return fmt.Errorf("receipt file %q is inside a cleanup target", path)
 		}
 	}

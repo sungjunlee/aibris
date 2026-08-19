@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -13,13 +14,13 @@ func guidedCodexWorktreeContainsCWD(worktreePath, cwd string) bool {
 	if cwd == "" {
 		return false
 	}
-	worktree, ok := cleanTargetPathKey(worktreePath)
+	worktree, ok := cleaner.TargetPathKey(worktreePath)
 	if !ok {
 		return false
 	}
-	current, ok := cleanTargetPathKey(cwd)
+	current, ok := cleaner.TargetPathKey(cwd)
 	if !ok {
 		return false
 	}
-	return worktree == current || cleanTargetContains(worktree, current)
+	return worktree == current || cleaner.PathContains(worktree, current)
 }

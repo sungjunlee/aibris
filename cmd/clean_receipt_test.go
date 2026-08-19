@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -182,7 +183,7 @@ func TestCleanJSONReceiptBatchConfirmationContextCancellationUsesStableReason(t 
 	if err := os.MkdirAll(target.Path, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	key, ok := cleanTargetPathKey(target.Path)
+	key, ok := cleaner.TargetPathKey(target.Path)
 	if !ok {
 		t.Fatal("target path did not canonicalize")
 	}
@@ -487,11 +488,11 @@ func TestExecuteCleanJSONReceiptRejectsSelectedPreparedSetMismatchBeforeInteract
 			t.Fatal(err)
 		}
 	}
-	firstKey, ok := cleanTargetPathKey(first.Path)
+	firstKey, ok := cleaner.TargetPathKey(first.Path)
 	if !ok {
 		t.Fatal("first path did not canonicalize")
 	}
-	secondKey, ok := cleanTargetPathKey(second.Path)
+	secondKey, ok := cleaner.TargetPathKey(second.Path)
 	if !ok {
 		t.Fatal("second path did not canonicalize")
 	}

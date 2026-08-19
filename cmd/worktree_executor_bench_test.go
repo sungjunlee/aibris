@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/testutil"
 )
 
@@ -57,7 +58,7 @@ func BenchmarkExecutePreparedCleanTargets(b *testing.B) {
 func newBenchmarkExecutorWorktrees(tb testing.TB, count int) (string, []string) {
 	tb.Helper()
 	home := tb.TempDir()
-	home, _ = cleanTargetPathKey(home)
+	home, _ = cleaner.TargetPathKey(home)
 	repository := filepath.Join(home, "repositories", "repo")
 	newGitFixtureRepoAt(tb, repository)
 	worktrees := make([]string, 0, count)

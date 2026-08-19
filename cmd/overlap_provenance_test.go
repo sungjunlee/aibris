@@ -185,7 +185,7 @@ func TestOverlapProvenanceFailureAndCancellationPreserveCompleteComponent(t *tes
 			t.Fatalf("error = %v; want child failure", err)
 		}
 		unit := singleExecutionUnit(t, receipt)
-		canonicalSecond, _ := cleanTargetPathKey(second)
+		canonicalSecond, _ := cleaner.TargetPathKey(second)
 		if unit.PhysicalRemoved || unit.FreedBytes != 0 || receipt.FreedBytes != 0 ||
 			unit.BlockingPath != canonicalSecond || len(unit.Obligations) != 2 {
 			t.Fatalf("receipt = %+v; complete component must survive with blocker", receipt)
@@ -296,8 +296,8 @@ func TestOverlapProvenanceFailureAndCancellationPreserveCompleteComponent(t *tes
 				t.Fatal("classification drift error = nil")
 			}
 			unit := singleExecutionUnit(t, receipt)
-			canonicalEntry, _ := cleanTargetPathKey(entry)
-			canonicalBlocker, _ := cleanTargetPathKey(unit.BlockingPath)
+			canonicalEntry, _ := cleaner.TargetPathKey(entry)
+			canonicalBlocker, _ := cleaner.TargetPathKey(unit.BlockingPath)
 			if unit.PhysicalRemoved || unit.FreedBytes != 0 ||
 				canonicalBlocker != canonicalEntry ||
 				len(unit.Obligations) != 1 ||
@@ -340,7 +340,7 @@ func TestOverlapProvenanceFailureAndCancellationPreserveCompleteComponent(t *tes
 			t.Fatal("missing refreshed revalidator error = nil")
 		}
 		unit := singleExecutionUnit(t, receipt)
-		canonicalEntry, _ := cleanTargetPathKey(entry)
+		canonicalEntry, _ := cleaner.TargetPathKey(entry)
 		if unit.PhysicalRemoved || unit.FreedBytes != 0 ||
 			len(unit.Obligations) != 1 ||
 			unit.Obligations[0].EntryPath != canonicalEntry ||
@@ -604,7 +604,7 @@ func assertCleanupComponentLineageEqual(
 	}
 	for i := range left {
 		if left[i].CanonicalPath != right[i].CanonicalPath ||
-			cleanTargetStableKey(left[i].Owner) != cleanTargetStableKey(right[i].Owner) ||
+			cleaner.TargetStableKey(left[i].Owner) != cleaner.TargetStableKey(right[i].Owner) ||
 			len(left[i].LogicalRows) != len(right[i].LogicalRows) ||
 			len(left[i].Obligations) != len(right[i].Obligations) {
 			t.Fatalf("component %d differs:\nleft=%+v\nright=%+v", i, left[i], right[i])

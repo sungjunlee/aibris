@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -149,7 +150,7 @@ func TestBuildWorktreeCleanupUnits(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			root := t.TempDir()
-			root, _ = cleanTargetPathKey(root)
+			root, _ = cleaner.TargetPathKey(root)
 			items := tt.buildItems(t, root)
 
 			units, err := BuildWorktreeCleanupUnits(items)
@@ -218,7 +219,7 @@ func TestBuildWorktreeCleanupUnitsReturnsErrorWhenTargetDisappears(t *testing.T)
 
 func TestBuildWorktreeCleanupUnitsCanonicalizesSymlinkTargets(t *testing.T) {
 	root := t.TempDir()
-	root, _ = cleanTargetPathKey(root)
+	root, _ = cleaner.TargetPathKey(root)
 	realTarget := filepath.Join(root, "real", "worktree")
 	createCleanupUnitGitFile(t, filepath.Join(realTarget, "project"), "canonical")
 	aliasTarget := filepath.Join(root, "alias")
@@ -247,7 +248,7 @@ func TestBuildWorktreeCleanupUnitsCanonicalizesSymlinkTargets(t *testing.T) {
 
 func TestBuildWorktreeCleanupUnitsUsesCanonicalRepositoryIdentity(t *testing.T) {
 	root := t.TempDir()
-	root, _ = cleanTargetPathKey(root)
+	root, _ = cleaner.TargetPathKey(root)
 	repositoryPath := filepath.Join(root, "repositories", "canonical-name")
 	commonDir := filepath.Join(repositoryPath, ".git")
 	aliasPath := filepath.Join(root, "aliases", "display-alias")
@@ -318,7 +319,7 @@ func TestBuildWorktreeCleanupUnitsKeepsSameBasenameRepositoriesDistinct(t *testi
 
 func TestBuildWorktreeCleanupUnitsOrdersMultipleRepositoriesDeterministically(t *testing.T) {
 	root := t.TempDir()
-	root, _ = cleanTargetPathKey(root)
+	root, _ = cleaner.TargetPathKey(root)
 	target := filepath.Join(root, "worktrees", "multi-repository")
 	alphaPath := filepath.Join(target, "alpha-member")
 	zetaPath := filepath.Join(target, "zeta-member")

@@ -144,7 +144,7 @@ func TestUnifiedCleanupPlanAdaptersShareOnePolicyNeutralModel(t *testing.T) {
 	if got, want := len(plan.Rows), 2; got != want {
 		t.Fatalf("rows = %d, want %d", got, want)
 	}
-	if cleanupPlanRowByKey(t, plan, "classic:"+cleanTargetStableKey(classic)).Selection != CleanupPlanSelected {
+	if cleanupPlanRowByKey(t, plan, "classic:"+cleaner.TargetStableKey(classic)).Selection != CleanupPlanSelected {
 		t.Fatal("classic candidate should retain selected policy decision")
 	}
 	worktreeRow := cleanupPlanRowByKey(t, plan, "worktree:"+cleanupUnitStableKey(unit))
@@ -197,7 +197,7 @@ func TestUnifiedCleanupPlanAbsorbsAgeIndependentAgentState(t *testing.T) {
 		t.Fatalf("rows = %d, want %d", got, want)
 	}
 
-	agentStateRow := cleanupPlanRowByKey(t, plan, "classic:"+cleanTargetStableKey(agentState))
+	agentStateRow := cleanupPlanRowByKey(t, plan, "classic:"+cleaner.TargetStableKey(agentState))
 	if agentStateRow.Selection != CleanupPlanSelected {
 		t.Fatalf("agent-state selection = %q, want selected", agentStateRow.Selection)
 	}
@@ -208,7 +208,7 @@ func TestUnifiedCleanupPlanAbsorbsAgeIndependentAgentState(t *testing.T) {
 		t.Fatalf("agent-state reasons = %#v, classic eligibility misstates proof-based selection", agentStateRow.Reasons)
 	}
 
-	cacheRow := cleanupPlanRowByKey(t, plan, "classic:"+cleanTargetStableKey(cache))
+	cacheRow := cleanupPlanRowByKey(t, plan, "classic:"+cleaner.TargetStableKey(cache))
 	if !hasCleanupPlanReason(cacheRow.Reasons, CleanupPlanReasonClassicEligible) {
 		t.Fatalf("cache reasons = %#v, want classic eligibility reason", cacheRow.Reasons)
 	}
@@ -407,7 +407,7 @@ func TestUnifiedCleanupPlanBuildsDeterministicContainmentComponent(t *testing.T)
 			len(forward.Rows), len(forward.Targets), len(forward.Components))
 	}
 	component := forward.Components[0]
-	canonicalOuter, _ := cleanTargetPathKey(outer)
+	canonicalOuter, _ := cleaner.TargetPathKey(outer)
 	if component.CanonicalPath != canonicalOuter || component.Owner.Path != outer ||
 		component.Owner.Size != 1000 || component.Selection != CleanupPlanSelected {
 		t.Fatalf("component = %+v; want canonical raw owner with its own size", component)
@@ -512,7 +512,7 @@ func TestSymlinkAliasExecutionDoesNotClaimCanonicalOwnerBytes(t *testing.T) {
 
 	aliasTarget := cleanupPlanTestItem(alias, types.CategoryBuildCache, 1000)
 	outerEvidence := cleanupPlanTestItem(outer, types.CategoryOtherCache, 1000)
-	canonicalOuter, _ := cleanTargetPathKey(outer)
+	canonicalOuter, _ := cleaner.TargetPathKey(outer)
 	runtime := staticOverlapSafetyRuntime(nil, nil)
 	selection, err := applyCleanupOverlapSafetyWithRows(
 		context.Background(),
