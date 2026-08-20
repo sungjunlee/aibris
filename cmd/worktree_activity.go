@@ -12,51 +12,23 @@ import (
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
+	"github.com/sungjunlee/aibris/internal/worktree"
 )
-
-// WorktreeActivitySource identifies the trusted metadata source selected for
-// a member's last activity. Constant order is also the deterministic tie
-// precedence: Codex session, HEAD reflog, then scanner metadata.
-type WorktreeActivitySource string
-
-const (
-	WorktreeActivityCodexSession WorktreeActivitySource = "codex_session"
-	WorktreeActivityHeadReflog   WorktreeActivitySource = "head_reflog"
-	WorktreeActivityFallback     WorktreeActivitySource = "scanner_metadata"
-
-	// worktreeActivitySourceNotRegistered marks a unit produced by a tool
-	// aibris has no session-activity reader for. It is a statement about
-	// aibris's coverage, not about the worktree: HEAD reflog and scanner
-	// metadata still date the unit, so review stays possible on Git evidence
-	// alone.
-	worktreeActivitySourceNotRegistered = "not-registered"
-	worktreeActivityNotRegisteredReason = "no registered activity source for this tool"
-)
-
-// WorktreeActivityEvidence preserves both positive timestamps and source
-// availability. Available evidence may have no matching timestamp; this is
-// distinct from an index or command outage.
-type WorktreeActivityEvidence struct {
-	Source    WorktreeActivitySource
-	Timestamp time.Time
-	Available bool
-	Error     string
-}
 
 type worktreeActivityOptions struct {
 	index        *codexActivityIndex
 	indexOptions codexActivityIndexOptions
-	runner       worktreeGitCommandRunner
+	runner       worktree.GitCommandRunner
 }
 
 // BuildWorktreeCleanupUnitsWithActivity builds cleanup units and enriches each
 // member with metadata-only activity evidence. Policy and deletion decisions
 // deliberately remain outside this evidence seam.
-func BuildWorktreeCleanupUnitsWithActivity(ctx context.Context, items []types.DebrisInfo) ([]WorktreeCleanupUnit, error) {
+func BuildWorktreeCleanupUnitsWithActivity(ctx context.Context, items []types.DebrisInfo) ([]worktree.WorktreeCleanupUnit, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	units, err := buildWorktreeCleanupUnits(ctx, items)
+	units, err := worktree.BuildWorktreeCleanupUnits(ctx, items)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +38,7 @@ func BuildWorktreeCleanupUnitsWithActivity(ctx context.Context, items []types.De
 	return units, nil
 }
 
-func enrichWorktreeCleanupActivity(ctx context.Context, units []WorktreeCleanupUnit, items []types.DebrisInfo, opts worktreeActivityOptions) error {
+func enrichWorktreeCleanupActivity(ctx context.Context, units []worktree.WorktreeCleanupUnit, items []types.DebrisInfo, opts worktreeActivityOptions) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -87,7 +59,7 @@ func enrichWorktreeCleanupActivity(ctx context.Context, units []WorktreeCleanupU
 		activity.Members = make(map[string]codexWorktreeActivity)
 	}
 	if opts.runner == nil {
-		opts.runner = runWorktreeGitCommand
+		opts.runner = worktree.RunGitCommand
 	}
 
 	scannerRows := cleanupUnitActivityRows(items)
@@ -126,15 +98,15 @@ func enrichWorktreeCleanupActivity(ctx context.Context, units []WorktreeCleanupU
 	return nil
 }
 
-func collectMemberActivity(ctx context.Context, member *GitWorktreeMember, fallback time.Time, identity codexActivityIdentity, tool types.Tool, source string, activity codexActivityIndex, runner worktreeGitCommandRunner) error {
+func collectMemberActivity(ctx context.Context, member *worktree.GitWorktreeMember, fallback time.Time, identity codexActivityIdentity, tool types.Tool, source string, activity codexActivityIndex, runner worktree.GitCommandRunner) error {
 	member.LastActivity = time.Time{}
 	member.ActivitySource = ""
 	member.ActivityAvailable = false
 	member.ActivityEvidence = nil
 	member.RegisteredActivityAvailable, member.RegisteredActivitySource, member.RegisteredActivityError = worktreeActivityAvailability(tool, source, activity)
 
-	session := WorktreeActivityEvidence{
-		Source:    WorktreeActivityCodexSession,
+	session := worktree.WorktreeActivityEvidence{
+		Source:    worktree.WorktreeActivityCodexSession,
 		Available: member.RegisteredActivityAvailable,
 	}
 	if !member.RegisteredActivityAvailable {
@@ -156,8 +128,8 @@ func collectMemberActivity(ctx context.Context, member *GitWorktreeMember, fallb
 	if err != nil {
 		return err
 	}
-	fallbackEvidence := WorktreeActivityEvidence{
-		Source:    WorktreeActivityFallback,
+	fallbackEvidence := worktree.WorktreeActivityEvidence{
+		Source:    worktree.WorktreeActivityFallback,
 		Timestamp: fallback,
 		Available: !fallback.IsZero(),
 	}
@@ -165,7 +137,7 @@ func collectMemberActivity(ctx context.Context, member *GitWorktreeMember, fallb
 		fallbackEvidence.Error = "scanner metadata unavailable"
 	}
 
-	member.ActivityEvidence = []WorktreeActivityEvidence{session, reflog, fallbackEvidence}
+	member.ActivityEvidence = []worktree.WorktreeActivityEvidence{session, reflog, fallbackEvidence}
 	for _, evidence := range member.ActivityEvidence {
 		if !evidence.Available || evidence.Timestamp.IsZero() {
 			continue
@@ -186,7 +158,7 @@ func collectMemberActivity(ctx context.Context, member *GitWorktreeMember, fallb
 // (HEAD reflog, scanner metadata) instead of being locked out of review.
 func worktreeActivityAvailability(tool types.Tool, source string, activity codexActivityIndex) (bool, string, string) {
 	if tool != types.ToolCodex {
-		return false, worktreeActivitySourceNotRegistered, worktreeActivityNotRegisteredReason
+		return false, worktree.ActivitySourceNotRegistered, worktree.ActivityNotRegisteredReason
 	}
 	return codexActivityAvailability(source, activity)
 }
@@ -219,9 +191,9 @@ func codexActivityAvailability(source string, activity codexActivityIndex) (bool
 	return true, activity.Source, ""
 }
 
-func headReflogActivity(ctx context.Context, worktreePath string, runner worktreeGitCommandRunner) (WorktreeActivityEvidence, error) {
-	evidence := WorktreeActivityEvidence{Source: WorktreeActivityHeadReflog}
-	commandCtx, cancel := context.WithTimeout(ctx, gitEvidenceCommandTimeout)
+func headReflogActivity(ctx context.Context, worktreePath string, runner worktree.GitCommandRunner) (worktree.WorktreeActivityEvidence, error) {
+	evidence := worktree.WorktreeActivityEvidence{Source: worktree.WorktreeActivityHeadReflog}
+	commandCtx, cancel := context.WithTimeout(ctx, worktree.GitEvidenceCommandTimeout)
 	defer cancel()
 	output, err := runner(commandCtx, worktreePath, "reflog", "show", "-1", "--format=%ct", "HEAD")
 	if err != nil {

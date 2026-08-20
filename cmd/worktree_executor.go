@@ -13,6 +13,7 @@ import (
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
+	"github.com/sungjunlee/aibris/internal/worktree"
 )
 
 type cleanExecutionState string
@@ -71,7 +72,7 @@ func (r cleanExecutionReceipt) counts() (removed, partial, failed int) {
 type preparedCleanTarget struct {
 	Item             types.DebrisInfo
 	Component        *cleanupOverlapComponent
-	ActiveUnit       *WorktreeCleanupUnit
+	ActiveUnit       *worktree.WorktreeCleanupUnit
 	MutationSafety   *cleanupMutationSafety
 	TargetSnapshot   *cleanupTargetSnapshot
 	PreparationError error
@@ -144,7 +145,7 @@ func prepareCleanExecutionWithOptions(
 			entry.MutationSafety = safety
 		}
 		if isActiveWorktreeTarget(target) {
-			units, err := buildWorktreeCleanupUnits(ctx, []types.DebrisInfo{target})
+			units, err := worktree.BuildWorktreeCleanupUnits(ctx, []types.DebrisInfo{target})
 			switch {
 			case err != nil:
 				entry.PreparationError = errors.Join(entry.PreparationError, err)
@@ -368,7 +369,7 @@ func executeActiveWorktreeUnit(
 	ctx context.Context,
 	target types.DebrisInfo,
 	component *cleanupOverlapComponent,
-	selected WorktreeCleanupUnit,
+	selected worktree.WorktreeCleanupUnit,
 	safety *cleanupMutationSafety,
 	snapshot *cleanupTargetSnapshot,
 	opts activeWorktreeExecutionOptions,
@@ -513,32 +514,32 @@ func executeActiveWorktreeUnit(
 	return receipt, nil
 }
 
-func preflightActiveWorktreeUnit(ctx context.Context, target types.DebrisInfo, selected WorktreeCleanupUnit, opts activeWorktreeExecutionOptions) (WorktreeCleanupUnit, map[string]string, error) {
+func preflightActiveWorktreeUnit(ctx context.Context, target types.DebrisInfo, selected worktree.WorktreeCleanupUnit, opts activeWorktreeExecutionOptions) (worktree.WorktreeCleanupUnit, map[string]string, error) {
 	memberErrors := make(map[string]string)
 	if err := ctx.Err(); err != nil {
-		return WorktreeCleanupUnit{}, memberErrors, err
+		return worktree.WorktreeCleanupUnit{}, memberErrors, err
 	}
 	home, err := opts.userHomeDir()
 	if err != nil {
-		return WorktreeCleanupUnit{}, memberErrors, fmt.Errorf("getting home dir: %w", err)
+		return worktree.WorktreeCleanupUnit{}, memberErrors, fmt.Errorf("getting home dir: %w", err)
 	}
 	if !cleaner.IsSafeTarget(home, target) {
-		return WorktreeCleanupUnit{}, memberErrors, fmt.Errorf("unsafe active worktree path %q rejected", target.Path)
+		return worktree.WorktreeCleanupUnit{}, memberErrors, fmt.Errorf("unsafe active worktree path %q rejected", target.Path)
 	}
 	cwd, err := opts.getwd()
 	if err != nil {
-		return WorktreeCleanupUnit{}, memberErrors, fmt.Errorf("getting current working directory: %w", err)
+		return worktree.WorktreeCleanupUnit{}, memberErrors, fmt.Errorf("getting current working directory: %w", err)
 	}
 	if guidedCodexWorktreeContainsCWD(selected.TargetPath, cwd) {
-		return WorktreeCleanupUnit{}, memberErrors, fmt.Errorf("current working directory is inside cleanup unit %q", selected.TargetPath)
+		return worktree.WorktreeCleanupUnit{}, memberErrors, fmt.Errorf("current working directory is inside cleanup unit %q", selected.TargetPath)
 	}
 
-	units, err := buildWorktreeCleanupUnits(ctx, []types.DebrisInfo{target})
+	units, err := worktree.BuildWorktreeCleanupUnits(ctx, []types.DebrisInfo{target})
 	if err != nil {
-		return WorktreeCleanupUnit{}, memberErrors, fmt.Errorf("refreshing active worktree evidence: %w", err)
+		return worktree.WorktreeCleanupUnit{}, memberErrors, fmt.Errorf("refreshing active worktree evidence: %w", err)
 	}
 	if len(units) != 1 {
-		return WorktreeCleanupUnit{}, memberErrors, fmt.Errorf("refreshing active worktree evidence: expected one cleanup unit, found %d", len(units))
+		return worktree.WorktreeCleanupUnit{}, memberErrors, fmt.Errorf("refreshing active worktree evidence: expected one cleanup unit, found %d", len(units))
 	}
 	refreshed := units[0]
 	if refreshed.TargetPath != selected.TargetPath {
@@ -592,8 +593,8 @@ func preflightActiveWorktreeUnit(ctx context.Context, target types.DebrisInfo, s
 	return refreshed, memberErrors, nil
 }
 
-func membersByPath(members []GitWorktreeMember) map[string]GitWorktreeMember {
-	byPath := make(map[string]GitWorktreeMember, len(members))
+func membersByPath(members []worktree.GitWorktreeMember) map[string]worktree.GitWorktreeMember {
+	byPath := make(map[string]worktree.GitWorktreeMember, len(members))
 	for _, member := range members {
 		byPath[member.WorktreePath] = member
 	}
@@ -638,7 +639,7 @@ func gitWorktreeRemoveArgs(repositoryID, worktreePath string) []string {
 	return []string{"--git-dir=" + repositoryID, "worktree", "remove", worktreePath}
 }
 
-func verifyRemovedWorktreeMember(ctx context.Context, member GitWorktreeMember) (bool, error) {
+func verifyRemovedWorktreeMember(ctx context.Context, member worktree.GitWorktreeMember) (bool, error) {
 	pathRemoved := pathDoesNotExist(member.WorktreePath)
 	listed, err := repositoryListsWorktree(ctx, member.RepositoryID, member.WorktreePath)
 	if err != nil {
@@ -653,7 +654,7 @@ func verifyRemovedWorktreeMember(ctx context.Context, member GitWorktreeMember) 
 		if err != nil {
 			return true, fmt.Errorf("preserved branch %s is unavailable: %w", member.BranchRef, err)
 		}
-		oid, err := gitOID(output)
+		oid, err := worktree.GitOID(output)
 		if err != nil || oid != member.HeadOID {
 			return true, fmt.Errorf("preserved branch %s changed from %s to %s", member.BranchRef, member.HeadOID, oid)
 		}
@@ -697,7 +698,7 @@ func containingRepositoryRefs(ctx context.Context, repositoryID, headOID, namesp
 	if err != nil {
 		return nil, fmt.Errorf("checking refs containing %s: %w", headOID, err)
 	}
-	return nonEmptyGitLines(output), nil
+	return worktree.NonEmptyGitLines(output), nil
 }
 
 func runRepositoryGitCommand(ctx context.Context, repositoryID string, args ...string) ([]byte, error) {
@@ -723,7 +724,7 @@ func sharesGitRef(before, after []string) bool {
 	return false
 }
 
-func setActiveReceiptPhysicalState(receipt *cleanUnitExecutionReceipt, selected WorktreeCleanupUnit) {
+func setActiveReceiptPhysicalState(receipt *cleanUnitExecutionReceipt, selected worktree.WorktreeCleanupUnit) {
 	receipt.PhysicalRemoved = pathDoesNotExist(selected.TargetPath)
 	if receipt.PhysicalRemoved && receipt.MutationAttempted {
 		receipt.FreedBytes = selected.Size
@@ -741,7 +742,7 @@ func setActiveReceiptPhysicalState(receipt *cleanUnitExecutionReceipt, selected 
 	}
 }
 
-func failedCleanUnitReceipt(target types.DebrisInfo, members []GitWorktreeMember, err error) cleanUnitExecutionReceipt {
+func failedCleanUnitReceipt(target types.DebrisInfo, members []worktree.GitWorktreeMember, err error) cleanUnitExecutionReceipt {
 	receipt := cleanUnitExecutionReceipt{
 		Target:           target,
 		ReceiptTargetKey: cleanJSONReceiptItemKey(target),

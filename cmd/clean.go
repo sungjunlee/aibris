@@ -20,6 +20,7 @@ import (
 	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/types"
 	"github.com/sungjunlee/aibris/internal/volume"
+	"github.com/sungjunlee/aibris/internal/worktree"
 )
 
 var (
@@ -676,7 +677,7 @@ func guidedCodexCleanupPressure(ctx context.Context, items []types.DebrisInfo) (
 	// guided review will actually show once it opens.
 	candidates := activeWorktrees(items)
 
-	units, err := buildWorktreeCleanupUnits(ctx, candidates)
+	units, err := worktree.BuildWorktreeCleanupUnits(ctx, candidates)
 	if err != nil || len(units) == 0 {
 		return 0, 0
 	}

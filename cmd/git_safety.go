@@ -3,12 +3,12 @@ package cmd
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/sungjunlee/aibris/internal/types"
+	"github.com/sungjunlee/aibris/internal/worktree"
 )
 
 const (
@@ -23,14 +23,12 @@ type worktreeGitSafety struct {
 	ProtectionReasons []string
 }
 
-type worktreeGitCommandRunner func(ctx context.Context, dir string, args ...string) ([]byte, error)
-
 // inspectActiveWorktreeCleanupSafety uses the same member discovery and Git
 // recoverability evidence as the active-worktree executor. The legacy
 // upstream comparison remains as a compatibility fallback for cached fixtures
 // that describe a regular repository rather than a linked worktree.
 func inspectActiveWorktreeCleanupSafety(ctx context.Context, candidatePath string) worktreeGitSafety {
-	units, err := buildWorktreeCleanupUnits(ctx, []types.DebrisInfo{{
+	units, err := worktree.BuildWorktreeCleanupUnits(ctx, []types.DebrisInfo{{
 		Category: types.CategoryWorktree,
 		Path:     candidatePath,
 	}})
@@ -52,11 +50,11 @@ func inspectActiveWorktreeCleanupSafety(ctx context.Context, candidatePath strin
 	return worktreeGitSafety{Protected: unit.HardLocked, ProtectionReasons: reasons}
 }
 
-func gitEvidenceProtectionReason(reason GitEvidenceReason) string {
+func gitEvidenceProtectionReason(reason worktree.GitEvidenceReason) string {
 	switch reason.Code {
-	case GitReasonDirtyWorktree:
+	case worktree.GitReasonDirtyWorktree:
 		return gitProtectionDirtyFiles
-	case GitReasonEvidenceUnavailable:
+	case worktree.GitReasonEvidenceUnavailable:
 		return gitProtectionGitStatusUnavailable
 	default:
 		return reason.Description
@@ -64,10 +62,10 @@ func gitEvidenceProtectionReason(reason GitEvidenceReason) string {
 }
 
 func inspectWorktreeGitState(ctx context.Context, candidatePath string) worktreeGitSafety {
-	return inspectWorktreeGitStateWithRunner(ctx, candidatePath, runWorktreeGitCommand)
+	return inspectWorktreeGitStateWithRunner(ctx, candidatePath, worktree.RunGitCommand)
 }
 
-func inspectWorktreeGitStateWithRunner(ctx context.Context, candidatePath string, runner worktreeGitCommandRunner) worktreeGitSafety {
+func inspectWorktreeGitStateWithRunner(ctx context.Context, candidatePath string, runner worktree.GitCommandRunner) worktreeGitSafety {
 	worktreeDir, ok := candidateGitWorktreeDir(candidatePath)
 	if !ok {
 		return protectedWorktreeGitSafety(gitProtectionGitStatusUnavailable)
@@ -112,12 +110,6 @@ func inspectWorktreeGitStateWithRunner(ctx context.Context, candidatePath string
 	}
 
 	return worktreeGitSafety{Protected: len(reasons) > 0, ProtectionReasons: reasons}
-}
-
-func runWorktreeGitCommand(ctx context.Context, dir string, args ...string) ([]byte, error) {
-	gitArgs := append([]string{"-C", dir}, args...)
-	cmd := exec.CommandContext(ctx, "git", gitArgs...)
-	return cmd.CombinedOutput()
 }
 
 func protectedWorktreeGitSafety(reason string) worktreeGitSafety {

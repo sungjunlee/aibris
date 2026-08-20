@@ -1,4 +1,4 @@
-package cmd
+package worktree
 
 import (
 	"os"
@@ -253,7 +253,7 @@ func TestPlanWorktreeCleanupOrdersHardLockReasonsAndDecisions(t *testing.T) {
 
 func TestPlanWorktreeCleanupUsesDefaultPolicyValues(t *testing.T) {
 	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
-	policy := fillCleanupPolicy(CleanupPolicy{Now: now})
+	policy := FillCleanupPolicy(CleanupPolicy{Now: now})
 	if policy.RecentActivityWindow != 6*time.Hour || policy.KeepPerRepository != 3 || policy.MinIdleAge != 3*24*time.Hour || policy.MinSize != 256*cleanupPolicyMiB {
 		t.Fatalf("default policy = %+v", policy)
 	}
@@ -302,15 +302,15 @@ func cleanupPolicyUnit(name string, activity time.Time, size int64, repositoryID
 	members := make([]GitWorktreeMember, 0, len(repositoryIDs))
 	for i, repositoryID := range repositoryIDs {
 		members = append(members, GitWorktreeMember{
-			WorktreePath:           target + "/member-" + string(rune('a'+i)),
-			RepositoryID:           repositoryID,
-			DisplayRepository:      "shared",
-			BranchRef:              "refs/heads/fixture",
-			Recoverable:            true,
-			EvidenceAvailable:      true,
-			GitEvidenceAvailable:   true,
-			LastActivity:           activity,
-			ActivityAvailable:      true,
+			WorktreePath:                target + "/member-" + string(rune('a'+i)),
+			RepositoryID:                repositoryID,
+			DisplayRepository:           "shared",
+			BranchRef:                   "refs/heads/fixture",
+			Recoverable:                 true,
+			EvidenceAvailable:           true,
+			GitEvidenceAvailable:        true,
+			LastActivity:                activity,
+			ActivityAvailable:           true,
 			RegisteredActivityAvailable: true,
 			Reason: GitEvidenceReason{
 				Code: GitReasonAttachedBranch,
@@ -318,12 +318,12 @@ func cleanupPolicyUnit(name string, activity time.Time, size int64, repositoryID
 		})
 	}
 	return WorktreeCleanupUnit{
-		TargetPath:             target,
-		Size:                   size,
-		Source:                 ".codex",
-		Members:                members,
-		LastActivity:           activity,
-		ActivityAvailable:      true,
+		TargetPath:                  target,
+		Size:                        size,
+		Source:                      ".codex",
+		Members:                     members,
+		LastActivity:                activity,
+		ActivityAvailable:           true,
 		RegisteredActivityAvailable: true,
 	}
 }
