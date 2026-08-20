@@ -22,6 +22,9 @@
   drops snapshot listing lines.
 - Human `scan` `--pressure` headline and hint use home-volume debris only.
   Explicit `clean --pressure` still relaxes official caches on every volume.
+- Human `scan` lists `--pressure` when it beats home-volume default clean,
+  even if other volumes have a larger default-cleanable total. The `default
+  delete` row stays the all-volume estimate.
 
 ## [0.11.1] - 2026-08-18
 

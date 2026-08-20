@@ -91,6 +91,67 @@ func TestScanPressureEstimateIgnoresOtherVolumeCaches(t *testing.T) {
 	}
 }
 
+func TestScanReclaimPathsKeepsHomePressureWhenOffVolumeDefaultIsLarger(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	prev := lookupPathDevice
+	lookupPathDevice = func(path string) (string, error) {
+		if strings.Contains(path, "other-vol") {
+			return "device:other", nil
+		}
+		return "device:home", nil
+	}
+	t.Cleanup(func() { lookupPathDevice = prev })
+
+	old := time.Now().Add(-30 * 24 * time.Hour)
+	recent := time.Now().Add(-time.Hour)
+	homeCache := filepath.Join(home, "go-build")
+	otherOrphan := filepath.Join(home, "other-vol", "orphaned")
+	for _, path := range []string{homeCache, otherOrphan} {
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	items := []types.DebrisInfo{
+		{
+			ID: "other-orphan", Tool: types.ToolCodex, Category: types.CategoryWorktree,
+			Status: types.WorktreeOrphaned, Path: otherOrphan,
+			Size: 10 * 1024 * 1024 * 1024, ModTime: old,
+		},
+		{
+			ID: "home-cache", Tool: types.ToolBuildCache, Category: types.CategoryBuildCache,
+			Path: homeCache, Size: 7 * 1024 * 1024 * 1024, ModTime: recent,
+		},
+	}
+
+	paths := scanReclaimPaths(items, scanNextPolicy())
+	got := reclaimPathMap(paths)
+	if got["aibris clean --dry-run"] != 10*1024*1024*1024 {
+		t.Fatalf("default delete = %d; want global 10 GiB; paths=%v", got["aibris clean --dry-run"], paths)
+	}
+	if got["aibris clean --pressure --dry-run"] != 7*1024*1024*1024 {
+		t.Fatalf("pressure = %d; want home 7 GiB; paths=%v", got["aibris clean --pressure --dry-run"], paths)
+	}
+
+	report := &volume.Report{
+		Role: "home", FSType: "apfs", UsedPercent: 92,
+		AvailableBytes: 34 * 1024 * 1024 * 1024, Band: volume.BandLow,
+	}
+	found := int64(17 * 1024 * 1024 * 1024)
+	headline := scanHeadline(found, paths, report)
+	for _, want := range []string{"largest reclaim 7.0 GB", "--pressure", "tight"} {
+		if !strings.Contains(headline, want) {
+			t.Errorf("headline missing %q:\n%s", want, headline)
+		}
+	}
+	output := captureOutput(func() {
+		printScanHeadlinePaths(found, paths, report)
+	})
+	if !strings.Contains(output, "--pressure") {
+		t.Fatalf("tight home omitted --pressure:\n%s", output)
+	}
+}
+
 func TestScanPressureEstimateSkipsWhenHomeDeviceUnknown(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)

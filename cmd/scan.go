@@ -586,7 +586,7 @@ func largestNonDefaultReclaim(paths []reclaimPath) (reclaimPath, bool) {
 	var best reclaimPath
 	found := false
 	for _, path := range paths {
-		if path.label == "default delete" || path.size <= def {
+		if !beatsDefaultReclaim(path, def) {
 			continue
 		}
 		if !found || path.size > best.size {
@@ -595,6 +595,17 @@ func largestNonDefaultReclaim(paths []reclaimPath) (reclaimPath, bool) {
 		}
 	}
 	return best, found
+}
+
+func beatsDefaultReclaim(path reclaimPath, defaultSize int64) bool {
+	switch path.label {
+	case "default delete":
+		return false
+	case "pressure caches":
+		return true
+	default:
+		return path.size > defaultSize
+	}
 }
 
 func reclaimSizeByLabel(paths []reclaimPath, label string) int64 {
@@ -682,10 +693,19 @@ func scanReclaimPaths(items []types.DebrisInfo, defaultPolicy types.PruneOptions
 	paths = appendReclaimPath(paths, "default delete", defaultSize, "aibris clean --dry-run")
 	stripSize := scanStripEstimate(items, defaultPolicy)
 	paths = appendReclaimPath(paths, "strip (keep trees)", stripSize, "aibris clean --strip --dry-run")
-	if pressure := scanPressureEstimate(items, defaultPolicy); pressure > defaultSize {
+	pressure := scanPressureEstimate(items, defaultPolicy)
+	if pressure > homeDefaultCleanSize(items, defaultPolicy, defaultSize) {
 		paths = appendReclaimPath(paths, "pressure caches", pressure, "aibris clean --pressure --dry-run")
 	}
 	return paths
+}
+
+func homeDefaultCleanSize(items []types.DebrisInfo, defaultPolicy types.PruneOptions, fallback int64) int64 {
+	homeItems, ok := itemsOnHomeVolume(items)
+	if !ok {
+		return fallback
+	}
+	return summarizeCleanup(homeItems, defaultPolicy).EligibleSize
 }
 
 func appendReclaimPath(paths []reclaimPath, label string, size int64, command string) []reclaimPath {
