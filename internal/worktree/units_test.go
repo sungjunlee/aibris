@@ -1,6 +1,7 @@
-package cmd
+package worktree
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -153,7 +154,7 @@ func TestBuildWorktreeCleanupUnits(t *testing.T) {
 			root, _ = cleaner.TargetPathKey(root)
 			items := tt.buildItems(t, root)
 
-			units, err := BuildWorktreeCleanupUnits(items)
+			units, err := BuildWorktreeCleanupUnits(context.Background(), items)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -183,7 +184,7 @@ func TestBuildWorktreeCleanupUnits(t *testing.T) {
 			for left, right := 0, len(reversed)-1; left < right; left, right = left+1, right-1 {
 				reversed[left], reversed[right] = reversed[right], reversed[left]
 			}
-			gotAgain, err := BuildWorktreeCleanupUnits(reversed)
+			gotAgain, err := BuildWorktreeCleanupUnits(context.Background(), reversed)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -205,7 +206,7 @@ func TestBuildWorktreeCleanupUnitsReturnsErrorWhenTargetDisappears(t *testing.T)
 		t.Fatal(err)
 	}
 
-	units, err := BuildWorktreeCleanupUnits([]types.DebrisInfo{item})
+	units, err := BuildWorktreeCleanupUnits(context.Background(), []types.DebrisInfo{item})
 	if err == nil {
 		t.Fatal("BuildWorktreeCleanupUnits() error = nil; want target filesystem error")
 	}
@@ -227,7 +228,7 @@ func TestBuildWorktreeCleanupUnitsCanonicalizesSymlinkTargets(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	units, err := BuildWorktreeCleanupUnits([]types.DebrisInfo{
+	units, err := BuildWorktreeCleanupUnits(context.Background(), []types.DebrisInfo{
 		cleanupUnitItem(aliasTarget, 600, ".codex"),
 		cleanupUnitItem(realTarget, 600, ".codex"),
 	})
@@ -264,7 +265,7 @@ func TestBuildWorktreeCleanupUnitsUsesCanonicalRepositoryIdentity(t *testing.T) 
 	createCleanupUnitLinkedWorktree(t, first, commonDir, "first", commonDir)
 	createCleanupUnitLinkedWorktree(t, second, commonDir, "second", filepath.Join(aliasPath, ".git"))
 
-	units, err := BuildWorktreeCleanupUnits([]types.DebrisInfo{
+	units, err := BuildWorktreeCleanupUnits(context.Background(), []types.DebrisInfo{
 		cleanupUnitItem(second, 200, ".codex"),
 		cleanupUnitItem(first, 100, ".codex"),
 	})
@@ -297,7 +298,7 @@ func TestBuildWorktreeCleanupUnitsKeepsSameBasenameRepositoriesDistinct(t *testi
 	createCleanupUnitLinkedWorktree(t, first, firstCommonDir, "first", firstCommonDir)
 	createCleanupUnitLinkedWorktree(t, second, secondCommonDir, "second", secondCommonDir)
 
-	units, err := BuildWorktreeCleanupUnits([]types.DebrisInfo{
+	units, err := BuildWorktreeCleanupUnits(context.Background(), []types.DebrisInfo{
 		cleanupUnitItem(first, 100, ".codex"),
 		cleanupUnitItem(second, 200, ".codex"),
 	})
@@ -332,7 +333,7 @@ func TestBuildWorktreeCleanupUnitsOrdersMultipleRepositoriesDeterministically(t 
 		cleanupUnitItem(target, 400, ".relay"),
 		cleanupUnitItem(target, 400, ".codex"),
 	}
-	units, err := BuildWorktreeCleanupUnits(items)
+	units, err := BuildWorktreeCleanupUnits(context.Background(), items)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -355,7 +356,7 @@ func TestBuildWorktreeCleanupUnitsOrdersMultipleRepositoriesDeterministically(t 
 	}
 
 	items[0], items[1] = items[1], items[0]
-	gotAgain, err := BuildWorktreeCleanupUnits(items)
+	gotAgain, err := BuildWorktreeCleanupUnits(context.Background(), items)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -389,7 +390,7 @@ func TestBuildWorktreeCleanupUnitsSurfacesRepositoryMetadataFailures(t *testing.
 		t.Fatal(err)
 	}
 
-	units, err := BuildWorktreeCleanupUnits([]types.DebrisInfo{
+	units, err := BuildWorktreeCleanupUnits(context.Background(), []types.DebrisInfo{
 		cleanupUnitItem(unreadableTarget, 200, ".codex"),
 		cleanupUnitItem(ambiguousTarget, 100, ".codex"),
 	})

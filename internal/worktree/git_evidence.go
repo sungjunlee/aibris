@@ -1,4 +1,4 @@
-package cmd
+package worktree
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const gitEvidenceCommandTimeout = 5 * time.Second
+const GitEvidenceCommandTimeout = 5 * time.Second
 
 // GitEvidenceReasonCode is a stable machine-readable recoverability result.
 type GitEvidenceReasonCode string
@@ -48,7 +48,7 @@ type GitUpstreamMetadata struct {
 	Ref   string
 }
 
-func inspectGitWorktreeEvidence(ctx context.Context, member *GitWorktreeMember, runner worktreeGitCommandRunner) {
+func inspectGitWorktreeEvidence(ctx context.Context, member *GitWorktreeMember, runner GitCommandRunner) {
 	status, err := runner(ctx, member.WorktreePath, "status", "--porcelain=v1", "-z", "--untracked-files=all")
 	if err != nil {
 		markGitEvidenceUnavailable(member, fmt.Errorf("reading porcelain status: %w", err))
@@ -61,7 +61,7 @@ func inspectGitWorktreeEvidence(ctx context.Context, member *GitWorktreeMember, 
 		markGitEvidenceUnavailable(member, fmt.Errorf("resolving HEAD: %w", err))
 		return
 	}
-	member.HeadOID, err = gitOID(headOutput)
+	member.HeadOID, err = GitOID(headOutput)
 	if err != nil {
 		markGitEvidenceUnavailable(member, fmt.Errorf("resolving HEAD: %w", err))
 		return
@@ -122,12 +122,12 @@ func inspectGitWorktreeEvidence(ctx context.Context, member *GitWorktreeMember, 
 	markGitMemberRecoverable(member, recoverableCode, recoverableDescription)
 }
 
-func containingGitRefs(ctx context.Context, worktreePath, headOID, namespace string, runner worktreeGitCommandRunner) ([]string, error) {
+func containingGitRefs(ctx context.Context, worktreePath, headOID, namespace string, runner GitCommandRunner) ([]string, error) {
 	output, err := runner(ctx, worktreePath, "for-each-ref", "--format=%(refname)", "--contains="+headOID, namespace)
 	if err != nil {
 		return nil, err
 	}
-	refs := nonEmptyGitLines(output)
+	refs := NonEmptyGitLines(output)
 	for _, ref := range refs {
 		if !strings.HasPrefix(ref, namespace+"/") {
 			return nil, fmt.Errorf("unexpected ref %q outside %s", ref, namespace)
@@ -137,7 +137,7 @@ func containingGitRefs(ctx context.Context, worktreePath, headOID, namespace str
 	return refs, nil
 }
 
-func inspectGitUpstream(ctx context.Context, worktreePath, branchRef string, runner worktreeGitCommandRunner) GitUpstreamMetadata {
+func inspectGitUpstream(ctx context.Context, worktreePath, branchRef string, runner GitCommandRunner) GitUpstreamMetadata {
 	output, err := runner(ctx, worktreePath, "for-each-ref", "--format=%(upstream)%00%(upstream:track)", branchRef)
 	if err != nil {
 		return GitUpstreamMetadata{State: GitUpstreamUnavailable}
@@ -159,14 +159,14 @@ func inspectGitUpstream(ctx context.Context, worktreePath, branchRef string, run
 }
 
 func singleGitValue(output []byte) (string, error) {
-	lines := nonEmptyGitLines(output)
+	lines := NonEmptyGitLines(output)
 	if len(lines) != 1 {
 		return "", fmt.Errorf("expected one value, got %d", len(lines))
 	}
 	return lines[0], nil
 }
 
-func gitOID(output []byte) (string, error) {
+func GitOID(output []byte) (string, error) {
 	value, err := singleGitValue(output)
 	if err != nil {
 		return "", err
@@ -180,7 +180,7 @@ func gitOID(output []byte) (string, error) {
 	return value, nil
 }
 
-func nonEmptyGitLines(output []byte) []string {
+func NonEmptyGitLines(output []byte) []string {
 	var lines []string
 	for _, line := range strings.Split(string(output), "\n") {
 		line = strings.TrimSpace(strings.TrimSuffix(line, "\r"))

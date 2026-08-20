@@ -14,6 +14,7 @@ import (
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
+	"github.com/sungjunlee/aibris/internal/worktree"
 )
 
 const guidedProtectedDisplayLimit = 20
@@ -56,7 +57,7 @@ type guidedCleanState struct {
 
 func buildGuidedCleanState(ctx context.Context, result *types.ScanResult, source scanSource, minIdleAge time.Duration, reason string) (guidedCleanState, error) {
 	items := activeWorktrees(result.Worktrees)
-	units, err := buildWorktreeCleanupUnits(ctx, items)
+	units, err := worktree.BuildWorktreeCleanupUnits(ctx, items)
 	if err != nil {
 		return guidedCleanState{}, err
 	}
@@ -69,7 +70,7 @@ func buildGuidedCleanState(ctx context.Context, result *types.ScanResult, source
 	policy.CurrentWorkingDirectory = cwd
 	policy.MinIdleAge = minIdleAge
 	policy = fillCleanupPolicy(policy)
-	plan := PlanWorktreeCleanup(units, policy)
+	plan := worktree.PlanWorktreeCleanup(units, policy)
 	state := newGuidedCleanStateFromCleanupPlan(source, reason, activity, policy, units, items, plan)
 	state.Inventory = append([]types.DebrisInfo(nil), result.Worktrees...)
 	return state, nil
@@ -530,7 +531,7 @@ func replanGuidedCleanAge(state guidedCleanState, age time.Duration) (guidedClea
 	next.Policy = fillCleanupPolicy(state.Policy)
 	next.Policy.MinIdleAge = age
 	decisions := make(map[string]WorktreeCleanupDecision, len(state.Units))
-	for _, decision := range PlanWorktreeCleanup(state.Units, next.Policy).Decisions {
+	for _, decision := range worktree.PlanWorktreeCleanup(state.Units, next.Policy).Decisions {
 		decisions[cleanupUnitStableKey(decision.Unit)] = decision
 	}
 	for i := range next.Rows {

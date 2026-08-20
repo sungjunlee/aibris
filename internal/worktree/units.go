@@ -1,4 +1,4 @@
-package cmd
+package worktree
 
 import (
 	"context"
@@ -70,11 +70,7 @@ type worktreeCleanupUnitRows struct {
 
 // BuildWorktreeCleanupUnits adapts scanner rows into deterministic physical
 // cleanup units without changing the persisted DebrisInfo or scan JSON shape.
-func BuildWorktreeCleanupUnits(items []types.DebrisInfo) ([]WorktreeCleanupUnit, error) {
-	return buildWorktreeCleanupUnits(context.Background(), items)
-}
-
-func buildWorktreeCleanupUnits(ctx context.Context, items []types.DebrisInfo) ([]WorktreeCleanupUnit, error) {
+func BuildWorktreeCleanupUnits(ctx context.Context, items []types.DebrisInfo) ([]WorktreeCleanupUnit, error) {
 	grouped := make(map[string][]types.DebrisInfo)
 	for _, item := range items {
 		if err := ctx.Err(); err != nil {
@@ -130,8 +126,8 @@ func discoverGitWorktreeMembers(ctx context.Context, targetPath string) ([]GitWo
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if hasGitWorktreeMetadata(targetPath) {
-		return []GitWorktreeMember{buildGitWorktreeMember(ctx, targetPath)}, nil
+	if HasGitWorktreeMetadata(targetPath) {
+		return []GitWorktreeMember{BuildGitWorktreeMember(ctx, targetPath)}, nil
 	}
 
 	entries, err := os.ReadDir(targetPath)
@@ -148,7 +144,7 @@ func discoverGitWorktreeMembers(ctx context.Context, targetPath string) ([]GitWo
 			continue
 		}
 		memberPath := filepath.Join(targetPath, entry.Name())
-		if hasGitWorktreeMetadata(memberPath) {
+		if HasGitWorktreeMetadata(memberPath) {
 			if canonicalPath, ok := cleaner.TargetPathKey(memberPath); ok {
 				memberPaths[canonicalPath] = true
 			}
@@ -183,7 +179,7 @@ func discoverGitWorktreeMembers(ctx context.Context, targetPath string) ([]GitWo
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		members = append(members, buildGitWorktreeMember(ctx, path))
+		members = append(members, BuildGitWorktreeMember(ctx, path))
 	}
 	return members, nil
 }
@@ -203,7 +199,7 @@ func twoLevelGitWorktreePaths(ctx context.Context, leafPath string) ([]string, b
 			continue
 		}
 		checkout := filepath.Join(leafPath, entry.Name())
-		if !hasGitWorktreeMetadata(checkout) {
+		if !HasGitWorktreeMetadata(checkout) {
 			missing = true
 			continue
 		}
@@ -219,13 +215,13 @@ func twoLevelGitWorktreePaths(ctx context.Context, leafPath string) ([]string, b
 	return paths, false, nil
 }
 
-func hasGitWorktreeMetadata(path string) bool {
+func HasGitWorktreeMetadata(path string) bool {
 	gitFilePath := filepath.Join(path, ".git")
 	info, err := os.Lstat(gitFilePath)
 	return err == nil && (info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0)
 }
 
-func buildGitWorktreeMember(ctx context.Context, worktreePath string) GitWorktreeMember {
+func BuildGitWorktreeMember(ctx context.Context, worktreePath string) GitWorktreeMember {
 	member := GitWorktreeMember{
 		WorktreePath: worktreePath,
 		Upstream:     GitUpstreamMetadata{State: GitUpstreamUnavailable},
@@ -241,9 +237,9 @@ func buildGitWorktreeMember(ctx context.Context, worktreePath string) GitWorktre
 	member.DisplayRepository = displayRepository
 	member.EvidenceAvailable = true
 
-	ctx, cancel := context.WithTimeout(ctx, gitEvidenceCommandTimeout)
+	ctx, cancel := context.WithTimeout(ctx, GitEvidenceCommandTimeout)
 	defer cancel()
-	inspectGitWorktreeEvidence(ctx, &member, runWorktreeGitCommand)
+	inspectGitWorktreeEvidence(ctx, &member, RunGitCommand)
 	return member
 }
 

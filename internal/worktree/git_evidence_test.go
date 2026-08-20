@@ -1,4 +1,4 @@
-package cmd
+package worktree
 
 import (
 	"context"
@@ -63,7 +63,7 @@ func TestInspectGitWorktreeEvidenceDoesNotLockWhenUpstreamMetadataFails(t *testi
 		if len(args) > 1 && args[0] == "for-each-ref" && args[len(args)-1] == "refs/heads/upstream-unavailable" {
 			return nil, errors.New("upstream metadata failed")
 		}
-		return runWorktreeGitCommand(ctx, dir, args...)
+		return RunGitCommand(ctx, dir, args...)
 	})
 
 	assertCleanupMemberReason(t, member, false, true, GitReasonAttachedBranch)
@@ -224,7 +224,7 @@ func newCleanupUnitWorktree(t *testing.T, branch string) (string, string) {
 
 func buildSingleCleanupUnit(t *testing.T, target string) WorktreeCleanupUnit {
 	t.Helper()
-	units, err := BuildWorktreeCleanupUnits([]types.DebrisInfo{cleanupUnitItem(target, 100, ".codex")})
+	units, err := BuildWorktreeCleanupUnits(context.Background(), []types.DebrisInfo{cleanupUnitItem(target, 100, ".codex")})
 	if err != nil {
 		t.Fatal(err)
 	}

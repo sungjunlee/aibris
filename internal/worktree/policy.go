@@ -1,4 +1,4 @@
-package cmd
+package worktree
 
 import (
 	"path/filepath"
@@ -88,7 +88,7 @@ type CleanupPlan struct {
 // PlanWorktreeCleanup evaluates hard locks, ranks every unit per canonical
 // repository, then classifies by hard lock, retention, idle age, and size.
 func PlanWorktreeCleanup(units []WorktreeCleanupUnit, policy CleanupPolicy) CleanupPlan {
-	policy = fillCleanupPolicy(policy)
+	policy = FillCleanupPolicy(policy)
 	hardLockReasons := make([][]DecisionReasonCode, len(units))
 	for i, unit := range units {
 		hardLockReasons[i] = cleanupUnitHardLockReasonCodes(unit, policy)
@@ -102,7 +102,7 @@ func PlanWorktreeCleanup(units []WorktreeCleanupUnit, policy CleanupPolicy) Clea
 		case len(hardLockReasons[i]) > 0:
 			decision.Class = DecisionLocked
 			decision.Reasons = decisionReasons(hardLockReasons[i]...)
-		case retained[cleanupUnitStableKey(unit)]:
+		case retained[CleanupUnitStableKey(unit)]:
 			decision.Class = DecisionReviewable
 			decision.Reasons = decisionReasons(DecisionReasonRepositoryRetention)
 		case !unit.LastActivity.Before(policy.Now.Add(-policy.MinIdleAge)):
@@ -127,12 +127,12 @@ func PlanWorktreeCleanup(units []WorktreeCleanupUnit, policy CleanupPolicy) Clea
 	}
 
 	sort.Slice(decisions, func(i, j int) bool {
-		return cleanupUnitStableKey(decisions[i].Unit) < cleanupUnitStableKey(decisions[j].Unit)
+		return CleanupUnitStableKey(decisions[i].Unit) < CleanupUnitStableKey(decisions[j].Unit)
 	})
 	return CleanupPlan{Decisions: decisions}
 }
 
-func fillCleanupPolicy(policy CleanupPolicy) CleanupPolicy {
+func FillCleanupPolicy(policy CleanupPolicy) CleanupPolicy {
 	if policy.RecentActivityWindow <= 0 {
 		policy.RecentActivityWindow = DefaultRecentActivityWindow
 	}
@@ -156,7 +156,7 @@ type repositoryCleanupUnit struct {
 func retainedCleanupUnits(units []WorktreeCleanupUnit, keep int) map[string]bool {
 	byRepository := make(map[string][]repositoryCleanupUnit)
 	for _, unit := range units {
-		key := cleanupUnitStableKey(unit)
+		key := CleanupUnitStableKey(unit)
 		seenRepositories := make(map[string]bool)
 		for _, member := range unit.Members {
 			if member.RepositoryID == "" || seenRepositories[member.RepositoryID] {
@@ -283,7 +283,7 @@ func cleanupUnitContainsPath(target, path string) bool {
 	return !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
-func cleanupUnitStableKey(unit WorktreeCleanupUnit) string {
+func CleanupUnitStableKey(unit WorktreeCleanupUnit) string {
 	return filepath.Clean(unit.TargetPath)
 }
 
@@ -320,12 +320,12 @@ func cleanupUnitRecoverabilityReasons(unit WorktreeCleanupUnit) []DecisionReason
 func decisionReasons(codes ...DecisionReasonCode) []DecisionReason {
 	reasons := make([]DecisionReason, 0, len(codes))
 	for _, code := range codes {
-		reasons = append(reasons, DecisionReason{Code: code, Description: decisionReasonDescription(code)})
+		reasons = append(reasons, DecisionReason{Code: code, Description: DecisionReasonDescription(code)})
 	}
 	return reasons
 }
 
-func decisionReasonDescription(code DecisionReasonCode) string {
+func DecisionReasonDescription(code DecisionReasonCode) string {
 	switch code {
 	case DecisionReasonCurrentWorkingDirectory:
 		return "current working directory is inside cleanup unit"
