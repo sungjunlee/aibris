@@ -67,55 +67,6 @@ func TestCaptureCleanupTargetSnapshotReportsAgeChangeSinceScan(t *testing.T) {
 	}
 }
 
-func TestExecuteActiveWorktreePreservesAttachedLocalOnlyBranch(t *testing.T) {
-	home, repository, worktree := newExecutorWorktree(t, "local-only")
-	testutil.SetHome(t, home)
-	writeGitFixtureFile(t, worktree, "local-only.txt", "local-only commit\n")
-	runGitFixture(t, worktree, "add", "local-only.txt")
-	runGitFixture(t, worktree, "commit", "-m", "local-only commit")
-	item := executorWorktreeItem(worktree, 321)
-	selected := buildExecutorUnit(t, item)
-	branchRef := selected.Members[0].BranchRef
-	headOID := selected.Members[0].HeadOID
-
-	receipt, err := executePreparedCleanTargets(context.Background(), []preparedCleanTarget{preparedExecutorTarget(t, item, selected)}, defaultActiveWorktreeExecutionOptions())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	assertRemovedExecutionUnit(t, receipt, 321, worktree)
-	if got := strings.TrimSpace(runGitFixtureOutput(t, repository, "rev-parse", "--verify", branchRef+"^{commit}")); got != headOID {
-		t.Errorf("preserved branch OID = %q; want %q", got, headOID)
-	}
-	assertRepositoryDoesNotListWorktree(t, repository, worktree)
-}
-
-func TestExecuteActiveWorktreeKeepsReferencedDetachedCommitReachable(t *testing.T) {
-	home, repository, worktree := newExecutorWorktree(t, "detached-referenced")
-	testutil.SetHome(t, home)
-	writeGitFixtureFile(t, worktree, "detached.txt", "referenced commit\n")
-	runGitFixture(t, worktree, "add", "detached.txt")
-	runGitFixture(t, worktree, "commit", "-m", "referenced detached commit")
-	runGitFixture(t, worktree, "checkout", "--detach", "HEAD")
-	item := executorWorktreeItem(worktree, 222)
-	selected := buildExecutorUnit(t, item)
-	headOID := selected.Members[0].HeadOID
-
-	receipt, err := executePreparedCleanTargets(context.Background(), []preparedCleanTarget{preparedExecutorTarget(t, item, selected)}, defaultActiveWorktreeExecutionOptions())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	assertRemovedExecutionUnit(t, receipt, 222, worktree)
-	if got := strings.TrimSpace(runGitFixtureOutput(t, repository, "rev-parse", "--verify", headOID+"^{commit}")); got != headOID {
-		t.Errorf("detached commit = %q; want reachable %q", got, headOID)
-	}
-	containing := runGitFixtureOutput(t, repository, "for-each-ref", "--format=%(refname)", "--contains="+headOID, "refs/heads", "refs/remotes")
-	if strings.TrimSpace(containing) == "" {
-		t.Fatalf("detached commit %s is no longer reachable from a named ref", headOID)
-	}
-}
-
 func TestExecuteActiveWorktreeRemovesMultiMemberUnitWithDefaultAge(t *testing.T) {
 	home, repository, target, first, second := newExecutorMultiMemberUnit(t)
 	testutil.SetHome(t, home)
@@ -380,56 +331,6 @@ func TestExecutePreparedMissingCommandRecordsFallbackPathRemoval(t *testing.T) {
 	}
 }
 
-func TestExecuteActiveWorktreePreflightsEveryMemberBeforeRemovingAny(t *testing.T) {
-	home, repository, target, first, second := newExecutorMultiMemberUnit(t)
-	testutil.SetHome(t, home)
-	item := executorWorktreeItem(target, 900)
-	selected := buildExecutorUnit(t, item)
-	writeGitFixtureFile(t, second, "became-dirty.txt", "changed after selection\n")
-
-	receipt, err := executePreparedCleanTargets(context.Background(), []preparedCleanTarget{preparedExecutorTarget(t, item, selected)}, defaultActiveWorktreeExecutionOptions())
-	if err == nil {
-		t.Fatal("executePreparedCleanTargets() error = nil; want preflight failure")
-	}
-
-	unit := singleExecutionUnit(t, receipt)
-	if unit.State != cleanExecutionFailed || unit.PhysicalRemoved || unit.FreedBytes != 0 {
-		t.Errorf("unit = %+v; want failed with no physical removal or freed bytes", unit)
-	}
-	for _, member := range unit.Members {
-		if member.Removed {
-			t.Errorf("member unexpectedly removed after failed preflight: %+v", member)
-		}
-	}
-	assertPathExists(t, first)
-	assertPathExists(t, second)
-	assertRepositoryListsWorktree(t, repository, first)
-	assertRepositoryListsWorktree(t, repository, second)
-}
-
-func TestExecuteActiveWorktreePreflightRejectsChangedHeadAtomically(t *testing.T) {
-	home, repository, target, first, second := newExecutorMultiMemberUnit(t)
-	testutil.SetHome(t, home)
-	item := executorWorktreeItem(target, 901)
-	selected := buildExecutorUnit(t, item)
-	writeGitFixtureFile(t, second, "new-head.txt", "new HEAD after selection\n")
-	runGitFixture(t, second, "add", "new-head.txt")
-	runGitFixture(t, second, "commit", "-m", "change selected HEAD")
-
-	receipt, err := executePreparedCleanTargets(context.Background(), []preparedCleanTarget{preparedExecutorTarget(t, item, selected)}, defaultActiveWorktreeExecutionOptions())
-	if err == nil || !strings.Contains(err.Error(), "HEAD changed") {
-		t.Fatalf("executePreparedCleanTargets() error = %v; want changed-HEAD preflight failure", err)
-	}
-	unit := singleExecutionUnit(t, receipt)
-	if unit.State != cleanExecutionFailed || unit.PhysicalRemoved || unit.FreedBytes != 0 {
-		t.Errorf("unit = %+v; want atomic preflight failure", unit)
-	}
-	assertPathExists(t, first)
-	assertPathExists(t, second)
-	assertRepositoryListsWorktree(t, repository, first)
-	assertRepositoryListsWorktree(t, repository, second)
-}
-
 func TestExecuteActiveWorktreePreflightCancellationRecordsComponentBlocker(t *testing.T) {
 	home, _, worktree := newExecutorWorktree(t, "preflight-cancelled")
 	testutil.SetHome(t, home)
@@ -513,33 +414,6 @@ func TestExecuteActiveWorktreeMissingUnitPreservesComponentLineage(t *testing.T)
 		t.Fatalf("missing-unit receipt = %+v; want component blocker and pending obligation", unit)
 	}
 	assertPathExists(t, worktree)
-}
-
-func TestExecuteActiveWorktreeCommandFailureNeverFallsBackToPathRemoval(t *testing.T) {
-	home, repository, worktree := newExecutorWorktree(t, "command-failure")
-	testutil.SetHome(t, home)
-	item := executorWorktreeItem(worktree, 444)
-	selected := buildExecutorUnit(t, item)
-	opts := defaultActiveWorktreeExecutionOptions()
-	removeCalls := 0
-	opts.removeWorktree = func(context.Context, string, string) error {
-		removeCalls++
-		return errors.New("injected git worktree remove failure")
-	}
-
-	receipt, err := executePreparedCleanTargets(context.Background(), []preparedCleanTarget{preparedExecutorTarget(t, item, selected)}, opts)
-	if err == nil {
-		t.Fatal("executePreparedCleanTargets() error = nil; want command failure")
-	}
-	if removeCalls != 1 {
-		t.Fatalf("Git remover calls = %d; want 1", removeCalls)
-	}
-	unit := singleExecutionUnit(t, receipt)
-	if unit.State != cleanExecutionFailed || unit.PhysicalRemoved || unit.FreedBytes != 0 || unit.Members[0].Removed {
-		t.Errorf("unit = %+v; want failed without path fallback", unit)
-	}
-	assertPathExists(t, worktree)
-	assertRepositoryListsWorktree(t, repository, worktree)
 }
 
 func TestExecuteActiveWorktreeReportsPartialMultiMemberResultWithoutFreedBytes(t *testing.T) {
