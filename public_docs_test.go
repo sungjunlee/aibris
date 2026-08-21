@@ -336,6 +336,69 @@ func TestHomebrewPourWorkflowContract(t *testing.T) {
 	}
 }
 
+func TestReleaseSupplyChainContract(t *testing.T) {
+	goreleaser := readRepoFile(t, ".goreleaser.yaml")
+	for _, required := range []string{
+		"sboms:",
+		"artifacts: archive",
+		"name_template: 'checksums.txt'",
+	} {
+		if !strings.Contains(goreleaser, required) {
+			t.Errorf("GoReleaser supply-chain contract is missing %q", required)
+		}
+	}
+
+	releaseWorkflow := readRepoFile(t, filepath.Join(".github", "workflows", "release.yml"))
+	for _, required := range []string{
+		"contents: write",
+		"id-token: write",
+		"attestations: write",
+		"anchore/sbom-action/download-syft",
+		"actions/attest-build-provenance",
+		"subject-path: dist/*.tar.gz, dist/*.zip",
+	} {
+		if !strings.Contains(releaseWorkflow, required) {
+			t.Errorf("release workflow supply-chain contract is missing %q", required)
+		}
+	}
+	if strings.Contains(releaseWorkflow, "continue-on-error:") {
+		t.Error("release workflow must fail closed: a failed SBOM/attestation step must fail the release")
+	}
+
+	// Attestations must happen after artifacts exist and inside the goreleaser
+	// job, before brew-pour may treat the release as trusted.
+	goreleaserStep := strings.Index(releaseWorkflow, "goreleaser/goreleaser-action")
+	attestStep := strings.Index(releaseWorkflow, "actions/attest-build-provenance")
+	brewPourJob := strings.Index(releaseWorkflow, "brew-pour:")
+	if goreleaserStep < 0 || attestStep < 0 || brewPourJob < 0 ||
+		!(goreleaserStep < attestStep && attestStep < brewPourJob) {
+		t.Error("attest-build-provenance must run after goreleaser publishes artifacts and before the brew-pour job")
+	}
+
+	readme := readRepoFile(t, "README.md")
+	for _, required := range []string{
+		"gh attestation verify",
+		"--owner sungjunlee",
+		"sha256sum -c checksums.txt",
+		"syft aibris_darwin_arm64.tar.gz.sbom",
+	} {
+		if !strings.Contains(readme, required) {
+			t.Errorf("README must document release verification command %q", required)
+		}
+	}
+
+	// Checksums stay the install.sh trust anchor.
+	installScript := readRepoFile(t, "install.sh")
+	for _, required := range []string{
+		"checksums.txt",
+		"checksum mismatch",
+	} {
+		if !strings.Contains(installScript, required) {
+			t.Errorf("install.sh must keep verifying checksums.txt: missing %q", required)
+		}
+	}
+}
+
 func readRepoFile(t *testing.T, path string) string {
 	t.Helper()
 	data, err := os.ReadFile(path)

@@ -91,6 +91,23 @@ add it for your shell. To install into a shared prefix instead:
 curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.sh | bash -s -- --prefix /usr/local/bin
 ```
 
+### Verify release artifacts
+
+Release archives ship `checksums.txt` (verified by `install.sh`), an SPDX SBOM
+(`<archive>.sbom`), and a GitHub artifact attestation produced by the release
+workflow. Copy-paste verification for a downloaded archive:
+
+```bash
+# Attestation: binds the archive to the release workflow build
+gh attestation verify aibris_darwin_arm64.tar.gz --owner sungjunlee
+
+# Checksums (same file install.sh checks)
+sha256sum -c checksums.txt --ignore-missing
+
+# SBOM published alongside the archive
+syft aibris_darwin_arm64.tar.gz.sbom
+```
+
 ## Quick start: scan → dry-run → clean
 
 The core loop is three commands:

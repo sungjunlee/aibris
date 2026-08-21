@@ -11,6 +11,11 @@ permissions:
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      # id-token/attestations are required only by attest-build-provenance (#121).
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -31,6 +36,8 @@ jobs:
             echo "HOMEBREW_TAP_TOKEN must be the tap deploy-key private key so a failed tap commit fails the release." >&2
             exit 1
           fi
+      - name: Install syft for GoReleaser SBOM generation
+        uses: anchore/sbom-action/download-syft@v0
       - uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
@@ -39,6 +46,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      # Runs in the same job as goreleaser: a failed attestation fails the
+      # release job, so no release is treated as trusted and brew-pour never
+      # runs. Do not mark this step as optional (#121).
+      - name: Attest release artifacts
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*.tar.gz, dist/*.zip
 
   brew-pour:
     needs: goreleaser
