@@ -156,6 +156,25 @@ func TestReleaseNotesTemplatePromptsCompatibilityImpact(t *testing.T) {
 	}
 }
 
+func TestReleaseNotesTemplateRequiredSections(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(".github", "release-notes", "TEMPLATE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	for _, heading := range []string{
+		"## Highlights\n",
+		"## Compatibility impact\n",
+		"## Upgrade and migration\n",
+		"## Safety\n",
+		"## Windows status\n",
+	} {
+		if !strings.Contains(content, heading) {
+			t.Errorf("release-notes template is missing required section %q", strings.TrimRight(heading, "\n"))
+		}
+	}
+}
+
 func TestWindowsReleaseDocumentationContract(t *testing.T) {
 	read := func(path string) string {
 		t.Helper()
