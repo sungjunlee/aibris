@@ -56,7 +56,9 @@ checksum:
   name_template: 'checksums.txt'
 snapshot:
   version_template: "{{ .Tag }}-next"
-# Public notes come exclusively from --release-notes (curated
-# .github/release-notes/<tag>.md). Never publish a git log fallback.
 changelog:
-  disable: true
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'

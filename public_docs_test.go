@@ -148,29 +148,11 @@ func TestReleaseNotesTemplatePromptsCompatibilityImpact(t *testing.T) {
 		"Deprecation",
 		"replacement and the earliest removal version",
 		"## Upgrade and migration",
+		"## Safety",
 		"## Windows status",
 	} {
 		if !strings.Contains(content, want) {
 			t.Errorf("release-notes template must prompt %q", want)
-		}
-	}
-}
-
-func TestReleaseNotesTemplateRequiredSections(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join(".github", "release-notes", "TEMPLATE.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	content := string(data)
-	for _, heading := range []string{
-		"## Highlights\n",
-		"## Compatibility impact\n",
-		"## Upgrade and migration\n",
-		"## Safety\n",
-		"## Windows status\n",
-	} {
-		if !strings.Contains(content, heading) {
-			t.Errorf("release-notes template is missing required section %q", strings.TrimRight(heading, "\n"))
 		}
 	}
 }
@@ -217,10 +199,15 @@ func TestWindowsReleaseDocumentationContract(t *testing.T) {
 		}
 	}
 
+	if strings.Contains(goreleaser, "disable: true") {
+		t.Error("changelog.disable: true ignores --release-notes and publishes empty GitHub notes")
+	}
+
 	releaseWorkflow := read(filepath.Join(".github", "workflows", "release.yml"))
 	for _, required := range []string{
 		`RELEASE_NOTES: .github/release-notes/${{ github.ref_name }}.md`,
 		`.github/scripts/validate-windows-release-status.sh "$RELEASE_NOTES"`,
+		`--release-notes .github/release-notes/${{ github.ref_name }}.md`,
 	} {
 		if !strings.Contains(releaseWorkflow, required) {
 			t.Errorf("release workflow is missing the Windows-status publication gate %q", required)
