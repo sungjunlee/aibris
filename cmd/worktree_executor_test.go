@@ -695,13 +695,15 @@ func TestExecutePreparedPathCleanupRevalidatesSnapshotAfterOverlapRefresh(t *tes
 		CleanupKind: types.CleanupRemovePath,
 	}
 	runtime := cleanupOverlapSafetyRuntime{
-		Initial: cleaner.OverlapSafetyEvidence{Complete: true},
-		Refresh: func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
-			changed := time.Now()
-			if err := os.Chtimes(targetPath, changed, changed); err != nil {
-				return cleaner.OverlapSafetyEvidence{}, err
-			}
-			return cleaner.OverlapSafetyEvidence{Complete: true}, nil
+		OverlapRuntime: cleaner.OverlapRuntime{
+			Initial: cleaner.OverlapSafetyEvidence{Complete: true},
+			Refresh: func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
+				changed := time.Now()
+				if err := os.Chtimes(targetPath, changed, changed); err != nil {
+					return cleaner.OverlapSafetyEvidence{}, err
+				}
+				return cleaner.OverlapSafetyEvidence{Complete: true}, nil
+			},
 		},
 	}
 	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{target})

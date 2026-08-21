@@ -271,17 +271,19 @@ func TestOverlapProvenanceFailureAndCancellationPreserveCompleteComponent(t *tes
 				},
 			})
 			runtime := cleanupOverlapSafetyRuntime{
-				Initial: cleaner.OverlapSafetyEvidence{
-					Items:    []types.DebrisInfo{initial},
-					Complete: true,
-				},
-				Refresh: func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
-					return cleaner.OverlapSafetyEvidence{
-						Items:    []types.DebrisInfo{refreshed},
+				OverlapRuntime: cleaner.OverlapRuntime{
+					Initial: cleaner.OverlapSafetyEvidence{
+						Items:    []types.DebrisInfo{initial},
 						Complete: true,
-					}, nil
+					},
+					Refresh: func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
+						return cleaner.OverlapSafetyEvidence{
+							Items:    []types.DebrisInfo{refreshed},
+							Complete: true,
+						}, nil
+					},
+					Lookup: lookup,
 				},
-				Lookup: lookup,
 			}
 			selection, err := applyCleanupOverlapSafety(
 				context.Background(),
@@ -319,12 +321,14 @@ func TestOverlapProvenanceFailureAndCancellationPreserveCompleteComponent(t *tes
 		}
 		orphan := overlapCmdAgentStateItem(entry, types.EntryClassOrphaned)
 		runtime := cleanupOverlapSafetyRuntime{
-			Initial: cleaner.OverlapSafetyEvidence{Complete: true},
-			Refresh: func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
-				return cleaner.OverlapSafetyEvidence{
-					Items:    []types.DebrisInfo{orphan},
-					Complete: true,
-				}, nil
+			OverlapRuntime: cleaner.OverlapRuntime{
+				Initial: cleaner.OverlapSafetyEvidence{Complete: true},
+				Refresh: func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
+					return cleaner.OverlapSafetyEvidence{
+						Items:    []types.DebrisInfo{orphan},
+						Complete: true,
+					}, nil
+				},
 			},
 		}
 		selection, err := applyCleanupOverlapSafety(

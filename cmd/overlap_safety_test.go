@@ -501,11 +501,13 @@ func TestExecuteOverlapSafetyRefreshCatchesClassificationDriftAndNewEntries(t *t
 			})
 			initial := cleaner.OverlapSafetyEvidence{Items: tt.initial(entry), Complete: true}
 			runtime := cleanupOverlapSafetyRuntime{
-				Initial: initial,
-				Refresh: func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
-					return cleaner.OverlapSafetyEvidence{Items: tt.refreshed(entry), Complete: true}, nil
+				OverlapRuntime: cleaner.OverlapRuntime{
+					Initial: initial,
+					Refresh: func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
+						return cleaner.OverlapSafetyEvidence{Items: tt.refreshed(entry), Complete: true}, nil
+					},
+					Lookup: lookup,
 				},
-				Lookup: lookup,
 			}
 			selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{
 				overlapCmdTarget(outer, 23),
@@ -667,14 +669,16 @@ func TestExecuteOverlapSafetyRefusesSymlinkRetargetAndIncompleteRefresh(t *testi
 			t.Fatal(err)
 		}
 		runtime := cleanupOverlapSafetyRuntime{
-			Initial: cleaner.OverlapSafetyEvidence{Complete: true},
-			Refresh: func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
-				return cleaner.OverlapSafetyEvidence{
-					ProviderErrors: []types.ScanProviderError{{
-						Tool:    types.ToolCursor,
-						Message: "injected",
-					}},
-				}, nil
+			OverlapRuntime: cleaner.OverlapRuntime{
+				Initial: cleaner.OverlapSafetyEvidence{Complete: true},
+				Refresh: func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
+					return cleaner.OverlapSafetyEvidence{
+						ProviderErrors: []types.ScanProviderError{{
+							Tool:    types.ToolCursor,
+							Message: "injected",
+						}},
+					}, nil
+				},
 			},
 		}
 		selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{
@@ -800,14 +804,16 @@ func TestExecuteOverlapSafetyRefreshBlocksNewCommandOverlapBeforeCommandRuns(t *
 	}
 	marker := filepath.Join(home, "command-ran")
 	runtime := cleanupOverlapSafetyRuntime{
-		Initial: cleaner.OverlapSafetyEvidence{Complete: true},
-		Refresh: func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
-			return cleaner.OverlapSafetyEvidence{
-				Items: []types.DebrisInfo{
-					overlapCmdAgentStateItem(entry, types.EntryClassLive),
-				},
-				Complete: true,
-			}, nil
+		OverlapRuntime: cleaner.OverlapRuntime{
+			Initial: cleaner.OverlapSafetyEvidence{Complete: true},
+			Refresh: func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
+				return cleaner.OverlapSafetyEvidence{
+					Items: []types.DebrisInfo{
+						overlapCmdAgentStateItem(entry, types.EntryClassLive),
+					},
+					Complete: true,
+				}, nil
+			},
 		},
 	}
 	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{{
@@ -965,14 +971,16 @@ func TestExecuteOverlapSafetyCancellationAndInteractiveConfirmationStayPreMutati
 			t.Fatal(err)
 		}
 		runtime := cleanupOverlapSafetyRuntime{
-			Initial: cleaner.OverlapSafetyEvidence{Complete: true},
-			Refresh: func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
-				return cleaner.OverlapSafetyEvidence{
-					Items: []types.DebrisInfo{
-						overlapCmdAgentStateItem(entry, types.EntryClassLive),
-					},
-					Complete: true,
-				}, nil
+			OverlapRuntime: cleaner.OverlapRuntime{
+				Initial: cleaner.OverlapSafetyEvidence{Complete: true},
+				Refresh: func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
+					return cleaner.OverlapSafetyEvidence{
+						Items: []types.DebrisInfo{
+							overlapCmdAgentStateItem(entry, types.EntryClassLive),
+						},
+						Complete: true,
+					}, nil
+				},
 			},
 		}
 		selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{
@@ -1106,11 +1114,13 @@ func staticOverlapSafetyRuntime(
 		Complete: true,
 	}
 	return cleanupOverlapSafetyRuntime{
-		Initial: evidence,
-		Refresh: func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
-			return evidence, nil
+		OverlapRuntime: cleaner.OverlapRuntime{
+			Initial: evidence,
+			Refresh: func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
+				return evidence, nil
+			},
+			Lookup: lookup,
 		},
-		Lookup: lookup,
 	}
 }
 
@@ -1138,17 +1148,17 @@ func TestRefreshMemoInvalidatesOnFingerprintChangeAndDoesNotCacheErrors(t *testi
 		}
 		return cleaner.OverlapSafetyEvidence{Complete: true}, nil
 	}
-	m := &refreshMemo{}
+	m := &cleaner.RefreshMemo{}
 
 	// First call scans and caches under v1.
-	if _, err := m.get(ctx, fingerprint, refresh); err != nil {
+	if _, err := m.Get(ctx, fingerprint, refresh); err != nil {
 		t.Fatal(err)
 	}
 	if calls != 1 {
 		t.Fatalf("calls=%d; want 1", calls)
 	}
 	// Unchanged fingerprint -> cache hit, no rescan.
-	if _, err := m.get(ctx, fingerprint, refresh); err != nil {
+	if _, err := m.Get(ctx, fingerprint, refresh); err != nil {
 		t.Fatal(err)
 	}
 	if calls != 1 {
@@ -1156,21 +1166,21 @@ func TestRefreshMemoInvalidatesOnFingerprintChangeAndDoesNotCacheErrors(t *testi
 	}
 	// Fingerprint change -> rescan; the scan error surfaces and is not cached.
 	key = "v2"
-	if _, err := m.get(ctx, fingerprint, refresh); err == nil {
+	if _, err := m.Get(ctx, fingerprint, refresh); err == nil {
 		t.Fatalf("expected the scan error to surface after fingerprint change")
 	}
 	if calls != 2 {
 		t.Fatalf("calls=%d; want 2 (fingerprint change forces rescan)", calls)
 	}
 	// The error must not be cached: retrying with the same key re-scans.
-	if _, err := m.get(ctx, fingerprint, refresh); err != nil {
+	if _, err := m.Get(ctx, fingerprint, refresh); err != nil {
 		t.Fatal(err)
 	}
 	if calls != 3 {
 		t.Fatalf("calls=%d; want 3 (error not cached, retry re-scans)", calls)
 	}
 	// The successful result is cached again under v2.
-	if _, err := m.get(ctx, fingerprint, refresh); err != nil {
+	if _, err := m.Get(ctx, fingerprint, refresh); err != nil {
 		t.Fatal(err)
 	}
 	if calls != 3 {
@@ -1178,7 +1188,7 @@ func TestRefreshMemoInvalidatesOnFingerprintChangeAndDoesNotCacheErrors(t *testi
 	}
 	// A fingerprint error fails closed by forcing a rescan rather than reusing.
 	fingerprint = func(context.Context) (string, error) { return "", errors.New("fingerprint failure") }
-	if _, err := m.get(ctx, fingerprint, refresh); err != nil {
+	if _, err := m.Get(ctx, fingerprint, refresh); err != nil {
 		t.Fatal(err)
 	}
 	if calls != 4 {
@@ -1244,11 +1254,13 @@ func TestExecuteOverlapSafetyMemoInvalidatesOnNewEntryAcrossBatch(t *testing.T) 
 	}
 
 	runtime := cleanupOverlapSafetyRuntime{
-		Initial:     cleaner.OverlapSafetyEvidence{Complete: true},
-		Refresh:     refresh,
-		Lookup:      lookup,
-		memo:        &refreshMemo{},
-		fingerprint: fingerprint,
+		OverlapRuntime: cleaner.OverlapRuntime{
+			Initial:     cleaner.OverlapSafetyEvidence{Complete: true},
+			Refresh:     refresh,
+			Lookup:      lookup,
+			Memo:        &cleaner.RefreshMemo{},
+			Fingerprint: fingerprint,
+		},
 	}
 	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{
 		overlapCmdTarget(outerA, 11),
@@ -1288,7 +1300,7 @@ func TestAgentStateEntryFingerprintTracksEntrySet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	base, err := agentStateEntryFingerprint(ctx)
+	base, err := cleaner.AgentStateEntryFingerprint(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1297,7 +1309,7 @@ func TestAgentStateEntryFingerprintTracksEntrySet(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(claudeRoot, "gamma"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	afterAdd, err := agentStateEntryFingerprint(ctx)
+	afterAdd, err := cleaner.AgentStateEntryFingerprint(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1309,7 +1321,7 @@ func TestAgentStateEntryFingerprintTracksEntrySet(t *testing.T) {
 	if err := os.RemoveAll(filepath.Join(claudeRoot, "alpha")); err != nil {
 		t.Fatal(err)
 	}
-	afterRemove, err := agentStateEntryFingerprint(ctx)
+	afterRemove, err := cleaner.AgentStateEntryFingerprint(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1321,7 +1333,7 @@ func TestAgentStateEntryFingerprintTracksEntrySet(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(claudeRoot, "not-a-dir.txt"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	afterFile, err := agentStateEntryFingerprint(ctx)
+	afterFile, err := cleaner.AgentStateEntryFingerprint(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1337,7 +1349,7 @@ func TestAgentStateEntryFingerprintTracksEntrySet(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root2, "a,b"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	single, err := agentStateEntryFingerprint(ctx)
+	single, err := cleaner.AgentStateEntryFingerprint(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1350,7 +1362,7 @@ func TestAgentStateEntryFingerprintTracksEntrySet(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root2, "b"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	split, err := agentStateEntryFingerprint(ctx)
+	split, err := cleaner.AgentStateEntryFingerprint(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1376,7 +1388,7 @@ func TestAgentStateEntryFingerprintEnumeratesAgentStateRoots(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	key, err := agentStateEntryFingerprint(ctx)
+	key, err := cleaner.AgentStateEntryFingerprint(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1395,7 +1407,7 @@ func TestAgentStateEntryFingerprintEnumeratesAgentStateRoots(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(cursorRoot, "cursor-entry-two"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	afterAdd, err := agentStateEntryFingerprint(ctx)
+	afterAdd, err := cleaner.AgentStateEntryFingerprint(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1413,14 +1425,14 @@ func TestAgentStateEntryFingerprintEnumeratesAgentStateRoots(t *testing.T) {
 	if err := os.MkdirAll(roots2[0], 0o755); err != nil {
 		t.Fatal(err)
 	}
-	oneRoot, err := agentStateEntryFingerprint(ctx)
+	oneRoot, err := cleaner.AgentStateEntryFingerprint(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(roots2[1], 0o755); err != nil {
 		t.Fatal(err)
 	}
-	twoRoots, err := agentStateEntryFingerprint(ctx)
+	twoRoots, err := cleaner.AgentStateEntryFingerprint(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1446,7 +1458,7 @@ func TestAgentStateEntryFingerprintCoversProviderRoots(t *testing.T) {
 		}
 	}
 
-	key, err := agentStateEntryFingerprint(ctx)
+	key, err := cleaner.AgentStateEntryFingerprint(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

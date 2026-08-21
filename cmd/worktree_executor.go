@@ -180,7 +180,7 @@ func executePreparedCleanTargets(ctx context.Context, targets []preparedCleanTar
 		// re-scans within the batch whenever the agent-state entry set changes,
 		// so newly created overlapping state is discovered before each mutation.
 		if safety := targets[0].MutationSafety; safety != nil {
-			safety.runtime.resetRefreshMemo()
+			safety.runtime.ResetRefreshMemo()
 		}
 	}
 	if opts.removeWorktree == nil {
