@@ -94,7 +94,7 @@ curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/i
 ### Verify release artifacts
 
 Release archives ship `checksums.txt` (verified by `install.sh`), an SPDX SBOM
-(`<archive>.sbom`), and a GitHub artifact attestation produced by the release
+(`<archive>.sbom.json`), and a GitHub artifact attestation produced by the release
 workflow. Copy-paste verification for a downloaded archive:
 
 ```bash
@@ -105,7 +105,7 @@ gh attestation verify aibris_darwin_arm64.tar.gz --owner sungjunlee
 sha256sum -c checksums.txt --ignore-missing
 
 # SBOM published alongside the archive
-syft aibris_darwin_arm64.tar.gz.sbom
+syft convert aibris_darwin_arm64.tar.gz.sbom.json -o spdx-json
 ```
 
 ## Quick start: scan → dry-run → clean

@@ -55,9 +55,11 @@ brews:
 checksum:
   name_template: 'checksums.txt'
 # SPDX SBOM per release archive, generated with syft and published as
-# `<archive>.sbom` alongside checksums.txt (#121).
+# `<archive>.sbom.json` alongside checksums.txt (#121).
 sboms:
   - artifacts: archive
+release:
+  draft: true
 snapshot:
   version_template: "{{ .Tag }}-next"
 changelog:

@@ -53,6 +53,12 @@ jobs:
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: dist/*.tar.gz, dist/*.zip
+      # GoReleaser created a draft. Publish only after provenance succeeds so
+      # a failed attestation cannot leave a public unattested release.
+      - name: Publish attested release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${GITHUB_REF_NAME}" --draft=false
 
   brew-pour:
     needs: goreleaser

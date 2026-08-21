@@ -342,6 +342,7 @@ func TestReleaseSupplyChainContract(t *testing.T) {
 		"sboms:",
 		"artifacts: archive",
 		"name_template: 'checksums.txt'",
+		"draft: true",
 	} {
 		if !strings.Contains(goreleaser, required) {
 			t.Errorf("GoReleaser supply-chain contract is missing %q", required)
@@ -356,6 +357,8 @@ func TestReleaseSupplyChainContract(t *testing.T) {
 		"anchore/sbom-action/download-syft",
 		"actions/attest-build-provenance",
 		"subject-path: dist/*.tar.gz, dist/*.zip",
+		"gh release edit",
+		"--draft=false",
 	} {
 		if !strings.Contains(releaseWorkflow, required) {
 			t.Errorf("release workflow supply-chain contract is missing %q", required)
@@ -369,10 +372,11 @@ func TestReleaseSupplyChainContract(t *testing.T) {
 	// job, before brew-pour may treat the release as trusted.
 	goreleaserStep := strings.Index(releaseWorkflow, "goreleaser/goreleaser-action")
 	attestStep := strings.Index(releaseWorkflow, "actions/attest-build-provenance")
+	publishStep := strings.Index(releaseWorkflow, "gh release edit")
 	brewPourJob := strings.Index(releaseWorkflow, "brew-pour:")
-	if goreleaserStep < 0 || attestStep < 0 || brewPourJob < 0 ||
-		!(goreleaserStep < attestStep && attestStep < brewPourJob) {
-		t.Error("attest-build-provenance must run after goreleaser publishes artifacts and before the brew-pour job")
+	if goreleaserStep < 0 || attestStep < 0 || publishStep < 0 || brewPourJob < 0 ||
+		!(goreleaserStep < attestStep && attestStep < publishStep && publishStep < brewPourJob) {
+		t.Error("attest then publish must run after goreleaser creates a draft and before brew-pour")
 	}
 
 	readme := readRepoFile(t, "README.md")
@@ -380,7 +384,7 @@ func TestReleaseSupplyChainContract(t *testing.T) {
 		"gh attestation verify",
 		"--owner sungjunlee",
 		"sha256sum -c checksums.txt",
-		"syft aibris_darwin_arm64.tar.gz.sbom",
+		"syft convert aibris_darwin_arm64.tar.gz.sbom.json",
 	} {
 		if !strings.Contains(readme, required) {
 			t.Errorf("README must document release verification command %q", required)
