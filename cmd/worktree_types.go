@@ -102,6 +102,10 @@ func hasGitWorktreeMetadata(path string) bool {
 	return worktree.HasGitWorktreeMetadata(path)
 }
 
+func gitWorktreeRemoveArgs(repositoryID, worktreePath string) []string {
+	return worktree.GitWorktreeRemoveArgs(repositoryID, worktreePath)
+}
+
 func decisionReasonDescription(code DecisionReasonCode) string {
 	return worktree.DecisionReasonDescription(code)
 }
