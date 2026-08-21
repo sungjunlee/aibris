@@ -52,7 +52,9 @@ jobs:
       - name: Attest release artifacts
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: dist/*.tar.gz, dist/*.zip
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.zip
       # GoReleaser created a draft. Publish only after provenance succeeds so
       # a failed attestation cannot leave a public unattested release.
       - name: Publish attested release

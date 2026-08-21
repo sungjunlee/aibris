@@ -356,7 +356,9 @@ func TestReleaseSupplyChainContract(t *testing.T) {
 		"attestations: write",
 		"anchore/sbom-action/download-syft",
 		"actions/attest-build-provenance",
-		"subject-path: dist/*.tar.gz, dist/*.zip",
+		"subject-path:",
+		"dist/*.tar.gz",
+		"dist/*.zip",
 		"gh release edit",
 		"--draft=false",
 	} {
