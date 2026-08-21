@@ -23,6 +23,11 @@ Choose and complete one of the following before release:
 
 <!-- Required for a breaking change; otherwise state that no migration is needed. -->
 
+## Safety
+
+State what this release guarantees not to touch (live worktrees, active agent
+state) and any cleanup safeguards that changed.
+
 ## Windows status
 
 <!-- Required by the release workflow. State the current Windows support status. -->
