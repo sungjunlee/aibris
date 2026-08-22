@@ -274,8 +274,7 @@ func TestHomebrewReleaseContract(t *testing.T) {
 		`bin.install "aibris"`,
 		`generate_completions_from_executable(bin/"aibris", "completion")`,
 		`man1.install Dir["release-assets/man/*.1"]`,
-		"skip_upload:",
-		".IsSnapshot",
+		"skip_upload: true",
 	} {
 		if !strings.Contains(goreleaser, required) {
 			t.Errorf("GoReleaser Homebrew contract is missing %q", required)
@@ -361,6 +360,7 @@ func TestReleaseSupplyChainContract(t *testing.T) {
 		"dist/*.zip",
 		"gh release edit",
 		"--draft=false",
+		"publish-homebrew-formula.sh",
 	} {
 		if !strings.Contains(releaseWorkflow, required) {
 			t.Errorf("release workflow supply-chain contract is missing %q", required)
@@ -376,9 +376,10 @@ func TestReleaseSupplyChainContract(t *testing.T) {
 	attestStep := strings.Index(releaseWorkflow, "actions/attest-build-provenance")
 	publishStep := strings.Index(releaseWorkflow, "gh release edit")
 	brewPourJob := strings.Index(releaseWorkflow, "brew-pour:")
-	if goreleaserStep < 0 || attestStep < 0 || publishStep < 0 || brewPourJob < 0 ||
-		!(goreleaserStep < attestStep && attestStep < publishStep && publishStep < brewPourJob) {
-		t.Error("attest then publish must run after goreleaser creates a draft and before brew-pour")
+	tapStep := strings.Index(releaseWorkflow, "publish-homebrew-formula.sh")
+	if goreleaserStep < 0 || attestStep < 0 || publishStep < 0 || tapStep < 0 || brewPourJob < 0 ||
+		!(goreleaserStep < attestStep && attestStep < publishStep && publishStep < tapStep && tapStep < brewPourJob) {
+		t.Error("attest, publish, then tap must run after goreleaser creates a draft and before brew-pour")
 	}
 
 	readme := readRepoFile(t, "README.md")

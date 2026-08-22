@@ -61,6 +61,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release edit "${GITHUB_REF_NAME}" --draft=false
+      # Tap commit happens only after the GitHub release is public so a
+      # failed attestation cannot leave brew pointing at draft 404s (#294).
+      - name: Publish Homebrew formula
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: .github/scripts/publish-homebrew-formula.sh
 
   brew-pour:
     needs: goreleaser
