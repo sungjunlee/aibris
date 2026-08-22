@@ -11,25 +11,30 @@ TAP_CLONE_URL="${AIBRIS_TAP_CLONE_URL:-git@github.com:sungjunlee/homebrew-tap.gi
 
 publish_usage() {
 	printf 'usage: publish-homebrew-formula.sh [dist-dir]\n' >&2
-	return 2
 }
 
 publish_find_formula() {
 	local dist=${1:-dist}
-	local matches
+	local found="" path count=0
 	if [ ! -d "$dist" ]; then
 		printf 'missing dist directory: %s\n' "$dist" >&2
 		return 1
 	fi
 	# GoReleaser writes the skipped-upload formula under dist/; do not
 	# rebuild archives (checksums would drift from the attested files).
-	mapfile -t matches < <(find "$dist" -type f -name "${FORMULA_NAME}.rb" | sort)
-	if [ "${#matches[@]}" -ne 1 ]; then
+	# Portable (macOS /bin/bash 3.2 has no mapfile).
+	while IFS= read -r path; do
+		found=$path
+		count=$((count + 1))
+	done <<EOF
+$(find "$dist" -type f -name "${FORMULA_NAME}.rb" | sort)
+EOF
+	if [ "$count" -ne 1 ]; then
 		printf 'expected exactly one %s.rb under %s, found %s\n' \
-			"$FORMULA_NAME" "$dist" "${#matches[@]}" >&2
+			"$FORMULA_NAME" "$dist" "$count" >&2
 		return 1
 	fi
-	printf '%s\n' "${matches[0]}"
+	printf '%s\n' "$found"
 }
 
 publish_require_token() {
