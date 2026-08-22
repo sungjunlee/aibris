@@ -24,6 +24,7 @@ publish_find_formula() {
 	# rebuild archives (checksums would drift from the attested files).
 	# Portable (macOS /bin/bash 3.2 has no mapfile).
 	while IFS= read -r path; do
+		[ -n "$path" ] || continue
 		found=$path
 		count=$((count + 1))
 	done <<EOF
