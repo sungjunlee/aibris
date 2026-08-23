@@ -1,9 +1,13 @@
 package cmd
 
 import (
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/types"
 )
 
 func TestCleanJSONReceiptPostCleanIsUnavailableAndPathFreeOnLinux(t *testing.T) {
@@ -100,5 +104,81 @@ func TestFinalizeCleanJSONReceiptPostCleanOmitsRecommendationWithoutSnapshots(t 
 	}
 	if finalized.PostClean.SnapshotThinningRecommended {
 		t.Fatal("post_clean.snapshot_thinning_recommended = true; want false/omitted for count 0")
+	}
+}
+
+func TestFinalizeCleanJSONReceiptPostCleanExcludesPhysicallyRemovedOwner(t *testing.T) {
+	previous := listLocalAPFSSnapshots
+	listLocalAPFSSnapshots = func() (int, error) { return 0, nil }
+	defer func() { listLocalAPFSSnapshots = previous }()
+
+	home := t.TempDir()
+	survivorPath := filepath.Join(home, "surviving-project", "node_modules")
+	if err := os.MkdirAll(survivorPath, 0o755); err != nil {
+		t.Fatalf("creating surviving owner: %v", err)
+	}
+	removedPath := filepath.Join(home, "removed-project", "node_modules")
+
+	survivor := types.DebrisInfo{
+		ID: "survivor", Category: types.CategoryNodeModules,
+		Path: survivorPath, Size: 300,
+	}
+	removed := types.DebrisInfo{
+		ID: "removed", Category: types.CategoryNodeModules,
+		Path: removedPath, Size: 700,
+	}
+	unmappable := types.DebrisInfo{
+		ID: "unmapped", Category: types.CategoryNodeModules,
+		Path: filepath.Join(home, "unmapped-project", "node_modules"), Size: 500,
+	}
+
+	pathKey := func(path string) string {
+		key, ok := cleaner.TargetPathKey(path)
+		if !ok {
+			t.Fatalf("no target path key for %q", path)
+		}
+		return key
+	}
+	components := []cleanJSONSnapshotComponent{
+		{Key: pathKey(removed.Path), Owner: removed},
+		{Key: pathKey(survivor.Path), Owner: survivor},
+	}
+
+	receipt := newCleanJSONReceipt(cleanJSONPlan{
+		PhysicalTargets: []cleanJSONPhysicalTarget{
+			{ID: "target-1", Decision: cleanJSONDecisionSelected, Bytes: 700},
+			{ID: "target-2", Decision: cleanJSONDecisionSelected, Bytes: 300},
+		},
+	})
+	receipt.inventory = cleanJSONReceiptInventory(components)
+	// An owner whose identity cannot be mapped to a physical target must be
+	// omitted from the post-clean debris split rather than counted.
+	receipt.inventory = append(receipt.inventory, cleanJSONReceiptInventoryOwner{Owner: unmappable})
+
+	markCleanJSONReceiptTarget(&receipt, "target-1", string(cleanExecutionRemoved), true, "removed")
+	markCleanJSONReceiptTarget(&receipt, "target-2", string(cleanExecutionRemoved), true, "physical_owner_present")
+	for i := range receipt.PhysicalTargets {
+		switch receipt.PhysicalTargets[i].ID {
+		case "target-1":
+			receipt.PhysicalTargets[i].PhysicalRemoved = true
+			receipt.PhysicalTargets[i].FreedBytes = 700
+		case "target-2":
+			receipt.PhysicalTargets[i].FreedBytes = 0
+		}
+	}
+
+	finalized, err := finishCleanJSONReceipt(receipt, nil)
+	if err != nil || finalized.Status != cleanJSONReceiptSucceeded {
+		t.Fatalf("receipt finalize status=%q error=%v", finalized.Status, err)
+	}
+	volume := finalized.PostClean.Volume
+	if volume == nil {
+		t.Fatal("finalized receipt has no post_clean volume report")
+	}
+	if onVolume, otherVolume := volume.DebrisBytes, volume.OtherVolumeDebrisBytes; onVolume+otherVolume != survivor.Size {
+		t.Fatalf(
+			"post_clean.volume debris = %d on-volume + %d other-volume; want only the surviving owner's %d bytes (physically removed and unmappable owners must not be counted)",
+			onVolume, otherVolume, survivor.Size,
+		)
 	}
 }
