@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Scan inventory counts nested worktree members under one outer owner once in
+  physical totals. Evidence rows remain, each with a document-local
+  `physical_target_id` (`target-N`). `summary.total_size` is still the row
+  sum; `physical_unit_count` / `physical_total_bytes` (also on by-category
+  and by-tool) feed the human headline and volume debris and match clean-plan
+  physical totals for the same fixture.
+
 ### Changed
 
 - Command cleanup credits `freed_bytes = max(0, size_before − size_after)`

@@ -94,33 +94,38 @@ var scanCmd = &cobra.Command{
 }
 
 type jsonWorktree struct {
-	Tool            string   `json:"tool"`
-	Category        string   `json:"category"`
-	ID              string   `json:"id"`
-	Project         string   `json:"project"`
-	Source          string   `json:"source"`
-	Path            string   `json:"path"`
-	Size            int64    `json:"size"`
-	ModTime         string   `json:"mod_time"`
-	Status          string   `json:"status"`
-	Classification  string   `json:"classification,omitempty"`
-	Risk            string   `json:"risk"`
-	Reason          string   `json:"reason"`
-	CleanupKind     string   `json:"cleanup_kind"`
-	CleanupCommand  []string `json:"cleanup_command"`
-	StrippableBytes int64    `json:"strippable_bytes,omitempty"`
-	StrippablePaths []string `json:"strippable_paths,omitempty"`
+	Tool             string   `json:"tool"`
+	Category         string   `json:"category"`
+	ID               string   `json:"id"`
+	Project          string   `json:"project"`
+	Source           string   `json:"source"`
+	Path             string   `json:"path"`
+	Size             int64    `json:"size"`
+	ModTime          string   `json:"mod_time"`
+	Status           string   `json:"status"`
+	Classification   string   `json:"classification,omitempty"`
+	Risk             string   `json:"risk"`
+	Reason           string   `json:"reason"`
+	CleanupKind      string   `json:"cleanup_kind"`
+	CleanupCommand   []string `json:"cleanup_command"`
+	PhysicalTargetID string   `json:"physical_target_id"`
+	StrippableBytes  int64    `json:"strippable_bytes,omitempty"`
+	StrippablePaths  []string `json:"strippable_paths,omitempty"`
 }
 
 type jsonSummaryEntry struct {
-	Count           int   `json:"count"`
-	Size            int64 `json:"size"`
-	StrippableBytes int64 `json:"strippable_bytes,omitempty"`
+	Count              int   `json:"count"`
+	Size               int64 `json:"size"`
+	PhysicalUnitCount  int   `json:"physical_unit_count"`
+	PhysicalTotalBytes int64 `json:"physical_total_bytes"`
+	StrippableBytes    int64 `json:"strippable_bytes,omitempty"`
 }
 
 type jsonSummary struct {
 	TotalCount           int                         `json:"total_count"`
 	TotalSize            int64                       `json:"total_size"`
+	PhysicalUnitCount    int                         `json:"physical_unit_count"`
+	PhysicalTotalBytes   int64                       `json:"physical_total_bytes"`
 	TotalStrippableBytes int64                       `json:"total_strippable_bytes,omitempty"`
 	ByCategory           map[string]jsonSummaryEntry `json:"by_category"`
 	ByTool               map[string]jsonSummaryEntry `json:"by_tool"`
@@ -222,6 +227,8 @@ func printJSON(r *types.ScanResult) {
 		Summary: jsonSummary{
 			TotalCount:           r.TotalCount,
 			TotalSize:            r.TotalSize,
+			PhysicalUnitCount:    r.PhysicalUnitCount,
+			PhysicalTotalBytes:   r.PhysicalTotalBytes,
 			TotalStrippableBytes: r.TotalStrippableBytes,
 			ByCategory:           make(map[string]jsonSummaryEntry, len(r.ByCategory)),
 			ByTool:               make(map[string]jsonSummaryEntry, len(r.ByTool)),
@@ -265,28 +272,30 @@ func printJSON(r *types.ScanResult) {
 			})
 		}
 	}
+	physicalIDs := physicalTargetIDs(r.Worktrees)
 	for i, w := range r.Worktrees {
 		cleanupCommand := append([]string(nil), w.CleanupCommand...)
 		if cleanupCommand == nil {
 			cleanupCommand = []string{}
 		}
 		items[i] = jsonWorktree{
-			Tool:            string(w.Tool),
-			Category:        string(w.Category),
-			ID:              w.ID,
-			Project:         w.Project,
-			Source:          w.Source,
-			Path:            w.Path,
-			Size:            w.Size,
-			ModTime:         w.ModTime.Format(time.RFC3339),
-			Status:          string(w.Status),
-			Classification:  string(w.Classification),
-			Risk:            itemRisk(w),
-			Reason:          itemReason(w),
-			CleanupKind:     string(cleanupKind(w)),
-			CleanupCommand:  cleanupCommand,
-			StrippableBytes: w.StrippableBytes,
-			StrippablePaths: append([]string(nil), w.StrippablePaths...),
+			Tool:             string(w.Tool),
+			Category:         string(w.Category),
+			ID:               w.ID,
+			Project:          w.Project,
+			Source:           w.Source,
+			Path:             w.Path,
+			Size:             w.Size,
+			ModTime:          w.ModTime.Format(time.RFC3339),
+			Status:           string(w.Status),
+			Classification:   string(w.Classification),
+			Risk:             itemRisk(w),
+			Reason:           itemReason(w),
+			CleanupKind:      string(cleanupKind(w)),
+			CleanupCommand:   cleanupCommand,
+			PhysicalTargetID: physicalIDs[i],
+			StrippableBytes:  w.StrippableBytes,
+			StrippablePaths:  append([]string(nil), w.StrippablePaths...),
 		}
 	}
 	for i, bucket := range r.Retention.Buckets {
@@ -310,15 +319,65 @@ func printJSON(r *types.ScanResult) {
 		out.Volume = jsonVolumeFromReport(*report)
 	}
 	for cat, s := range r.ByCategory {
-		out.Summary.ByCategory[string(cat)] = jsonSummaryEntry{Count: s.Count, Size: s.Size, StrippableBytes: s.StrippableBytes}
+		out.Summary.ByCategory[string(cat)] = jsonSummaryEntry{
+			Count:              s.Count,
+			Size:               s.Size,
+			PhysicalUnitCount:  s.PhysicalUnitCount,
+			PhysicalTotalBytes: s.PhysicalTotalBytes,
+			StrippableBytes:    s.StrippableBytes,
+		}
 	}
 	for tool, s := range r.ByTool {
-		out.Summary.ByTool[string(tool)] = jsonSummaryEntry{Count: s.Count, Size: s.Size, StrippableBytes: s.StrippableBytes}
+		out.Summary.ByTool[string(tool)] = jsonSummaryEntry{
+			Count:              s.Count,
+			Size:               s.Size,
+			PhysicalUnitCount:  s.PhysicalUnitCount,
+			PhysicalTotalBytes: s.PhysicalTotalBytes,
+			StrippableBytes:    s.StrippableBytes,
+		}
 	}
+	applyPhysicalJSONSummary(&out, r.Worktrees)
 
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	enc.Encode(out)
+}
+
+func applyPhysicalJSONSummary(out *jsonOutput, items []types.DebrisInfo) {
+	units := cleaner.PhysicalInventory(items)
+	out.Summary.PhysicalUnitCount = len(units)
+	var total int64
+	for _, unit := range units {
+		total += unit.Size
+	}
+	out.Summary.PhysicalTotalBytes = total
+}
+
+func physicalTargetIDs(items []types.DebrisInfo) []string {
+	units := cleaner.PhysicalInventory(items)
+	ids := make([]string, len(items))
+	for i, item := range items {
+		ids[i] = fmt.Sprintf("target-%d", physicalUnitIndex(item, units)+1)
+	}
+	return ids
+}
+
+func physicalUnitIndex(item types.DebrisInfo, units []types.DebrisInfo) int {
+	itemPath, itemOK := cleaner.TargetPathKey(item.Path)
+	for i, unit := range units {
+		if physicalUnitOwns(unit, item, itemPath, itemOK) {
+			return i
+		}
+	}
+	return len(units)
+}
+
+func physicalUnitOwns(unit, item types.DebrisInfo, itemPath string, itemOK bool) bool {
+	unitPath, unitOK := cleaner.TargetPathKey(unit.Path)
+	if unitOK && itemOK {
+		return unitPath == itemPath || cleaner.PathContains(unitPath, itemPath)
+	}
+	return unit.Path == item.Path && unit.ID == item.ID
 }
 
 func printScanHeader(roots []string) {
@@ -498,7 +557,7 @@ func printHumanScanResult(ctx context.Context, r *types.ScanResult) {
 	report := homeVolumeReport(r.Worktrees)
 	printScanHeadline(r, report)
 	fmt.Printf("  found       %d %s\n", r.TotalCount, itemNoun(r.TotalCount))
-	fmt.Printf("  found size  %s\n", cleaner.FormatSize(r.TotalSize))
+	fmt.Printf("  found size  %s\n", cleaner.FormatSize(r.PhysicalTotalBytes))
 	printVolumePressureReport(report)
 	if r.TotalStrippableBytes > 0 {
 		fmt.Printf("  strippable  %s regenerable subtrees inside worktrees (clean --strip)\n",
@@ -557,7 +616,7 @@ func printScanHeadline(r *types.ScanResult, report *volume.Report) {
 		return
 	}
 	printScanHeadlinePaths(
-		r.TotalSize,
+		r.PhysicalTotalBytes,
 		scanReclaimPaths(r.Worktrees, scanDefaultCleanPolicy()),
 		report,
 	)
@@ -789,7 +848,7 @@ func homeVolumeReport(items []types.DebrisInfo) *volume.Report {
 	if err != nil {
 		dev = ""
 	}
-	on, other := volume.SplitDebris(dev, items)
+	on, other := volume.SplitDebris(dev, cleaner.PhysicalInventory(items))
 	report.DebrisBytes = on
 	report.OtherVolumeDebrisBytes = other
 	return &report
@@ -953,7 +1012,7 @@ func printCategorySummary(summary map[types.Category]types.CategorySummary) {
 	fmt.Println("\nby category")
 	for _, category := range sortedCategories(summary) {
 		entry := summary[category]
-		fmt.Printf("  %-13s %3d   %s\n", category, entry.Count, cleaner.FormatSize(entry.Size))
+		fmt.Printf("  %-13s %3d   %s\n", category, entry.PhysicalUnitCount, cleaner.FormatSize(entry.PhysicalTotalBytes))
 	}
 }
 

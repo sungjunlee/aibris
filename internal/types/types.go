@@ -112,6 +112,10 @@ type ScanResult struct {
 	Worktrees  []DebrisInfo
 	TotalCount int
 	TotalSize  int64
+	// PhysicalUnitCount and PhysicalTotalBytes count each outer mutation
+	// owner once. TotalCount/TotalSize remain the evidence-row sum.
+	PhysicalUnitCount  int
+	PhysicalTotalBytes int64
 	// TotalStrippableBytes sums regenerable-subtree bytes reported separately
 	// from deletable Size, so protected worktrees stop reading as unrecoverable.
 	TotalStrippableBytes int64
@@ -264,6 +268,10 @@ type ScanProgressEvent struct {
 type CategorySummary struct {
 	Count int
 	Size  int64
+	// PhysicalUnitCount and PhysicalTotalBytes count each outer mutation
+	// owner once. Count/Size remain the evidence-row sum.
+	PhysicalUnitCount  int
+	PhysicalTotalBytes int64
 	// StrippableBytes reports regenerable-subtree bytes separately from Size.
 	StrippableBytes int64
 }
@@ -272,6 +280,10 @@ type CategorySummary struct {
 type ToolSummary struct {
 	Count int
 	Size  int64
+	// PhysicalUnitCount and PhysicalTotalBytes count each outer mutation
+	// owner once. Count/Size remain the evidence-row sum.
+	PhysicalUnitCount  int
+	PhysicalTotalBytes int64
 	// StrippableBytes reports regenerable-subtree bytes separately from Size.
 	StrippableBytes int64
 }

@@ -55,8 +55,11 @@ Output contains:
   non-worktree debris.
 - `summary.total_count`
 - `summary.total_size`
+- `summary.physical_unit_count`
+- `summary.physical_total_bytes`
 - `summary.by_category`
 - `summary.by_tool`
+- item-level `physical_target_id` linking evidence rows to a document-local physical unit (`target-N`)
 - item-level `status`, `classification`, `risk`, and `reason` fields for agent
   decisions; `classification` is `live`, `orphaned`, or `undetermined` for
   `agent-state` and omitted for other categories

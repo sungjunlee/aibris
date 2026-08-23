@@ -2367,14 +2367,16 @@ func TestPrintJSON_WithData(t *testing.T) {
 				CleanupCommand: []string{"go", "clean", "-cache"},
 			},
 		},
-		TotalCount: 2,
-		TotalSize:  307200,
+		TotalCount:         2,
+		TotalSize:          307200,
+		PhysicalUnitCount:  2,
+		PhysicalTotalBytes: 307200,
 		ByCategory: map[types.Category]types.CategorySummary{
-			types.CategoryWorktree: {Count: 2, Size: 307200},
+			types.CategoryWorktree: {Count: 2, Size: 307200, PhysicalUnitCount: 2, PhysicalTotalBytes: 307200},
 		},
 		ByTool: map[types.Tool]types.ToolSummary{
-			types.ToolCodex:  {Count: 1, Size: 102400},
-			types.ToolClaude: {Count: 1, Size: 204800},
+			types.ToolCodex:  {Count: 1, Size: 102400, PhysicalUnitCount: 1, PhysicalTotalBytes: 102400},
+			types.ToolClaude: {Count: 1, Size: 204800, PhysicalUnitCount: 1, PhysicalTotalBytes: 204800},
 		},
 	}
 
@@ -2391,6 +2393,9 @@ func TestPrintJSON_WithData(t *testing.T) {
 	}
 	if out.Summary.TotalSize != 307200 {
 		t.Errorf("TotalSize = %d; want 307200", out.Summary.TotalSize)
+	}
+	if out.Summary.PhysicalUnitCount != 2 || out.Summary.PhysicalTotalBytes != 307200 {
+		t.Errorf("physical = %d/%d; want 2/307200", out.Summary.PhysicalUnitCount, out.Summary.PhysicalTotalBytes)
 	}
 	if out.SchemaVersion != scanJSONSchemaVersion {
 		t.Errorf("SchemaVersion = %d; want %d", out.SchemaVersion, scanJSONSchemaVersion)

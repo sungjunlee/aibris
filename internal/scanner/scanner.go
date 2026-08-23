@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
+	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/exclude"
 	"github.com/sungjunlee/aibris/internal/retention"
 	"github.com/sungjunlee/aibris/internal/types"
@@ -233,27 +234,7 @@ func (s *Scanner) ScanWithOptions(ctx context.Context, opts types.ScanOptions) (
 	result.Worktrees = requireTempDirOwnership(ctx, result.Worktrees, roots)
 
 	applyUserExclusions(result, opts)
-
-	result.TotalCount = len(result.Worktrees)
-	for _, w := range result.Worktrees {
-		result.TotalSize += w.Size
-		result.TotalStrippableBytes += w.StrippableBytes
-		cat := w.Category
-		if cat == "" {
-			cat = catByTool[w.Tool]
-		}
-		s := result.ByCategory[cat]
-		s.Count++
-		s.Size += w.Size
-		s.StrippableBytes += w.StrippableBytes
-		result.ByCategory[cat] = s
-
-		t := result.ByTool[w.Tool]
-		t.Count++
-		t.Size += w.Size
-		t.StrippableBytes += w.StrippableBytes
-		result.ByTool[w.Tool] = t
-	}
+	fillInventoryTotals(result, catByTool)
 
 	sort.Slice(result.Worktrees, func(i, j int) bool {
 		return result.Worktrees[i].Size > result.Worktrees[j].Size
@@ -364,6 +345,54 @@ func emitProgress(fn func(types.ScanProgressEvent), event types.ScanProgressEven
 	if fn != nil {
 		fn(event)
 	}
+}
+
+func fillInventoryTotals(result *types.ScanResult, catByTool map[types.Tool]types.Category) {
+	result.TotalCount = len(result.Worktrees)
+	for _, item := range result.Worktrees {
+		addEvidenceSummary(result, item, catByTool)
+	}
+	addPhysicalSummary(result, catByTool)
+}
+
+func addEvidenceSummary(result *types.ScanResult, item types.DebrisInfo, catByTool map[types.Tool]types.Category) {
+	result.TotalSize += item.Size
+	result.TotalStrippableBytes += item.StrippableBytes
+	cat := itemCategory(item, catByTool)
+	summary := result.ByCategory[cat]
+	summary.Count++
+	summary.Size += item.Size
+	summary.StrippableBytes += item.StrippableBytes
+	result.ByCategory[cat] = summary
+	tool := result.ByTool[item.Tool]
+	tool.Count++
+	tool.Size += item.Size
+	tool.StrippableBytes += item.StrippableBytes
+	result.ByTool[item.Tool] = tool
+}
+
+func addPhysicalSummary(result *types.ScanResult, catByTool map[types.Tool]types.Category) {
+	units := cleaner.PhysicalInventory(result.Worktrees)
+	result.PhysicalUnitCount = len(units)
+	for _, item := range units {
+		result.PhysicalTotalBytes += item.Size
+		cat := itemCategory(item, catByTool)
+		summary := result.ByCategory[cat]
+		summary.PhysicalUnitCount++
+		summary.PhysicalTotalBytes += item.Size
+		result.ByCategory[cat] = summary
+		tool := result.ByTool[item.Tool]
+		tool.PhysicalUnitCount++
+		tool.PhysicalTotalBytes += item.Size
+		result.ByTool[item.Tool] = tool
+	}
+}
+
+func itemCategory(item types.DebrisInfo, catByTool map[types.Tool]types.Category) types.Category {
+	if item.Category != "" {
+		return item.Category
+	}
+	return catByTool[item.Tool]
 }
 
 func totalSize(items []types.DebrisInfo) int64 {

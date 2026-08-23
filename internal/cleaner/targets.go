@@ -81,6 +81,21 @@ type normalizedTarget struct {
 	rawSizes map[string]int64
 }
 
+// PhysicalInventory collapses path aliases and nested containment the same
+// way clean execution does. Rows without a usable path stay as their own unit.
+func PhysicalInventory(items []types.DebrisInfo) []types.DebrisInfo {
+	keyed := make([]types.DebrisInfo, 0, len(items))
+	unkeyed := make([]types.DebrisInfo, 0)
+	for _, item := range items {
+		if _, ok := TargetPathKey(item.Path); ok {
+			keyed = append(keyed, item)
+			continue
+		}
+		unkeyed = append(unkeyed, item)
+	}
+	return append(unkeyed, NormalizeTargets(keyed)...)
+}
+
 func NormalizeTargets(targets []types.DebrisInfo) []types.DebrisInfo {
 	byPath := make(map[string]normalizedTarget, len(targets))
 	for i, target := range targets {
