@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/codexhome"
+	"github.com/sungjunlee/aibris/internal/types"
 )
 
 // dirActivity reports the total file bytes and the newest modification time
@@ -313,12 +314,19 @@ func pathUnderRoots(path string, roots []string) bool {
 
 // applyCodexHomeScanRoots extends roots with uncovered Codex homes only for
 // the default $HOME scan. Explicit --root is a hard boundary and is returned
-// unchanged.
-func applyCodexHomeScanRoots(roots []string) ([]string, error) {
-	if !isDefaultHomeScan(roots) {
+// unchanged, including --root $HOME.
+func applyCodexHomeScanRoots(opts types.ScanOptions, roots []string) ([]string, error) {
+	if explicitScan(opts, roots) {
 		return roots, nil
 	}
 	return appendUncoveredCodexHomes(roots)
+}
+
+func explicitScan(opts types.ScanOptions, roots []string) bool {
+	if opts.ExplicitRoots {
+		return true
+	}
+	return len(roots) > 0 && !isDefaultHomeScan(roots)
 }
 
 func isDefaultHomeScan(roots []string) bool {
@@ -335,11 +343,11 @@ func isDefaultHomeScan(roots []string) bool {
 // UncoveredCodexHomeWarning returns one path-free diagnostic when explicit
 // scan roots do not cover a configured Codex home. Default $HOME scans return
 // no warning because those homes are still appended.
-func UncoveredCodexHomeWarning(roots []string) (string, error) {
-	if len(roots) == 0 || isDefaultHomeScan(roots) {
+func UncoveredCodexHomeWarning(opts types.ScanOptions) (string, error) {
+	if !explicitScan(opts, opts.Roots) {
 		return "", nil
 	}
-	uncovered, err := uncoveredCodexHomes(roots)
+	uncovered, err := uncoveredCodexHomes(opts.Roots)
 	if err != nil || len(uncovered) == 0 {
 		return "", err
 	}
@@ -366,6 +374,9 @@ func uncoveredCodexHomes(roots []string) ([]string, error) {
 	}
 	var uncovered []string
 	for _, home := range homes {
+		if _, err := os.Stat(home); err != nil {
+			continue
+		}
 		if !pathUnderRoots(home, roots) {
 			uncovered = append(uncovered, home)
 		}

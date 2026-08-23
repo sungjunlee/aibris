@@ -39,7 +39,7 @@ func (a *AILogsAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([]typ
 	if err != nil {
 		return nil, err
 	}
-	roots, err = applyCodexHomeScanRoots(roots)
+	roots, err = applyCodexHomeScanRoots(opts, roots)
 	if err != nil {
 		return nil, err
 	}

@@ -846,15 +846,20 @@ func runCleanScan(ctx context.Context, roots, excludes []string, showProgress bo
 		scanner.DefaultScanner.RetentionProviders,
 	)
 	quietScanner.ErrorWriter = io.Discard
-	return quietScanner.ScanWithOptions(ctx, types.ScanOptions{Roots: roots, Excludes: excludes})
+	return quietScanner.ScanWithOptions(ctx, types.ScanOptions{
+		Roots:         roots,
+		ExplicitRoots: len(cleanRoots) > 0,
+		Excludes:      excludes,
+	})
 }
 
 func runLiveCleanScan(ctx context.Context, roots, excludes []string) (*types.ScanResult, error) {
 	progress := newScanProgressPrinter(os.Stdout)
 	result, err := scanner.ScanWithOptions(ctx, types.ScanOptions{
-		Roots:      roots,
-		Excludes:   excludes,
-		OnProgress: progress.Handle,
+		Roots:         roots,
+		ExplicitRoots: len(cleanRoots) > 0,
+		Excludes:      excludes,
+		OnProgress:    progress.Handle,
 	})
 	progress.Stop()
 	return result, err

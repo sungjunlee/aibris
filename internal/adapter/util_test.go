@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/testutil"
+	"github.com/sungjunlee/aibris/internal/types"
 )
 
 func setTestModTime(t *testing.T, path string, modTime time.Time) {
@@ -313,7 +314,7 @@ func TestApplyCodexHomeScanRoots_DefaultHomeStillAppends(t *testing.T) {
 	codexHome := t.TempDir()
 	t.Setenv("CODEX_HOME", codexHome)
 
-	got, err := applyCodexHomeScanRoots([]string{home})
+	got, err := applyCodexHomeScanRoots(types.ScanOptions{}, []string{home})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -332,12 +333,30 @@ func TestApplyCodexHomeScanRoots_ExplicitRootIsHardBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := applyCodexHomeScanRoots([]string{root})
+	got, err := applyCodexHomeScanRoots(types.ScanOptions{}, []string{root})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(got) != 1 || got[0] != root {
 		t.Fatalf("explicit roots = %v; want only %q", got, root)
+	}
+}
+
+func TestApplyCodexHomeScanRoots_ExplicitHomeIsHardBoundary(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+
+	got, err := applyCodexHomeScanRoots(
+		types.ScanOptions{ExplicitRoots: true},
+		[]string{home},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != home {
+		t.Fatalf("explicit $HOME roots = %v; want only $HOME", got)
 	}
 }
 
@@ -350,19 +369,29 @@ func TestUncoveredCodexHomeWarning_ExplicitRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	warning, err := UncoveredCodexHomeWarning([]string{root})
+	warning, err := UncoveredCodexHomeWarning(types.ScanOptions{Roots: []string{root}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if warning == "" {
 		t.Fatal("want one uncovered Codex home diagnostic")
 	}
-	homeWarning, err := UncoveredCodexHomeWarning([]string{home})
+	homeWarning, err := UncoveredCodexHomeWarning(types.ScanOptions{Roots: []string{home}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if homeWarning != "" {
 		t.Fatalf("default home warning = %q; want empty", homeWarning)
+	}
+	explicitHome, err := UncoveredCodexHomeWarning(types.ScanOptions{
+		Roots:         []string{home},
+		ExplicitRoots: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if explicitHome == "" {
+		t.Fatal("want a diagnostic for explicit --root $HOME")
 	}
 }
 

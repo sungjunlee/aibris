@@ -47,9 +47,10 @@ var scanCmd = &cobra.Command{
 				os.Exit(1)
 			}
 			result, err := scanner.DefaultScanner.ScanWithOptions(ctx, types.ScanOptions{
-				Roots:       roots,
-				Diagnostics: scanDiagnostics,
-				Excludes:    scanExcludes,
+				Roots:         roots,
+				ExplicitRoots: len(scanRoots) > 0,
+				Diagnostics:   scanDiagnostics,
+				Excludes:      scanExcludes,
 			})
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -72,10 +73,11 @@ var scanCmd = &cobra.Command{
 
 		progress := newScanProgressPrinter(os.Stdout)
 		result, err := scanner.DefaultScanner.ScanWithOptions(ctx, types.ScanOptions{
-			Roots:       roots,
-			Diagnostics: scanDiagnostics,
-			Excludes:    scanExcludes,
-			OnProgress:  progress.Handle,
+			Roots:         roots,
+			ExplicitRoots: len(scanRoots) > 0,
+			Diagnostics:   scanDiagnostics,
+			Excludes:      scanExcludes,
+			OnProgress:    progress.Handle,
 		})
 		progress.Stop()
 		if err != nil {

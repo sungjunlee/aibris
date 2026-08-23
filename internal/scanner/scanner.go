@@ -41,8 +41,8 @@ func (s *Scanner) now() time.Time {
 	return time.Now()
 }
 
-func (s *Scanner) emitUncoveredCodexHomeWarning(roots []string) error {
-	warning, err := adapter.UncoveredCodexHomeWarning(roots)
+func (s *Scanner) emitUncoveredCodexHomeWarning(opts types.ScanOptions) error {
+	warning, err := adapter.UncoveredCodexHomeWarning(opts)
 	if err != nil || warning == "" {
 		return err
 	}
@@ -108,7 +108,7 @@ func (s *Scanner) ScanWithOptions(ctx context.Context, opts types.ScanOptions) (
 		return nil, err
 	}
 	opts.Roots = roots
-	if err := s.emitUncoveredCodexHomeWarning(roots); err != nil {
+	if err := s.emitUncoveredCodexHomeWarning(opts); err != nil {
 		return nil, err
 	}
 

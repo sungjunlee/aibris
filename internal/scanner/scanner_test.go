@@ -783,6 +783,24 @@ func TestScanWithOptions_ExplicitRootIsHardCodexHomeBoundary(t *testing.T) {
 	if !scanContainsID(full.Worktrees, "runtime-hash") || !scanContainsID(full.Worktrees, "repo-hash") {
 		t.Fatalf("default scan = %+v; want Codex home and relay units", full.Worktrees)
 	}
+
+	stderr.Reset()
+	explicitHome, err := s.ScanWithOptions(context.Background(), types.ScanOptions{
+		Roots:         []string{home},
+		ExplicitRoots: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scanContainsID(explicitHome.Worktrees, "runtime-hash") {
+		t.Fatalf("explicit --root $HOME widened to Codex home: %+v", explicitHome.Worktrees)
+	}
+	if !scanContainsID(explicitHome.Worktrees, "repo-hash") {
+		t.Fatalf("explicit --root $HOME missed in-home unit: %+v", explicitHome.Worktrees)
+	}
+	if strings.Count(stderr.String(), "warning:") != 1 {
+		t.Fatalf("explicit --root $HOME stderr = %q; want one warning", stderr.String())
+	}
 }
 
 func writeLinkedWorktree(t *testing.T, worktreeDir, parentRepoDir, name string) {

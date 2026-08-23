@@ -738,6 +738,44 @@ func TestWorktreeAdapter_ExplicitRootDirectOwnerDiscoversOneUnit(t *testing.T) {
 	}
 }
 
+func TestWorktreeAdapter_ExplicitPlainDirIsNotAWorktreeUnit(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	root := filepath.Join(home, "wt")
+	createWorktreeGit(t, filepath.Join(root, "a"), filepath.Join(home, "parent"), "a")
+	if err := os.WriteFile(filepath.Join(root, "NOTES.md"), []byte("keep"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{Roots: []string{root}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range results {
+		if row.Path == canonicalExistingPath(root) {
+			t.Fatalf("plain dir became a worktree unit: %+v", results)
+		}
+	}
+}
+
+func TestWorktreeAdapter_GitRepoWithLinkedChildIsNotAWorktreeUnit(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	repo := filepath.Join(home, "app")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	createWorktreeGit(t, filepath.Join(repo, "sub"), filepath.Join(home, "parent"), "sub")
+
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{Roots: []string{repo}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 0 {
+		t.Fatalf("git repo with linked child became a worktree unit: %+v", results)
+	}
+}
+
 func TestWorktreeAdapter_ExplicitGitRepoRootIsNotAWorktreeUnit(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
