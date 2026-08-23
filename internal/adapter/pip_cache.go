@@ -42,7 +42,7 @@ func (a *PipCacheAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([]t
 		command []string
 	}{
 		{id: "pip", path: filepath.Join(home, ".cache", "pip")},
-		{id: "uv", path: filepath.Join(home, ".cache", "uv"), command: []string{"uv", "cache", "prune"}},
+		{id: "uv", path: filepath.Join(home, ".cache", "uv"), command: []string{"uv", "cache", "clean"}},
 	}
 
 	for _, p := range paths {

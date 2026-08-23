@@ -82,7 +82,7 @@ func TestExecuteActiveWorktreeRemovesMultiMemberUnitWithDefaultAge(t *testing.T)
 		t.Fatal(err)
 	}
 	unit := singleExecutionUnit(t, receipt)
-	if unit.State != cleanExecutionRemoved || !unit.PhysicalRemoved || unit.FreedBytes != item.Size || receipt.FreedBytes != item.Size {
+	if unit.State != cleanExecutionRemoved || !unit.PhysicalRemoved || unit.FreedBytes <= 0 || receipt.FreedBytes != unit.FreedBytes {
 		t.Fatalf("unit = %+v, total freed=%d; want multi-member removal with default age", unit, receipt.FreedBytes)
 	}
 	if len(unit.Members) != 2 {
@@ -111,6 +111,10 @@ func TestExecutePreparedCommandCancellationAfterStartRemainsFailed(t *testing.T)
 	if err := os.MkdirAll(targetPath, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	payload := []byte("cancelled-command-payload")
+	if err := os.WriteFile(filepath.Join(targetPath, "payload"), payload, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	marker := filepath.Join(home, "command-started")
 	command := filepath.Join(t.TempDir(), "cancel-after-start")
 	writeJSONReceiptExecutable(t, command, "#!/bin/sh\ntouch \"$1\"\nsleep 5\n")
@@ -119,7 +123,7 @@ func TestExecutePreparedCommandCancellationAfterStartRemainsFailed(t *testing.T)
 		Tool:           types.ToolBuildCache,
 		Category:       types.CategoryBuildCache,
 		Path:           targetPath,
-		Size:           17,
+		Size:           int64(len(payload)),
 		CleanupKind:    types.CleanupCommand,
 		CleanupCommand: []string{command, marker},
 	}
@@ -149,6 +153,9 @@ func TestExecutePreparedCommandCancellationAfterStartRemainsFailed(t *testing.T)
 	if unit.State != cleanExecutionFailed || unit.PhysicalRemoved || unit.FreedBytes != 0 {
 		t.Fatalf("cancelled command receipt = %+v; want failed with retained physical owner", unit)
 	}
+	if unit.ResidualBytes != int64(len(payload)) {
+		t.Fatalf("cancelled residual = %d; want remaining payload %d", unit.ResidualBytes, len(payload))
+	}
 	assertPathExists(t, targetPath)
 }
 
@@ -162,6 +169,10 @@ func TestExecutePreparedCommandRemovingOwnerThenFailingIsPartial(t *testing.T) {
 	if err := os.MkdirAll(targetPath, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	payload := []byte("command-removes-owner-payload")
+	if err := os.WriteFile(filepath.Join(targetPath, "payload"), payload, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	command := filepath.Join(t.TempDir(), "remove-then-fail")
 	writeJSONReceiptExecutable(t, command, "#!/bin/sh\nrm -rf \"$1\"\nexit 7\n")
 	target := types.DebrisInfo{
@@ -169,7 +180,7 @@ func TestExecutePreparedCommandRemovingOwnerThenFailingIsPartial(t *testing.T) {
 		Tool:           types.ToolBuildCache,
 		Category:       types.CategoryBuildCache,
 		Path:           targetPath,
-		Size:           29,
+		Size:           int64(len(payload)),
 		CleanupKind:    types.CleanupCommand,
 		CleanupCommand: []string{command, targetPath},
 	}
@@ -251,6 +262,10 @@ func TestExecutePreparedCommandRemovingOwnerThenCancelledIsPartial(t *testing.T)
 	if err := os.MkdirAll(targetPath, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	payload := []byte("command-removes-then-cancels-payload")
+	if err := os.WriteFile(filepath.Join(targetPath, "payload"), payload, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	marker := filepath.Join(home, "command-owner-removed")
 	command := filepath.Join(t.TempDir(), "remove-then-wait")
 	writeJSONReceiptExecutable(t, command, "#!/bin/sh\nrm -rf \"$1\"\ntouch \"$2\"\nsleep 5\n")
@@ -259,7 +274,7 @@ func TestExecutePreparedCommandRemovingOwnerThenCancelledIsPartial(t *testing.T)
 		Tool:           types.ToolBuildCache,
 		Category:       types.CategoryBuildCache,
 		Path:           targetPath,
-		Size:           31,
+		Size:           int64(len(payload)),
 		CleanupKind:    types.CleanupCommand,
 		CleanupCommand: []string{command, targetPath, marker},
 	}
@@ -558,7 +573,7 @@ func TestExecuteActiveWorktreeCreditsVerifiedOwnerAbsenceAfterMemberMutation(t *
 	}
 	unit := singleExecutionUnit(t, receipt)
 	if unit.State != cleanExecutionPartial || !unit.PhysicalRemoved || !unit.MutationAttempted ||
-		unit.FreedBytes != item.Size || receipt.FreedBytes != item.Size {
+		unit.FreedBytes <= 0 || receipt.FreedBytes != unit.FreedBytes {
 		t.Fatalf("post-mutation disappearance receipt = %+v, total freed=%d; want attributed partial removal", unit, receipt.FreedBytes)
 	}
 	if len(unit.Members) != 2 || !unit.Members[0].Removed || unit.Members[1].Removed || !pathDoesNotExist(first) {
@@ -606,7 +621,7 @@ func TestExecuteOrphanedWorktreeKeepsRawPathCleanup(t *testing.T) {
 		t.Fatal(err)
 	}
 	unit := singleExecutionUnit(t, receipt)
-	if unit.State != cleanExecutionRemoved || !unit.PhysicalRemoved || unit.FreedBytes != 77 || receipt.FreedBytes != 77 || len(unit.Members) != 0 {
+	if unit.State != cleanExecutionRemoved || !unit.PhysicalRemoved || unit.FreedBytes <= 0 || receipt.FreedBytes != unit.FreedBytes || len(unit.Members) != 0 {
 		t.Errorf("orphaned receipt = %+v; want raw-path removal", unit)
 	}
 	if !pathDoesNotExist(target) {

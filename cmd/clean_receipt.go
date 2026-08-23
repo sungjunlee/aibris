@@ -57,6 +57,7 @@ type cleanJSONReceiptPhysicalTarget struct {
 	Requested       bool     `json:"requested"`
 	Bytes           int64    `json:"bytes"`
 	FreedBytes      int64    `json:"freed_bytes"`
+	ResidualBytes   *int64   `json:"residual_bytes,omitempty"`
 	PhysicalRemoved bool     `json:"physical_removed"`
 	Category        string   `json:"category"`
 	Tool            string   `json:"tool"`
@@ -513,13 +514,11 @@ func applyCleanJSONExecutionReceipt(
 				unit.State == cleanExecutionFailed ||
 				unit.State == cleanExecutionCancelled
 			target.PhysicalRemoved = unit.PhysicalRemoved
-			target.FreedBytes = 0
-			if unit.PhysicalRemoved && unit.FreedBytes > 0 {
-				target.FreedBytes = unit.FreedBytes
-				if target.Bytes >= 0 && target.FreedBytes > target.Bytes {
-					target.FreedBytes = target.Bytes
-				}
+			target.FreedBytes = unit.FreedBytes
+			if target.FreedBytes < 0 {
+				target.FreedBytes = 0
 			}
+			target.ResidualBytes = residualBytesJSON(unit)
 			target.ReasonCodes = uniqueCleanJSONReasonCodes(
 				append(target.ReasonCodes, cleanJSONReceiptStateReasons(unit)...),
 			)
@@ -532,12 +531,23 @@ func applyCleanJSONExecutionReceipt(
 	return errors.Join(errs...)
 }
 
+func residualBytesJSON(unit cleanUnitExecutionReceipt) *int64 {
+	if unit.PhysicalRemoved {
+		return nil
+	}
+	residual := unit.ResidualBytes
+	return &residual
+}
+
 func cleanJSONReceiptStateReasons(unit cleanUnitExecutionReceipt) []string {
 	codes := make([]string, 0, 2)
 	if unit.CommandFallbackPathRemoval {
 		codes = append(codes, "command_fallback_path_removal")
 	}
 	if unit.State == cleanExecutionRemoved && !unit.PhysicalRemoved {
+		if unit.FreedBytes == 0 {
+			return append(codes, "physical_owner_present", "no_bytes_reclaimed")
+		}
 		return append(codes, "physical_owner_present")
 	}
 	switch unit.State {
@@ -592,9 +602,7 @@ func finalizeCleanJSONReceipt(receipt cleanJSONReceipt) (cleanJSONReceipt, error
 		if target.Requested {
 			totals.Requested++
 		}
-		if target.PhysicalRemoved {
-			totals.FreedBytes += target.FreedBytes
-		}
+		totals.FreedBytes += target.FreedBytes
 	}
 	receipt.Totals = totals
 	accountedRequests := totals.Removed + totals.Partial + totals.Failed + totals.Cancelled

@@ -25,6 +25,9 @@ func TestOverlapProvenanceCarriesRowsAndSuccessfulObligationsToReceipt(t *testin
 			t.Fatal(err)
 		}
 	}
+	if err := os.WriteFile(filepath.Join(outer, "payload"), make([]byte, 1000), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	owner := overlapCmdTarget(outer, 1000)
 	claude := overlapCmdAgentStateItem(claudeEntry, types.EntryClassOrphaned)

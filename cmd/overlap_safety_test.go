@@ -362,8 +362,8 @@ func TestExecuteOverlapSafetyRevalidatesNestedOrphanBeforeRemovingOuterTarget(t 
 		t.Fatalf("revalidation calls = %d; want 1", calls)
 	}
 	unit := singleExecutionUnit(t, receipt)
-	if !unit.PhysicalRemoved || unit.FreedBytes != 31 || receipt.FreedBytes != 31 {
-		t.Fatalf("receipt = %+v; want one 31-byte physical removal", receipt)
+	if !unit.PhysicalRemoved || unit.FreedBytes != 23 || receipt.FreedBytes != 23 {
+		t.Fatalf("receipt = %+v; want observed sentinel reclaim", receipt)
 	}
 	if _, statErr := os.Lstat(outer); !os.IsNotExist(statErr) {
 		t.Fatalf("outer target survived successful barrier: %v", statErr)
@@ -520,8 +520,8 @@ func TestExecuteOverlapSafetyRefreshCatchesClassificationDriftAndNewEntries(t *t
 				if err != nil {
 					t.Fatal(err)
 				}
-				if receipt.FreedBytes != 23 || revalidationCalls != 1 {
-					t.Fatalf("freed=%d, revalidations=%d; want 23 and 1", receipt.FreedBytes, revalidationCalls)
+				if receipt.FreedBytes != 7 || revalidationCalls != 1 {
+					t.Fatalf("freed=%d, revalidations=%d; want observed fixture 7 and 1", receipt.FreedBytes, revalidationCalls)
 				}
 				if _, statErr := os.Lstat(outer); !os.IsNotExist(statErr) {
 					t.Fatalf("outer target survived successful new obligation: %v", statErr)
@@ -1275,8 +1275,8 @@ func TestExecuteOverlapSafetyMemoInvalidatesOnNewEntryAcrossBatch(t *testing.T) 
 	if err == nil {
 		t.Fatalf("expected refusal for target B after a new live entry appeared")
 	}
-	if receipt.FreedBytes != 11 {
-		t.Fatalf("freed=%d; want 11 (only target A removed)", receipt.FreedBytes)
+	if receipt.FreedBytes != 7 {
+		t.Fatalf("freed=%d; want observed sentinel 7 (only target A removed)", receipt.FreedBytes)
 	}
 	if refreshCalls != 2 {
 		t.Fatalf("refresh calls=%d; want 2 (fingerprint change must force a rescan for target B)", refreshCalls)

@@ -815,8 +815,8 @@ func TestExecute_NonExistent(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	if total != 100 {
-		t.Errorf("total = %d; want 100 (RemoveAll succeeds on non-existent)", total)
+	if total != 0 {
+		t.Errorf("total = %d; want 0 observed bytes for a missing path", total)
 	}
 }
 
@@ -830,6 +830,9 @@ func TestExecute_RefusesAgentStateWithoutRegisteredRevalidatorAndContinues(t *te
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(removablePath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(removablePath, "pkg"), make([]byte, 11), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1262,9 +1265,12 @@ func TestExecute_GoCleanCacheAllowsHomeCustomGOCACHE(t *testing.T) {
 	if err := os.MkdirAll(planned, 0755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(planned, "file"), []byte("data"), 0644); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("GOCACHE", planned)
 	binDir := t.TempDir()
-	writeExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\nexit 0\n")
+	writeExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\nrm -f \""+filepath.Join(planned, "file")+"\"\nexit 0\n")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	total, err := Execute([]types.DebrisInfo{{
@@ -1291,9 +1297,12 @@ func TestExecute_GoCleanCacheRunsWhenGOCACHEMatches(t *testing.T) {
 	if err := os.MkdirAll(planned, 0755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(planned, "file"), []byte("data"), 0644); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("GOCACHE", planned)
 	binDir := t.TempDir()
-	writeExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\nexit 0\n")
+	writeExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\nrm -f \""+filepath.Join(planned, "file")+"\"\nexit 0\n")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	total, err := Execute([]types.DebrisInfo{{
@@ -1316,11 +1325,44 @@ func TestExecute_GoCleanCacheRunsWhenGOCACHEMatches(t *testing.T) {
 	}
 }
 
-func TestExecute_CommandCleanupSuccess(t *testing.T) {
+func TestExecute_CommandCleanupZeroReclaimWhenOwnerRemains(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	binDir := t.TempDir()
 	writeExecutable(t, filepath.Join(binDir, "fake-clean"), "#!/bin/sh\nexit 0\n")
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	path := filepath.Join(home, ".cache", "uv")
+	if err := os.MkdirAll(path, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(path, "file"), []byte("data"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	total, err := Execute([]types.DebrisInfo{{
+		ID:             "uv",
+		Tool:           types.ToolPipCache,
+		Path:           path,
+		Size:           4,
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{"fake-clean"},
+	}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if total != 0 {
+		t.Fatalf("total = %d; want 0 observed reclaim", total)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("command cleanup should keep the owner; stat err = %v", err)
+	}
+}
+
+func TestExecute_CommandCleanupSuccess(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	binDir := t.TempDir()
+	writeExecutable(t, filepath.Join(binDir, "fake-clean"), "#!/bin/sh\nrm -f \""+filepath.Join(home, ".cache", "go-build", "file")+"\"\nexit 0\n")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	path := filepath.Join(home, ".cache", "go-build")
 	os.MkdirAll(path, 0755)
@@ -1402,6 +1444,42 @@ func TestExecute_CommandFailureDoesNotFallback(t *testing.T) {
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Errorf("path should remain after command failure; stat err = %v", err)
+	}
+}
+
+func TestExecute_CommandCancellationDoesNotCreditRemainingPayload(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	binDir := t.TempDir()
+	writeExecutable(t, filepath.Join(binDir, "fake-sleep"), "#!/bin/sh\nsleep 2\n")
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	path := filepath.Join(home, ".cache", "uv")
+	if err := os.MkdirAll(path, 0755); err != nil {
+		t.Fatal(err)
+	}
+	payload := []byte("still-here")
+	if err := os.WriteFile(filepath.Join(path, "file"), payload, 0644); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	total, err := ExecuteWithContext(ctx, []types.DebrisInfo{{
+		ID:             "uv",
+		Tool:           types.ToolPipCache,
+		Path:           path,
+		Size:           int64(len(payload)),
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{"fake-sleep"},
+	}})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v; want context.Canceled", err)
+	}
+	if total != 0 {
+		t.Fatalf("total = %d; want 0 when payload remains after cancel", total)
+	}
+	if _, err := os.Stat(filepath.Join(path, "file")); err != nil {
+		t.Errorf("payload should remain; stat err = %v", err)
 	}
 }
 

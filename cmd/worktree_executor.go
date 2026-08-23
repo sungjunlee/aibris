@@ -35,6 +35,7 @@ type cleanUnitExecutionReceipt struct {
 	State                      cleanExecutionState
 	PhysicalRemoved            bool
 	FreedBytes                 int64
+	ResidualBytes              int64
 	Members                    []cleanMemberExecutionReceipt
 	Obligations                []cleaner.AgentStateRevalidationOutcome
 	BlockingPath               string
@@ -320,6 +321,9 @@ func executePathCleanupTarget(
 		func(outcome cleaner.CleanupMutationOutcome) {
 			receipt.MutationAttempted = receipt.MutationAttempted || outcome.MutationAttempted
 			receipt.CommandFallbackPathRemoval = receipt.CommandFallbackPathRemoval || outcome.CommandFallbackPathRemoval
+			if outcome.ResidualBytes > receipt.ResidualBytes {
+				receipt.ResidualBytes = outcome.ResidualBytes
+			}
 		},
 	)
 	if validated {
@@ -334,10 +338,13 @@ func executePathCleanupTarget(
 		physicalOwnerPath = component.CanonicalPath
 	}
 	receipt.PhysicalRemoved = pathDoesNotExist(physicalOwnerPath)
+	receipt.FreedBytes = freed
+	if receipt.PhysicalRemoved {
+		receipt.ResidualBytes = 0
+	}
 	if err != nil {
-		if receipt.PhysicalRemoved && receipt.MutationAttempted {
+		if receipt.MutationAttempted && (receipt.PhysicalRemoved || freed > 0) {
 			receipt.State = cleanExecutionPartial
-			receipt.FreedBytes = target.Size
 		}
 		if receipt.BlockingPath == "" {
 			receipt.BlockingPath = target.Path
@@ -352,13 +359,17 @@ func executePathCleanupTarget(
 		receipt.BlockingPath = physicalOwnerPath
 		receipt.BlockingReason = err.Error()
 		receipt.Error = err.Error()
+		if pathDoesNotExist(target.Path) && target.Path != physicalOwnerPath {
+			receipt.FreedBytes = 0
+			receipt.ResidualBytes = 0
+			return receipt, err
+		}
+		if freed > 0 {
+			receipt.State = cleanExecutionPartial
+		}
 		return receipt, err
 	}
 	receipt.State = cleanExecutionRemoved
-	// Keep the legacy human receipt's command-clean estimate. The JSON
-	// projection independently credits bytes only when PhysicalRemoved is
-	// true, which is the stricter machine-readable accounting contract.
-	receipt.FreedBytes = freed
 	return receipt, nil
 }
 

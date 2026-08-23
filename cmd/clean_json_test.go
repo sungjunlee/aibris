@@ -569,6 +569,9 @@ func TestCleanJSONReasonCodeAllowListPreservesKnownCodes(t *testing.T) {
 	if got := cleanJSONReasonCode("command_fallback_path_removal"); got != "command_fallback_path_removal" {
 		t.Fatalf("command fallback reason code normalized to %q", got)
 	}
+	if got := cleanJSONReasonCode("no_bytes_reclaimed"); got != "no_bytes_reclaimed" {
+		t.Fatalf("no_bytes_reclaimed reason code normalized to %q", got)
+	}
 	decisionCodes := []DecisionReasonCode{
 		DecisionReasonCurrentWorkingDirectory,
 		DecisionReasonDirtyWorktree,

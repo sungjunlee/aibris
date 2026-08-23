@@ -319,7 +319,7 @@ Supported command-backed cleanup:
 | ------ | --------- |
 | `go-build` | `go clean -cache` |
 | `npm` | `npm cache clean --force` |
-| `uv` | `uv cache prune` |
+| `uv` | `uv cache clean` |
 
 If the command is missing, aibris falls back to safe path removal. If the
 command runs and fails, aibris reports the error and does not remove the path.
