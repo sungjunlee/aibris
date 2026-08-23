@@ -110,27 +110,28 @@ func TestEvidenceBasedReclamationBaseline(t *testing.T) {
 func baselineCleanupUnit(name, repository string, size int64, activity time.Time) WorktreeCleanupUnit {
 	target := "/fixture/.codex/worktrees/" + name
 	return WorktreeCleanupUnit{
-		TargetPath:             target,
-		Size:                   size,
-		Source:                 ".codex",
-		Members:                []GitWorktreeMember{baselineCleanupMember(target, repository)},
-		LastActivity:           activity,
-		ActivityAvailable:      true,
+		TargetPath:                  target,
+		Size:                        size,
+		Source:                      ".codex",
+		Members:                     []GitWorktreeMember{baselineCleanupMember(target, repository)},
+		LastActivity:                activity,
+		ActivityAvailable:           true,
 		RegisteredActivityAvailable: true,
 	}
 }
 
 func baselineCleanupMember(path, repository string) GitWorktreeMember {
 	return GitWorktreeMember{
-		WorktreePath:         path,
-		RepositoryID:         "/fixture/repositories/" + repository + "/.git",
-		DisplayRepository:    "shared-display-name",
-		BranchRef:            "refs/heads/" + filepath.Base(path),
-		HeadOID:              "0123456789abcdef0123456789abcdef01234567",
-		Upstream:             GitUpstreamMetadata{State: GitUpstreamPresent, Ref: "refs/remotes/origin/main"},
-		Recoverable:          true,
-		EvidenceAvailable:    true,
-		GitEvidenceAvailable: true,
+		WorktreePath:            path,
+		RepositoryID:            "/fixture/repositories/" + repository + "/.git",
+		DisplayRepository:       "shared-display-name",
+		BranchRef:               "refs/heads/" + filepath.Base(path),
+		HeadOID:                 "0123456789abcdef0123456789abcdef01234567",
+		Upstream:                GitUpstreamMetadata{State: GitUpstreamPresent, Ref: "refs/remotes/origin/main"},
+		Recoverable:             true,
+		EvidenceAvailable:       true,
+		GitEvidenceAvailable:    true,
+		DefaultBranchUniqueness: UniquenessMerged,
 		Reason: GitEvidenceReason{
 			Code:         GitReasonAttachedBranch,
 			Description:  "local branch retained",

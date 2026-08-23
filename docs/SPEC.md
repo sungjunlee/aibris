@@ -295,7 +295,8 @@ Guided cleanup unit and policy contract:
   reader to fail. A missing reader is not a hard lock; a registered reader
   that failed still is.
 - Policy order is hard lock, recent-three repository retention, minimum idle
-  age, minimum size, no registered activity source, then recommendation.
+  age, minimum size, no registered activity source, default-branch uniqueness
+  demotion, then recommendation.
 - Hard locks are: current working directory containment; dirty or untracked
   members; unavailable Git evidence; a failed registered activity reader;
   detached HEAD not reachable from a named local or remote ref; and activity
@@ -304,6 +305,14 @@ Guided cleanup unit and policy contract:
   reason `activity_source_not_registered`, never recommended: Git evidence can
   carry a review row, but idleness resting on reflog and scanner mtime alone
   does not justify an automatic recommendation.
+- After those holds, a unit is reviewable rather than recommended when any
+  member still has unique content versus local `refs/remotes/origin/HEAD`
+  (`unique_commits_not_in_default`) or the uniqueness probe is unknown
+  (`merge_evidence_unknown`). The probe never fetches, never guesses
+  `main`/`master`, never calls GitHub, and never hard-locks recoverability.
+  Ancestor of that default commit, or `git merge-tree --write-tree` tree
+  equality with it, counts as merged; `git cherry` is not the detector.
+  All-merged units do not change class. Scan `active` remains gitdir liveness.
 - The three most recent units per canonical repository are reviewable. Ranking
   includes locked units and is deterministic by activity then stable unit key.
 - The guided minimum idle age defaults to 3 days and the recommendation size to

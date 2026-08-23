@@ -74,7 +74,12 @@ Evaluation order is fixed:
 2. Recent-three retention by canonical repository.
 3. Minimum idle age.
 4. Minimum recommendation size.
-5. Recommendation.
+5. No registered activity reader (`activity_source_not_registered`).
+6. Unique or unknown vs local `refs/remotes/origin/HEAD`
+   (`unique_commits_not_in_default` / `merge_evidence_unknown`).
+7. Recommendation. Merged content does not bypass earlier holds.
+
+Scan `active` remains gitdir liveness, not merge status.
 
 Hard locks are:
 
@@ -96,8 +101,9 @@ canonical repository. The newest three are reviewable. Locked units still
 occupy retention positions; the planner does not backfill a fourth unit.
 
 The guided minimum idle age defaults to 3 days. A safe unit younger than that is
-reviewable. A safe older unit below 256 MB is also reviewable. Only a safe,
-non-retained, old-enough, large-enough unit is recommended.
+reviewable. A safe older unit below 256 MB is also reviewable. Unique-vs-default
+or unknown uniqueness is reviewable, never auto-recommended. Only a safe,
+non-retained, old-enough, large-enough, merge-proven unit is recommended.
 
 ## Selection State
 

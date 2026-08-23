@@ -70,6 +70,7 @@ func buildGuidedCleanState(ctx context.Context, result *types.ScanResult, source
 	policy.CurrentWorkingDirectory = cwd
 	policy.MinIdleAge = minIdleAge
 	policy = fillCleanupPolicy(policy)
+	worktree.InspectRecommendedCandidateUniqueness(ctx, units, policy)
 	plan := worktree.PlanWorktreeCleanup(units, policy)
 	state := newGuidedCleanStateFromCleanupPlan(source, reason, activity, policy, units, items, plan)
 	state.Inventory = append([]types.DebrisInfo(nil), result.Worktrees...)
@@ -523,32 +524,50 @@ func replanGuidedCleanAge(state guidedCleanState, age time.Duration) (guidedClea
 		return state, "age threshold cannot be changed in this context"
 	}
 	overrides := guidedCleanSelectionOverrides(state)
+	next := cloneGuidedCleanStateForReplan(state)
+	next.Policy = fillCleanupPolicy(state.Policy)
+	next.Policy.MinIdleAge = age
+	applyReplannedGuidedCleanup(&next)
+	applyGuidedCleanSelectionOverrides(&next, overrides)
+	return next, fmt.Sprintf("minimum idle age set to %s", guidedAgeString(age))
+}
+
+func cloneGuidedCleanStateForReplan(state guidedCleanState) guidedCleanState {
 	next := state
 	next.Rows = append([]guidedCleanRow(nil), state.Rows...)
 	for i := range next.Rows {
 		next.Rows[i].ReasonCodes = append([]DecisionReasonCode(nil), state.Rows[i].ReasonCodes...)
 	}
-	next.Policy = fillCleanupPolicy(state.Policy)
-	next.Policy.MinIdleAge = age
+	next.Units = append([]WorktreeCleanupUnit(nil), state.Units...)
+	for i := range next.Units {
+		next.Units[i].Members = append([]GitWorktreeMember(nil), state.Units[i].Members...)
+	}
+	return next
+}
+
+func applyReplannedGuidedCleanup(state *guidedCleanState) {
+	worktree.InspectRecommendedCandidateUniqueness(context.Background(), state.Units, state.Policy)
 	decisions := make(map[string]WorktreeCleanupDecision, len(state.Units))
-	for _, decision := range worktree.PlanWorktreeCleanup(state.Units, next.Policy).Decisions {
+	for _, decision := range worktree.PlanWorktreeCleanup(state.Units, state.Policy).Decisions {
 		decisions[cleanupUnitStableKey(decision.Unit)] = decision
 	}
-	for i := range next.Rows {
-		decision, ok := decisions[next.Rows[i].Key]
-		if !ok {
-			continue
-		}
-		next.Rows[i].Policy = decision.Class
-		next.Rows[i].Row.Reason = guidedCleanupDecisionReason(decision)
-		next.Rows[i].ReasonCodes = next.Rows[i].ReasonCodes[:0]
-		for _, reason := range decision.Reasons {
-			next.Rows[i].ReasonCodes = append(next.Rows[i].ReasonCodes, reason.Code)
-		}
-		next.Rows[i].Selected = next.Rows[i].Policy == guidedCleanPolicyRecommended
+	for i := range state.Rows {
+		applyReplannedGuidedRow(&state.Rows[i], decisions)
 	}
-	applyGuidedCleanSelectionOverrides(&next, overrides)
-	return next, fmt.Sprintf("minimum idle age set to %s", guidedAgeString(age))
+}
+
+func applyReplannedGuidedRow(row *guidedCleanRow, decisions map[string]WorktreeCleanupDecision) {
+	decision, ok := decisions[row.Key]
+	if !ok {
+		return
+	}
+	row.Policy = decision.Class
+	row.Row.Reason = guidedCleanupDecisionReason(decision)
+	row.ReasonCodes = row.ReasonCodes[:0]
+	for _, reason := range decision.Reasons {
+		row.ReasonCodes = append(row.ReasonCodes, reason.Code)
+	}
+	row.Selected = row.Policy == guidedCleanPolicyRecommended
 }
 
 func guidedCleanSelectionOverrides(state guidedCleanState) map[string]bool {

@@ -110,9 +110,14 @@ registered superpowers container는 `superpowers`를 사용합니다:
 
 | Status | 의미 |
 |--------|------|
-| `active` | `.git` 존재, 상위 repo 살아있음 |
+| `active` | `.git` 존재, 상위 repo 살아있음 (최근 사용·머지 여부가 아님) |
 | `orphaned` | `.git` 존재, 상위 repo 사라짐 (정리 대상) |
 | `plain-dir` | valid metadata 없음 또는 한 owner 안의 invalid/mixed marker (review-only, 정리 금지) |
+
+Guided cleanup treats unique-vs-`refs/remotes/origin/HEAD` (or unknown uniqueness)
+as `reviewable`, never auto-recommended. It does not call GitHub. Scan `active`
+stays gitdir liveness. All-merged units are not promoted past keep=3 / min-idle /
+min-size / recent locks.
 
 ## 빌드
 

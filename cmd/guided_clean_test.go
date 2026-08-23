@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -228,6 +229,48 @@ func TestGuidedProjectedFreedSizeUsesNormalizedTargets(t *testing.T) {
 	}
 }
 
+func TestReplanGuidedCleanAgeProbesNewlyEligibleUnits(t *testing.T) {
+	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	merged, unique := replanProbeUnits(t, now)
+	policy := DefaultCleanupPolicy(now)
+	policy.MinIdleAge = 14 * 24 * time.Hour
+	units := append(repositoryRetainers(now, "/repos/replan/.git"), merged, unique)
+	state := newGuidedCleanStateFromCleanupPlan(
+		scanSource{}, "", guidedCleanTestActivity(), policy, units, guidedCleanupItems(units), PlanWorktreeCleanup(units, policy),
+	)
+	if got := guidedRowByKey(t, state, merged.TargetPath); got.Policy != guidedCleanPolicyReviewable {
+		t.Fatalf("initial merged-old = %+v; want idle reviewable", got)
+	}
+	next, _, ok := applyGuidedCleanCommand(state, "age 7d")
+	if !ok {
+		t.Fatal("age 7d not handled")
+	}
+	assertGuidedRowClass(t, next, merged.TargetPath, guidedCleanPolicyRecommended, true)
+	assertGuidedReason(t, next, unique.TargetPath, guidedCleanPolicyReviewable, false, DecisionReasonUniqueCommits)
+}
+
+func replanProbeUnits(t *testing.T, now time.Time) (WorktreeCleanupUnit, WorktreeCleanupUnit) {
+	t.Helper()
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	mergedPath := createCleanCodexGitWorktree(t, home, "merged-old")
+	uniquePath := createCleanCodexGitWorktree(t, home, "unique-old")
+	writeGitFixtureFile(t, uniquePath, "extra.txt", "extra\n")
+	runGitFixture(t, uniquePath, "add", "extra.txt")
+	runGitFixture(t, uniquePath, "commit", "-m", "unique leftover")
+	repo := "/repos/replan/.git"
+	merged := unprobedCleanupUnit("merged-old", now.Add(-10*24*time.Hour), repo, mergedPath)
+	unique := unprobedCleanupUnit("unique-old", now.Add(-10*24*time.Hour), repo, uniquePath)
+	return merged, unique
+}
+
+func unprobedCleanupUnit(name string, activity time.Time, repo, path string) WorktreeCleanupUnit {
+	unit := cleanupPolicyUnit(name, activity, 512*cleanupPolicyMiB, repo)
+	unit.Members[0].DefaultBranchUniqueness = ""
+	unit.Members[0].WorktreePath = path
+	return unit
+}
+
 func TestGuidedCleanAgeCommandReplansSelection(t *testing.T) {
 	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
 	state := guidedCleanupPolicyState(now, 24*time.Hour)
@@ -290,6 +333,69 @@ func TestGuidedCleanAgeReplanDoesNotMutatePriorState(t *testing.T) {
 	if len(next.Rows) > 0 && len(state.Rows) > 0 && &next.Rows[0] == &state.Rows[0] {
 		t.Fatal("replanned rows share backing storage with prior state")
 	}
+}
+
+func TestGuidedCleanupDemotesUniqueAndUnknownReasons(t *testing.T) {
+	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	unique := uniquenessFixtureUnit(now, "unique", "/repos/unique/.git", UniquenessNotMerged)
+	unknown := uniquenessFixtureUnit(now, "unknown", "/repos/unknown/.git", UniquenessUnknown)
+	merged := uniquenessFixtureUnit(now, "merged", "/repos/merged/.git", UniquenessMerged)
+	units := uniquenessDemotionUnits(now, unique, unknown, merged)
+	state := newGuidedCleanStateFromCleanupPlan(
+		scanSource{}, "", guidedCleanTestActivity(), DefaultCleanupPolicy(now), units, guidedCleanupItems(units), PlanWorktreeCleanup(units, DefaultCleanupPolicy(now)),
+	)
+	assertGuidedReason(t, state, unique.TargetPath, guidedCleanPolicyReviewable, false, DecisionReasonUniqueCommits)
+	assertGuidedReason(t, state, unknown.TargetPath, guidedCleanPolicyReviewable, false, DecisionReasonMergeEvidenceUnknown)
+	assertGuidedRowClass(t, state, merged.TargetPath, guidedCleanPolicyRecommended, true)
+}
+
+func uniquenessFixtureUnit(now time.Time, name, repo string, uniqueness DefaultBranchUniqueness) WorktreeCleanupUnit {
+	unit := cleanupPolicyUnit(name, now.Add(-7*24*time.Hour), 512*cleanupPolicyMiB, repo)
+	unit.Members[0].DefaultBranchUniqueness = uniqueness
+	return unit
+}
+
+func uniquenessDemotionUnits(now time.Time, unique, unknown, merged WorktreeCleanupUnit) []WorktreeCleanupUnit {
+	units := repositoryRetainers(now, unique.Members[0].RepositoryID)
+	units = append(units, unique)
+	units = append(units, repositoryRetainers(now, unknown.Members[0].RepositoryID)...)
+	units = append(units, unknown)
+	units = append(units, repositoryRetainers(now, merged.Members[0].RepositoryID)...)
+	return append(units, merged)
+}
+
+func repositoryRetainers(now time.Time, repo string) []WorktreeCleanupUnit {
+	return []WorktreeCleanupUnit{
+		cleanupPolicyUnit("r1", now.Add(-4*24*time.Hour), 512*cleanupPolicyMiB, repo),
+		cleanupPolicyUnit("r2", now.Add(-5*24*time.Hour), 512*cleanupPolicyMiB, repo),
+		cleanupPolicyUnit("r3", now.Add(-6*24*time.Hour), 512*cleanupPolicyMiB, repo),
+	}
+}
+
+func assertGuidedRowClass(t *testing.T, state guidedCleanState, key string, class guidedCleanPolicy, selected bool) {
+	t.Helper()
+	row := guidedRowByKey(t, state, key)
+	if row.Policy != class || row.Selected != selected {
+		t.Fatalf("row %q = %+v; want class=%s selected=%t", key, row, class, selected)
+	}
+}
+
+func assertGuidedReason(t *testing.T, state guidedCleanState, key string, class guidedCleanPolicy, selected bool, reason DecisionReasonCode) {
+	t.Helper()
+	assertGuidedRowClass(t, state, key, class, selected)
+	row := guidedRowByKey(t, state, key)
+	if !slicesContainsReason(row.ReasonCodes, reason) {
+		t.Fatalf("row %q codes = %v; want %s", key, row.ReasonCodes, reason)
+	}
+}
+
+func slicesContainsReason(codes []DecisionReasonCode, want DecisionReasonCode) bool {
+	for _, code := range codes {
+		if code == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestGuidedCleanupPolicyDecisionsDriveClassesAndAgeReplan(t *testing.T) {

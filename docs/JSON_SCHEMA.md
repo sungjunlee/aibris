@@ -477,7 +477,9 @@ classic eligible rows use `eligible`, guided recommendations use
 `reviewable`, hard locks and safety protections use `protected`, and
 filtered/noncandidate inventory uses
 `skipped`. `reason_codes` contains stable machine-readable codes only; human
-reason descriptions are not part of this contract. Only `physical_targets` are
+reason descriptions are not part of this contract. Additive guided
+uniqueness holds use `unique_commits_not_in_default` and
+`merge_evidence_unknown`; existing documented codes keep their names. Only `physical_targets` are
 action rows. An `ancestor` row is evidence attached to the selected physical
 owner; its ancestor path is never an additional action target. A selected
 target may therefore carry protected or reviewable evidence with a

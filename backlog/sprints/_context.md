@@ -55,6 +55,11 @@
 - Milestone #9 `0.x Automation & Schema` is closed. Milestone #8 `0.x OSS
   Distribution & Release Trust` remains open (#118, #120, #121, #122).
   Long-horizon work stays in the existing `Future` milestone.
+- #296 (Future) is the locked spec for guided default-branch uniqueness:
+  demote unique/`unknown` units out of `recommended`; do not promote merged
+  trees; scan `active` stays gitdir liveness. Children: #297 probe, #298
+  demotion, #299 copy/JSON/docs. Do not start a sprint until these are
+  admitted; do not add GitHub API or keep=3/min-idle bypass.
 
 ## Release Posture
 

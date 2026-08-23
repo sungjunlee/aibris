@@ -160,12 +160,19 @@ min-size=256MB`다. 판정 순서는 다음과 같다:
    named ref에서 도달 불가능한 detached HEAD, 6시간 이내 활동은 `locked`.
 2. canonical Git common-dir별 최신 3개는 `reviewable`.
 3. 3일보다 젊거나 256 MB 미만인 안전 unit은 `reviewable`.
-4. 나머지는 `recommended`.
+4. 등록된 session-activity reader가 없는 도구는 `reviewable`.
+5. local `refs/remotes/origin/HEAD` 대비 unique 콘텐츠가 있거나 uniqueness가
+   `unknown`이면 `reviewable` (`unique_commits_not_in_default` /
+   `merge_evidence_unknown`). GitHub API는 쓰지 않는다. 스쿼시 머지는
+   merge-tree 트리 동등으로 판정하며 `git cherry`는 쓰지 않는다.
+6. 나머지는 `recommended`. merged라는 이유만으로 승격하지 않는다.
 
+scan의 `active`는 상위 gitdir 생존이지 최근 사용이나 머지 여부가 아니다.
 upstream 미설정/삭제는 설명 metadata일 뿐 단독 잠금 사유가 아니다. 로컬
 branch ref가 있거나 detached HEAD가 named local/remote ref에서 도달 가능하면
 committed state는 recoverable하다. multi-member unit은 물리 크기를 한 번만
-세되 모든 member가 hard safety를 통과해야 한다.
+세되 모든 member가 hard safety를 통과해야 한다. uniqueness는 member 하나라도
+unique/`unknown`이면 유닛 전체를 추천에서 내린다.
 
 사용자가 guided preview의 선택 항목을 확인하고 실제 삭제를 재승인하면 `--dry-run`을 제거한다:
 
