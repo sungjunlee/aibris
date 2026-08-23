@@ -152,6 +152,7 @@ func validReuseCache(roots []string, selector string) lastScanCache {
 		Selector:                  selector,
 		CreatedAt:                 time.Now(),
 		Roots:                     append([]string(nil), roots...),
+		ExplicitRoots:             true,
 		Result:                    types.ScanResult{},
 	}
 }

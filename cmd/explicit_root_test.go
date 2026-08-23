@@ -50,6 +50,38 @@ func TestScanAndClean_ExplicitRootIsHardWorktreeBoundary(t *testing.T) {
 	assertPlanTargetsUnderRoot(t, planOut, unit)
 }
 
+func TestExplicitHomeDoesNotReuseDefaultScanCache(t *testing.T) {
+	resetScanFlags()
+	resetCleanFlags()
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+
+	codexHome := t.TempDir()
+	writeCmdLinkedWorktree(t, filepath.Join(codexHome, "worktrees", "runtime-hash", "proj"), filepath.Join(home, "codex-parent"), "runtime-hash")
+	t.Setenv("CODEX_HOME", codexHome)
+	unit := filepath.Join(home, ".relay", "worktrees", "repo-hash")
+	writeCmdLinkedWorktree(t, filepath.Join(unit, "dispatch"), filepath.Join(home, "main-repo"), "repo-hash")
+
+	captureStdStreams(func() {
+		resetScanFlags()
+		rootCmd.SetArgs([]string{"scan", "--json"})
+		if err := rootCmd.Execute(); err != nil {
+			t.Errorf("default scan execute: %v", err)
+		}
+	})
+	planOut, _ := captureStdStreams(func() {
+		resetCleanFlags()
+		rootCmd.SetArgs([]string{
+			"clean", "--json", "--dry-run", "--no-guide",
+			"--category=worktree", "--root", home,
+		})
+		if err := rootCmd.Execute(); err != nil {
+			t.Errorf("explicit-home clean execute: %v", err)
+		}
+	})
+	assertPlanTargetsUnderRoot(t, planOut, home)
+}
+
 func writeCmdLinkedWorktree(t *testing.T, worktreeDir, parentRepoDir, name string) {
 	t.Helper()
 	parentGit := filepath.Join(parentRepoDir, ".git")

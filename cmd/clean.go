@@ -789,7 +789,7 @@ func excludedCleanScanReason(roots []string, selector string, excludes []string)
 	if len(excludes) == 0 {
 		return "", false
 	}
-	_, _, reason, ok := inspectLastScanCache(roots, selector)
+	_, _, reason, ok := inspectLastScanCache(roots, selector, len(cleanRoots) > 0)
 	if !ok && reason == "" {
 		return "", true
 	}
@@ -804,7 +804,7 @@ func cachedScanMissReason(ok bool, reason string) string {
 }
 
 func inspectCachedCleanScan(roots []string, selector string) (*types.ScanResult, time.Duration, string, bool) {
-	result, age, reason, ok := inspectLastScanCache(roots, selector)
+	result, age, reason, ok := inspectLastScanCache(roots, selector, len(cleanRoots) > 0)
 	if ok && scanResultHasExclusions(result) {
 		return nil, age, "cached scan used exclusions", false
 	}
@@ -833,7 +833,7 @@ func liveCleanScan(ctx context.Context, roots, excludes []string, selector strin
 	if err := requireCompleteScan(result); err != nil {
 		return nil, scanSource{}, err
 	}
-	writeLastScanCacheForSelector(roots, scanner.DefaultScanner.ProviderIdentity(), selector, result)
+	writeLastScanCacheForSelector(roots, scanner.DefaultScanner.ProviderIdentity(), selector, len(cleanRoots) > 0, result)
 	return result, scanSource{Kind: scanSourceLive}, nil
 }
 

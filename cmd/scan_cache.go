@@ -15,7 +15,7 @@ import (
 const (
 	// Bump this explicit compatibility revision when cache format or provider
 	// behavior changes without a concrete provider-membership change.
-	lastScanCacheSchemaVersion = 8
+	lastScanCacheSchemaVersion = 9
 	lastScanCacheMaxAge        = 5 * time.Minute
 )
 
@@ -26,15 +26,16 @@ type lastScanCache struct {
 	Selector                  string                            `json:"selector,omitempty"`
 	CreatedAt                 time.Time                         `json:"created_at"`
 	Roots                     []string                          `json:"roots"`
+	ExplicitRoots             bool                              `json:"explicit_roots,omitempty"`
 	Result                    types.ScanResult                  `json:"result"`
 	TargetEvidence            map[string]lastScanTargetEvidence `json:"target_evidence,omitempty"`
 }
 
 func writeLastScanCache(roots []string, identity string, result *types.ScanResult) {
-	writeLastScanCacheForSelector(roots, identity, "", result)
+	writeLastScanCacheForSelector(roots, identity, "", len(scanRoots) > 0, result)
 }
 
-func writeLastScanCacheForSelector(roots []string, identity, selector string, result *types.ScanResult) {
+func writeLastScanCacheForSelector(roots []string, identity, selector string, explicit bool, result *types.ScanResult) {
 	if result == nil {
 		return
 	}
@@ -49,6 +50,7 @@ func writeLastScanCacheForSelector(roots []string, identity, selector string, re
 		Selector:                  selector,
 		CreatedAt:                 time.Now(),
 		Roots:                     append([]string(nil), roots...),
+		ExplicitRoots:             explicit,
 		Result:                    *result,
 		TargetEvidence:            evidence,
 	})
@@ -110,28 +112,28 @@ func saveLastScanCache(cache lastScanCache) error {
 }
 
 func readFreshLastScanCache(roots []string) (*types.ScanResult, time.Duration, bool) {
-	result, age, _, ok := inspectLastScanCache(roots, "")
+	result, age, _, ok := inspectLastScanCache(roots, "", false)
 	return result, age, ok
 }
 
-func inspectLastScanCache(roots []string, selector string) (*types.ScanResult, time.Duration, string, bool) {
+func inspectLastScanCache(roots []string, selector string, explicit bool) (*types.ScanResult, time.Duration, string, bool) {
 	cache, ok := readLastScanCache()
 	if !ok {
 		return nil, 0, "", false
 	}
 	age := time.Since(cache.CreatedAt)
-	if reason := lastScanReuseRefuseReason(cache, roots, selector, age); reason != "" {
+	if reason := lastScanReuseRefuseReason(cache, roots, selector, explicit, age); reason != "" {
 		return nil, age, reason, false
 	}
 	result := cache.Result
 	return &result, age, "", true
 }
 
-func lastScanReuseRefuseReason(cache lastScanCache, roots []string, selector string, age time.Duration) string {
+func lastScanReuseRefuseReason(cache lastScanCache, roots []string, selector string, explicit bool, age time.Duration) string {
 	if reason := lastScanFreshnessReason(cache, age); reason != "" {
 		return reason
 	}
-	if reason := lastScanIdentityReason(cache, roots); reason != "" {
+	if reason := lastScanIdentityReason(cache, roots, explicit); reason != "" {
 		return reason
 	}
 	if !validateLastScanTargetEvidence(cache.Result.Worktrees, cache.TargetEvidence) {
@@ -150,7 +152,7 @@ func lastScanFreshnessReason(cache lastScanCache, age time.Duration) string {
 	return ""
 }
 
-func lastScanIdentityReason(cache lastScanCache, roots []string) string {
+func lastScanIdentityReason(cache lastScanCache, roots []string, explicit bool) string {
 	if cache.ProviderIdentity == "" || cache.ProviderIdentity != adapter.DefaultProviderIdentity() {
 		return "provider set changed"
 	}
@@ -158,7 +160,7 @@ func lastScanIdentityReason(cache lastScanCache, roots []string) string {
 		cache.RetentionProviderIdentity != retention.DefaultProviderIdentity() {
 		return "provider set changed"
 	}
-	if !slices.Equal(cache.Roots, roots) {
+	if !slices.Equal(cache.Roots, roots) || cache.ExplicitRoots != explicit {
 		return "scan roots changed"
 	}
 	return ""

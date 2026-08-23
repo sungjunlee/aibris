@@ -246,7 +246,10 @@ func (a *WorktreeAdapter) scanRootAsWorktreeUnit(
 		return nil, nil
 	}
 	if _, err := os.Stat(canonical); err != nil {
-		return nil, nil
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
 	}
 	if _, isContainer := rootByPath[canonical]; isContainer {
 		return nil, nil

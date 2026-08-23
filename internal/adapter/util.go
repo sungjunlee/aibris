@@ -375,7 +375,10 @@ func uncoveredCodexHomes(roots []string) ([]string, error) {
 	var uncovered []string
 	for _, home := range homes {
 		if _, err := os.Stat(home); err != nil {
-			continue
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, err
 		}
 		if !pathUnderRoots(home, roots) {
 			uncovered = append(uncovered, home)
