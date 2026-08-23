@@ -42,9 +42,11 @@ func TestInspectDefaultBranchUniquenessMultiCommitSquash(t *testing.T) {
 	runGitFixture(t, worktree, "commit", "-m", "b")
 	squashFeatureOntoOriginMain(t, repo, "squash-two")
 
-	cherry := runGitFixtureOutput(t, worktree, "cherry", "origin/main", "HEAD")
-	if !strings.Contains(cherry, "+") {
-		t.Fatalf("git cherry = %q; want + for multi-commit squash leftovers", cherry)
+	cherryCmd := exec.Command("git", "cherry", "origin/main", "HEAD")
+	cherryCmd.Dir = worktree
+	cherryOut, _ := cherryCmd.CombinedOutput()
+	if !strings.Contains(string(cherryOut), "+") {
+		t.Fatalf("git cherry = %q; want + for multi-commit squash leftovers", cherryOut)
 	}
 
 	member := uniquenessMember(worktree)
@@ -178,15 +180,4 @@ func squashFeatureOntoOriginMain(t *testing.T, repo, feature string) {
 	runGitFixture(t, repo, "merge", "--squash", feature)
 	runGitFixture(t, repo, "commit", "-m", "squash "+feature)
 	runGitFixture(t, repo, "push", "origin", "main")
-}
-
-func runGitFixtureOutput(t *testing.T, dir string, args ...string) string {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	output, err := cmd.CombinedOutput()
-	if err != nil && cmd.ProcessState != nil && cmd.ProcessState.ExitCode() > 1 {
-		t.Fatalf("git %v failed: %v\n%s", args, err, output)
-	}
-	return string(output)
 }
