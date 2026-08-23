@@ -990,5 +990,6 @@ Read-only home inspection of Codex `tamgu_note` worktrees, no deletions:
 
 Fixture coverage for the probe (ancestor, single-commit squash, multi-commit
 squash with `git cherry` `+`, unique commits, missing `origin/HEAD`, cancelled
-timeout) lives in `internal/worktree/merge_evidence_test.go`. Policy matrix
-cases live in `internal/worktree/policy_test.go`.
+timeout) lives in `internal/worktree/default_branch_uniqueness_test.go`.
+Guided inspect skip/wiring lives in `internal/worktree/merge_evidence_test.go`.
+Policy matrix cases live in `internal/worktree/policy_test.go`.

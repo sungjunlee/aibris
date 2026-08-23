@@ -23,6 +23,7 @@ type (
 	CleanupPlan              = worktree.CleanupPlan
 	WorktreeActivitySource   = worktree.WorktreeActivitySource
 	WorktreeActivityEvidence = worktree.WorktreeActivityEvidence
+	DefaultBranchUniqueness  = worktree.DefaultBranchUniqueness
 	worktreeGitCommandRunner = worktree.GitCommandRunner
 )
 

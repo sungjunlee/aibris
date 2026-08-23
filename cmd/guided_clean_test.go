@@ -231,6 +231,26 @@ func TestGuidedProjectedFreedSizeUsesNormalizedTargets(t *testing.T) {
 
 func TestReplanGuidedCleanAgeProbesNewlyEligibleUnits(t *testing.T) {
 	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	merged, unique := replanProbeUnits(t, now)
+	policy := DefaultCleanupPolicy(now)
+	policy.MinIdleAge = 14 * 24 * time.Hour
+	units := append(repositoryRetainers(now, "/repos/replan/.git"), merged, unique)
+	state := newGuidedCleanStateFromCleanupPlan(
+		scanSource{}, "", guidedCleanTestActivity(), policy, units, guidedCleanupItems(units), PlanWorktreeCleanup(units, policy),
+	)
+	if got := guidedRowByKey(t, state, merged.TargetPath); got.Policy != guidedCleanPolicyReviewable {
+		t.Fatalf("initial merged-old = %+v; want idle reviewable", got)
+	}
+	next, _, ok := applyGuidedCleanCommand(state, "age 7d")
+	if !ok {
+		t.Fatal("age 7d not handled")
+	}
+	assertGuidedRowClass(t, next, merged.TargetPath, guidedCleanPolicyRecommended, true)
+	assertGuidedReason(t, next, unique.TargetPath, guidedCleanPolicyReviewable, false, DecisionReasonUniqueCommits)
+}
+
+func replanProbeUnits(t *testing.T, now time.Time) (WorktreeCleanupUnit, WorktreeCleanupUnit) {
+	t.Helper()
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	mergedPath := createCleanCodexGitWorktree(t, home, "merged-old")
@@ -238,47 +258,17 @@ func TestReplanGuidedCleanAgeProbesNewlyEligibleUnits(t *testing.T) {
 	writeGitFixtureFile(t, uniquePath, "extra.txt", "extra\n")
 	runGitFixture(t, uniquePath, "add", "extra.txt")
 	runGitFixture(t, uniquePath, "commit", "-m", "unique leftover")
-
 	repo := "/repos/replan/.git"
-	merged := cleanupPolicyUnit("merged-old", now.Add(-10*24*time.Hour), 512*cleanupPolicyMiB, repo)
-	merged.Members[0].DefaultBranchUniqueness = ""
-	merged.Members[0].WorktreePath = mergedPath
-	unique := cleanupPolicyUnit("unique-old", now.Add(-10*24*time.Hour), 512*cleanupPolicyMiB, repo)
-	unique.Members[0].DefaultBranchUniqueness = ""
-	unique.Members[0].WorktreePath = uniquePath
-	units := []WorktreeCleanupUnit{
-		cleanupPolicyUnit("newer-one", now.Add(-4*24*time.Hour), 512*cleanupPolicyMiB, repo),
-		cleanupPolicyUnit("newer-two", now.Add(-5*24*time.Hour), 512*cleanupPolicyMiB, repo),
-		cleanupPolicyUnit("newer-three", now.Add(-6*24*time.Hour), 512*cleanupPolicyMiB, repo),
-		merged,
-		unique,
-	}
-	policy := DefaultCleanupPolicy(now)
-	policy.MinIdleAge = 14 * 24 * time.Hour
-	items := guidedCleanupItems(units)
-	state := newGuidedCleanStateFromCleanupPlan(
-		scanSource{}, "", guidedCleanTestActivity(), policy, units, items, PlanWorktreeCleanup(units, policy),
-	)
-	mergedRow := guidedRowByKey(t, state, merged.TargetPath)
-	if mergedRow.Policy != guidedCleanPolicyReviewable {
-		t.Fatalf("initial merged-old = %+v; want idle reviewable", mergedRow)
-	}
+	merged := unprobedCleanupUnit("merged-old", now.Add(-10*24*time.Hour), repo, mergedPath)
+	unique := unprobedCleanupUnit("unique-old", now.Add(-10*24*time.Hour), repo, uniquePath)
+	return merged, unique
+}
 
-	next, _, ok := applyGuidedCleanCommand(state, "age 7d")
-	if !ok {
-		t.Fatal("age 7d not handled")
-	}
-	mergedNext := guidedRowByKey(t, next, merged.TargetPath)
-	if mergedNext.Policy != guidedCleanPolicyRecommended || !mergedNext.Selected {
-		t.Fatalf("replanned merged-old = %+v; want recommended after probe", mergedNext)
-	}
-	uniqueNext := guidedRowByKey(t, next, unique.TargetPath)
-	if uniqueNext.Policy != guidedCleanPolicyReviewable || uniqueNext.Selected {
-		t.Fatalf("replanned unique-old = %+v; want unselected reviewable", uniqueNext)
-	}
-	if !slicesContainsReason(uniqueNext.ReasonCodes, DecisionReasonUniqueCommits) {
-		t.Fatalf("unique-old codes = %v; want unique_commits_not_in_default", uniqueNext.ReasonCodes)
-	}
+func unprobedCleanupUnit(name string, activity time.Time, repo, path string) WorktreeCleanupUnit {
+	unit := cleanupPolicyUnit(name, activity, 512*cleanupPolicyMiB, repo)
+	unit.Members[0].DefaultBranchUniqueness = ""
+	unit.Members[0].WorktreePath = path
+	return unit
 }
 
 func TestGuidedCleanAgeCommandReplansSelection(t *testing.T) {
@@ -347,51 +337,55 @@ func TestGuidedCleanAgeReplanDoesNotMutatePriorState(t *testing.T) {
 
 func TestGuidedCleanupDemotesUniqueAndUnknownReasons(t *testing.T) {
 	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
-	unique := cleanupPolicyUnit("unique", now.Add(-7*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unique/.git")
-	unique.Members[0].DefaultBranchUniqueness = UniquenessNotMerged
-	unknown := cleanupPolicyUnit("unknown", now.Add(-7*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unknown/.git")
-	unknown.Members[0].DefaultBranchUniqueness = UniquenessUnknown
-	merged := cleanupPolicyUnit("merged", now.Add(-7*24*time.Hour), 512*cleanupPolicyMiB, "/repos/merged/.git")
-	merged.Members[0].DefaultBranchUniqueness = UniquenessMerged
-	units := []WorktreeCleanupUnit{
-		cleanupPolicyUnit("u-one", now.Add(-4*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unique/.git"),
-		cleanupPolicyUnit("u-two", now.Add(-5*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unique/.git"),
-		cleanupPolicyUnit("u-three", now.Add(-6*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unique/.git"),
-		unique,
-		cleanupPolicyUnit("k-one", now.Add(-4*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unknown/.git"),
-		cleanupPolicyUnit("k-two", now.Add(-5*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unknown/.git"),
-		cleanupPolicyUnit("k-three", now.Add(-6*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unknown/.git"),
-		unknown,
-		cleanupPolicyUnit("m-one", now.Add(-4*24*time.Hour), 512*cleanupPolicyMiB, "/repos/merged/.git"),
-		cleanupPolicyUnit("m-two", now.Add(-5*24*time.Hour), 512*cleanupPolicyMiB, "/repos/merged/.git"),
-		cleanupPolicyUnit("m-three", now.Add(-6*24*time.Hour), 512*cleanupPolicyMiB, "/repos/merged/.git"),
-		merged,
-	}
-	policy := DefaultCleanupPolicy(now)
-	items := guidedCleanupItems(units)
+	unique := uniquenessFixtureUnit(now, "unique", "/repos/unique/.git", UniquenessNotMerged)
+	unknown := uniquenessFixtureUnit(now, "unknown", "/repos/unknown/.git", UniquenessUnknown)
+	merged := uniquenessFixtureUnit(now, "merged", "/repos/merged/.git", UniquenessMerged)
+	units := uniquenessDemotionUnits(now, unique, unknown, merged)
 	state := newGuidedCleanStateFromCleanupPlan(
-		scanSource{}, "", guidedCleanTestActivity(), policy, units, items, PlanWorktreeCleanup(units, policy),
+		scanSource{}, "", guidedCleanTestActivity(), DefaultCleanupPolicy(now), units, guidedCleanupItems(units), PlanWorktreeCleanup(units, DefaultCleanupPolicy(now)),
 	)
-	uniqueRow := guidedRowByKey(t, state, unique.TargetPath)
-	if uniqueRow.Policy != guidedCleanPolicyReviewable || uniqueRow.Selected {
-		t.Fatalf("unique row = %+v; want unselected reviewable", uniqueRow)
+	assertGuidedReason(t, state, unique.TargetPath, guidedCleanPolicyReviewable, false, DecisionReasonUniqueCommits)
+	assertGuidedReason(t, state, unknown.TargetPath, guidedCleanPolicyReviewable, false, DecisionReasonMergeEvidenceUnknown)
+	assertGuidedRowClass(t, state, merged.TargetPath, guidedCleanPolicyRecommended, true)
+}
+
+func uniquenessFixtureUnit(now time.Time, name, repo string, uniqueness DefaultBranchUniqueness) WorktreeCleanupUnit {
+	unit := cleanupPolicyUnit(name, now.Add(-7*24*time.Hour), 512*cleanupPolicyMiB, repo)
+	unit.Members[0].DefaultBranchUniqueness = uniqueness
+	return unit
+}
+
+func uniquenessDemotionUnits(now time.Time, unique, unknown, merged WorktreeCleanupUnit) []WorktreeCleanupUnit {
+	units := repositoryRetainers(now, unique.Members[0].RepositoryID)
+	units = append(units, unique)
+	units = append(units, repositoryRetainers(now, unknown.Members[0].RepositoryID)...)
+	units = append(units, unknown)
+	units = append(units, repositoryRetainers(now, merged.Members[0].RepositoryID)...)
+	return append(units, merged)
+}
+
+func repositoryRetainers(now time.Time, repo string) []WorktreeCleanupUnit {
+	return []WorktreeCleanupUnit{
+		cleanupPolicyUnit("r1", now.Add(-4*24*time.Hour), 512*cleanupPolicyMiB, repo),
+		cleanupPolicyUnit("r2", now.Add(-5*24*time.Hour), 512*cleanupPolicyMiB, repo),
+		cleanupPolicyUnit("r3", now.Add(-6*24*time.Hour), 512*cleanupPolicyMiB, repo),
 	}
-	if !strings.Contains(uniqueRow.Row.Reason, "unique commits not in the local default branch") {
-		t.Fatalf("unique reason = %q; want uniqueness copy", uniqueRow.Row.Reason)
+}
+
+func assertGuidedRowClass(t *testing.T, state guidedCleanState, key string, class guidedCleanPolicy, selected bool) {
+	t.Helper()
+	row := guidedRowByKey(t, state, key)
+	if row.Policy != class || row.Selected != selected {
+		t.Fatalf("row %q = %+v; want class=%s selected=%t", key, row, class, selected)
 	}
-	if !slicesContainsReason(uniqueRow.ReasonCodes, DecisionReasonUniqueCommits) {
-		t.Fatalf("unique codes = %v; want unique_commits_not_in_default", uniqueRow.ReasonCodes)
-	}
-	unknownRow := guidedRowByKey(t, state, unknown.TargetPath)
-	if unknownRow.Policy != guidedCleanPolicyReviewable || unknownRow.Selected {
-		t.Fatalf("unknown row = %+v; want unselected reviewable", unknownRow)
-	}
-	if !slicesContainsReason(unknownRow.ReasonCodes, DecisionReasonMergeEvidenceUnknown) {
-		t.Fatalf("unknown codes = %v; want merge_evidence_unknown", unknownRow.ReasonCodes)
-	}
-	mergedRow := guidedRowByKey(t, state, merged.TargetPath)
-	if mergedRow.Policy != guidedCleanPolicyRecommended || !mergedRow.Selected {
-		t.Fatalf("merged row = %+v; want selected recommended", mergedRow)
+}
+
+func assertGuidedReason(t *testing.T, state guidedCleanState, key string, class guidedCleanPolicy, selected bool, reason DecisionReasonCode) {
+	t.Helper()
+	assertGuidedRowClass(t, state, key, class, selected)
+	row := guidedRowByKey(t, state, key)
+	if !slicesContainsReason(row.ReasonCodes, reason) {
+		t.Fatalf("row %q codes = %v; want %s", key, row.ReasonCodes, reason)
 	}
 }
 

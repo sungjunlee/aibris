@@ -88,48 +88,51 @@ type CleanupPlan struct {
 }
 
 // PlanWorktreeCleanup evaluates hard locks, ranks every unit per canonical
-// repository, then classifies by hard lock, retention, idle age, and size.
+// repository, then classifies by hard lock, retention, idle age, size, and
+// default-branch uniqueness demotion.
 func PlanWorktreeCleanup(units []WorktreeCleanupUnit, policy CleanupPolicy) CleanupPlan {
 	policy = FillCleanupPolicy(policy)
-	hardLockReasons := make([][]DecisionReasonCode, len(units))
-	for i, unit := range units {
-		hardLockReasons[i] = cleanupUnitHardLockReasonCodes(unit, policy)
-	}
 	retained := retainedCleanupUnits(units, policy.KeepPerRepository)
-
 	decisions := make([]WorktreeCleanupDecision, 0, len(units))
-	for i, unit := range units {
-		decision := WorktreeCleanupDecision{Unit: unit}
-		switch {
-		case len(hardLockReasons[i]) > 0:
-			decision.Class = DecisionLocked
-			decision.Reasons = decisionReasons(hardLockReasons[i]...)
-		case retained[CleanupUnitStableKey(unit)]:
-			decision.Class = DecisionReviewable
-			decision.Reasons = decisionReasons(DecisionReasonRepositoryRetention)
-		case !unit.LastActivity.Before(policy.Now.Add(-policy.MinIdleAge)):
-			decision.Class = DecisionReviewable
-			decision.Reasons = decisionReasons(DecisionReasonMinimumIdleAge)
-		case unit.Size < policy.MinSize:
-			decision.Class = DecisionReviewable
-			decision.Reasons = decisionReasons(DecisionReasonMinimumSize)
-		case !cleanupUnitHasRegisteredActivitySource(unit):
-			// Git evidence alone can carry a review row, but it cannot carry an
-			// automatic recommendation: without a session log, "idle" rests on
-			// reflog and scanner mtime only. Say so instead of recommending.
-			decision.Class = DecisionReviewable
-			decision.Reasons = decisionReasons(DecisionReasonActivityNotRegistered)
-			decision.Reasons = append(decision.Reasons, cleanupUnitRecoverabilityReasons(unit)...)
-		default:
-			decision = classifyEligibleCleanupUnit(unit)
-		}
-		decisions = append(decisions, decision)
+	for _, unit := range units {
+		locks := cleanupUnitHardLockReasonCodes(unit, policy)
+		decisions = append(decisions, classifyCleanupUnit(unit, policy, locks, retained))
 	}
-
 	sort.Slice(decisions, func(i, j int) bool {
 		return CleanupUnitStableKey(decisions[i].Unit) < CleanupUnitStableKey(decisions[j].Unit)
 	})
 	return CleanupPlan{Decisions: decisions}
+}
+
+func classifyCleanupUnit(unit WorktreeCleanupUnit, policy CleanupPolicy, locks []DecisionReasonCode, retained map[string]bool) WorktreeCleanupDecision {
+	switch {
+	case len(locks) > 0:
+		return lockedCleanupDecision(unit, locks)
+	case retained[CleanupUnitStableKey(unit)]:
+		return reviewableCleanupDecision(unit, DecisionReasonRepositoryRetention)
+	case !unit.LastActivity.Before(policy.Now.Add(-policy.MinIdleAge)):
+		return reviewableCleanupDecision(unit, DecisionReasonMinimumIdleAge)
+	case unit.Size < policy.MinSize:
+		return reviewableCleanupDecision(unit, DecisionReasonMinimumSize)
+	case !cleanupUnitHasRegisteredActivitySource(unit):
+		return unregisteredActivityCleanupDecision(unit)
+	default:
+		return classifyEligibleCleanupUnit(unit)
+	}
+}
+
+func lockedCleanupDecision(unit WorktreeCleanupUnit, reasons []DecisionReasonCode) WorktreeCleanupDecision {
+	return WorktreeCleanupDecision{Unit: unit, Class: DecisionLocked, Reasons: decisionReasons(reasons...)}
+}
+
+func reviewableCleanupDecision(unit WorktreeCleanupUnit, reason DecisionReasonCode) WorktreeCleanupDecision {
+	return WorktreeCleanupDecision{Unit: unit, Class: DecisionReviewable, Reasons: decisionReasons(reason)}
+}
+
+func unregisteredActivityCleanupDecision(unit WorktreeCleanupUnit) WorktreeCleanupDecision {
+	reasons := decisionReasons(DecisionReasonActivityNotRegistered)
+	reasons = append(reasons, cleanupUnitRecoverabilityReasons(unit)...)
+	return WorktreeCleanupDecision{Unit: unit, Class: DecisionReviewable, Reasons: reasons}
 }
 
 func FillCleanupPolicy(policy CleanupPolicy) CleanupPolicy {
@@ -325,37 +328,27 @@ func decisionReasons(codes ...DecisionReasonCode) []DecisionReason {
 	return reasons
 }
 
+var decisionReasonCopy = map[DecisionReasonCode]string{
+	DecisionReasonCurrentWorkingDirectory: "current working directory is inside cleanup unit",
+	DecisionReasonGitEvidenceUnavailable:  "Git evidence unavailable",
+	DecisionReasonDirtyWorktree:           "dirty or untracked files",
+	DecisionReasonDetachedUnreferenced:    "detached HEAD not reachable from named ref",
+	DecisionReasonActivityUnavailable:     "activity evidence unavailable",
+	DecisionReasonRecentActivity:          "activity within recent safety window",
+	DecisionReasonActivityNotRegistered:   worktreeActivityNotRegisteredReason,
+	DecisionReasonRepositoryRetention:     "retained among the most recent units for a repository",
+	DecisionReasonMinimumIdleAge:          "younger than minimum idle age",
+	DecisionReasonMinimumSize:             "below minimum recommendation size",
+	DecisionReasonEligible:                "eligible for cleanup recommendation",
+	DecisionReasonUniqueCommits:           "HEAD has unique commits not in the local default branch",
+	DecisionReasonMergeEvidenceUnknown:    "default-branch uniqueness could not be determined",
+}
+
 func DecisionReasonDescription(code DecisionReasonCode) string {
-	switch code {
-	case DecisionReasonCurrentWorkingDirectory:
-		return "current working directory is inside cleanup unit"
-	case DecisionReasonGitEvidenceUnavailable:
-		return "Git evidence unavailable"
-	case DecisionReasonDirtyWorktree:
-		return "dirty or untracked files"
-	case DecisionReasonDetachedUnreferenced:
-		return "detached HEAD not reachable from named ref"
-	case DecisionReasonActivityUnavailable:
-		return "activity evidence unavailable"
-	case DecisionReasonRecentActivity:
-		return "activity within recent safety window"
-	case DecisionReasonActivityNotRegistered:
-		return worktreeActivityNotRegisteredReason
-	case DecisionReasonRepositoryRetention:
-		return "retained among the most recent units for a repository"
-	case DecisionReasonMinimumIdleAge:
-		return "younger than minimum idle age"
-	case DecisionReasonMinimumSize:
-		return "below minimum recommendation size"
-	case DecisionReasonEligible:
-		return "eligible for cleanup recommendation"
-	case DecisionReasonUniqueCommits:
-		return "HEAD has unique commits not in the local default branch"
-	case DecisionReasonMergeEvidenceUnknown:
-		return "default-branch uniqueness could not be determined"
-	default:
-		return "cleanup policy decision"
+	if text, ok := decisionReasonCopy[code]; ok {
+		return text
 	}
+	return "cleanup policy decision"
 }
 
 func classifyEligibleCleanupUnit(unit WorktreeCleanupUnit) WorktreeCleanupDecision {
