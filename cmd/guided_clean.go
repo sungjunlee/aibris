@@ -65,6 +65,10 @@ func buildGuidedCleanState(ctx context.Context, result *types.ScanResult, source
 	if err := enrichWorktreeCleanupActivity(ctx, units, items, worktreeActivityOptions{index: &activity}); err != nil {
 		return guidedCleanState{}, err
 	}
+	return planGuidedCleanState(ctx, result, source, reason, activity, units, items, minIdleAge)
+}
+
+func planGuidedCleanState(ctx context.Context, result *types.ScanResult, source scanSource, reason string, activity codexActivityIndex, units []WorktreeCleanupUnit, items []types.DebrisInfo, minIdleAge time.Duration) (guidedCleanState, error) {
 	cwd, _ := os.Getwd()
 	policy := DefaultCleanupPolicy(time.Now())
 	policy.CurrentWorkingDirectory = cwd
