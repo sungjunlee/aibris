@@ -62,7 +62,6 @@ type GitWorktreeMember struct {
 	RegisteredActivitySource    string
 	RegisteredActivityError     string
 	DefaultBranchUniqueness     DefaultBranchUniqueness
-	DefaultBranchOID            string
 }
 
 type worktreeCleanupUnitRows struct {
@@ -271,7 +270,7 @@ func inspectCleanupUnitUniqueness(ctx context.Context, unit *WorktreeCleanupUnit
 		if member.HardLocked || member.DefaultBranchUniqueness != "" {
 			continue
 		}
-		inspectDefaultBranchUniquenessWithTimeout(ctx, member)
+		member.DefaultBranchUniqueness = ProbeDefaultBranchUniqueness(ctx, member.WorktreePath, RunGitCommand)
 	}
 }
 
@@ -295,12 +294,6 @@ func inspectGitWorktreeEvidenceWithTimeout(ctx context.Context, member *GitWorkt
 	evidenceCtx, cancel := context.WithTimeout(ctx, GitEvidenceCommandTimeout)
 	defer cancel()
 	inspectGitWorktreeEvidence(evidenceCtx, member, RunGitCommand)
-}
-
-func inspectDefaultBranchUniquenessWithTimeout(ctx context.Context, member *GitWorktreeMember) {
-	uniquenessCtx, cancel := context.WithTimeout(ctx, DefaultBranchUniquenessTimeout)
-	defer cancel()
-	inspectDefaultBranchUniqueness(uniquenessCtx, member, RunGitCommand)
 }
 
 func cleanupUnitHardLockReasons(members []GitWorktreeMember) []GitEvidenceReason {
