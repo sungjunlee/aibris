@@ -36,6 +36,20 @@ type cleanJSONReceipt struct {
 	Plan            cleanJSONPlan                    `json:"plan"`
 	Totals          cleanJSONReceiptTotals           `json:"totals"`
 	PhysicalTargets []cleanJSONReceiptPhysicalTarget `json:"physical_targets"`
+	PostClean       *cleanJSONPostClean              `json:"post_clean"`
+
+	// inventory is the pre-execution debris list used only to derive the
+	// path-free post_clean volume split; it is never serialized.
+	inventory []types.DebrisInfo
+}
+
+// cleanJSONPostClean reports post-cleanup host state: whether reclaimed blocks
+// are still held by local APFS snapshots and the volume pressure of the volume
+// that contains $HOME. It carries no paths and no snapshot identifiers.
+type cleanJSONPostClean struct {
+	Volume                      *jsonVolume `json:"volume,omitempty"`
+	LocalAPFSSnapshots          any         `json:"local_apfs_snapshots"`
+	SnapshotThinningRecommended bool        `json:"snapshot_thinning_recommended,omitempty"`
 }
 
 type cleanJSONReceiptTotals struct {
@@ -78,6 +92,7 @@ func executeCleanJSONReceipt(
 	interactive bool,
 ) (cleanJSONReceipt, error) {
 	receipt := newCleanJSONReceipt(document)
+	receipt.inventory = cleanJSONReceiptInventory(components)
 	targetIDs, err := cleanJSONReceiptTargetIDsForPrepared(components, prepared)
 	if err != nil {
 		return finishCleanJSONReceipt(receipt, err)
@@ -564,7 +579,39 @@ func finishCleanJSONReceipt(receipt cleanJSONReceipt, executionErr error) (clean
 	return finalized, errors.Join(executionErr, finalizeErr)
 }
 
+func cleanJSONReceiptInventory(components []cleanJSONSnapshotComponent) []types.DebrisInfo {
+	owners := make([]types.DebrisInfo, 0, len(components))
+	for _, component := range components {
+		if component.Owner.ID == "" && component.Owner.Path == "" {
+			continue
+		}
+		owners = append(owners, component.Owner)
+	}
+	return owners
+}
+
+// buildCleanJSONPostClean derives the path-free post-cleanup host state. On
+// non-Darwin hosts the snapshot listing stub errors, so the count is reported
+// as "unavailable" and no thinning is recommended.
+func buildCleanJSONPostClean(inventory []types.DebrisInfo) *cleanJSONPostClean {
+	post := cleanJSONPostClean{}
+	if report := homeVolumeReport(inventory); report != nil {
+		post.Volume = jsonVolumeFromReport(*report)
+	}
+	count, err := listLocalAPFSSnapshots()
+	if err != nil {
+		post.LocalAPFSSnapshots = "unavailable"
+		return &post
+	}
+	post.LocalAPFSSnapshots = count
+	post.SnapshotThinningRecommended = count >= 1
+	return &post
+}
+
 func finalizeCleanJSONReceipt(receipt cleanJSONReceipt) (cleanJSONReceipt, error) {
+	if receipt.PostClean == nil {
+		receipt.PostClean = buildCleanJSONPostClean(receipt.inventory)
+	}
 	for i := range receipt.PhysicalTargets {
 		if receipt.PhysicalTargets[i].State != cleanJSONReceiptPending {
 			continue
@@ -675,6 +722,7 @@ func newGuidedCleanExecutionReceipt(
 		return guidedCleanExecutionReceipt{}, err
 	}
 	receipt := newCleanJSONReceipt(document)
+	receipt.inventory = cleanJSONReceiptInventory(components)
 	// A deletion-time overlap refusal shrinks the prepared set after the plan
 	// was accepted. Name it the way the classic route does instead of letting
 	// the finalize fallback report it as an unrecorded execution.
