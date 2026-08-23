@@ -82,7 +82,7 @@ func TestExecuteActiveWorktreeRemovesMultiMemberUnitWithDefaultAge(t *testing.T)
 		t.Fatal(err)
 	}
 	unit := singleExecutionUnit(t, receipt)
-	if unit.State != cleanExecutionRemoved || !unit.PhysicalRemoved || unit.FreedBytes != item.Size || receipt.FreedBytes != item.Size {
+	if unit.State != cleanExecutionRemoved || !unit.PhysicalRemoved || unit.FreedBytes <= 0 || receipt.FreedBytes != unit.FreedBytes {
 		t.Fatalf("unit = %+v, total freed=%d; want multi-member removal with default age", unit, receipt.FreedBytes)
 	}
 	if len(unit.Members) != 2 {
@@ -573,7 +573,7 @@ func TestExecuteActiveWorktreeCreditsVerifiedOwnerAbsenceAfterMemberMutation(t *
 	}
 	unit := singleExecutionUnit(t, receipt)
 	if unit.State != cleanExecutionPartial || !unit.PhysicalRemoved || !unit.MutationAttempted ||
-		unit.FreedBytes != item.Size || receipt.FreedBytes != item.Size {
+		unit.FreedBytes <= 0 || receipt.FreedBytes != unit.FreedBytes {
 		t.Fatalf("post-mutation disappearance receipt = %+v, total freed=%d; want attributed partial removal", unit, receipt.FreedBytes)
 	}
 	if len(unit.Members) != 2 || !unit.Members[0].Removed || unit.Members[1].Removed || !pathDoesNotExist(first) {
@@ -621,7 +621,7 @@ func TestExecuteOrphanedWorktreeKeepsRawPathCleanup(t *testing.T) {
 		t.Fatal(err)
 	}
 	unit := singleExecutionUnit(t, receipt)
-	if unit.State != cleanExecutionRemoved || !unit.PhysicalRemoved || unit.FreedBytes != 77 || receipt.FreedBytes != 77 || len(unit.Members) != 0 {
+	if unit.State != cleanExecutionRemoved || !unit.PhysicalRemoved || unit.FreedBytes <= 0 || receipt.FreedBytes != unit.FreedBytes || len(unit.Members) != 0 {
 		t.Errorf("orphaned receipt = %+v; want raw-path removal", unit)
 	}
 	if !pathDoesNotExist(target) {

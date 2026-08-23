@@ -1972,6 +1972,9 @@ func TestInteractiveCleanReturnsRejectedTargetError(t *testing.T) {
 	if err := os.MkdirAll(safePath, 0755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(safePath, "pkg"), make([]byte, 42), 0644); err != nil {
+		t.Fatal(err)
+	}
 	safeItem := types.DebrisInfo{
 		Tool:     types.ToolNodeModules,
 		Category: types.CategoryNodeModules,

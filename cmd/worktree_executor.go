@@ -359,6 +359,11 @@ func executePathCleanupTarget(
 		receipt.BlockingPath = physicalOwnerPath
 		receipt.BlockingReason = err.Error()
 		receipt.Error = err.Error()
+		if pathDoesNotExist(target.Path) && target.Path != physicalOwnerPath {
+			receipt.FreedBytes = 0
+			receipt.ResidualBytes = 0
+			return receipt, err
+		}
 		if freed > 0 {
 			receipt.State = cleanExecutionPartial
 		}
