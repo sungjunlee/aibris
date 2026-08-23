@@ -48,6 +48,8 @@ func (s *Scanner) emitUncoveredCodexHomeWarning(opts types.ScanOptions) error {
 	}
 	line := "warning: " + warning + "\n"
 	fmt.Fprint(s.errw(), line)
+	// JSON clean discards provider errors on stderr; the --root diagnostic
+	// still has to reach the operator, so re-emit when the writer is Discard.
 	if s.ErrorWriter == io.Discard {
 		fmt.Fprint(os.Stderr, line)
 	}

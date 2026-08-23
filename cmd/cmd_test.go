@@ -979,7 +979,7 @@ func TestCleanCmd_ReusesFreshCurrentSchemaLastScanCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, source, err := scanForClean(context.Background(), resolvedRoots, nil); err != nil {
+	if _, source, err := scanForClean(context.Background(), resolvedRoots, nil, true); err != nil {
 		t.Fatal(err)
 	} else if source.Kind != scanSourceCached {
 		t.Fatalf("scan source = %q; want cached", source.Kind)
