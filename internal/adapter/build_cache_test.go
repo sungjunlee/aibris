@@ -71,6 +71,70 @@ func TestBuildCacheAdapter_GoBuild(t *testing.T) {
 	}
 }
 
+// TestBuildCacheAdapter_GoBuildLegacyDotCacheOnly is the darwin CI fixture:
+// with $GOCACHE unset, a tree planted only at $HOME/.cache/go-build must be
+// found even though os.UserCacheDir() ignores XDG_CACHE_HOME on darwin and
+// points at ~/Library/Caches instead.
+func TestBuildCacheAdapter_GoBuildLegacyDotCacheOnly(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	t.Setenv("GOCACHE", "")
+	goBuild := filepath.Join(home, ".cache", "go-build")
+	os.MkdirAll(filepath.Join(goBuild, "entry"), 0755)
+	os.WriteFile(filepath.Join(goBuild, "entry", "blob"), []byte("x"), 0644)
+
+	results, err := (&BuildCacheAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, r := range results {
+		if r.ID == "go-build" && r.Path == goBuild {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("go-build not reported at legacy %q; results: %+v", goBuild, results)
+	}
+}
+
+// TestBuildCacheAdapter_GoBuildBothLocationsReported pins that when the
+// UserCacheDir layout and the legacy layout are two distinct directories,
+// both are scanned; when they resolve to the same path (Linux default), only
+// one row is reported.
+func TestBuildCacheAdapter_GoBuildBothLocationsReported(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	t.Setenv("GOCACHE", "")
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		t.Skipf("os.UserCacheDir unavailable: %v", err)
+	}
+	userCacheDirGoBuild := filepath.Join(cacheDir, "go-build")
+	legacyGoBuild := filepath.Join(home, ".cache", "go-build")
+	if filepath.Clean(userCacheDirGoBuild) == filepath.Clean(legacyGoBuild) {
+		t.Skip("UserCacheDir and ~/.cache/go-build are the same path on this host")
+	}
+	for _, dir := range []string{userCacheDirGoBuild, legacyGoBuild} {
+		os.MkdirAll(filepath.Join(dir, "entry"), 0755)
+		os.WriteFile(filepath.Join(dir, "entry", "blob"), []byte("x"), 0644)
+	}
+
+	results, err := (&BuildCacheAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := map[string]bool{}
+	for _, r := range results {
+		if r.ID == "go-build" {
+			found[r.Path] = true
+		}
+	}
+	if len(found) != 2 || !found[userCacheDirGoBuild] || !found[legacyGoBuild] {
+		t.Fatalf("expected both %q and %q, got %v", userCacheDirGoBuild, legacyGoBuild, found)
+	}
+}
+
 func TestBuildCacheAdapter_FileNotDir(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)

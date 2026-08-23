@@ -25,6 +25,28 @@ func GoBuildCachePath() (string, bool) {
 	return filepath.Join(dir, "go-build"), true
 }
 
+// goBuildScanCandidates lists the directories to scan for the Go build cache.
+// With $GOCACHE set only that path is scanned. Unset, both os.UserCacheDir()
+// (which ignores XDG_CACHE_HOME on darwin) and the legacy $HOME/.cache/go-build
+// convention are reported as distinct cleaned paths so either layout is found
+// on every platform.
+func goBuildScanCandidates(home string) []string {
+	if cache := os.Getenv("GOCACHE"); cache != "" {
+		return []string{filepath.Clean(cache)}
+	}
+	var candidates []string
+	if dir, err := os.UserCacheDir(); err == nil {
+		candidates = append(candidates, filepath.Join(dir, "go-build"))
+	}
+	legacy := filepath.Clean(filepath.Join(home, ".cache", "go-build"))
+	for _, candidate := range candidates {
+		if filepath.Clean(candidate) == legacy {
+			return candidates
+		}
+	}
+	return append(candidates, legacy)
+}
+
 func (a *BuildCacheAdapter) Name() types.Tool {
 	return types.ToolBuildCache
 }
@@ -58,7 +80,7 @@ func (a *BuildCacheAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([
 		command []string
 	}
 	var candidates []cacheCandidate
-	if goBuild, ok := GoBuildCachePath(); ok {
+	for _, goBuild := range goBuildScanCandidates(home) {
 		candidates = append(candidates, cacheCandidate{id: "go-build", path: goBuild, command: []string{"go", "clean", "-cache"}})
 	}
 	candidates = append(candidates,

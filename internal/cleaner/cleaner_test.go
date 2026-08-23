@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -770,6 +771,52 @@ func TestExecute_UnsafePath(t *testing.T) {
 	}
 	if err != nil && !strings.Contains(err.Error(), "unsafe path") {
 		t.Errorf("error missing 'unsafe path'; got: %v", err)
+	}
+}
+
+// TestExecute_CustomGOCACHEAllowed pins the sol-blocking fix: a custom
+// $GOCACHE like ~/custom-gocache has no safe prefix, but because the scanner
+// only reports it via GoBuildCachePath, Execute must accept the exact live
+// resolver path instead of rejecting it as unsafe.
+func TestExecute_CustomGOCACHEAllowed(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	custom := filepath.Join(home, "custom-gocache")
+	os.MkdirAll(filepath.Join(custom, "entry"), 0755)
+	os.WriteFile(filepath.Join(custom, "entry", "blob"), make([]byte, 12), 0644)
+	t.Setenv("GOCACHE", custom)
+
+	items, err := (&adapter.BuildCacheAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].ID != "go-build" || items[0].Path != custom {
+		t.Fatalf("scan = %+v; want single go-build at %q", items, custom)
+	}
+	if !IsSafeTarget(home, items[0]) {
+		t.Fatalf("live GOCACHE path %q must be a safe target", custom)
+	}
+
+	origLookPath := lookPath
+	lookPath = func(string) (string, error) { return "", exec.ErrNotFound }
+	defer func() { lookPath = origLookPath }()
+	output := captureStdout(func() {
+		total, err := Execute(items)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if total <= 0 {
+			t.Errorf("total = %d; want > 0", total)
+		}
+	})
+	if _, err := os.Stat(custom); !os.IsNotExist(err) {
+		t.Errorf("custom GOCACHE should be removed; stat err = %v", err)
+	}
+	if !strings.Contains(output, "removed:") {
+		t.Errorf("output missing 'removed:'; got: %s", output)
+	}
+	if strings.Contains(output, "unsafe path") {
+		t.Errorf("output must not reject the live GOCACHE path as unsafe; got: %s", output)
 	}
 }
 

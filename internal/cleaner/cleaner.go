@@ -51,6 +51,12 @@ func IsSafeTarget(home string, item types.DebrisInfo) bool {
 		_, ok := safeHomeRel(home, item.Path)
 		return ok
 	}
+	// A custom $GOCACHE (e.g. ~/custom-gocache) has no safe prefix, but the
+	// scanner only reports it when it resolves via GoBuildCachePath, so exact
+	// equality with the live resolver output is a safe cleanup target.
+	if live, ok := adapter.GoBuildCachePath(); ok && filepath.Clean(item.Path) == live {
+		return true
+	}
 	return IsSafePath(home, item.Path)
 }
 
