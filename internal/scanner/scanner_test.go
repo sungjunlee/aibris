@@ -76,6 +76,9 @@ func TestScan_NoResults(t *testing.T) {
 	if result.TotalSize != 0 {
 		t.Errorf("TotalSize = %d; want 0", result.TotalSize)
 	}
+	if result.PhysicalUnitCount != 0 || result.PhysicalTotalBytes != 0 {
+		t.Errorf("physical = %d/%d; want 0/0", result.PhysicalUnitCount, result.PhysicalTotalBytes)
+	}
 }
 
 func TestScan_WorktreeMetadataIOFailureProducesPartialEvidence(t *testing.T) {
@@ -163,6 +166,9 @@ func TestScan_SingleProvider(t *testing.T) {
 	if result.TotalSize != 100 {
 		t.Errorf("TotalSize = %d; want 100", result.TotalSize)
 	}
+	if result.PhysicalUnitCount != 1 || result.PhysicalTotalBytes != 100 {
+		t.Errorf("physical = %d/%d; want 1/100", result.PhysicalUnitCount, result.PhysicalTotalBytes)
+	}
 }
 
 func TestScan_MultipleProviders(t *testing.T) {
@@ -192,6 +198,55 @@ func TestScan_MultipleProviders(t *testing.T) {
 	}
 	if result.TotalSize != 600 {
 		t.Errorf("TotalSize = %d; want 600", result.TotalSize)
+	}
+	if result.PhysicalUnitCount != 3 || result.PhysicalTotalBytes != 600 {
+		t.Errorf("physical = %d/%d; want 3/600", result.PhysicalUnitCount, result.PhysicalTotalBytes)
+	}
+}
+
+func TestScan_NestedWorktreeAliasesCountOnce(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	owner := filepath.Join(home, ".codex", "worktrees", "848f")
+	for _, name := range []string{"proj-a", "proj-b", "proj-c"} {
+		writeLinkedWorktree(t, filepath.Join(owner, name), filepath.Join(home, "parent-"+name), name)
+		if err := os.WriteFile(filepath.Join(owner, name, "blob"), []byte("payload-"+name), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	s := New([]adapter.DebrisProvider{adapter.NewWorktreeAdapter()})
+	result, err := s.ScanWithOptions(context.Background(), types.ScanOptions{Roots: []string{home}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Worktrees) != 3 {
+		t.Fatalf("evidence rows = %d; want 3 nested members", len(result.Worktrees))
+	}
+	ownerSize := result.Worktrees[0].Size
+	if ownerSize <= 0 {
+		t.Fatalf("owner size = %d; want measured outer owner bytes", ownerSize)
+	}
+	for _, item := range result.Worktrees {
+		if item.Path != result.Worktrees[0].Path {
+			t.Fatalf("member path = %q; want shared outer owner %q", item.Path, result.Worktrees[0].Path)
+		}
+		if item.Size != ownerSize {
+			t.Fatalf("member size = %d; want shared owner size %d", item.Size, ownerSize)
+		}
+	}
+	if result.TotalCount != 3 || result.TotalSize != ownerSize*3 {
+		t.Fatalf("row sum = %d/%d; want 3/%d", result.TotalCount, result.TotalSize, ownerSize*3)
+	}
+	if result.PhysicalUnitCount != 1 || result.PhysicalTotalBytes != ownerSize {
+		t.Fatalf("physical = %d/%d; want 1/%d", result.PhysicalUnitCount, result.PhysicalTotalBytes, ownerSize)
+	}
+	worktree := result.ByCategory[types.CategoryWorktree]
+	if worktree.Count != 3 || worktree.Size != ownerSize*3 {
+		t.Fatalf("by-category row sum = %+v; want count 3 size %d", worktree, ownerSize*3)
+	}
+	if worktree.PhysicalUnitCount != 1 || worktree.PhysicalTotalBytes != ownerSize {
+		t.Fatalf("by-category physical = %+v; want 1/%d", worktree, ownerSize)
 	}
 }
 

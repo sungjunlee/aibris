@@ -61,7 +61,8 @@ and must not use a partial inventory as cleanup authorization.
       "risk": "low",
       "reason": "orphaned worktree; parent repo metadata missing",
       "cleanup_kind": "remove-path",
-      "cleanup_command": []
+      "cleanup_command": [],
+      "physical_target_id": "target-1"
     }
   ],
   "worktrees": [
@@ -78,19 +79,22 @@ and must not use a partial inventory as cleanup authorization.
       "risk": "low",
       "reason": "orphaned worktree; parent repo metadata missing",
       "cleanup_kind": "remove-path",
-      "cleanup_command": []
+      "cleanup_command": [],
+      "physical_target_id": "target-1"
     }
   ],
   "summary": {
     "total_count": 42,
     "total_size": 52428800,
+    "physical_unit_count": 40,
+    "physical_total_bytes": 50331648,
     "by_category": {
-      "worktree": { "count": 10, "size": 10240000 },
-      "node_modules": { "count": 5, "size": 20971520 }
+      "worktree": { "count": 10, "size": 10240000, "physical_unit_count": 8, "physical_total_bytes": 8192000 },
+      "node_modules": { "count": 5, "size": 20971520, "physical_unit_count": 5, "physical_total_bytes": 20971520 }
     },
     "by_tool": {
-      "codex": { "count": 8, "size": 8192000 },
-      "claude": { "count": 2, "size": 2048000 }
+      "codex": { "count": 8, "size": 8192000, "physical_unit_count": 6, "physical_total_bytes": 6144000 },
+      "claude": { "count": 2, "size": 2048000, "physical_unit_count": 2, "physical_total_bytes": 2048000 }
     }
   }
 }
@@ -138,15 +142,18 @@ The top-level `retention` object is present on every scan:
 ```
 
 `retention` is a non-authorizing read-only projection: its values never enter
-`summary`, `total_count`, or `total_size`, never create cleanup candidates, and
+`summary`, `total_count`, `total_size`, `physical_unit_count`, or
+`physical_total_bytes`, never create cleanup candidates, and
 a retention-local partial state (`retention.partial: true`) does not set the
 top-level `partial` flag or change the exit status.
 
 The optional top-level `volume` object reports host-volume pressure for the
 volume that contains `$HOME` (the default scan roots). It is omitted when
 volume inspection is unavailable (including Windows). Existing summary fields
-keep their meaning and still count every item. `debris_bytes` is only the
-debris that sits on that volume; `other_volume_debris_bytes` is the rest.
+keep their meaning and still count every evidence row. `debris_bytes` is only the
+physical debris that sits on that volume; `other_volume_debris_bytes` is the rest.
+Nested worktree members that share one outer owner contribute once to volume
+debris, matching `summary.physical_total_bytes`.
 
 ```json
 {
@@ -209,6 +216,7 @@ item list, not as a worktree-only list.
 | `reason` | string | Short derived explanation for cleanup review |
 | `cleanup_kind` | string | Cleanup strategy (`remove-path` or `command`) |
 | `cleanup_command` | array | Argv command used when `cleanup_kind` is `command`; empty for path removal |
+| `physical_target_id` | string | Document-local physical unit id (`target-1`, `target-2`, …), the same pattern as clean `physical_target_id`. Nested members under one outer owner share one id. These ids are not path hashes and are not stable across runs. |
 | `strippable_bytes` | integer | Bytes in regenerable subtrees (dependency directories and platform build output) inventoried at fixed known-relative positions inside a `worktree` unit. Omitted when zero. Reported separately from `size` so protected worktrees do not read as unrecoverable; only `clean --strip` removes them, and strip eligibility never authorizes deletion. |
 | `strippable_paths` | array | Absolute paths of those regenerable subtrees. Omitted when empty. |
 
@@ -240,11 +248,13 @@ protected.
 
 | Field | Type | Description |
 | ------- | ------ | ------------- |
-| `total_count` | integer | Total number of debris items |
-| `total_size` | integer | Total size in bytes |
+| `total_count` | integer | Total number of evidence-row debris items |
+| `total_size` | integer | Sum of evidence-row `size` values. Nested members that share one outer owner are each counted, so this can overstate physical bytes. |
+| `physical_unit_count` | integer | Number of physical mutation owners after the same alias/containment collapse clean uses (`NormalizeTargets`). N nested worktree members under one outer owner contribute 1. |
+| `physical_total_bytes` | integer | Sum of those physical owners' sizes, counted once each. Human scan headline and volume debris use this figure. |
 | `total_strippable_bytes` | integer | Sum of `strippable_bytes` across all items. Omitted when zero. Reported separately from `total_size`; it never changes deletion totals. |
-| `by_category` | object | Per-category counts and sizes |
-| `by_tool` | object | Per-tool counts and sizes |
+| `by_category` | object | Per-category evidence-row and physical counts and sizes |
+| `by_tool` | object | Per-tool evidence-row and physical counts and sizes |
 
 ### Partial-scan fields
 
@@ -272,8 +282,10 @@ Exclusions affect discovery only: excluded items are absent from `items` and
 
 | Field | Type | Description |
 | ----- | ---- | ----------- |
-| `count` | integer | Number of items |
-| `size` | integer | Total size in bytes |
+| `count` | integer | Number of evidence-row items |
+| `size` | integer | Sum of evidence-row `size` values |
+| `physical_unit_count` | integer | Number of physical mutation owners in this group |
+| `physical_total_bytes` | integer | Sum of those physical owners' sizes, counted once each |
 | `strippable_bytes` | integer | Sum of `strippable_bytes` for the items in this group. Omitted when zero. |
 
 ## Diagnostics (experimental)
