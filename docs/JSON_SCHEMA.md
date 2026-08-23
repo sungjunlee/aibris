@@ -567,7 +567,22 @@ Non-dry-run JSON execution emits a single top-level receipt:
       "cleanup_kind": "remove-path",
       "reason_codes": ["classic_eligible", "removed"]
     }
-  ]
+  ],
+  "post_clean": {
+    "volume": {
+      "role": "home",
+      "fs_type": "apfs",
+      "id": "apfs-a1b2c3d4",
+      "total_bytes": 500000000000,
+      "used_bytes": 475000000000,
+      "available_bytes": 25000000000,
+      "used_percent": 95.0,
+      "band": "critical",
+      "debris_bytes": 30000000000
+    },
+    "local_apfs_snapshots": 2,
+    "snapshot_thinning_recommended": true
+  }
 }
 ```
 
@@ -601,6 +616,17 @@ and path-free; external command output is never copied into JSON. A
 `command_fallback_path_removal` reason code records that a missing planned
 cleanup command reached its safe path-removal fallback. `no_bytes_reclaimed`
 records a successful command that did not shrink the container.
+
+Every receipt carries a path-free top-level `post_clean` object. Its `volume`
+uses the same shape as the scan document's `volume` (omitted when volume
+inspection is unavailable), so agents can see post-cleanup pressure on the
+volume that contains `$HOME`. `local_apfs_snapshots` is the number of local
+APFS snapshots still holding blocks after cleanup, or the string
+`"unavailable"` when they cannot be listed; it never includes snapshot
+identifiers or timestamps. When at least one snapshot remains,
+`snapshot_thinning_recommended` is `true`, pointing agents at
+`aibris clean --apfs-snapshots`; it is omitted otherwise. The receipt never
+thins snapshots itself, and classic or strip runs are unaffected.
 
 ### Receipt file sink
 

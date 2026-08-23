@@ -36,6 +36,21 @@ type cleanJSONReceipt struct {
 	Plan            cleanJSONPlan                    `json:"plan"`
 	Totals          cleanJSONReceiptTotals           `json:"totals"`
 	PhysicalTargets []cleanJSONReceiptPhysicalTarget `json:"physical_targets"`
+	PostClean       *cleanJSONPostClean              `json:"post_clean"`
+
+	// inventory is the pre-execution debris owner list with its physical
+	// target identity; only owners whose targets were not physically removed
+	// feed the path-free post_clean volume split. It is never serialized.
+	inventory []cleanJSONReceiptInventoryOwner
+}
+
+// cleanJSONPostClean reports post-cleanup host state: whether reclaimed blocks
+// are still held by local APFS snapshots and the volume pressure of the volume
+// that contains $HOME. It carries no paths and no snapshot identifiers.
+type cleanJSONPostClean struct {
+	Volume                      *jsonVolume `json:"volume,omitempty"`
+	LocalAPFSSnapshots          any         `json:"local_apfs_snapshots"`
+	SnapshotThinningRecommended bool        `json:"snapshot_thinning_recommended,omitempty"`
 }
 
 type cleanJSONReceiptTotals struct {
@@ -79,6 +94,7 @@ func executeCleanJSONReceipt(
 	interactive bool,
 ) (cleanJSONReceipt, error) {
 	receipt := newCleanJSONReceipt(document)
+	receipt.inventory = cleanJSONReceiptInventory(components)
 	targetIDs, err := cleanJSONReceiptTargetIDsForPrepared(components, prepared)
 	if err != nil {
 		return finishCleanJSONReceipt(receipt, err)
@@ -574,6 +590,68 @@ func finishCleanJSONReceipt(receipt cleanJSONReceipt, executionErr error) (clean
 	return finalized, errors.Join(executionErr, finalizeErr)
 }
 
+func cleanJSONReceiptInventory(components []cleanJSONSnapshotComponent) []cleanJSONReceiptInventoryOwner {
+	owners := make([]cleanJSONReceiptInventoryOwner, 0, len(components))
+	for _, component := range components {
+		if component.Owner.ID == "" && component.Owner.Path == "" {
+			continue
+		}
+		owners = append(owners, cleanJSONReceiptInventoryOwner{
+			Owner:    component.Owner,
+			TargetID: cleanJSONReceiptTargetIDForItem(components, component.Owner),
+		})
+	}
+	return owners
+}
+
+// buildCleanJSONPostClean derives the path-free post-cleanup host state. On
+// non-Darwin hosts the snapshot listing stub errors, so the count is reported
+// as "unavailable" and no thinning is recommended.
+func buildCleanJSONPostClean(owners []types.DebrisInfo) *cleanJSONPostClean {
+	post := cleanJSONPostClean{}
+	if report := homeVolumeReport(owners); report != nil {
+		post.Volume = jsonVolumeFromReport(*report)
+	}
+	count, err := listLocalAPFSSnapshots()
+	if err != nil {
+		post.LocalAPFSSnapshots = "unavailable"
+		return &post
+	}
+	post.LocalAPFSSnapshots = count
+	post.SnapshotThinningRecommended = count >= 1
+	return &post
+}
+
+// cleanJSONReceiptInventoryOwner pairs a pre-execution debris owner with the
+// physical target ID its component maps to. An empty TargetID means the
+// identity could not be established, so the owner must never contribute to a
+// volume split that runs after deletion.
+type cleanJSONReceiptInventoryOwner struct {
+	Owner    types.DebrisInfo
+	TargetID string
+}
+
+// remainingCleanJSONReceiptInventory keeps only owners whose targets survived
+// execution. A physically removed path can no longer be stat'ed, so counting
+// it would report debris that no longer exists; an unmappable owner is omitted
+// for the same reason.
+func remainingCleanJSONReceiptOwners(receipt cleanJSONReceipt) []types.DebrisInfo {
+	removed := make(map[string]bool, len(receipt.PhysicalTargets))
+	for _, target := range receipt.PhysicalTargets {
+		if target.PhysicalRemoved {
+			removed[target.ID] = true
+		}
+	}
+	owners := make([]types.DebrisInfo, 0, len(receipt.inventory))
+	for _, entry := range receipt.inventory {
+		if entry.TargetID == "" || removed[entry.TargetID] {
+			continue
+		}
+		owners = append(owners, entry.Owner)
+	}
+	return owners
+}
+
 func finalizeCleanJSONReceipt(receipt cleanJSONReceipt) (cleanJSONReceipt, error) {
 	for i := range receipt.PhysicalTargets {
 		if receipt.PhysicalTargets[i].State != cleanJSONReceiptPending {
@@ -605,6 +683,12 @@ func finalizeCleanJSONReceipt(receipt cleanJSONReceipt) (cleanJSONReceipt, error
 		totals.FreedBytes += target.FreedBytes
 	}
 	receipt.Totals = totals
+	// post_clean volume state is derived only after every target's final
+	// execution state (especially PhysicalRemoved) is recorded, so removed
+	// paths never enter the debris split.
+	if receipt.PostClean == nil {
+		receipt.PostClean = buildCleanJSONPostClean(remainingCleanJSONReceiptOwners(receipt))
+	}
 	accountedRequests := totals.Removed + totals.Partial + totals.Failed + totals.Cancelled
 	if totals.Requested != accountedRequests {
 		receipt.Status = cleanJSONReceiptFailed
@@ -683,6 +767,7 @@ func newGuidedCleanExecutionReceipt(
 		return guidedCleanExecutionReceipt{}, err
 	}
 	receipt := newCleanJSONReceipt(document)
+	receipt.inventory = cleanJSONReceiptInventory(components)
 	// A deletion-time overlap refusal shrinks the prepared set after the plan
 	// was accepted. Name it the way the classic route does instead of letting
 	// the finalize fallback report it as an unrecorded execution.
