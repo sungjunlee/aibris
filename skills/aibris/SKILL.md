@@ -301,7 +301,7 @@ aibris clean --category node_modules
 - `--dry-run` 없이 실행하면 confirm 필요. `--force`는 confirm만 생략하며 locked row를 풀거나 `git worktree remove --force`로 전달되지 않는다
 - classic에서는 active worktree가 기본 제외된다. `--include-active-worktrees`로 포함해도 Git hard safety 검사를 통과해야 한다
 - active worktree는 실행 직전 모든 member의 repository/HEAD/dirty/ref를 재검사하고 Git-aware removal로 제거한다. branch ref와 parent `git worktree` metadata를 검증하며 실패 시 raw recursive deletion으로 fallback하지 않는다
-- `go-build`, `npm`, `uv` 캐시는 가능하면 공식 command(`go clean -cache`, `npm cache clean --force`, `uv cache prune`)로 정리함
+- `go-build`, `npm`, `uv` 캐시는 가능하면 공식 command(`go clean -cache`, `npm cache clean --force`, `uv cache clean`)로 정리함
 - command가 없으면 기존 safe path 삭제로 fallback하지만, command가 실행 후 실패하면 조용히 fallback하지 않음
 - orphaned/일반 path target은 안전 검사 후 경로 삭제한다. active worktree는 non-forced Git-aware executor를 사용하고 branch ref는 삭제하지 않는다
 - **ai-logs 계열**은 기본 clean에서 제외. 삭제하려면 `--risky` 필요

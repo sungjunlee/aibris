@@ -345,6 +345,62 @@ func TestCleanJSONReceiptCommandSuccessDoesNotInventFreedBytes(t *testing.T) {
 	if len(targets) != 1 || targets[0]["physical_removed"] != false {
 		t.Fatalf("command physical target = %+v; want retained owner", targets)
 	}
+	codes, _ := targets[0]["reason_codes"].([]any)
+	found := false
+	for _, code := range codes {
+		if code == "no_bytes_reclaimed" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("reason codes = %v; want no_bytes_reclaimed", codes)
+	}
+	if _, err := os.Lstat(goCache); err != nil {
+		t.Fatalf("command cleanup should preserve its physical owner: %v", err)
+	}
+}
+
+func TestCleanJSONReceiptCommandCreditsObservedShrink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell command fixture is Unix-specific")
+	}
+	binary := buildCLIContractBinary(t)
+	home := t.TempDir()
+	goCache := testutil.GoBuildCache(home)
+	payload := []byte("observed-shrink-payload")
+	if err := os.MkdirAll(goCache, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(goCache, "payload"), payload, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	chtimesTree(t, goCache, time.Now().Add(-48*time.Hour))
+	binDir := t.TempDir()
+	writeJSONReceiptExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\nrm -f \""+filepath.Join(goCache, "payload")+"\"\nexit 0\n")
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	stdout, stderr, err := runCleanJSONProcess(
+		t,
+		binary,
+		home,
+		"clean", "--json", "--force", "--no-guide", "--age=1h", "--category=build-cache",
+	)
+	if err != nil || stderr != "" {
+		t.Fatalf("command JSON cleanup = err %v stderr %q stdout %s", err, stderr, stdout)
+	}
+	document := decodeJSONReceiptDocument(t, stdout)
+	totals := jsonReceiptObject(t, document, "totals")
+	if jsonReceiptInt64(totals, "freed_bytes") != int64(len(payload)) {
+		t.Fatalf("freed_bytes = %+v; want observed %d", totals, len(payload))
+	}
+	targets := jsonReceiptArray(t, document, "physical_targets")
+	if len(targets) != 1 || targets[0]["physical_removed"] != false {
+		t.Fatalf("command physical target = %+v; want retained owner", targets)
+	}
+	if jsonReceiptInt64(targets[0], "freed_bytes") != int64(len(payload)) {
+		t.Fatalf("target freed_bytes = %+v; want %d", targets[0], len(payload))
+	}
 	if _, err := os.Lstat(goCache); err != nil {
 		t.Fatalf("command cleanup should preserve its physical owner: %v", err)
 	}
@@ -382,6 +438,9 @@ func TestApplyCleanJSONExecutionReceiptUsesPreMutationIdentityAfterSymlinkedAnce
 		CleanupCommand: []string{"definitely-missing-aibris-cleaner"},
 	}
 	if err := os.MkdirAll(target.Path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(target.Path, "payload"), make([]byte, int(target.Size)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	targetIDKey := cleanJSONReceiptItemKey(target)

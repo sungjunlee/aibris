@@ -4,6 +4,13 @@
 
 ### Changed
 
+- Command cleanup credits `freed_bytes = max(0, size_before − size_after)`
+  measured with the scan estimator. Human output and JSON share that number.
+  A leftover command container is success (`physical_owner_present`); zero
+  reclaim is success with `no_bytes_reclaimed`. uv's full-cache argv is
+  `uv cache clean`. remove-path that shrinks then fails is `partial` with
+  remaining bytes.
+
 - Go build-cache discovery uses process `$GOCACHE`, then the `go env -w` file
   (`$GOENV` or `UserConfigDir/go/env`), then `UserCacheDir/go-build` (Darwin
   `~/Library/Caches/go-build`, Windows `%LocalAppData%\go-build`, Linux

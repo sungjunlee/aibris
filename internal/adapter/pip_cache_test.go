@@ -88,8 +88,8 @@ func TestPipCacheAdapter_PipAndUv(t *testing.T) {
 	if len(commands["pip"]) != 0 {
 		t.Errorf("pip CleanupCommand = %v; want none", commands["pip"])
 	}
-	if got := commands["uv"]; len(got) != 3 || got[0] != "uv" || got[1] != "cache" || got[2] != "prune" {
-		t.Errorf("uv CleanupCommand = %v; want [uv cache prune]", got)
+	if got := commands["uv"]; len(got) != 3 || got[0] != "uv" || got[1] != "cache" || got[2] != "clean" {
+		t.Errorf("uv CleanupCommand = %v; want [uv cache clean]", got)
 	}
 }
 

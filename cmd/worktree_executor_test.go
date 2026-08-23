@@ -162,6 +162,10 @@ func TestExecutePreparedCommandRemovingOwnerThenFailingIsPartial(t *testing.T) {
 	if err := os.MkdirAll(targetPath, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	payload := []byte("command-removes-owner-payload")
+	if err := os.WriteFile(filepath.Join(targetPath, "payload"), payload, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	command := filepath.Join(t.TempDir(), "remove-then-fail")
 	writeJSONReceiptExecutable(t, command, "#!/bin/sh\nrm -rf \"$1\"\nexit 7\n")
 	target := types.DebrisInfo{
@@ -169,7 +173,7 @@ func TestExecutePreparedCommandRemovingOwnerThenFailingIsPartial(t *testing.T) {
 		Tool:           types.ToolBuildCache,
 		Category:       types.CategoryBuildCache,
 		Path:           targetPath,
-		Size:           29,
+		Size:           int64(len(payload)),
 		CleanupKind:    types.CleanupCommand,
 		CleanupCommand: []string{command, targetPath},
 	}
@@ -251,6 +255,10 @@ func TestExecutePreparedCommandRemovingOwnerThenCancelledIsPartial(t *testing.T)
 	if err := os.MkdirAll(targetPath, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	payload := []byte("command-removes-then-cancels-payload")
+	if err := os.WriteFile(filepath.Join(targetPath, "payload"), payload, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	marker := filepath.Join(home, "command-owner-removed")
 	command := filepath.Join(t.TempDir(), "remove-then-wait")
 	writeJSONReceiptExecutable(t, command, "#!/bin/sh\nrm -rf \"$1\"\ntouch \"$2\"\nsleep 5\n")
@@ -259,7 +267,7 @@ func TestExecutePreparedCommandRemovingOwnerThenCancelledIsPartial(t *testing.T)
 		Tool:           types.ToolBuildCache,
 		Category:       types.CategoryBuildCache,
 		Path:           targetPath,
-		Size:           31,
+		Size:           int64(len(payload)),
 		CleanupKind:    types.CleanupCommand,
 		CleanupCommand: []string{command, targetPath, marker},
 	}

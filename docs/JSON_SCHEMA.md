@@ -582,8 +582,12 @@ Only `succeeded` exits zero. Receipt accounting is physical-target based:
 
 - `requested = removed + partial + failed + cancelled`;
 - protected, reviewable, and skipped targets are not requested;
-- `freed_bytes` is credited only for a target whose physical owner was
-  verified absent after its mutation; it is never inferred from logical rows;
+- `freed_bytes` is the observed reclaim `max(0, size_before − size_after)`
+  measured with the same estimator as scan. Command-backed caches that keep
+  their container still credit that delta; `physical_owner_present` is not a
+  failure. Zero reclaim is success with `no_bytes_reclaimed`. Optional
+  `residual_bytes` is the post-clean container size when the owner remains.
+  Bytes are never inferred from logical rows;
 - `partial_failure` means execution both made progress or left a partial
   mutation and encountered a partial, failed, or cancelled request;
 - `failed` means at least one requested target failed without any successful
@@ -595,7 +599,8 @@ physical target paths and the embedded plan's logical paths, projects, and
 cleanup commands are included. Error and refusal reason codes remain stable
 and path-free; external command output is never copied into JSON. A
 `command_fallback_path_removal` reason code records that a missing planned
-cleanup command reached its safe path-removal fallback.
+cleanup command reached its safe path-removal fallback. `no_bytes_reclaimed`
+records a successful command that did not shrink the container.
 
 ### Receipt file sink
 

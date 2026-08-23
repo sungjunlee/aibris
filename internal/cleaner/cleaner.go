@@ -125,6 +125,8 @@ type CleanupMutationOutcome struct {
 	Item                       types.DebrisInfo
 	MutationAttempted          bool
 	CommandFallbackPathRemoval bool
+	FreedBytes                 int64
+	ResidualBytes              int64
 }
 
 type CleanupMutationObserver func(CleanupMutationOutcome)
@@ -246,16 +248,29 @@ func executeWithContextOutput(
 				fmt.Fprintf(errorOutput, "error: %v\n", err)
 				continue
 			}
-			if err := runCleanupCommand(ctx, w.CleanupCommand, func() {
+			freed, residual, err := observeReclamation(ctx, w.Path, func() error {
+				return runCleanupCommand(ctx, w.CleanupCommand, func() {
+					if observer != nil {
+						observer(CleanupMutationOutcome{Item: w, MutationAttempted: true})
+					}
+				})
+			})
+			if err == nil {
+				total += freed
+				reportCommandCleaned(output, w, freed, residual)
 				if observer != nil {
-					observer(CleanupMutationOutcome{Item: w, MutationAttempted: true})
+					observer(CleanupMutationOutcome{
+						Item: w, MutationAttempted: true, FreedBytes: freed, ResidualBytes: residual,
+					})
 				}
-			}); err == nil {
-				total += w.Size
-				fmt.Fprintf(output, "cleaned: %s (%s) via %s — %s\n",
-					w.ID, w.Tool, strings.Join(w.CleanupCommand, " "), FormatSize(w.Size))
 				continue
 			} else if !errors.Is(err, errCleanupCommandNotFound) {
+				total += freed
+				if observer != nil {
+					observer(CleanupMutationOutcome{
+						Item: w, MutationAttempted: true, FreedBytes: freed, ResidualBytes: residual,
+					})
+				}
 				errs = append(errs, fmt.Errorf("running cleanup command for %s: %w", w.ID, err))
 				continue
 			}
@@ -277,12 +292,24 @@ func executeWithContextOutput(
 				CommandFallbackPathRemoval: commandFallbackPathRemoval,
 			})
 		}
-		if err := os.RemoveAll(w.Path); err != nil {
+		freed, residual, err := observeReclamation(ctx, w.Path, func() error {
+			return os.RemoveAll(w.Path)
+		})
+		total += freed
+		if observer != nil {
+			observer(CleanupMutationOutcome{
+				Item:                       w,
+				MutationAttempted:          true,
+				CommandFallbackPathRemoval: commandFallbackPathRemoval,
+				FreedBytes:                 freed,
+				ResidualBytes:              residual,
+			})
+		}
+		if err != nil {
 			errs = append(errs, fmt.Errorf("removing %s: %w", w.Path, err))
 			continue
 		}
-		total += w.Size
-		fmt.Fprintf(output, "removed: %s (%s) — %s\n", w.ID, w.Tool, FormatSize(w.Size))
+		fmt.Fprintf(output, "removed: %s (%s) — %s\n", w.ID, w.Tool, FormatSize(freed))
 	}
 	if len(errs) > 0 {
 		return total, fmt.Errorf("failed to remove %d item(s): %w", len(errs), errors.Join(errs...))
@@ -326,6 +353,16 @@ func refuseStaleGoCache(item types.DebrisInfo) error {
 
 func isGoCleanCache(argv []string) bool {
 	return len(argv) == 3 && argv[0] == "go" && argv[1] == "clean" && argv[2] == "-cache"
+}
+
+func reportCommandCleaned(output io.Writer, w types.DebrisInfo, freed, residual int64) {
+	if residual > 0 {
+		fmt.Fprintf(output, "cleaned: %s (%s) via %s — %s remaining %s\n",
+			w.ID, w.Tool, strings.Join(w.CleanupCommand, " "), FormatSize(freed), FormatSize(residual))
+		return
+	}
+	fmt.Fprintf(output, "cleaned: %s (%s) via %s — %s\n",
+		w.ID, w.Tool, strings.Join(w.CleanupCommand, " "), FormatSize(freed))
 }
 
 func runCleanupCommand(ctx context.Context, argv []string, beforeStart func()) error {
