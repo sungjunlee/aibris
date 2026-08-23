@@ -3,6 +3,7 @@ package testutil
 
 import (
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -18,13 +19,15 @@ import (
 // TEMP and TMP are intentionally not changed here; callers that need
 // temporary-directory isolation should set those variables explicitly.
 //
-// CODEX_HOME and AIBRIS_CODEX_HOMES override where Codex stores live, so
-// they are cleared too: the fixture home stays the only Codex home unless a
-// test sets them explicitly.
+// CODEX_HOME, AIBRIS_CODEX_HOMES, and GOCACHE override where live stores
+// sit, so they are cleared too: the fixture home stays the only Codex home
+// and the default UserCacheDir/go-build cache is used unless a test sets
+// them explicitly.
 func SetHome(tb testing.TB, home string) {
 	tb.Helper()
 	tb.Setenv("CODEX_HOME", "")
 	tb.Setenv("AIBRIS_CODEX_HOMES", "")
+	tb.Setenv("GOCACHE", "")
 	tb.Setenv("HOME", home)
 	tb.Setenv("USERPROFILE", home)
 	drive := filepath.VolumeName(home)
@@ -33,4 +36,14 @@ func SetHome(tb testing.TB, home string) {
 	cache := filepath.Join(home, ".cache")
 	tb.Setenv("LOCALAPPDATA", cache)
 	tb.Setenv("XDG_CACHE_HOME", cache)
+}
+
+// GoBuildCache is the default GOCACHE aibris discovers inside a fixture
+// home when $GOCACHE is unset. Darwin is ~/Library/Caches/go-build;
+// Windows and Unix test fixtures redirect UserCacheDir to ~/.cache.
+func GoBuildCache(home string) string {
+	if runtime.GOOS == "darwin" || runtime.GOOS == "ios" {
+		return filepath.Join(home, "Library", "Caches", "go-build")
+	}
+	return filepath.Join(home, ".cache", "go-build")
 }

@@ -323,6 +323,8 @@ Supported command-backed cleanup:
 
 If the command is missing, aibris falls back to safe path removal. If the
 command runs and fails, aibris reports the error and does not remove the path.
+`go clean -cache` is also refused when the live `$GOCACHE` path no longer
+matches the path recorded at scan time.
 
 Age values accept human units such as `7d`, `2w`, `1mo`, and `1y`. Use `mo` for
 months; bare `m` keeps the Go duration meaning of minutes.

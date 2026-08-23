@@ -31,6 +31,8 @@ func TestIsSafePath(t *testing.T) {
 		{"claude worktree under project", home + "/project/.claude/worktrees/session", true},
 		{"cursor projects", home + "/.cursor/projects/myproj", true},
 		{"go build cache", home + "/.cache/go-build", true},
+		{"darwin library go-build", home + "/Library/Caches/go-build", true},
+		{"windows local go-build", home + "/AppData/Local/go-build", true},
 		{"npm cache", home + "/.npm/_cacache", true},
 		{"gradle cache", home + "/.gradle/caches", true},
 		{"cargo registry", home + "/.cargo/registry", true},
@@ -1175,6 +1177,84 @@ func TestExecute_Multiple(t *testing.T) {
 	}
 	if _, err := os.Stat(wt2); !os.IsNotExist(err) {
 		t.Error("wt2 should be removed")
+	}
+}
+
+func TestExecute_GoCleanCacheRefusesStaleGOCACHE(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	planned := testutil.GoBuildCache(home)
+	if err := os.MkdirAll(planned, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(planned, "file"), []byte("data"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	live := filepath.Join(home, ".cache", "other-gocache")
+	if err := os.MkdirAll(live, 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GOCACHE", live)
+	binDir := t.TempDir()
+	marker := filepath.Join(home, "command-ran")
+	writeExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\ntouch \""+marker+"\"\nexit 0\n")
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	total, err := Execute([]types.DebrisInfo{{
+		ID:             "go-build",
+		Tool:           types.ToolBuildCache,
+		Category:       types.CategoryBuildCache,
+		Path:           planned,
+		Size:           4,
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{"go", "clean", "-cache"},
+	}})
+	if err == nil {
+		t.Fatal("expected stale GOCACHE refusal")
+	}
+	if !strings.Contains(err.Error(), "no longer matches") {
+		t.Fatalf("err = %v; want no longer matches", err)
+	}
+	if total != 0 {
+		t.Fatalf("total = %d; want 0", total)
+	}
+	if _, err := os.Stat(planned); err != nil {
+		t.Errorf("planned path should remain; stat err = %v", err)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Error("go clean -cache must not run when GOCACHE drifted")
+	}
+}
+
+func TestExecute_GoCleanCacheRunsWhenGOCACHEMatches(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	planned := testutil.GoBuildCache(home)
+	if err := os.MkdirAll(planned, 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GOCACHE", planned)
+	binDir := t.TempDir()
+	writeExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\nexit 0\n")
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	total, err := Execute([]types.DebrisInfo{{
+		ID:             "go-build",
+		Tool:           types.ToolBuildCache,
+		Category:       types.CategoryBuildCache,
+		Path:           planned,
+		Size:           4,
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{"go", "clean", "-cache"},
+	}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if total != 4 {
+		t.Fatalf("total = %d; want 4", total)
+	}
+	if _, err := os.Stat(planned); err != nil {
+		t.Errorf("command cleanup should not remove path; stat err = %v", err)
 	}
 }
 

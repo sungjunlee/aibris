@@ -149,9 +149,9 @@ These areas are unsupported or unaudited:
 
 - The native installation workflow is manual; `install.sh` does not install or
   update `aibris.exe`.
-- Windows' platform-specific default locations for Go, npm, pip, and uv caches
-  have not been audited or modeled. The current cache candidates include
-  Unix-oriented home paths such as `.cache\go-build`, `.npm\_cacache`,
+- The Go build cache is discovered as `$GOCACHE` when that variable is set and
+  under requested roots, otherwise `%LocalAppData%\go-build`. npm, pip, and uv
+  cache candidates still use Unix-oriented home paths such as `.npm\_cacache`,
   `.cache\pip`, and `.cache\uv`; do not rely on them to find normal Windows
   cache installations.
 - Real Windows vendor-store layouts and migrations for Codex, Claude, Cursor,

@@ -443,6 +443,7 @@ func cliContractEnv(environ []string, home string) []string {
 		"LOCALAPPDATA":       true,
 		"CODEX_HOME":         true,
 		"AIBRIS_CODEX_HOMES": true,
+		"GOCACHE":            true,
 	}
 	env := make([]string, 0, len(environ)+len(isolatedKeys))
 	for _, entry := range environ {

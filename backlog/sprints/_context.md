@@ -58,8 +58,14 @@
 - #296 (Future) is the locked spec for guided default-branch uniqueness:
   demote unique/`unknown` units out of `recommended`; do not promote merged
   trees; scan `active` stays gitdir liveness. Children: #297 probe, #298
-  demotion, #299 copy/JSON/docs. Do not start a sprint until these are
-  admitted; do not add GitHub API or keep=3/min-idle bypass.
+  demotion, #299 copy/JSON/docs. Shipped via #301/#302. Do not add GitHub API
+  or keep=3/min-idle bypass.
+- #303 (Future) is the locked spec for 2026-08-23 dogfood follow-up:
+  explicit `--root` is a hard boundary, effective GOCACHE, measured command
+  bytes, scan physical vs evidence totals, receipt `post_clean` volume/APFS
+  remainder, skill `--include-paths`. Children: #304–#309. #304 shipped via
+  PR #310. First: #305. Do not start a sprint until admitted. No hashed JSON
+  IDs, no APFS auto-thin, no node_modules pressure age relax.
 
 ## Release Posture
 

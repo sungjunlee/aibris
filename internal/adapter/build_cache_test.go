@@ -37,7 +37,7 @@ func TestBuildCacheAdapter_NoCacheDirs(t *testing.T) {
 func TestBuildCacheAdapter_GoBuild(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
-	goBuild := filepath.Join(home, ".cache", "go-build")
+	goBuild := testutil.GoBuildCache(home)
 	os.MkdirAll(filepath.Join(goBuild, "cache-entry"), 0755)
 	os.WriteFile(filepath.Join(goBuild, "cache-entry", "a.out"), []byte("binary"), 0644)
 
@@ -67,13 +67,17 @@ func TestBuildCacheAdapter_GoBuild(t *testing.T) {
 	if got := results[0].CleanupCommand; len(got) != 3 || got[0] != "go" || got[1] != "clean" || got[2] != "-cache" {
 		t.Errorf("CleanupCommand = %v; want [go clean -cache]", got)
 	}
+	if results[0].Path != goBuild {
+		t.Errorf("Path = %q; want %q", results[0].Path, goBuild)
+	}
 }
 
 func TestBuildCacheAdapter_FileNotDir(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
-	os.MkdirAll(filepath.Join(home, ".cache"), 0755)
-	os.WriteFile(filepath.Join(home, ".cache", "go-build"), []byte("not-a-dir"), 0644)
+	goBuild := testutil.GoBuildCache(home)
+	os.MkdirAll(filepath.Dir(goBuild), 0755)
+	os.WriteFile(goBuild, []byte("not-a-dir"), 0644)
 
 	a := &BuildCacheAdapter{}
 	results, err := a.Scan(context.Background(), types.ScanOptions{})
@@ -172,8 +176,8 @@ func TestBuildCacheAdapter_Cargo(t *testing.T) {
 func TestBuildCacheAdapter_Multiple(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
-	os.MkdirAll(filepath.Join(home, ".cache", "go-build", "e1"), 0755)
-	os.WriteFile(filepath.Join(home, ".cache", "go-build", "e1", "a.out"), make([]byte, 10), 0644)
+	os.MkdirAll(filepath.Join(testutil.GoBuildCache(home), "e1"), 0755)
+	os.WriteFile(filepath.Join(testutil.GoBuildCache(home), "e1", "a.out"), make([]byte, 10), 0644)
 	os.MkdirAll(filepath.Join(home, ".gradle", "caches", "8.14"), 0755)
 	os.WriteFile(filepath.Join(home, ".gradle", "caches", "8.14", "cache.bin"), make([]byte, 20), 0644)
 	os.MkdirAll(filepath.Join(home, ".npm", "_cacache", "content"), 0755)
@@ -294,6 +298,104 @@ func TestBuildCacheAdapter_MissingHomebrewDirAndMissingBrewBinary(t *testing.T) 
 	}
 	if len(brew.CleanupCommand) == 0 || brew.CleanupCommand[0] != "brew" {
 		t.Fatalf("homebrew must keep argv-only brew cleanup; got %v", brew.CleanupCommand)
+	}
+}
+
+func TestBuildCacheAdapter_GOCACHEEnv(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	envCache := filepath.Join(home, ".cache", "custom-gocache")
+	writeGoBuildFixture(t, envCache)
+	writeGoBuildFixture(t, testutil.GoBuildCache(home))
+	t.Setenv("GOCACHE", envCache)
+
+	results := scanGoBuild(t)
+	if results[0].Path != envCache {
+		t.Errorf("Path = %q; want GOCACHE %q", results[0].Path, envCache)
+	}
+}
+
+func TestBuildCacheAdapter_GOCACHEOutsideRoots(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	outside := filepath.Join(t.TempDir(), "gocache")
+	writeGoBuildFixture(t, outside)
+	writeGoBuildFixture(t, testutil.GoBuildCache(home))
+	t.Setenv("GOCACHE", outside)
+
+	a := &BuildCacheAdapter{}
+	results, err := a.Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range results {
+		if item.ID == "go-build" {
+			t.Fatalf("reported go-build %q; want none when GOCACHE is outside roots", item.Path)
+		}
+	}
+}
+
+func TestBuildCacheAdapter_GOCACHEUnderExplicitRoot(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	root := filepath.Join(home, ".cache", "scoped")
+	envCache := filepath.Join(root, "gocache")
+	writeGoBuildFixture(t, envCache)
+	writeGoBuildFixture(t, testutil.GoBuildCache(home))
+	t.Setenv("GOCACHE", envCache)
+
+	a := &BuildCacheAdapter{}
+	results, err := a.Scan(context.Background(), types.ScanOptions{Roots: []string{root}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].ID != "go-build" || results[0].Path != envCache {
+		t.Fatalf("results = %+v; want go-build at %q", results, envCache)
+	}
+}
+
+func TestBuildCacheAdapter_LinuxHomeDotCacheGoBuild(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux ~/.cache/go-build fixture")
+	}
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	goBuild := filepath.Join(home, ".cache", "go-build")
+	writeGoBuildFixture(t, goBuild)
+
+	results := scanGoBuild(t)
+	if results[0].Path != goBuild {
+		t.Errorf("Path = %q; want %q", results[0].Path, goBuild)
+	}
+}
+
+func TestBuildCacheAdapter_UnsetGOCACHEIgnoresHomeDotCacheWhenUserCacheDiffers(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	dotCache := filepath.Join(home, ".cache", "go-build")
+	userCache := testutil.GoBuildCache(home)
+	if dotCache == userCache {
+		t.Skip("this platform's UserCacheDir is ~/.cache")
+	}
+	writeGoBuildFixture(t, dotCache)
+	writeGoBuildFixture(t, userCache)
+
+	results := scanGoBuild(t)
+	if results[0].Path != userCache {
+		t.Errorf("Path = %q; want UserCacheDir %q", results[0].Path, userCache)
+	}
+}
+
+func TestBuildCacheAdapter_ScanDoesNotRequireGoEnv(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	t.Setenv("PATH", "")
+	goBuild := testutil.GoBuildCache(home)
+	writeGoBuildFixture(t, goBuild)
+
+	results := scanGoBuild(t)
+	if results[0].Path != goBuild {
+		t.Errorf("Path = %q; want %q", results[0].Path, goBuild)
 	}
 }
 
@@ -453,5 +555,33 @@ func TestBuildCacheAdapter_ContainerModTimeWinsOverOlderTree(t *testing.T) {
 	}
 	if !item.PathModTime.Equal(expected) {
 		t.Errorf("gradle PathModTime = %v; want container mtime %v", item.PathModTime, expected)
+	}
+}
+
+func scanGoBuild(t *testing.T) []types.DebrisInfo {
+	t.Helper()
+	results, err := (&BuildCacheAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found []types.DebrisInfo
+	for _, item := range results {
+		if item.ID == "go-build" {
+			found = append(found, item)
+		}
+	}
+	if len(found) != 1 {
+		t.Fatalf("go-build count = %d; want 1", len(found))
+	}
+	return found
+}
+
+func writeGoBuildFixture(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(path, "cache-entry"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(path, "cache-entry", "a.out"), []byte("binary"), 0644); err != nil {
+		t.Fatal(err)
 	}
 }

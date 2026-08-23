@@ -62,6 +62,31 @@ func TestSetHomeClearsCodexHomeOverrides(t *testing.T) {
 	}
 }
 
+// TestSetHomeClearsGOCACHE guards cache isolation: an ambient GOCACHE must
+// not leak into tests that only redirected the user home.
+func TestSetHomeClearsGOCACHE(t *testing.T) {
+	t.Setenv("GOCACHE", "/ambient/gocache")
+	SetHome(t, t.TempDir())
+
+	if got := os.Getenv("GOCACHE"); got != "" {
+		t.Fatalf("GOCACHE = %q; want cleared", got)
+	}
+}
+
+func TestGoBuildCacheMatchesUserCacheDir(t *testing.T) {
+	home := t.TempDir()
+	SetHome(t, home)
+
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(dir, "go-build")
+	if got := GoBuildCache(home); got != want {
+		t.Fatalf("GoBuildCache() = %q; want UserCacheDir/go-build %q", got, want)
+	}
+}
+
 // TestSetHomePreservesVolumeShape guards the HOMEDRIVE/HOMEPATH pair: they
 // must still reconstruct the fixture home so Windows tools that prefer that
 // fallback stay inside the test profile.

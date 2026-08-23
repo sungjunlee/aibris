@@ -18,7 +18,7 @@ import (
 var safePathPrefixes = []string{
 	".codex", ".claude", ".cursor", ".cache", ".npm", ".gradle", ".cargo",
 	"Caches", "projects", ".codeium", "node_modules",
-	"DerivedData", ".dartServer",
+	"DerivedData", ".dartServer", "go-build",
 }
 
 var (
@@ -226,6 +226,11 @@ func executeWithContextOutput(
 		}
 		commandFallbackPathRemoval := false
 		if cleanupKind(w) == types.CleanupCommand && len(w.CleanupCommand) > 0 {
+			if err := refuseStaleGoCache(w); err != nil {
+				errs = append(errs, fmt.Errorf("running cleanup command for %s: %w", w.ID, err))
+				fmt.Fprintf(errorOutput, "error: %v\n", err)
+				continue
+			}
 			fmt.Fprintf(output, "running %d/%d: %s (%s) via %s ...\n",
 				i+1, len(worktrees), debrisName(w), w.Category, strings.Join(w.CleanupCommand, " "))
 			if err := runMutationBarrier(ctx, barrier, w); err != nil {
@@ -302,6 +307,17 @@ func cleanupKind(w types.DebrisInfo) types.CleanupKind {
 		return w.CleanupKind
 	}
 	return types.CleanupRemovePath
+}
+
+func refuseStaleGoCache(item types.DebrisInfo) error {
+	if !isGoCleanCache(item.CleanupCommand) {
+		return nil
+	}
+	return adapter.RefuseStaleGoCache(item.Path)
+}
+
+func isGoCleanCache(argv []string) bool {
+	return len(argv) == 3 && argv[0] == "go" && argv[1] == "clean" && argv[2] == "-cache"
 }
 
 func runCleanupCommand(ctx context.Context, argv []string, beforeStart func()) error {

@@ -274,7 +274,7 @@ func TestCleanJSONReceiptPartialExecutionAccountsOnlyVerifiedOwners(t *testing.T
 	}
 	binary := buildCLIContractBinary(t)
 	home := t.TempDir()
-	goCache := filepath.Join(home, ".cache", "go-build")
+	goCache := testutil.GoBuildCache(home)
 	modules := filepath.Join(home, "workspace", "partial-project", "node_modules")
 	writeJSONReceiptFixture(t, goCache, "go cache")
 	writeJSONReceiptFixture(t, modules, "modules")
@@ -321,7 +321,7 @@ func TestCleanJSONReceiptCommandSuccessDoesNotInventFreedBytes(t *testing.T) {
 	}
 	binary := buildCLIContractBinary(t)
 	home := t.TempDir()
-	goCache := filepath.Join(home, ".cache", "go-build")
+	goCache := testutil.GoBuildCache(home)
 	writeJSONReceiptFixture(t, goCache, "command leaves owner")
 	binDir := t.TempDir()
 	writeJSONReceiptExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\nexit 0\n")

@@ -4,6 +4,12 @@
 
 ### Changed
 
+- Go build-cache discovery uses `$GOCACHE` when that path exists and is under
+  requested roots, otherwise `UserCacheDir/go-build` (Darwin
+  `~/Library/Caches/go-build`, Windows `%LocalAppData%\go-build`, Linux
+  `~/.cache/go-build`). Execution of `go clean -cache` refuses if the live
+  GOCACHE path no longer matches the planned path.
+
 - Explicit `--root` is a hard scan boundary for worktree and ai-logs. Default
   `$HOME` scans still cover `$CODEX_HOME` / `$AIBRIS_CODEX_HOMES`. An explicit
   root that does not cover a configured Codex home emits one warning and does

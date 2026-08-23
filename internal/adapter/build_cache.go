@@ -34,6 +34,7 @@ func (a *BuildCacheAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([
 	if err != nil {
 		return nil, err
 	}
+	goCache, _ := effectiveGoCache()
 
 	var results []types.DebrisInfo
 
@@ -43,7 +44,7 @@ func (a *BuildCacheAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([
 		os      string
 		command []string
 	}{
-		{id: "go-build", path: filepath.Join(home, ".cache", "go-build"), command: []string{"go", "clean", "-cache"}},
+		{id: "go-build", path: goCache, command: []string{"go", "clean", "-cache"}},
 		{id: "xcode", path: filepath.Join(home, "Library", "Caches", "Xcode"), os: "darwin"},
 		{id: "xcode-deriveddata", path: filepath.Join(home, "Library", "Developer", "Xcode", "DerivedData"), os: "darwin"},
 		{id: "homebrew", path: filepath.Join(home, "Library", "Caches", "Homebrew"), os: "darwin", command: []string{"brew", "cleanup", "--prune=all"}},
@@ -57,6 +58,9 @@ func (a *BuildCacheAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([
 	for _, c := range candidates {
 		if err := ctx.Err(); err != nil {
 			return nil, err
+		}
+		if c.path == "" {
+			continue
 		}
 		if c.os != "" && c.os != runtime.GOOS {
 			continue

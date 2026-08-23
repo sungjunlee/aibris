@@ -14,6 +14,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sungjunlee/aibris/internal/testutil"
 )
 
 var cliContractBinary string
@@ -129,6 +131,7 @@ func filteredCLIContractEnv() []string {
 		"TEMP":               true,
 		"CODEX_HOME":         true,
 		"AIBRIS_CODEX_HOMES": true,
+		"GOCACHE":            true,
 	}
 	var env []string
 	for _, entry := range os.Environ() {
@@ -547,7 +550,7 @@ func TestCLIContractCancellation(t *testing.T) {
 
 func TestCLIContractCleanupFailure(t *testing.T) {
 	home := t.TempDir()
-	cache := filepath.Join(home, ".cache", "go-build")
+	cache := testutil.GoBuildCache(home)
 	if err := os.MkdirAll(cache, 0755); err != nil {
 		t.Fatal(err)
 	}
