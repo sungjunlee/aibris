@@ -2,6 +2,8 @@ package worktree
 
 import (
 	"context"
+	"errors"
+	"os/exec"
 	"strings"
 	"time"
 )
@@ -33,11 +35,8 @@ func ProbeDefaultBranchUniqueness(ctx context.Context, worktreePath string, runn
 	if runner == nil {
 		runner = RunGitCommand
 	}
-	if _, ok := ctx.Deadline(); !ok {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, DefaultBranchUniquenessTimeout)
-		defer cancel()
-	}
+	ctx, cancel := context.WithTimeout(ctx, DefaultBranchUniquenessTimeout)
+	defer cancel()
 
 	defaultOID, err := probeCommitOID(ctx, worktreePath, runner, "refs/remotes/origin/HEAD^{commit}")
 	if err != nil {
@@ -52,7 +51,7 @@ func ProbeDefaultBranchUniqueness(ctx context.Context, worktreePath string, runn
 	if err == nil {
 		return UniquenessMerged
 	}
-	if ctx.Err() != nil || probeOutputLooksFatal(ancestorOutput) {
+	if ctx.Err() != nil || probeOutputLooksFatal(ancestorOutput) || !probeIsNotAncestor(err) {
 		return UniquenessUnknown
 	}
 
@@ -92,4 +91,11 @@ func probeCommitOID(ctx context.Context, worktreePath string, runner GitCommandR
 // expected nonzero exit of "--is-ancestor" when HEAD is not an ancestor.
 func probeOutputLooksFatal(output []byte) bool {
 	return strings.Contains(strings.ToLower(string(output)), "fatal")
+}
+
+// probeIsNotAncestor is the expected merge-base --is-ancestor miss (exit 1).
+// Any other command error must stay unknown, not fall through to merge-tree.
+func probeIsNotAncestor(err error) bool {
+	var exitErr *exec.ExitError
+	return errors.As(err, &exitErr) && exitErr.ExitCode() == 1
 }

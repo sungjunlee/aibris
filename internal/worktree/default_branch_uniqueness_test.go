@@ -143,3 +143,43 @@ func TestProbeDefaultBranchUniquenessRunnerErrorReturnsUnknown(t *testing.T) {
 		t.Errorf("probe mutated member safety state: %+v", member)
 	}
 }
+
+func TestProbeAppliesOwnTimeoutWhenParentHasLaterDeadline(t *testing.T) {
+	parent, cancel := context.WithTimeout(context.Background(), time.Hour)
+	defer cancel()
+
+	var remaining time.Duration
+	got := ProbeDefaultBranchUniqueness(parent, "/fixture", func(ctx context.Context, dir string, args ...string) ([]byte, error) {
+		dl, ok := ctx.Deadline()
+		if !ok {
+			t.Fatal("probe context has no deadline")
+		}
+		remaining = time.Until(dl)
+		return nil, errors.New("stop")
+	})
+	if got != UniquenessUnknown {
+		t.Errorf("probe = %q; want %q", got, UniquenessUnknown)
+	}
+	if remaining <= 0 || remaining > DefaultBranchUniquenessTimeout {
+		t.Errorf("probe deadline remaining %v; want (0, %v]", remaining, DefaultBranchUniquenessTimeout)
+	}
+}
+
+func TestProbeMergeBaseNonExit1StaysUnknown(t *testing.T) {
+	oid := []byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n")
+	got := ProbeDefaultBranchUniqueness(context.Background(), "/fixture", func(ctx context.Context, dir string, args ...string) ([]byte, error) {
+		switch args[0] {
+		case "rev-parse":
+			return oid, nil
+		case "merge-base":
+			return []byte("command failed"), errors.New("command failed")
+		case "merge-tree":
+			t.Fatal("merge-tree must not run after a non-exit-1 merge-base error")
+		}
+		t.Fatalf("unexpected git args %v", args)
+		return nil, errors.New("unexpected")
+	})
+	if got != UniquenessUnknown {
+		t.Errorf("probe = %q; want %q", got, UniquenessUnknown)
+	}
+}
