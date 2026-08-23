@@ -41,6 +41,19 @@ func (s *Scanner) now() time.Time {
 	return time.Now()
 }
 
+func (s *Scanner) emitUncoveredCodexHomeWarning(roots []string) error {
+	warning, err := adapter.UncoveredCodexHomeWarning(roots)
+	if err != nil || warning == "" {
+		return err
+	}
+	line := "warning: " + warning + "\n"
+	fmt.Fprint(s.errw(), line)
+	if s.ErrorWriter == io.Discard {
+		fmt.Fprint(os.Stderr, line)
+	}
+	return nil
+}
+
 func (s *Scanner) errw() io.Writer {
 	if s.ErrorWriter != nil {
 		return s.ErrorWriter
@@ -95,6 +108,9 @@ func (s *Scanner) ScanWithOptions(ctx context.Context, opts types.ScanOptions) (
 		return nil, err
 	}
 	opts.Roots = roots
+	if err := s.emitUncoveredCodexHomeWarning(roots); err != nil {
+		return nil, err
+	}
 
 	result := &types.ScanResult{
 		ByCategory: make(map[types.Category]types.CategorySummary),

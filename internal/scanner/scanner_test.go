@@ -738,3 +738,93 @@ func TestScanWithOptions_DiagnosticsSortedByTool(t *testing.T) {
 			result.Diagnostics[0].Tool, result.Diagnostics[1].Tool)
 	}
 }
+
+func TestScanWithOptions_ExplicitRootIsHardCodexHomeBoundary(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	codexHome := t.TempDir()
+	writeLinkedWorktree(t, filepath.Join(codexHome, "worktrees", "runtime-hash", "proj"), filepath.Join(home, "codex-parent"), "runtime-hash")
+	if err := os.WriteFile(filepath.Join(codexHome, "logs_2.sqlite"), make([]byte, 40), 0644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CODEX_HOME", codexHome)
+
+	unit := filepath.Join(home, ".relay", "worktrees", "repo-hash")
+	writeLinkedWorktree(t, filepath.Join(unit, "dispatch"), filepath.Join(home, "main-repo"), "repo-hash")
+
+	var stderr bytes.Buffer
+	s := New([]adapter.DebrisProvider{
+		adapter.NewWorktreeAdapter(),
+		&adapter.AILogsAdapter{},
+	})
+	s.ErrorWriter = &stderr
+
+	scoped, err := s.ScanWithOptions(context.Background(), types.ScanOptions{Roots: []string{unit}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertScanPathsUnderRoot(t, scoped.Worktrees, unit)
+	if len(scoped.Worktrees) != 1 || scoped.Worktrees[0].ID != "repo-hash" {
+		t.Fatalf("scoped items = %+v; want the explicit relay unit", scoped.Worktrees)
+	}
+	if strings.Count(stderr.String(), "warning:") != 1 ||
+		!strings.Contains(stderr.String(), "outside --root") {
+		t.Fatalf("stderr = %q; want one uncovered Codex home warning", stderr.String())
+	}
+
+	stderr.Reset()
+	full, err := s.ScanWithOptions(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("default scan stderr = %q; want no Codex home warning", stderr.String())
+	}
+	if !scanContainsID(full.Worktrees, "runtime-hash") || !scanContainsID(full.Worktrees, "repo-hash") {
+		t.Fatalf("default scan = %+v; want Codex home and relay units", full.Worktrees)
+	}
+}
+
+func writeLinkedWorktree(t *testing.T, worktreeDir, parentRepoDir, name string) {
+	t.Helper()
+	parentGit := filepath.Join(parentRepoDir, ".git")
+	if err := os.MkdirAll(filepath.Join(parentGit, "worktrees", name), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(worktreeDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	content := "gitdir: " + filepath.Join(parentGit, "worktrees", name) + "\n"
+	if err := os.WriteFile(filepath.Join(worktreeDir, ".git"), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertScanPathsUnderRoot(t *testing.T, items []types.DebrisInfo, root string) {
+	t.Helper()
+	root = resolveTestPath(root)
+	for _, item := range items {
+		path := resolveTestPath(item.Path)
+		rel, err := filepath.Rel(root, path)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			t.Errorf("path %q is outside root %q", item.Path, root)
+		}
+	}
+}
+
+func resolveTestPath(path string) string {
+	path = filepath.Clean(path)
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return filepath.Clean(resolved)
+	}
+	return path
+}
+
+func scanContainsID(items []types.DebrisInfo, id string) bool {
+	for _, item := range items {
+		if item.ID == id {
+			return true
+		}
+	}
+	return false
+}

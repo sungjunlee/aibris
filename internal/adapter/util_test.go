@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/sungjunlee/aibris/internal/testutil"
 )
 
 func setTestModTime(t *testing.T, path string, modTime time.Time) {
@@ -303,4 +305,73 @@ func fileModTime(t *testing.T, path string) time.Time {
 		t.Fatal(err)
 	}
 	return info.ModTime()
+}
+
+func TestApplyCodexHomeScanRoots_DefaultHomeStillAppends(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+
+	got, err := applyCodexHomeScanRoots([]string{home})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsPath(got, home) || !containsPath(got, codexHome) {
+		t.Fatalf("default home roots = %v; want $HOME and CODEX_HOME", got)
+	}
+}
+
+func TestApplyCodexHomeScanRoots_ExplicitRootIsHardBoundary(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+	root := filepath.Join(home, "workspace")
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := applyCodexHomeScanRoots([]string{root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != root {
+		t.Fatalf("explicit roots = %v; want only %q", got, root)
+	}
+}
+
+func TestUncoveredCodexHomeWarning_ExplicitRoot(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	t.Setenv("CODEX_HOME", t.TempDir())
+	root := filepath.Join(home, "workspace")
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	warning, err := UncoveredCodexHomeWarning([]string{root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if warning == "" {
+		t.Fatal("want one uncovered Codex home diagnostic")
+	}
+	homeWarning, err := UncoveredCodexHomeWarning([]string{home})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if homeWarning != "" {
+		t.Fatalf("default home warning = %q; want empty", homeWarning)
+	}
+}
+
+func containsPath(paths []string, want string) bool {
+	want = canonicalExistingPath(want)
+	for _, path := range paths {
+		if canonicalExistingPath(path) == want {
+			return true
+		}
+	}
+	return false
 }

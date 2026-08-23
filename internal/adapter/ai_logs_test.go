@@ -179,6 +179,30 @@ func TestAILogsAdapter_CodexHomeOutsideScanRootsStillReported(t *testing.T) {
 	}
 }
 
+func TestAILogsAdapter_ExplicitRootDoesNotReportUncoveredCodexHome(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	codexHome := t.TempDir()
+	if err := os.WriteFile(filepath.Join(codexHome, "logs_2.sqlite"), make([]byte, 100), 0644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CODEX_HOME", codexHome)
+	scoped := filepath.Join(home, "workspace")
+	if err := os.MkdirAll(scoped, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := (&AILogsAdapter{}).Scan(context.Background(), types.ScanOptions{Roots: []string{scoped}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range results {
+		if !pathUnderRoots(row.Path, []string{scoped}) {
+			t.Fatalf("explicit root reported uncovered Codex home %q", row.Path)
+		}
+	}
+}
+
 func TestAILogsAdapter_ExtraCodexHomesReportedSeparately(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)

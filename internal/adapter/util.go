@@ -311,21 +311,64 @@ func pathUnderRoots(path string, roots []string) bool {
 	return false
 }
 
+// applyCodexHomeScanRoots extends roots with uncovered Codex homes only for
+// the default $HOME scan. Explicit --root is a hard boundary and is returned
+// unchanged.
+func applyCodexHomeScanRoots(roots []string) ([]string, error) {
+	if !isDefaultHomeScan(roots) {
+		return roots, nil
+	}
+	return appendUncoveredCodexHomes(roots)
+}
+
+func isDefaultHomeScan(roots []string) bool {
+	if len(roots) != 1 {
+		return false
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	return canonicalExistingPath(roots[0]) == canonicalExistingPath(home)
+}
+
+// UncoveredCodexHomeWarning returns one path-free diagnostic when explicit
+// scan roots do not cover a configured Codex home. Default $HOME scans return
+// no warning because those homes are still appended.
+func UncoveredCodexHomeWarning(roots []string) (string, error) {
+	if len(roots) == 0 || isDefaultHomeScan(roots) {
+		return "", nil
+	}
+	uncovered, err := uncoveredCodexHomes(roots)
+	if err != nil || len(uncovered) == 0 {
+		return "", err
+	}
+	return "configured Codex home is outside --root; not widening scan scope", nil
+}
+
 // appendUncoveredCodexHomes returns roots extended with every Codex home
 // (CODEX_HOME plus any AIBRIS_CODEX_HOMES entries) that is not already under
 // one of them. Scan roots default to $HOME while the Codex CLI honors
-// CODEX_HOME, so a Codex home outside the roots must still be covered or its
+// CODEX_HOME, so a default scan must still cover an overridden home or its
 // store would be silently filtered away.
 func appendUncoveredCodexHomes(roots []string) ([]string, error) {
+	uncovered, err := uncoveredCodexHomes(roots)
+	if err != nil {
+		return nil, err
+	}
+	return append(append([]string(nil), roots...), uncovered...), nil
+}
+
+func uncoveredCodexHomes(roots []string) ([]string, error) {
 	homes, err := codexhome.Homes()
 	if err != nil {
 		return nil, err
 	}
-	extended := append([]string(nil), roots...)
+	var uncovered []string
 	for _, home := range homes {
-		if !pathUnderRoots(home, extended) {
-			extended = append(extended, home)
+		if !pathUnderRoots(home, roots) {
+			uncovered = append(uncovered, home)
 		}
 	}
-	return extended, nil
+	return uncovered, nil
 }
