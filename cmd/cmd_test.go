@@ -245,13 +245,13 @@ func TestScanCmd_WritesLastScanCache(t *testing.T) {
 func TestWriteLastScanCacheSkipsPartialResult(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
-	writeLastScanCache([]string{home}, scanner.DefaultScanner.ProviderIdentity(), &types.ScanResult{})
+	writeLastScanCache([]string{home}, scanner.DefaultScanner.ProviderIdentity(), &types.ScanResult{}, false)
 	if _, ok := readLastScanCache(); !ok {
 		t.Fatal("complete scan cache fixture was not written")
 	}
 	writeLastScanCache([]string{home}, scanner.DefaultScanner.ProviderIdentity(), &types.ScanResult{
 		ProviderErrors: []types.ScanProviderError{{Tool: types.ToolCodex, Message: "boom"}},
-	})
+	}, false)
 	if _, ok := readLastScanCache(); ok {
 		t.Fatal("partial scan must invalidate the previous clean cache")
 	}
@@ -979,7 +979,7 @@ func TestCleanCmd_ReusesFreshCurrentSchemaLastScanCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, source, err := scanForClean(context.Background(), resolvedRoots, nil); err != nil {
+	if _, source, err := scanForClean(context.Background(), resolvedRoots, nil, true); err != nil {
 		t.Fatal(err)
 	} else if source.Kind != scanSourceCached {
 		t.Fatalf("scan source = %q; want cached", source.Kind)

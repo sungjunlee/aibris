@@ -4,6 +4,12 @@
 
 ### Changed
 
+- Explicit `--root` is a hard scan boundary for worktree and ai-logs. Default
+  `$HOME` scans still cover `$CODEX_HOME` / `$AIBRIS_CODEX_HOMES`. An explicit
+  root that does not cover a configured Codex home emits one warning and does
+  not silently widen. A `--root` that is itself a valid worktree outer owner is
+  discovered as that one unit.
+
 - Human `scan` summary now leads with found size, the largest reclaim path
   among default / strip / pressure when that path is larger than default, and
   home-volume used% / free bytes / band. JSON `volume.band` `low` still means

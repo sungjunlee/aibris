@@ -64,7 +64,7 @@ func runStripClean() {
 	}
 	printCleanHeader(roots)
 
-	result, _, err := scanForClean(ctx, roots, cleanExcludes)
+	result, _, err := scanForClean(ctx, roots, cleanExcludes, len(cleanRoots) > 0)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)

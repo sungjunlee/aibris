@@ -204,8 +204,12 @@ type RetentionProviderError struct {
 
 // ScanOptions configures discovery scope for scan providers.
 type ScanOptions struct {
-	Roots       []string
-	Diagnostics bool
+	Roots []string
+	// ExplicitRoots is true when the operator passed --root. Normalized
+	// roots equal to $HOME still count as explicit; adapters must not infer
+	// a default scan from path equality alone.
+	ExplicitRoots bool
+	Diagnostics   bool
 	// Excludes holds user exclusion patterns (--exclude flags). Exclusions
 	// only remove discovered paths from results; they never broaden deletion
 	// authority.

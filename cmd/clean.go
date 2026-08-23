@@ -168,7 +168,7 @@ without deleting the unit, its branch, or any uncommitted work.`,
 		}
 		printCleanHeader(roots)
 
-		result, source, err := scanForClean(ctx, roots, cleanExcludes)
+		result, source, err := scanForClean(ctx, roots, cleanExcludes, len(cleanRoots) > 0)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
@@ -737,23 +737,23 @@ func printCleanHeader(roots []string) {
 	fmt.Printf("  roots  %s\n\n", strings.Join(displayRoots(roots), ", "))
 }
 
-func scanForClean(ctx context.Context, roots, excludes []string) (*types.ScanResult, scanSource, error) {
-	return scanForCleanWithProgress(ctx, roots, excludes, true)
+func scanForClean(ctx context.Context, roots, excludes []string, explicit bool) (*types.ScanResult, scanSource, error) {
+	return scanForCleanWithProgress(ctx, roots, excludes, explicit, true)
 }
 
-func scanForCleanQuiet(ctx context.Context, roots, excludes []string) (*types.ScanResult, scanSource, error) {
-	return scanForCleanWithProgress(ctx, roots, excludes, false)
+func scanForCleanQuiet(ctx context.Context, roots, excludes []string, explicit bool) (*types.ScanResult, scanSource, error) {
+	return scanForCleanWithProgress(ctx, roots, excludes, explicit, false)
 }
 
-func scanForCleanWithProgress(ctx context.Context, roots, excludes []string, showProgress bool) (*types.ScanResult, scanSource, error) {
+func scanForCleanWithProgress(ctx context.Context, roots, excludes []string, explicit, showProgress bool) (*types.ScanResult, scanSource, error) {
 	selector := cleanScanSelector()
-	if result, source, ok := tryCachedCleanScan(roots, excludes, selector, showProgress); ok {
+	if result, source, ok := tryCachedCleanScan(roots, excludes, selector, explicit, showProgress); ok {
 		if err := requireCompleteScan(result); err != nil {
 			return nil, scanSource{}, err
 		}
 		return result, source, nil
 	}
-	return liveCleanScan(ctx, roots, excludes, selector, showProgress)
+	return liveCleanScan(ctx, roots, excludes, selector, explicit, showProgress)
 }
 
 func cleanScanSelector() string {
@@ -766,17 +766,18 @@ func cleanScanSelector() string {
 	return "delete"
 }
 
-func tryCachedCleanScan(roots, excludes []string, selector string, showProgress bool) (*types.ScanResult, scanSource, bool) {
-	if reason, skip := excludedCleanScanReason(roots, selector, excludes); skip {
+func tryCachedCleanScan(roots, excludes []string, selector string, explicit, showProgress bool) (*types.ScanResult, scanSource, bool) {
+	if reason, skip := excludedCleanScanReason(roots, selector, excludes, explicit); skip {
 		printLastScanRescan(reason, showProgress)
 		return nil, scanSource{}, false
 	}
 	readAt := time.Now()
-	result, age, reason, ok := inspectCachedCleanScan(roots, selector)
+	result, age, reason, ok := inspectCachedCleanScan(roots, selector, explicit)
 	if !ok || !claimLastScanSelector(selector) {
 		printLastScanRescan(cachedScanMissReason(ok, reason), showProgress)
 		return nil, scanSource{}, false
 	}
+	emitCachedExplicitRootWarning(roots, explicit)
 	printLastScanReuse(age, showProgress)
 	return result, scanSource{
 		Kind:       scanSourceCached,
@@ -785,11 +786,11 @@ func tryCachedCleanScan(roots, excludes []string, selector string, showProgress 
 	}, true
 }
 
-func excludedCleanScanReason(roots []string, selector string, excludes []string) (string, bool) {
+func excludedCleanScanReason(roots []string, selector string, excludes []string, explicit bool) (string, bool) {
 	if len(excludes) == 0 {
 		return "", false
 	}
-	_, _, reason, ok := inspectLastScanCache(roots, selector)
+	_, _, reason, ok := inspectLastScanCache(roots, selector, explicit)
 	if !ok && reason == "" {
 		return "", true
 	}
@@ -803,8 +804,8 @@ func cachedScanMissReason(ok bool, reason string) string {
 	return "cache selector unavailable"
 }
 
-func inspectCachedCleanScan(roots []string, selector string) (*types.ScanResult, time.Duration, string, bool) {
-	result, age, reason, ok := inspectLastScanCache(roots, selector)
+func inspectCachedCleanScan(roots []string, selector string, explicit bool) (*types.ScanResult, time.Duration, string, bool) {
+	result, age, reason, ok := inspectLastScanCache(roots, selector, explicit)
 	if ok && scanResultHasExclusions(result) {
 		return nil, age, "cached scan used exclusions", false
 	}
@@ -825,36 +826,41 @@ func printLastScanRescan(reason string, show bool) {
 	fmt.Printf("scanning again: %s\n", reason)
 }
 
-func liveCleanScan(ctx context.Context, roots, excludes []string, selector string, showProgress bool) (*types.ScanResult, scanSource, error) {
-	result, err := runCleanScan(ctx, roots, excludes, showProgress)
+func liveCleanScan(ctx context.Context, roots, excludes []string, selector string, explicit, showProgress bool) (*types.ScanResult, scanSource, error) {
+	result, err := runCleanScan(ctx, roots, excludes, explicit, showProgress)
 	if err != nil {
 		return nil, scanSource{}, err
 	}
 	if err := requireCompleteScan(result); err != nil {
 		return nil, scanSource{}, err
 	}
-	writeLastScanCacheForSelector(roots, scanner.DefaultScanner.ProviderIdentity(), selector, result)
+	writeLastScanCacheForSelector(roots, scanner.DefaultScanner.ProviderIdentity(), selector, explicit, result)
 	return result, scanSource{Kind: scanSourceLive}, nil
 }
 
-func runCleanScan(ctx context.Context, roots, excludes []string, showProgress bool) (*types.ScanResult, error) {
+func runCleanScan(ctx context.Context, roots, excludes []string, explicit, showProgress bool) (*types.ScanResult, error) {
 	if showProgress {
-		return runLiveCleanScan(ctx, roots, excludes)
+		return runLiveCleanScan(ctx, roots, excludes, explicit)
 	}
 	quietScanner := scanner.NewWithRetentionProviders(
 		scanner.DefaultScanner.Providers,
 		scanner.DefaultScanner.RetentionProviders,
 	)
 	quietScanner.ErrorWriter = io.Discard
-	return quietScanner.ScanWithOptions(ctx, types.ScanOptions{Roots: roots, Excludes: excludes})
+	return quietScanner.ScanWithOptions(ctx, types.ScanOptions{
+		Roots:         roots,
+		ExplicitRoots: explicit,
+		Excludes:      excludes,
+	})
 }
 
-func runLiveCleanScan(ctx context.Context, roots, excludes []string) (*types.ScanResult, error) {
+func runLiveCleanScan(ctx context.Context, roots, excludes []string, explicit bool) (*types.ScanResult, error) {
 	progress := newScanProgressPrinter(os.Stdout)
 	result, err := scanner.ScanWithOptions(ctx, types.ScanOptions{
-		Roots:      roots,
-		Excludes:   excludes,
-		OnProgress: progress.Handle,
+		Roots:         roots,
+		ExplicitRoots: explicit,
+		Excludes:      excludes,
+		OnProgress:    progress.Handle,
 	})
 	progress.Stop()
 	return result, err

@@ -83,41 +83,94 @@ func (a *WorktreeAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([]t
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	return a.scanWorktreeRoots(ctx, opts)
+}
 
-	roots, err := scanRootsOrHome(opts.Roots)
-	if err != nil {
-		return nil, err
-	}
-	roots, err = appendUncoveredCodexHomes(roots)
-	if err != nil {
-		return nil, err
-	}
-	roots = normalizedWorktreeScanRoots(roots)
+type worktreeScanPrep struct {
+	roots      []string
+	containers []registeredWorktreeContainer
+	explicit   bool
+}
 
+func prepareWorktreeScan(opts types.ScanOptions) (worktreeScanPrep, error) {
+	roots, explicit, err := explicitWorktreeRoots(opts)
+	if err != nil {
+		return worktreeScanPrep{}, err
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return nil, err
+		return worktreeScanPrep{}, err
 	}
-	home = canonicalExistingPath(home)
+	containers, err := registeredWorktreeContainers(canonicalExistingPath(home))
+	if err != nil {
+		return worktreeScanPrep{}, err
+	}
+	return worktreeScanPrep{roots: roots, containers: containers, explicit: explicit}, nil
+}
 
-	containers, err := registeredWorktreeContainers(home)
+func explicitWorktreeRoots(opts types.ScanOptions) ([]string, bool, error) {
+	roots, err := scanRootsOrHome(opts.Roots)
+	if err != nil {
+		return nil, false, err
+	}
+	explicit := explicitScan(opts, roots)
+	roots, err = applyCodexHomeScanRoots(opts, roots)
+	if err != nil {
+		return nil, false, err
+	}
+	return normalizedWorktreeScanRoots(roots), explicit, nil
+}
+
+func (a *WorktreeAdapter) scanWorktreeRoots(ctx context.Context, opts types.ScanOptions) ([]types.DebrisInfo, error) {
+	prep, err := prepareWorktreeScan(opts)
 	if err != nil {
 		return nil, err
 	}
+	rootByPath, blocked, err := collectWorktreeContainers(ctx, prep.containers, prep.roots)
+	if err != nil {
+		return nil, err
+	}
+	visited := make(map[string]bool)
+	results, err := a.scanCollectedContainers(ctx, rootByPath, visited)
+	if err != nil {
+		return nil, err
+	}
+	explicit, err := a.scanExplicitRootUnits(ctx, prep, rootByPath, blocked, visited)
+	if err != nil {
+		return nil, err
+	}
+	return sortWorktreeResults(filterDebrisUnderRoots(append(results, explicit...), prep.roots)), nil
+}
 
+func collectWorktreeContainers(
+	ctx context.Context,
+	containers []registeredWorktreeContainer,
+	roots []string,
+) (map[string]worktreeRoot, map[string]bool, error) {
 	rootByPath := make(map[string]worktreeRoot)
 	registeredRoots, blockedAliases, err := discoverRegisteredWorktreeRoots(ctx, containers, roots)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, root := range registeredRoots {
 		rootByPath[root.path] = root
 	}
+	if err := addConventionWorktreeRoots(ctx, roots, blockedAliases, rootByPath); err != nil {
+		return nil, nil, err
+	}
+	return rootByPath, blockedAliases, nil
+}
 
+func addConventionWorktreeRoots(
+	ctx context.Context,
+	roots []string,
+	blockedAliases map[string]bool,
+	rootByPath map[string]worktreeRoot,
+) error {
 	for _, scanRoot := range roots {
 		worktreeRoots, err := discoverWorktreeRoots(ctx, scanRoot)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		for _, path := range worktreeRoots {
 			canonical := canonicalExistingPath(path)
@@ -130,7 +183,14 @@ func (a *WorktreeAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([]t
 			rootByPath[canonical] = worktreeRoot{path: canonical}
 		}
 	}
+	return nil
+}
 
+func (a *WorktreeAdapter) scanCollectedContainers(
+	ctx context.Context,
+	rootByPath map[string]worktreeRoot,
+	visited map[string]bool,
+) ([]types.DebrisInfo, error) {
 	worktreeRoots := make([]worktreeRoot, 0, len(rootByPath))
 	for _, root := range rootByPath {
 		worktreeRoots = append(worktreeRoots, root)
@@ -141,17 +201,201 @@ func (a *WorktreeAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([]t
 		}
 		return worktreeRoots[i].source < worktreeRoots[j].source
 	})
-
-	visitedEntries := make(map[string]bool)
 	var results []types.DebrisInfo
 	for _, root := range worktreeRoots {
-		items, err := a.scanWorktreeRootWithSource(ctx, root, visitedEntries)
+		items, err := a.scanWorktreeRootWithSource(ctx, root, visited)
 		if err != nil {
 			return nil, err
 		}
 		results = append(results, items...)
 	}
+	return results, nil
+}
 
+func (a *WorktreeAdapter) scanExplicitRootUnits(
+	ctx context.Context,
+	prep worktreeScanPrep,
+	rootByPath map[string]worktreeRoot,
+	blocked map[string]bool,
+	visited map[string]bool,
+) ([]types.DebrisInfo, error) {
+	if !prep.explicit {
+		return nil, nil
+	}
+	var results []types.DebrisInfo
+	for _, scanRoot := range prep.roots {
+		items, err := a.scanRootAsWorktreeUnit(ctx, scanRoot, prep.containers, rootByPath, blocked, visited)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, items...)
+	}
+	return results, nil
+}
+
+func (a *WorktreeAdapter) scanRootAsWorktreeUnit(
+	ctx context.Context,
+	scanRoot string,
+	containers []registeredWorktreeContainer,
+	rootByPath map[string]worktreeRoot,
+	blocked map[string]bool,
+	visited map[string]bool,
+) ([]types.DebrisInfo, error) {
+	canonical := canonicalExistingPath(scanRoot)
+	if blocked[canonical] || visited[canonical] {
+		return nil, nil
+	}
+	if _, err := os.Stat(canonical); err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if _, isContainer := rootByPath[canonical]; isContainer {
+		return nil, nil
+	}
+	if !isWorktreeContainerMember(canonical, containers) {
+		return nil, nil
+	}
+	owner, err := linkedWorktreeOwnerAt(ctx, canonical, containers)
+	if err != nil || owner.path == "" {
+		return nil, err
+	}
+	return a.scanWorktreeUnit(ctx, owner, visited)
+}
+
+func linkedWorktreeOwnerAt(
+	ctx context.Context,
+	path string,
+	containers []registeredWorktreeContainer,
+) (worktreeRoot, error) {
+	meta := worktreeUnitMeta(path, containers)
+	ok, err := isLinkedWorktreeOwner(ctx, path, meta.memberDepth)
+	if err != nil || !ok {
+		return worktreeRoot{}, err
+	}
+	return meta, nil
+}
+
+func isWorktreeContainerMember(path string, containers []registeredWorktreeContainer) bool {
+	if worktreeUnitMeta(path, containers).memberDepth == registeredWorktreeMemberDepth {
+		return true
+	}
+	return isWorktreeRootDir(filepath.Base(filepath.Dir(canonicalExistingPath(path))))
+}
+
+func worktreeUnitMeta(path string, containers []registeredWorktreeContainer) worktreeRoot {
+	canonical := canonicalExistingPath(path)
+	parent := filepath.Dir(canonical)
+	for _, registered := range containers {
+		container := canonicalExistingPath(filepath.Join(registered.base, registered.relativePath))
+		if parent == container {
+			return worktreeRoot{
+				path:        path,
+				source:      registered.source,
+				memberDepth: registeredWorktreeMemberDepth,
+			}
+		}
+	}
+	return worktreeRoot{path: path, source: detectWorktreeSource(path)}
+}
+
+func isLinkedWorktreeOwner(ctx context.Context, path string, memberDepth int) (bool, error) {
+	if present, err := hasLinkedWorktreeMarker(ctx, path); present || err != nil {
+		return present, err
+	}
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return false, fmt.Errorf("reading worktree unit %q: %w", path, err)
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		child := filepath.Join(path, entry.Name())
+		if present, err := hasLinkedDescendantMarker(ctx, child, memberDepth); present || err != nil {
+			return present, err
+		}
+	}
+	return false, nil
+}
+
+func hasLinkedDescendantMarker(ctx context.Context, path string, memberDepth int) (bool, error) {
+	if present, err := hasLinkedWorktreeMarker(ctx, path); present || err != nil {
+		return present, err
+	}
+	if memberDepth < registeredWorktreeMemberDepth {
+		return false, nil
+	}
+	return hasLinkedChildMarker(ctx, path)
+}
+
+func hasLinkedChildMarker(ctx context.Context, path string) (bool, error) {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return false, fmt.Errorf("reading worktree leaf %q: %w", path, err)
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if present, err := hasLinkedWorktreeMarker(ctx, filepath.Join(path, entry.Name())); present || err != nil {
+			return present, err
+		}
+	}
+	return false, nil
+}
+
+func hasLinkedWorktreeMarker(ctx context.Context, path string) (bool, error) {
+	inspection, err := inspectWorktreeMarker(ctx, filepath.Join(path, ".git"))
+	if err != nil {
+		return false, err
+	}
+	if inspection.state == worktreeMarkerValid {
+		return true, nil
+	}
+	return inspection.state == worktreeMarkerInvalid && inspection.reason != ".git marker is a directory", nil
+}
+
+func (a *WorktreeAdapter) scanWorktreeUnit(
+	ctx context.Context,
+	root worktreeRoot,
+	visited map[string]bool,
+) ([]types.DebrisInfo, error) {
+	canonical := canonicalExistingPath(root.path)
+	if visited[canonical] {
+		return nil, nil
+	}
+	items, err := a.scanEntry(ctx, canonical, root.source, root.memberDepth)
+	if err != nil || len(items) == 0 {
+		return items, err
+	}
+	visited[canonical] = true
+	return applyWorktreeUnitSizes(ctx, items, canonical)
+}
+
+func applyWorktreeUnitSizes(ctx context.Context, items []types.DebrisInfo, path string) ([]types.DebrisInfo, error) {
+	sizes := estimateDirSizes(ctx, []string{path})
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	for i := range items {
+		items[i].Size = sizes[items[i].Path]
+	}
+	return items, nil
+}
+
+func filterDebrisUnderRoots(items []types.DebrisInfo, roots []string) []types.DebrisInfo {
+	kept := items[:0]
+	for _, item := range items {
+		if pathUnderRoots(item.Path, roots) {
+			kept = append(kept, item)
+		}
+	}
+	return kept
+}
+
+func sortWorktreeResults(results []types.DebrisInfo) []types.DebrisInfo {
 	sort.Slice(results, func(i, j int) bool {
 		if results[i].Path != results[j].Path {
 			return results[i].Path < results[j].Path
@@ -164,7 +408,7 @@ func (a *WorktreeAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([]t
 		}
 		return results[i].Status < results[j].Status
 	})
-	return results, nil
+	return results
 }
 
 func normalizedWorktreeScanRoots(roots []string) []string {

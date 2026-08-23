@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/sungjunlee/aibris/internal/testutil"
+	"github.com/sungjunlee/aibris/internal/types"
 )
 
 func setTestModTime(t *testing.T, path string, modTime time.Time) {
@@ -303,4 +306,101 @@ func fileModTime(t *testing.T, path string) time.Time {
 		t.Fatal(err)
 	}
 	return info.ModTime()
+}
+
+func TestApplyCodexHomeScanRoots_DefaultHomeStillAppends(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+
+	got, err := applyCodexHomeScanRoots(types.ScanOptions{}, []string{home})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsPath(got, home) || !containsPath(got, codexHome) {
+		t.Fatalf("default home roots = %v; want $HOME and CODEX_HOME", got)
+	}
+}
+
+func TestApplyCodexHomeScanRoots_ExplicitRootIsHardBoundary(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+	root := filepath.Join(home, "workspace")
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := applyCodexHomeScanRoots(types.ScanOptions{}, []string{root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != root {
+		t.Fatalf("explicit roots = %v; want only %q", got, root)
+	}
+}
+
+func TestApplyCodexHomeScanRoots_ExplicitHomeIsHardBoundary(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+
+	got, err := applyCodexHomeScanRoots(
+		types.ScanOptions{ExplicitRoots: true},
+		[]string{home},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != home {
+		t.Fatalf("explicit $HOME roots = %v; want only $HOME", got)
+	}
+}
+
+func TestUncoveredCodexHomeWarning_ExplicitRoot(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	t.Setenv("CODEX_HOME", t.TempDir())
+	root := filepath.Join(home, "workspace")
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	warning, err := UncoveredCodexHomeWarning(types.ScanOptions{Roots: []string{root}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if warning == "" {
+		t.Fatal("want one uncovered Codex home diagnostic")
+	}
+	homeWarning, err := UncoveredCodexHomeWarning(types.ScanOptions{Roots: []string{home}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if homeWarning != "" {
+		t.Fatalf("default home warning = %q; want empty", homeWarning)
+	}
+	explicitHome, err := UncoveredCodexHomeWarning(types.ScanOptions{
+		Roots:         []string{home},
+		ExplicitRoots: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if explicitHome == "" {
+		t.Fatal("want a diagnostic for explicit --root $HOME")
+	}
+}
+
+func containsPath(paths []string, want string) bool {
+	want = canonicalExistingPath(want)
+	for _, path := range paths {
+		if canonicalExistingPath(path) == want {
+			return true
+		}
+	}
+	return false
 }

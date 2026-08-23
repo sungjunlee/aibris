@@ -106,7 +106,7 @@ func mustNormalizeRoots(t *testing.T, root string) []string {
 
 func assertCachedCleanScan(t *testing.T, root string) {
 	t.Helper()
-	_, source, err := scanForClean(context.Background(), mustNormalizeRoots(t, root), nil)
+	_, source, err := scanForClean(context.Background(), mustNormalizeRoots(t, root), nil, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,6 +152,7 @@ func validReuseCache(roots []string, selector string) lastScanCache {
 		Selector:                  selector,
 		CreatedAt:                 time.Now(),
 		Roots:                     append([]string(nil), roots...),
+		ExplicitRoots:             true,
 		Result:                    types.ScanResult{},
 	}
 }

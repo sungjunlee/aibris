@@ -303,7 +303,8 @@ only inventoried regenerable subtrees from units that deletion would protect.
 It never deletes the unit, its branch, or uncommitted work. Strip refuses a
 unit whose working directory sits inside the unit or an inventoried subtree.
 
-Scan roots default to `$HOME`. Use repeatable `--root` flags to narrow scope:
+Scan roots default to `$HOME`. Use repeatable `--root` flags to narrow scope.
+Explicit `--root` is a hard boundary and does not pull in uncovered Codex homes:
 
 ```bash
 aibris scan --root ~/.codex --json
