@@ -301,6 +301,44 @@ func TestBuildCacheAdapter_MissingHomebrewDirAndMissingBrewBinary(t *testing.T) 
 	}
 }
 
+func TestBuildCacheAdapter_GOENVFile(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	envCache := filepath.Join(home, "from-goenv")
+	writeGoBuildFixture(t, envCache)
+	writeGoBuildFixture(t, testutil.GoBuildCache(home))
+	goenv := filepath.Join(home, "goenv")
+	if err := os.WriteFile(goenv, []byte("GOCACHE="+envCache+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GOENV", goenv)
+
+	results := scanGoBuild(t)
+	if results[0].Path != envCache {
+		t.Errorf("Path = %q; want GOENV GOCACHE %q", results[0].Path, envCache)
+	}
+}
+
+func TestBuildCacheAdapter_ProcessEnvWinsOverGOENVFile(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	processCache := filepath.Join(home, ".cache", "process-gocache")
+	fileCache := filepath.Join(home, "from-goenv")
+	writeGoBuildFixture(t, processCache)
+	writeGoBuildFixture(t, fileCache)
+	goenv := filepath.Join(home, "goenv")
+	if err := os.WriteFile(goenv, []byte("GOCACHE="+fileCache+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GOENV", goenv)
+	t.Setenv("GOCACHE", processCache)
+
+	results := scanGoBuild(t)
+	if results[0].Path != processCache {
+		t.Errorf("Path = %q; want process GOCACHE %q", results[0].Path, processCache)
+	}
+}
+
 func TestBuildCacheAdapter_GOCACHEEnv(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
@@ -389,13 +427,22 @@ func TestBuildCacheAdapter_UnsetGOCACHEIgnoresHomeDotCacheWhenUserCacheDiffers(t
 func TestBuildCacheAdapter_ScanDoesNotRequireGoEnv(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
-	t.Setenv("PATH", "")
+	binDir := t.TempDir()
+	marker := filepath.Join(home, "go-env-ran")
+	script := "#!/bin/sh\ntouch \"" + marker + "\"\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(binDir, "go"), []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir)
 	goBuild := testutil.GoBuildCache(home)
 	writeGoBuildFixture(t, goBuild)
 
 	results := scanGoBuild(t)
 	if results[0].Path != goBuild {
 		t.Errorf("Path = %q; want %q", results[0].Path, goBuild)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatal("scan invoked go; want env + UserCacheDir + GOENV file only")
 	}
 }
 

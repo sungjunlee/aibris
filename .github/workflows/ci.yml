@@ -72,14 +72,16 @@ jobs:
       - name: Test Windows binary and home-containment contracts
         run: go test -race -count=1 -cover . -run '^(TestWindowsCLIContractBinaryCommands|TestWindowsCLIContractRootContainmentAndHomeIsolation|TestCLIContractDestructiveCommandIsolatesWindowsUserCache)$'
       - name: Test recorded-cwd volume safety
-        run: go test -race -count=1 -cover ./internal/adapter -run '^(TestRecordedCWDVolumeIDUsesWindowsVolumePath|TestAgentStateStoreClassifiersRecordedCWDAncestorAvailability)$'
+        run: go test -race -count=1 -cover ./internal/adapter -run '^(TestRecordedCWDVolumeIDUsesWindowsVolumePath|TestAgentStateStoreClassifiersRecordedCWDAncestorAvailability|TestBuildCacheAdapter_GoBuild$|TestBuildCacheAdapter_GOCACHEEnv|TestBuildCacheAdapter_GOCACHEOutsideRoots|TestBuildCacheAdapter_GOENVFile)$'
       - name: Test cross-platform CLI contracts
         run: go test -race -count=1 -cover . -run '^(TestCLIContractInvalidFlag|TestCLIContractCleanHelpMatchesPolicyVocabulary)$'
       - name: Test platform-safe command and cleanup identity behavior
         run: go test -race -count=1 -cover ./cmd -run '^(TestWindowsCleanupPathIdentityRejectsReparsePoint|TestCleanCmd_NegativeAge|TestCleanCmd_GuideNoGuideErrors|TestParseAge|TestCleanCmd_InvalidSelector|TestParseCleanSelectorsTrimAndDeduplicate)$'
+      - name: Test effective GOCACHE cleanup safety
+        run: go test -race -count=1 -cover ./internal/cleaner -run '^TestIsSafeTarget_GoBuildCacheUnderHome$'
       - name: Test HOME hermeticity under isolated profile
         run: |
-          go test -race -count=1 -cover ./internal/testutil -run '^(TestSetHomeRedirectsUserHomeDir|TestSetHomeRedirectsUserCacheDir|TestSetHomePreservesVolumeShape)$'
+          go test -race -count=1 -cover ./internal/testutil -run '^(TestSetHomeRedirectsUserHomeDir|TestSetHomeRedirectsUserCacheDir|TestSetHomePreservesVolumeShape|TestSetHomeClearsGOCACHE|TestSetHomeDisablesGOENV|TestGoBuildCacheMatchesUserCacheDir)$'
           go test -race -count=1 -cover ./cmd -run '^TestAgentStateEntryFingerprintTracksEntrySet$'
           go test -race -count=1 -cover ./internal/scanner -run '^(TestScan_Default|TestNormalizeRoots_DefaultHome)$'
       - name: Test nested perfharness module environment

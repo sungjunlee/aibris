@@ -105,6 +105,7 @@ func newCLIContractCommand(t *testing.T, ctx context.Context, home string, extra
 	values["HOMEPATH"] = strings.TrimPrefix(home, homeDrive)
 	values["XDG_CACHE_HOME"] = cache
 	values["LOCALAPPDATA"] = cache
+	values["GOENV"] = "off"
 	values["TMPDIR"] = temp
 	values["TMP"] = temp
 	values["TEMP"] = temp
@@ -132,6 +133,7 @@ func filteredCLIContractEnv() []string {
 		"CODEX_HOME":         true,
 		"AIBRIS_CODEX_HOMES": true,
 		"GOCACHE":            true,
+		"GOENV":              true,
 	}
 	var env []string
 	for _, entry := range os.Environ() {

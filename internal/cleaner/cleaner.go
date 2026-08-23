@@ -18,7 +18,7 @@ import (
 var safePathPrefixes = []string{
 	".codex", ".claude", ".cursor", ".cache", ".npm", ".gradle", ".cargo",
 	"Caches", "projects", ".codeium", "node_modules",
-	"DerivedData", ".dartServer", "go-build",
+	"DerivedData", ".dartServer",
 }
 
 var (
@@ -51,7 +51,15 @@ func IsSafeTarget(home string, item types.DebrisInfo) bool {
 		_, ok := safeHomeRel(home, item.Path)
 		return ok
 	}
+	if goBuildCacheTarget(item) {
+		_, ok := safeHomeRel(home, item.Path)
+		return ok
+	}
 	return IsSafePath(home, item.Path)
+}
+
+func goBuildCacheTarget(item types.DebrisInfo) bool {
+	return item.Tool == types.ToolBuildCache && item.ID == "go-build"
 }
 
 func safeHomeRel(home, target string) (string, bool) {

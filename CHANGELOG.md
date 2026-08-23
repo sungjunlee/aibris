@@ -4,11 +4,13 @@
 
 ### Changed
 
-- Go build-cache discovery uses `$GOCACHE` when that path exists and is under
-  requested roots, otherwise `UserCacheDir/go-build` (Darwin
+- Go build-cache discovery uses process `$GOCACHE`, then the `go env -w` file
+  (`$GOENV` or `UserConfigDir/go/env`), then `UserCacheDir/go-build` (Darwin
   `~/Library/Caches/go-build`, Windows `%LocalAppData%\go-build`, Linux
-  `~/.cache/go-build`). Execution of `go clean -cache` refuses if the live
-  GOCACHE path no longer matches the planned path.
+  `~/.cache/go-build`). A configured GOCACHE is reported only when it exists
+  and is under requested roots; it does not fall back to UserCacheDir.
+  Execution of `go clean -cache` refuses if the live path no longer matches
+  the planned path. Last-scan cache schema is 10.
 
 - Explicit `--root` is a hard scan boundary for worktree and ai-logs. Default
   `$HOME` scans still cover `$CODEX_HOME` / `$AIBRIS_CODEX_HOMES`. An explicit

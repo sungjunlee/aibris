@@ -19,15 +19,17 @@ import (
 // TEMP and TMP are intentionally not changed here; callers that need
 // temporary-directory isolation should set those variables explicitly.
 //
-// CODEX_HOME, AIBRIS_CODEX_HOMES, and GOCACHE override where live stores
-// sit, so they are cleared too: the fixture home stays the only Codex home
-// and the default UserCacheDir/go-build cache is used unless a test sets
-// them explicitly.
+// CODEX_HOME, AIBRIS_CODEX_HOMES, GOCACHE, and GOENV override where live
+// stores sit, so they are cleared too: the fixture home stays the only
+// Codex home and the default UserCacheDir/go-build cache is used unless a
+// test sets them explicitly. GOENV=off matches `go env` and stops tests
+// from reading the operator's `go env -w` file.
 func SetHome(tb testing.TB, home string) {
 	tb.Helper()
 	tb.Setenv("CODEX_HOME", "")
 	tb.Setenv("AIBRIS_CODEX_HOMES", "")
 	tb.Setenv("GOCACHE", "")
+	tb.Setenv("GOENV", "off")
 	tb.Setenv("HOME", home)
 	tb.Setenv("USERPROFILE", home)
 	drive := filepath.VolumeName(home)

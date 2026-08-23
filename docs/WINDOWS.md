@@ -149,8 +149,9 @@ These areas are unsupported or unaudited:
 
 - The native installation workflow is manual; `install.sh` does not install or
   update `aibris.exe`.
-- The Go build cache is discovered as `$GOCACHE` when that variable is set and
-  under requested roots, otherwise `%LocalAppData%\go-build`. npm, pip, and uv
+- The Go build cache is discovered as process `$GOCACHE`, else the `go env -w`
+  file, else `%LocalAppData%\go-build`. A configured GOCACHE outside requested
+  roots is skipped rather than falling back. npm, pip, and uv
   cache candidates still use Unix-oriented home paths such as `.npm\_cacache`,
   `.cache\pip`, and `.cache\uv`; do not rely on them to find normal Windows
   cache installations.

@@ -73,6 +73,15 @@ func TestSetHomeClearsGOCACHE(t *testing.T) {
 	}
 }
 
+func TestSetHomeDisablesGOENV(t *testing.T) {
+	t.Setenv("GOENV", "/ambient/go/env")
+	SetHome(t, t.TempDir())
+
+	if got := os.Getenv("GOENV"); got != "off" {
+		t.Fatalf("GOENV = %q; want off", got)
+	}
+}
+
 func TestGoBuildCacheMatchesUserCacheDir(t *testing.T) {
 	home := t.TempDir()
 	SetHome(t, home)

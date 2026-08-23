@@ -32,7 +32,8 @@ func TestIsSafePath(t *testing.T) {
 		{"cursor projects", home + "/.cursor/projects/myproj", true},
 		{"go build cache", home + "/.cache/go-build", true},
 		{"darwin library go-build", home + "/Library/Caches/go-build", true},
-		{"windows local go-build", home + "/AppData/Local/go-build", true},
+		{"windows local go-build not a generic prefix", home + "/AppData/Local/go-build", false},
+		{"unrelated go-build directory", home + "/important/go-build", false},
 		{"npm cache", home + "/.npm/_cacache", true},
 		{"gradle cache", home + "/.gradle/caches", true},
 		{"cargo registry", home + "/.cargo/registry", true},
@@ -54,6 +55,34 @@ func TestIsSafePath(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := IsSafePath(home, tt.target); got != tt.want {
 				t.Errorf("IsSafePath(%q, %q) = %v; want %v", home, tt.target, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsSafeTarget_GoBuildCacheUnderHome(t *testing.T) {
+	home := "/home/user"
+	item := types.DebrisInfo{
+		Tool:           types.ToolBuildCache,
+		Category:       types.CategoryBuildCache,
+		ID:             "go-build",
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{"go", "clean", "-cache"},
+	}
+	tests := []struct {
+		name string
+		path string
+		want bool
+	}{
+		{"windows local", home + "/AppData/Local/go-build", true},
+		{"custom name under home", home + "/gocache", true},
+		{"outside home", "/tmp/gocache", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			item.Path = tt.path
+			if got := IsSafeTarget(home, item); got != tt.want {
+				t.Errorf("IsSafeTarget(%q) = %v; want %v", tt.path, got, tt.want)
 			}
 		})
 	}
@@ -1223,6 +1252,35 @@ func TestExecute_GoCleanCacheRefusesStaleGOCACHE(t *testing.T) {
 	}
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Error("go clean -cache must not run when GOCACHE drifted")
+	}
+}
+
+func TestExecute_GoCleanCacheAllowsHomeCustomGOCACHE(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	planned := filepath.Join(home, "gocache")
+	if err := os.MkdirAll(planned, 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GOCACHE", planned)
+	binDir := t.TempDir()
+	writeExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\nexit 0\n")
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	total, err := Execute([]types.DebrisInfo{{
+		ID:             "go-build",
+		Tool:           types.ToolBuildCache,
+		Category:       types.CategoryBuildCache,
+		Path:           planned,
+		Size:           4,
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{"go", "clean", "-cache"},
+	}})
+	if err != nil {
+		t.Fatalf("custom GOCACHE under home refused: %v", err)
+	}
+	if total != 4 {
+		t.Fatalf("total = %d; want 4", total)
 	}
 }
 
