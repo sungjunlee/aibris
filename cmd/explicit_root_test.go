@@ -40,7 +40,8 @@ func TestScanAndClean_ExplicitRootIsHardWorktreeBoundary(t *testing.T) {
 	planOut, _ := captureStdStreams(func() {
 		resetCleanFlags()
 		rootCmd.SetArgs([]string{
-			"clean", "--json", "--dry-run", "--no-guide",
+			"clean", "--json", "--dry-run", "--no-guide", "--include-paths",
+			"--include-active-worktrees", "--age=1ns",
 			"--category=worktree", "--root", unit,
 		})
 		if err := rootCmd.Execute(); err != nil {
@@ -72,7 +73,8 @@ func TestExplicitHomeDoesNotReuseDefaultScanCache(t *testing.T) {
 	planOut, _ := captureStdStreams(func() {
 		resetCleanFlags()
 		rootCmd.SetArgs([]string{
-			"clean", "--json", "--dry-run", "--no-guide",
+			"clean", "--json", "--dry-run", "--no-guide", "--include-paths",
+			"--include-active-worktrees", "--age=1ns",
 			"--category=worktree", "--root", home,
 		})
 		if err := rootCmd.Execute(); err != nil {
@@ -80,6 +82,7 @@ func TestExplicitHomeDoesNotReuseDefaultScanCache(t *testing.T) {
 		}
 	})
 	assertPlanTargetsUnderRoot(t, planOut, home)
+	assertPlanScanSource(t, planOut, "live")
 }
 
 func writeCmdLinkedWorktree(t *testing.T, worktreeDir, parentRepoDir, name string) {
@@ -128,23 +131,46 @@ func assertJSONItemsUnderRoot(t *testing.T, stdout, root string) {
 func assertPlanTargetsUnderRoot(t *testing.T, stdout, root string) {
 	t.Helper()
 	var document struct {
+		PhysicalTargets []struct {
+			Path *string `json:"path"`
+		} `json:"physical_targets"`
 		Rows []struct {
-			ID   string `json:"id"`
-			Path string `json:"path"`
+			Path *string `json:"path"`
 		} `json:"rows"`
 	}
 	if err := json.Unmarshal([]byte(stdout), &document); err != nil {
 		t.Fatalf("plan JSON: %v\n%s", err, stdout)
 	}
-	ids := map[string]bool{}
-	for _, row := range document.Rows {
-		ids[row.ID] = true
-		if row.Path != "" && !pathUnderTestRoot(row.Path, root) {
-			t.Errorf("plan path %q is outside %q", row.Path, root)
+	if len(document.PhysicalTargets) == 0 {
+		t.Fatalf("plan had no physical targets:\n%s", stdout)
+	}
+	for _, target := range document.PhysicalTargets {
+		if target.Path == nil || *target.Path == "" {
+			t.Fatalf("physical target missing path; pass --include-paths:\n%s", stdout)
+		}
+		if !pathUnderTestRoot(*target.Path, root) {
+			t.Errorf("plan path %q is outside %q", *target.Path, root)
 		}
 	}
-	if ids["runtime-hash"] {
-		t.Fatalf("plan included uncovered Codex home unit:\n%s", stdout)
+	for _, row := range document.Rows {
+		if row.Path != nil && *row.Path != "" && !pathUnderTestRoot(*row.Path, root) {
+			t.Errorf("plan row path %q is outside %q", *row.Path, root)
+		}
+	}
+}
+
+func assertPlanScanSource(t *testing.T, stdout, want string) {
+	t.Helper()
+	var document struct {
+		Evidence struct {
+			Source string `json:"source"`
+		} `json:"evidence"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &document); err != nil {
+		t.Fatalf("plan JSON: %v\n%s", err, stdout)
+	}
+	if document.Evidence.Source != want {
+		t.Fatalf("evidence.source = %q; want %q\n%s", document.Evidence.Source, want, stdout)
 	}
 }
 
