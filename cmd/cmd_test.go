@@ -2013,7 +2013,7 @@ func TestCleanCmd_CleanupFailureExitsNonZero(t *testing.T) {
 		resetCleanFlags()
 		home := t.TempDir()
 		testutil.SetHome(t, home)
-		cache := filepath.Join(home, ".cache", "go-build")
+		cache := testutil.GoBuildCache(home)
 		if err := os.MkdirAll(cache, 0755); err != nil {
 			t.Fatal(err)
 		}

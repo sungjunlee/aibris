@@ -443,6 +443,8 @@ func cliContractEnv(environ []string, home string) []string {
 		"LOCALAPPDATA":       true,
 		"CODEX_HOME":         true,
 		"AIBRIS_CODEX_HOMES": true,
+		"GOCACHE":            true,
+		"GOENV":              true,
 	}
 	env := make([]string, 0, len(environ)+len(isolatedKeys))
 	for _, entry := range environ {
@@ -463,6 +465,7 @@ func cliContractEnv(environ []string, home string) []string {
 		"HOMEPATH="+homePath,
 		"XDG_CACHE_HOME="+cacheHome,
 		"LOCALAPPDATA="+cacheHome,
+		"GOENV=off",
 	)
 }
 

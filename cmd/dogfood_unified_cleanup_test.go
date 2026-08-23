@@ -48,7 +48,7 @@ func TestDogfoodUnifiedJourneyRepresentativeHome(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(modules, "pkg"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	goBuild := filepath.Join(home, ".cache", "go-build")
+	goBuild := testutil.GoBuildCache(home)
 	if err := os.MkdirAll(filepath.Join(goBuild, "aa", "bb"), 0755); err != nil {
 		t.Fatal(err)
 	}

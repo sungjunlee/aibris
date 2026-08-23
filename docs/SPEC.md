@@ -379,7 +379,7 @@ Cross-category containment uses the same physical-component contract:
 | ---------- | --------------- | ------- | ------------------- |
 | `worktree` | orphaned only | `codex`, `claude`, `unknown` | Finite exact registry plus depth-4 convention fallback for directories named `worktrees`, `worktree`, `worktree-*`, or `worktrees-*`; units are validated at direct or one-level nested `.git` markers, and at two-level `<owner>/<leaf>/<checkout>/.git` only inside a registered container |
 | `node_modules` | yes | `node_modules` | `$HOME/**/node_modules`, with noisy system/media/cache directories pruned |
-| `build-cache` | yes | `build-cache` | `~/.cache/go-build`, `~/.gradle/caches`, `~/.npm/_cacache`, `~/.cargo/registry`, `~/Library/Caches/Xcode` |
+| `build-cache` | yes | `build-cache` | process `$GOCACHE`, else `go env -w` file, else `UserCacheDir/go-build` (Linux `~/.cache/go-build`, Darwin `~/Library/Caches/go-build`, Windows `%LocalAppData%\go-build`); a configured GOCACHE is reported only when it exists and is under requested roots; `~/.gradle/caches`, `~/.npm/_cacache`, `~/.cargo/registry`, `~/Library/Caches/Xcode` |
 | `other-cache` | yes | `pip-cache` | `~/.cache/pip`, `~/.cache/uv` |
 | `agent-state` | proof-classified orphaned only; default selection waits for `--agent-state-grace` | `claude`, `cursor` | recorded-cwd project stores; `live` and `undetermined` entries are protected; classic `--age` does not apply |
 | `ai-logs` | no, requires `--risky` | `ai-logs`, `windsurf` | known Codex, Claude, and Windsurf log/cache locations |

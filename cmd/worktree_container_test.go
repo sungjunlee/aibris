@@ -17,6 +17,33 @@ import (
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
+func TestLastScanCacheRejectsPreEffectiveGoCacheRevision(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	roots, err := scanner.NormalizeRoots([]string{home})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const preEffectiveGoCacheRevision = 9
+	if lastScanCacheSchemaVersion <= preEffectiveGoCacheRevision {
+		t.Fatalf("cache revision = %d; must exceed pre-GOCACHE revision %d",
+			lastScanCacheSchemaVersion, preEffectiveGoCacheRevision)
+	}
+	if err := saveLastScanCache(lastScanCache{
+		SchemaVersion:    preEffectiveGoCacheRevision,
+		ProviderIdentity: adapter.DefaultProviderIdentity(),
+		CreatedAt:        time.Now(),
+		Roots:            roots,
+		Result:           types.ScanResult{},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, ok := readFreshLastScanCache(roots); ok {
+		t.Fatal("pre-effective-GOCACHE cache revision was accepted")
+	}
+}
+
 func TestLastScanCacheRejectsPreWorktreeRegistryRevision(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
