@@ -61,7 +61,7 @@ func TestIsSafePath(t *testing.T) {
 }
 
 func TestIsSafeTarget_GoBuildCacheUnderHome(t *testing.T) {
-	home := "/home/user"
+	home := t.TempDir()
 	item := types.DebrisInfo{
 		Tool:           types.ToolBuildCache,
 		Category:       types.CategoryBuildCache,
@@ -74,9 +74,9 @@ func TestIsSafeTarget_GoBuildCacheUnderHome(t *testing.T) {
 		path string
 		want bool
 	}{
-		{"windows local", home + "/AppData/Local/go-build", true},
-		{"custom name under home", home + "/gocache", true},
-		{"outside home", "/tmp/gocache", false},
+		{"windows local", filepath.Join(home, "AppData", "Local", "go-build"), true},
+		{"custom name under home", filepath.Join(home, "gocache"), true},
+		{"outside home", filepath.Join(t.TempDir(), "gocache"), false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
