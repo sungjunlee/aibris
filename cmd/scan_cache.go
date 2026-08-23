@@ -32,8 +32,8 @@ type lastScanCache struct {
 	TargetEvidence            map[string]lastScanTargetEvidence `json:"target_evidence,omitempty"`
 }
 
-func writeLastScanCache(roots []string, identity string, result *types.ScanResult) {
-	writeLastScanCacheForSelector(roots, identity, "", len(scanRoots) > 0, result)
+func writeLastScanCache(roots []string, identity string, result *types.ScanResult, explicit bool) {
+	writeLastScanCacheForSelector(roots, identity, "", explicit, result)
 }
 
 func writeLastScanCacheForSelector(roots []string, identity, selector string, explicit bool, result *types.ScanResult) {

@@ -56,7 +56,7 @@ var scanCmd = &cobra.Command{
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
 			}
-			writeLastScanCache(roots, scanner.DefaultScanner.ProviderIdentity(), result)
+			writeLastScanCache(roots, scanner.DefaultScanner.ProviderIdentity(), result, len(scanRoots) > 0)
 			printJSON(result)
 			if result.Partial() {
 				os.Exit(1)
@@ -85,7 +85,7 @@ var scanCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		writeLastScanCache(roots, scanner.DefaultScanner.ProviderIdentity(), result)
+		writeLastScanCache(roots, scanner.DefaultScanner.ProviderIdentity(), result, len(scanRoots) > 0)
 		printHumanScanResult(ctx, result)
 		if result.Partial() {
 			os.Exit(1)

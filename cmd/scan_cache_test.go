@@ -163,12 +163,12 @@ func TestReadLastScanCacheRejectsForeignProviderIdentity(t *testing.T) {
 		t.Fatal("fixture requires a provider set whose identity differs from the default registry")
 	}
 
-	writeLastScanCache([]string{home}, foreign, &types.ScanResult{TotalCount: 1})
+	writeLastScanCache([]string{home}, foreign, &types.ScanResult{TotalCount: 1}, false)
 	if _, _, ok := readFreshLastScanCache([]string{home}); ok {
 		t.Fatal("readFreshLastScanCache accepted inventory produced by a foreign provider set; clean must fall back to a live scan")
 	}
 
-	writeLastScanCache([]string{home}, scanner.DefaultScanner.ProviderIdentity(), &types.ScanResult{TotalCount: 1})
+	writeLastScanCache([]string{home}, scanner.DefaultScanner.ProviderIdentity(), &types.ScanResult{TotalCount: 1}, false)
 	if _, _, ok := readFreshLastScanCache([]string{home}); !ok {
 		t.Fatal("readFreshLastScanCache rejected inventory produced by the default provider set")
 	}
@@ -215,7 +215,7 @@ func TestWriteLastScanCacheKeepsCacheWithNewerInTreeActivity(t *testing.T) {
 		t.Fatalf("fixture must produce in-tree activity newer than the container: %+v", *scanned)
 	}
 
-	writeLastScanCache(roots, scanner.DefaultScanner.ProviderIdentity(), result)
+	writeLastScanCache(roots, scanner.DefaultScanner.ProviderIdentity(), result, false)
 	if _, ok := readLastScanCache(); !ok {
 		t.Fatal("last-scan cache was invalidated for a home with active in-tree cache activity")
 	}
@@ -259,7 +259,7 @@ func TestReadFreshLastScanCacheRejectsCacheEntryWithoutPathModTime(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeLastScanCache(roots, scanner.DefaultScanner.ProviderIdentity(), result)
+	writeLastScanCache(roots, scanner.DefaultScanner.ProviderIdentity(), result, false)
 	if _, _, ok := readFreshLastScanCache(roots); !ok {
 		t.Fatal("readFreshLastScanCache rejected an intact cache; fixture is wrong")
 	}
@@ -311,7 +311,7 @@ func TestReadFreshLastScanCacheRejectsAgentStateEntryWithoutPathModTime(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeLastScanCache(roots, scanner.DefaultScanner.ProviderIdentity(), result)
+	writeLastScanCache(roots, scanner.DefaultScanner.ProviderIdentity(), result, false)
 	if _, _, ok := readFreshLastScanCache(roots); !ok {
 		t.Fatal("readFreshLastScanCache rejected an intact cache; fixture is wrong")
 	}
