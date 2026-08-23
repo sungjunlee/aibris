@@ -192,6 +192,61 @@ func TestBuildCleanJSONPlanPreservesGuidedRecommendedAndClassicEligiblePolicyDec
 	}
 }
 
+func TestBuildCleanJSONPlanPreservesUniquenessDemotionReasonCodes(t *testing.T) {
+	t.Cleanup(resetCleanFlags)
+	resetCleanFlags()
+	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	unique := cleanupPolicyUnit("unique", now.Add(-7*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unique/.git")
+	unique.Members[0].DefaultBranchUniqueness = UniquenessNotMerged
+	units := []WorktreeCleanupUnit{
+		cleanupPolicyUnit("one", now.Add(-4*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unique/.git"),
+		cleanupPolicyUnit("two", now.Add(-5*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unique/.git"),
+		cleanupPolicyUnit("three", now.Add(-6*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unique/.git"),
+		unique,
+	}
+	policy := DefaultCleanupPolicy(now)
+	items := guidedCleanupItems(units)
+	state := newGuidedCleanStateFromCleanupPlan(
+		scanSource{}, "", guidedCleanTestActivity(), policy, units, items, PlanWorktreeCleanup(units, policy),
+	)
+	physical, _ := cleanAuditPhysicalComponents(items, nil)
+	document, err := buildCleanJSONPlan(
+		context.Background(),
+		&types.ScanResult{Worktrees: items},
+		scanSource{Kind: scanSourceLive, ObservedAt: now},
+		types.PruneOptions{Age: 7 * 24 * time.Hour},
+		&state,
+		nil,
+		nil,
+		cleanAudit{Components: physical},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var uniqueRow *cleanJSONRow
+	for i := range document.Rows {
+		if slices.Contains(document.Rows[i].ReasonCodes, string(DecisionReasonUniqueCommits)) {
+			uniqueRow = &document.Rows[i]
+			break
+		}
+	}
+	if uniqueRow == nil {
+		t.Fatalf("unique row missing: %+v", document.Rows)
+	}
+	if uniqueRow.PolicyDecision != cleanJSONPolicyReviewable {
+		t.Fatalf("unique policy decision = %q; want reviewable", uniqueRow.PolicyDecision)
+	}
+	if uniqueRow.Decision == cleanJSONDecisionSelected {
+		t.Fatalf("unique decision = %q; unique units must not be default-selected", uniqueRow.Decision)
+	}
+	if !slices.Contains(uniqueRow.ReasonCodes, string(DecisionReasonUniqueCommits)) {
+		t.Fatalf("unique reason codes = %v; want unique_commits_not_in_default", uniqueRow.ReasonCodes)
+	}
+	if slices.Contains(uniqueRow.ReasonCodes, "policy_decision") && len(uniqueRow.ReasonCodes) == 1 {
+		t.Fatal("uniqueness reason was collapsed to policy_decision")
+	}
+}
+
 func TestBuildCleanJSONPlanKeepsB1ActionOwnersButCountsTheirBytesOnce(t *testing.T) {
 	t.Cleanup(resetCleanFlags)
 	resetCleanFlags()
@@ -528,6 +583,8 @@ func TestCleanJSONReasonCodeAllowListPreservesKnownCodes(t *testing.T) {
 		DecisionReasonMinimumIdleAge,
 		DecisionReasonMinimumSize,
 		DecisionReasonEligible,
+		DecisionReasonUniqueCommits,
+		DecisionReasonMergeEvidenceUnknown,
 	}
 	gitEvidenceCodes := []GitEvidenceReasonCode{
 		GitReasonEvidenceUnavailable,

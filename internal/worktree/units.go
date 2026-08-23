@@ -61,6 +61,8 @@ type GitWorktreeMember struct {
 	RegisteredActivityAvailable bool
 	RegisteredActivitySource    string
 	RegisteredActivityError     string
+	DefaultBranchUniqueness     DefaultBranchUniqueness
+	DefaultBranchOID            string
 }
 
 type worktreeCleanupUnitRows struct {
@@ -236,11 +238,69 @@ func BuildGitWorktreeMember(ctx context.Context, worktreePath string) GitWorktre
 	member.RepositoryID = repositoryID
 	member.DisplayRepository = displayRepository
 	member.EvidenceAvailable = true
-
-	ctx, cancel := context.WithTimeout(ctx, GitEvidenceCommandTimeout)
-	defer cancel()
-	inspectGitWorktreeEvidence(ctx, &member, RunGitCommand)
+	inspectGitWorktreeEvidenceWithTimeout(ctx, &member)
 	return member
+}
+
+// InspectCleanupUnitsUniqueness runs the default-branch probe on unlocked
+// members. Callers that only need hard-lock/size must not invoke it: the
+// probe may write unreachable merge-tree objects.
+func InspectCleanupUnitsUniqueness(ctx context.Context, units []WorktreeCleanupUnit) {
+	for i := range units {
+		inspectCleanupUnitUniqueness(ctx, &units[i])
+	}
+}
+
+// InspectRecommendedCandidateUniqueness probes only units that would otherwise
+// reach the recommendation arm. Retention, idle, size, activity, and hard
+// locks already hold those rows, so merge-tree must not write into them.
+func InspectRecommendedCandidateUniqueness(ctx context.Context, units []WorktreeCleanupUnit, policy CleanupPolicy) {
+	policy = FillCleanupPolicy(policy)
+	retained := retainedCleanupUnits(units, policy.KeepPerRepository)
+	for i := range units {
+		if !cleanupUnitNeedsUniquenessProbe(units[i], policy, retained) {
+			continue
+		}
+		inspectCleanupUnitUniqueness(ctx, &units[i])
+	}
+}
+
+func inspectCleanupUnitUniqueness(ctx context.Context, unit *WorktreeCleanupUnit) {
+	for j := range unit.Members {
+		member := &unit.Members[j]
+		if member.HardLocked {
+			continue
+		}
+		inspectDefaultBranchUniquenessWithTimeout(ctx, member)
+	}
+}
+
+func cleanupUnitNeedsUniquenessProbe(unit WorktreeCleanupUnit, policy CleanupPolicy, retained map[string]bool) bool {
+	if len(cleanupUnitHardLockReasonCodes(unit, policy)) > 0 {
+		return false
+	}
+	if retained[CleanupUnitStableKey(unit)] {
+		return false
+	}
+	if !unit.LastActivity.Before(policy.Now.Add(-policy.MinIdleAge)) {
+		return false
+	}
+	if unit.Size < policy.MinSize {
+		return false
+	}
+	return cleanupUnitHasRegisteredActivitySource(unit)
+}
+
+func inspectGitWorktreeEvidenceWithTimeout(ctx context.Context, member *GitWorktreeMember) {
+	evidenceCtx, cancel := context.WithTimeout(ctx, GitEvidenceCommandTimeout)
+	defer cancel()
+	inspectGitWorktreeEvidence(evidenceCtx, member, RunGitCommand)
+}
+
+func inspectDefaultBranchUniquenessWithTimeout(ctx context.Context, member *GitWorktreeMember) {
+	uniquenessCtx, cancel := context.WithTimeout(ctx, DefaultBranchUniquenessTimeout)
+	defer cancel()
+	inspectDefaultBranchUniqueness(uniquenessCtx, member, RunGitCommand)
 }
 
 func cleanupUnitHardLockReasons(members []GitWorktreeMember) []GitEvidenceReason {

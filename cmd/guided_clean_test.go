@@ -292,6 +292,65 @@ func TestGuidedCleanAgeReplanDoesNotMutatePriorState(t *testing.T) {
 	}
 }
 
+func TestGuidedCleanupDemotesUniqueAndUnknownReasons(t *testing.T) {
+	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	unique := cleanupPolicyUnit("unique", now.Add(-7*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unique/.git")
+	unique.Members[0].DefaultBranchUniqueness = UniquenessNotMerged
+	unknown := cleanupPolicyUnit("unknown", now.Add(-7*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unknown/.git")
+	unknown.Members[0].DefaultBranchUniqueness = UniquenessUnknown
+	merged := cleanupPolicyUnit("merged", now.Add(-7*24*time.Hour), 512*cleanupPolicyMiB, "/repos/merged/.git")
+	merged.Members[0].DefaultBranchUniqueness = UniquenessMerged
+	units := []WorktreeCleanupUnit{
+		cleanupPolicyUnit("u-one", now.Add(-4*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unique/.git"),
+		cleanupPolicyUnit("u-two", now.Add(-5*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unique/.git"),
+		cleanupPolicyUnit("u-three", now.Add(-6*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unique/.git"),
+		unique,
+		cleanupPolicyUnit("k-one", now.Add(-4*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unknown/.git"),
+		cleanupPolicyUnit("k-two", now.Add(-5*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unknown/.git"),
+		cleanupPolicyUnit("k-three", now.Add(-6*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unknown/.git"),
+		unknown,
+		cleanupPolicyUnit("m-one", now.Add(-4*24*time.Hour), 512*cleanupPolicyMiB, "/repos/merged/.git"),
+		cleanupPolicyUnit("m-two", now.Add(-5*24*time.Hour), 512*cleanupPolicyMiB, "/repos/merged/.git"),
+		cleanupPolicyUnit("m-three", now.Add(-6*24*time.Hour), 512*cleanupPolicyMiB, "/repos/merged/.git"),
+		merged,
+	}
+	policy := DefaultCleanupPolicy(now)
+	items := guidedCleanupItems(units)
+	state := newGuidedCleanStateFromCleanupPlan(
+		scanSource{}, "", guidedCleanTestActivity(), policy, units, items, PlanWorktreeCleanup(units, policy),
+	)
+	uniqueRow := guidedRowByKey(t, state, unique.TargetPath)
+	if uniqueRow.Policy != guidedCleanPolicyReviewable || uniqueRow.Selected {
+		t.Fatalf("unique row = %+v; want unselected reviewable", uniqueRow)
+	}
+	if !strings.Contains(uniqueRow.Row.Reason, "unique commits not in the local default branch") {
+		t.Fatalf("unique reason = %q; want uniqueness copy", uniqueRow.Row.Reason)
+	}
+	if !slicesContainsReason(uniqueRow.ReasonCodes, DecisionReasonUniqueCommits) {
+		t.Fatalf("unique codes = %v; want unique_commits_not_in_default", uniqueRow.ReasonCodes)
+	}
+	unknownRow := guidedRowByKey(t, state, unknown.TargetPath)
+	if unknownRow.Policy != guidedCleanPolicyReviewable || unknownRow.Selected {
+		t.Fatalf("unknown row = %+v; want unselected reviewable", unknownRow)
+	}
+	if !slicesContainsReason(unknownRow.ReasonCodes, DecisionReasonMergeEvidenceUnknown) {
+		t.Fatalf("unknown codes = %v; want merge_evidence_unknown", unknownRow.ReasonCodes)
+	}
+	mergedRow := guidedRowByKey(t, state, merged.TargetPath)
+	if mergedRow.Policy != guidedCleanPolicyRecommended || !mergedRow.Selected {
+		t.Fatalf("merged row = %+v; want selected recommended", mergedRow)
+	}
+}
+
+func slicesContainsReason(codes []DecisionReasonCode, want DecisionReasonCode) bool {
+	for _, code := range codes {
+		if code == want {
+			return true
+		}
+	}
+	return false
+}
+
 func TestGuidedCleanupPolicyDecisionsDriveClassesAndAgeReplan(t *testing.T) {
 	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
 	units := guidedClassificationUnits(now)

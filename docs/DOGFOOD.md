@@ -972,3 +972,23 @@ young cache as `volume_pressure`. Classic execution with
 `--no-guide --json --force --category=node_modules` emitted a
 `clean_receipt` schema version 1 with status `succeeded`, `requested: 1`,
 `removed: 1`, and `freed_bytes: 4096`. Only the fixture target was deleted.
+
+## 2026-08-22 Default-branch uniqueness demotion
+
+Read-only home inspection of Codex `tamgu_note` worktrees, no deletions:
+
+- `~/.codex/worktrees/48d7` (`codex/v0.7.0-release-prep`) had six unique
+  commits versus `origin/main` and an open GitHub PR. Pre-change guided
+  policy marked it `recommended` because it was idle and large. After
+  uniqueness demotion it must be `reviewable` with
+  `unique_commits_not_in_default`, not default-selected.
+- `~/.codex/worktrees/f192` was a squash-merged checkout (GitHub PR merged;
+  `git cherry` equivalent). It stayed unselected by default because keep=3
+  / min-idle still apply: merged content does not promote into
+  `recommended`.
+- `active` in `scan --json` remained the structural gitdir status for both.
+
+Fixture coverage for the probe (ancestor, single-commit squash, multi-commit
+squash with `git cherry` `+`, unique commits, missing `origin/HEAD`, cancelled
+timeout) lives in `internal/worktree/merge_evidence_test.go`. Policy matrix
+cases live in `internal/worktree/policy_test.go`.

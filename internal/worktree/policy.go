@@ -65,6 +65,8 @@ const (
 	DecisionReasonMinimumIdleAge          DecisionReasonCode = "younger_than_min_idle_age"
 	DecisionReasonMinimumSize             DecisionReasonCode = "below_min_size"
 	DecisionReasonEligible                DecisionReasonCode = "cleanup_recommended"
+	DecisionReasonUniqueCommits           DecisionReasonCode = "unique_commits_not_in_default"
+	DecisionReasonMergeEvidenceUnknown    DecisionReasonCode = "merge_evidence_unknown"
 )
 
 // DecisionReason wraps a stable code so future presentation details can be
@@ -119,9 +121,7 @@ func PlanWorktreeCleanup(units []WorktreeCleanupUnit, policy CleanupPolicy) Clea
 			decision.Reasons = decisionReasons(DecisionReasonActivityNotRegistered)
 			decision.Reasons = append(decision.Reasons, cleanupUnitRecoverabilityReasons(unit)...)
 		default:
-			decision.Class = DecisionRecommended
-			decision.Reasons = decisionReasons(DecisionReasonEligible)
-			decision.Reasons = append(decision.Reasons, cleanupUnitRecoverabilityReasons(unit)...)
+			decision = classifyEligibleCleanupUnit(unit)
 		}
 		decisions = append(decisions, decision)
 	}
@@ -349,7 +349,41 @@ func DecisionReasonDescription(code DecisionReasonCode) string {
 		return "below minimum recommendation size"
 	case DecisionReasonEligible:
 		return "eligible for cleanup recommendation"
+	case DecisionReasonUniqueCommits:
+		return "HEAD has unique commits not in the local default branch"
+	case DecisionReasonMergeEvidenceUnknown:
+		return "default-branch uniqueness could not be determined"
 	default:
 		return "cleanup policy decision"
 	}
+}
+
+func classifyEligibleCleanupUnit(unit WorktreeCleanupUnit) WorktreeCleanupDecision {
+	if reason, ok := uniquenessDemotion(unit); ok {
+		return WorktreeCleanupDecision{
+			Unit:    unit,
+			Class:   DecisionReviewable,
+			Reasons: decisionReasons(reason),
+		}
+	}
+	reasons := decisionReasons(DecisionReasonEligible)
+	reasons = append(reasons, cleanupUnitRecoverabilityReasons(unit)...)
+	return WorktreeCleanupDecision{Unit: unit, Class: DecisionRecommended, Reasons: reasons}
+}
+
+func uniquenessDemotion(unit WorktreeCleanupUnit) (DecisionReasonCode, bool) {
+	sawUnknown := false
+	for _, member := range unit.Members {
+		switch member.DefaultBranchUniqueness {
+		case UniquenessNotMerged:
+			return DecisionReasonUniqueCommits, true
+		case UniquenessMerged:
+		default:
+			sawUnknown = true
+		}
+	}
+	if sawUnknown {
+		return DecisionReasonMergeEvidenceUnknown, true
+	}
+	return "", false
 }

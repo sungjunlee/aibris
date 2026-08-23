@@ -156,6 +156,7 @@ func newGitFixtureRepoAt(t testing.TB, repo string) {
 	runGitFixture(t, repo, "add", "README.md")
 	runGitFixture(t, repo, "commit", "-m", "initial")
 	runGitFixture(t, repo, "push", "-u", "origin", "main")
+	runGitFixture(t, repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
 }
 
 func writeGitFixtureFile(t testing.TB, repo, name, content string) {

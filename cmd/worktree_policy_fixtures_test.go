@@ -19,6 +19,7 @@ func cleanupPolicyUnit(name string, activity time.Time, size int64, repositoryID
 			LastActivity:                activity,
 			ActivityAvailable:           true,
 			RegisteredActivityAvailable: true,
+			DefaultBranchUniqueness:     UniquenessMerged,
 			Reason: GitEvidenceReason{
 				Code: GitReasonAttachedBranch,
 			},

@@ -70,6 +70,7 @@ func buildGuidedCleanState(ctx context.Context, result *types.ScanResult, source
 	policy.CurrentWorkingDirectory = cwd
 	policy.MinIdleAge = minIdleAge
 	policy = fillCleanupPolicy(policy)
+	worktree.InspectRecommendedCandidateUniqueness(ctx, units, policy)
 	plan := worktree.PlanWorktreeCleanup(units, policy)
 	state := newGuidedCleanStateFromCleanupPlan(source, reason, activity, policy, units, items, plan)
 	state.Inventory = append([]types.DebrisInfo(nil), result.Worktrees...)

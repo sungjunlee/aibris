@@ -173,6 +173,80 @@ func TestPlanWorktreeCleanupPolicyMatrix(t *testing.T) {
 			},
 		},
 		{
+			name: "unique idle large unit is reviewable not recommended",
+			units: []WorktreeCleanupUnit{
+				cleanupPolicyUnit("first", now.Add(-4*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unique/.git"),
+				cleanupPolicyUnit("second", now.Add(-5*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unique/.git"),
+				cleanupPolicyUnit("third", now.Add(-6*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unique/.git"),
+				cleanupPolicyUniqueUnit(cleanupPolicyUnit("unique", now.Add(-7*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unique/.git")),
+			},
+			policy: defaultPolicy,
+			want: map[string]cleanupPolicyWant{
+				"first":  {DecisionReviewable, []DecisionReasonCode{DecisionReasonRepositoryRetention}},
+				"second": {DecisionReviewable, []DecisionReasonCode{DecisionReasonRepositoryRetention}},
+				"third":  {DecisionReviewable, []DecisionReasonCode{DecisionReasonRepositoryRetention}},
+				"unique": {DecisionReviewable, []DecisionReasonCode{DecisionReasonUniqueCommits}},
+			},
+		},
+		{
+			name: "unknown uniqueness demotes without locking",
+			units: []WorktreeCleanupUnit{
+				cleanupPolicyUnit("first", now.Add(-4*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unknown/.git"),
+				cleanupPolicyUnit("second", now.Add(-5*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unknown/.git"),
+				cleanupPolicyUnit("third", now.Add(-6*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unknown/.git"),
+				cleanupPolicyUnknownUnit(cleanupPolicyUnit("unknown", now.Add(-7*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unknown/.git")),
+			},
+			policy: defaultPolicy,
+			want: map[string]cleanupPolicyWant{
+				"first":   {DecisionReviewable, []DecisionReasonCode{DecisionReasonRepositoryRetention}},
+				"second":  {DecisionReviewable, []DecisionReasonCode{DecisionReasonRepositoryRetention}},
+				"third":   {DecisionReviewable, []DecisionReasonCode{DecisionReasonRepositoryRetention}},
+				"unknown": {DecisionReviewable, []DecisionReasonCode{DecisionReasonMergeEvidenceUnknown}},
+			},
+		},
+		{
+			name: "mixed members fail closed to unique demotion",
+			units: []WorktreeCleanupUnit{
+				cleanupPolicyUnit("first", now.Add(-4*24*time.Hour), 512*cleanupPolicyMiB, "/repos/mixed/.git"),
+				cleanupPolicyUnit("second", now.Add(-5*24*time.Hour), 512*cleanupPolicyMiB, "/repos/mixed/.git"),
+				cleanupPolicyUnit("third", now.Add(-6*24*time.Hour), 512*cleanupPolicyMiB, "/repos/mixed/.git"),
+				cleanupPolicyMixedUniqueUnit(cleanupPolicyUnit("mixed", now.Add(-7*24*time.Hour), 512*cleanupPolicyMiB, "/repos/mixed/.git", "/repos/mixed/.git")),
+			},
+			policy: defaultPolicy,
+			want: map[string]cleanupPolicyWant{
+				"first":  {DecisionReviewable, []DecisionReasonCode{DecisionReasonRepositoryRetention}},
+				"second": {DecisionReviewable, []DecisionReasonCode{DecisionReasonRepositoryRetention}},
+				"third":  {DecisionReviewable, []DecisionReasonCode{DecisionReasonRepositoryRetention}},
+				"mixed":  {DecisionReviewable, []DecisionReasonCode{DecisionReasonUniqueCommits}},
+			},
+		},
+		{
+			name: "all-merged fourth unit stays recommended",
+			units: []WorktreeCleanupUnit{
+				cleanupPolicyMergedUnit(cleanupPolicyUnit("first", now.Add(-4*24*time.Hour), 512*cleanupPolicyMiB, "/repos/merged/.git")),
+				cleanupPolicyMergedUnit(cleanupPolicyUnit("second", now.Add(-5*24*time.Hour), 512*cleanupPolicyMiB, "/repos/merged/.git")),
+				cleanupPolicyMergedUnit(cleanupPolicyUnit("third", now.Add(-6*24*time.Hour), 512*cleanupPolicyMiB, "/repos/merged/.git")),
+				cleanupPolicyMergedUnit(cleanupPolicyUnit("fourth", now.Add(-7*24*time.Hour), 512*cleanupPolicyMiB, "/repos/merged/.git")),
+			},
+			policy: defaultPolicy,
+			want: map[string]cleanupPolicyWant{
+				"first":  {DecisionReviewable, []DecisionReasonCode{DecisionReasonRepositoryRetention}},
+				"second": {DecisionReviewable, []DecisionReasonCode{DecisionReasonRepositoryRetention}},
+				"third":  {DecisionReviewable, []DecisionReasonCode{DecisionReasonRepositoryRetention}},
+				"fourth": {DecisionRecommended, []DecisionReasonCode{DecisionReasonEligible, DecisionReasonCode(GitReasonAttachedBranch)}},
+			},
+		},
+		{
+			name: "recent activity still locks merge-proven units",
+			units: []WorktreeCleanupUnit{
+				cleanupPolicyMergedUnit(cleanupPolicyUnit("recent-merged", now.Add(-time.Hour), 512*cleanupPolicyMiB, "/repos/recent-merged/.git")),
+			},
+			policy: defaultPolicy,
+			want: map[string]cleanupPolicyWant{
+				"recent-merged": {DecisionLocked, []DecisionReasonCode{DecisionReasonRecentActivity}},
+			},
+		},
+		{
 			name: "historical session presence has no policy effect beyond last activity",
 			units: func() []WorktreeCleanupUnit {
 				units := []WorktreeCleanupUnit{
@@ -312,6 +386,7 @@ func cleanupPolicyUnit(name string, activity time.Time, size int64, repositoryID
 			LastActivity:                activity,
 			ActivityAvailable:           true,
 			RegisteredActivityAvailable: true,
+			DefaultBranchUniqueness:     UniquenessMerged,
 			Reason: GitEvidenceReason{
 				Code: GitReasonAttachedBranch,
 			},
@@ -326,6 +401,35 @@ func cleanupPolicyUnit(name string, activity time.Time, size int64, repositoryID
 		ActivityAvailable:           true,
 		RegisteredActivityAvailable: true,
 	}
+}
+
+func cleanupPolicyMergedUnit(unit WorktreeCleanupUnit) WorktreeCleanupUnit {
+	for i := range unit.Members {
+		unit.Members[i].DefaultBranchUniqueness = UniquenessMerged
+	}
+	return unit
+}
+
+func cleanupPolicyUniqueUnit(unit WorktreeCleanupUnit) WorktreeCleanupUnit {
+	for i := range unit.Members {
+		unit.Members[i].DefaultBranchUniqueness = UniquenessNotMerged
+	}
+	return unit
+}
+
+func cleanupPolicyUnknownUnit(unit WorktreeCleanupUnit) WorktreeCleanupUnit {
+	for i := range unit.Members {
+		unit.Members[i].DefaultBranchUniqueness = UniquenessUnknown
+	}
+	return unit
+}
+
+func cleanupPolicyMixedUniqueUnit(unit WorktreeCleanupUnit) WorktreeCleanupUnit {
+	unit.Members[0].DefaultBranchUniqueness = UniquenessMerged
+	if len(unit.Members) > 1 {
+		unit.Members[1].DefaultBranchUniqueness = UniquenessNotMerged
+	}
+	return unit
 }
 
 func cleanupPolicyDirtyUnit(unit WorktreeCleanupUnit) WorktreeCleanupUnit {

@@ -59,6 +59,12 @@ const (
 	DecisionReasonMinimumIdleAge          = worktree.DecisionReasonMinimumIdleAge
 	DecisionReasonMinimumSize             = worktree.DecisionReasonMinimumSize
 	DecisionReasonEligible                = worktree.DecisionReasonEligible
+	DecisionReasonUniqueCommits           = worktree.DecisionReasonUniqueCommits
+	DecisionReasonMergeEvidenceUnknown    = worktree.DecisionReasonMergeEvidenceUnknown
+
+	UniquenessMerged    = worktree.UniquenessMerged
+	UniquenessNotMerged = worktree.UniquenessNotMerged
+	UniquenessUnknown   = worktree.UniquenessUnknown
 
 	WorktreeActivityCodexSession = worktree.WorktreeActivityCodexSession
 	WorktreeActivityHeadReflog   = worktree.WorktreeActivityHeadReflog
@@ -80,6 +86,14 @@ func PlanWorktreeCleanup(units []WorktreeCleanupUnit, policy CleanupPolicy) Clea
 
 func BuildWorktreeCleanupUnits(items []types.DebrisInfo) ([]WorktreeCleanupUnit, error) {
 	return worktree.BuildWorktreeCleanupUnits(context.Background(), items)
+}
+
+func InspectCleanupUnitsUniqueness(ctx context.Context, units []WorktreeCleanupUnit) {
+	worktree.InspectCleanupUnitsUniqueness(ctx, units)
+}
+
+func InspectRecommendedCandidateUniqueness(ctx context.Context, units []WorktreeCleanupUnit, policy CleanupPolicy) {
+	worktree.InspectRecommendedCandidateUniqueness(ctx, units, policy)
 }
 
 func fillCleanupPolicy(policy CleanupPolicy) CleanupPolicy {
