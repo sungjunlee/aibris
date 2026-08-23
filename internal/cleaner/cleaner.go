@@ -18,7 +18,7 @@ import (
 var safePathPrefixes = []string{
 	".codex", ".claude", ".cursor", ".cache", ".npm", ".gradle", ".cargo",
 	"Caches", "projects", ".codeium", "node_modules",
-	"DerivedData", ".dartServer",
+	"DerivedData", ".dartServer", "go-build",
 }
 
 var (
@@ -226,6 +226,11 @@ func executeWithContextOutput(
 		}
 		commandFallbackPathRemoval := false
 		if cleanupKind(w) == types.CleanupCommand && len(w.CleanupCommand) > 0 {
+			if err := verifyGoCleanTarget(w); err != nil {
+				errs = append(errs, err)
+				fmt.Fprintf(errorOutput, "error: %v\n", err)
+				continue
+			}
 			fmt.Fprintf(output, "running %d/%d: %s (%s) via %s ...\n",
 				i+1, len(worktrees), debrisName(w), w.Category, strings.Join(w.CleanupCommand, " "))
 			if err := runMutationBarrier(ctx, barrier, w); err != nil {
@@ -295,6 +300,24 @@ func debrisName(w types.DebrisInfo) string {
 		return w.ID
 	}
 	return string(w.Tool)
+}
+
+// verifyGoCleanTarget fails closed when a planned `go clean -cache` item no
+// longer matches the live go build cache location. It never shells out to
+// `go env`; the live location is resolved the same way the scanner resolves
+// it ($GOCACHE, else os.UserCacheDir()/go-build).
+func verifyGoCleanTarget(item types.DebrisInfo) error {
+	if len(item.CleanupCommand) < 3 ||
+		item.CleanupCommand[0] != "go" ||
+		item.CleanupCommand[1] != "clean" ||
+		item.CleanupCommand[2] != "-cache" {
+		return nil
+	}
+	live, ok := adapter.GoBuildCachePath()
+	if !ok || live != filepath.Clean(item.Path) {
+		return fmt.Errorf("refusing %s cleanup: live go build cache %q does not match planned path %q", item.ID, live, item.Path)
+	}
+	return nil
 }
 
 func cleanupKind(w types.DebrisInfo) types.CleanupKind {

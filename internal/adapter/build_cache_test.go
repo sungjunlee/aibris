@@ -23,6 +23,7 @@ func TestBuildCacheAdapter_Name(t *testing.T) {
 func TestBuildCacheAdapter_NoCacheDirs(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
+	t.Setenv("GOCACHE", "")
 
 	a := &BuildCacheAdapter{}
 	results, err := a.Scan(context.Background(), types.ScanOptions{})
@@ -37,6 +38,7 @@ func TestBuildCacheAdapter_NoCacheDirs(t *testing.T) {
 func TestBuildCacheAdapter_GoBuild(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
+	t.Setenv("GOCACHE", "")
 	goBuild := filepath.Join(home, ".cache", "go-build")
 	os.MkdirAll(filepath.Join(goBuild, "cache-entry"), 0755)
 	os.WriteFile(filepath.Join(goBuild, "cache-entry", "a.out"), []byte("binary"), 0644)
@@ -72,6 +74,7 @@ func TestBuildCacheAdapter_GoBuild(t *testing.T) {
 func TestBuildCacheAdapter_FileNotDir(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
+	t.Setenv("GOCACHE", "")
 	os.MkdirAll(filepath.Join(home, ".cache"), 0755)
 	os.WriteFile(filepath.Join(home, ".cache", "go-build"), []byte("not-a-dir"), 0644)
 
@@ -172,6 +175,7 @@ func TestBuildCacheAdapter_Cargo(t *testing.T) {
 func TestBuildCacheAdapter_Multiple(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
+	t.Setenv("GOCACHE", "")
 	os.MkdirAll(filepath.Join(home, ".cache", "go-build", "e1"), 0755)
 	os.WriteFile(filepath.Join(home, ".cache", "go-build", "e1", "a.out"), make([]byte, 10), 0644)
 	os.MkdirAll(filepath.Join(home, ".gradle", "caches", "8.14"), 0755)
@@ -453,5 +457,130 @@ func TestBuildCacheAdapter_ContainerModTimeWinsOverOlderTree(t *testing.T) {
 	}
 	if !item.PathModTime.Equal(expected) {
 		t.Errorf("gradle PathModTime = %v; want container mtime %v", item.PathModTime, expected)
+	}
+}
+
+func TestBuildCacheAdapter_GOCACHEOverride(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	custom := filepath.Join(home, "custom-gocache")
+	os.MkdirAll(filepath.Join(custom, "entry"), 0755)
+	os.WriteFile(filepath.Join(custom, "entry", "blob"), []byte("x"), 0644)
+	t.Setenv("GOCACHE", custom)
+
+	results, err := (&BuildCacheAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1, got %d", len(results))
+	}
+	if results[0].ID != "go-build" || results[0].Path != custom {
+		t.Errorf("got ID=%q path=%q; want go-build at %q", results[0].ID, results[0].Path, custom)
+	}
+}
+
+func TestBuildCacheAdapter_GOCACHENotReportedWhenMissing(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	t.Setenv("GOCACHE", filepath.Join(home, "missing", "gocache"))
+
+	results, err := (&BuildCacheAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 0 {
+		t.Errorf("expected 0 (GOCACHE dir does not exist), got %d", len(results))
+	}
+}
+
+func TestBuildCacheAdapter_GOCACHEOutsideRootsIgnored(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	outside := t.TempDir()
+	gocache := filepath.Join(outside, "gocache")
+	os.MkdirAll(filepath.Join(gocache, "entry"), 0755)
+	os.WriteFile(filepath.Join(gocache, "entry", "blob"), []byte("x"), 0644)
+	t.Setenv("GOCACHE", gocache)
+
+	results, err := (&BuildCacheAdapter{}).Scan(context.Background(), types.ScanOptions{Roots: []string{home}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range results {
+		if r.ID == "go-build" {
+			t.Fatalf("go-build reported although GOCACHE %q is outside roots %v", gocache, home)
+		}
+	}
+}
+
+// TestBuildCacheAdapter_GoBuildUserCacheDirDefault pins the $GOCACHE-unset
+// default: os.UserCacheDir()/go-build on every platform. SetHome already
+// points the per-OS cache env vars at <home>/.cache, so this equals the old
+// Linux fixture path there.
+func TestBuildCacheAdapter_GoBuildUserCacheDirDefault(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	t.Setenv("GOCACHE", "")
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		t.Skipf("os.UserCacheDir unavailable: %v", err)
+	}
+	goBuild := filepath.Join(cacheDir, "go-build")
+	os.MkdirAll(filepath.Join(goBuild, "entry"), 0755)
+	os.WriteFile(filepath.Join(goBuild, "entry", "blob"), []byte("x"), 0644)
+
+	results, err := (&BuildCacheAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1, got %d", len(results))
+	}
+	if results[0].Path != goBuild {
+		t.Errorf("path = %q; want %q", results[0].Path, goBuild)
+	}
+	if got := results[0].CleanupCommand; len(got) != 3 || got[0] != "go" || got[1] != "clean" || got[2] != "-cache" {
+		t.Errorf("CleanupCommand = %v; want [go clean -cache]", got)
+	}
+}
+
+// TestBuildCacheAdapter_GoBuildPlatformDefaultCandidates covers each
+// platform's native UserCacheDir layout with its cache env var reset to the
+// OS default instead of the SetHome override.
+func TestBuildCacheAdapter_GoBuildPlatformDefaultCandidates(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	t.Setenv("GOCACHE", "")
+
+	var want string
+	switch runtime.GOOS {
+	case "windows":
+		localAppData := filepath.Join(home, "AppData", "Local")
+		t.Setenv("LOCALAPPDATA", localAppData)
+		want = filepath.Join(localAppData, "go-build")
+	case "darwin":
+		t.Setenv("XDG_CACHE_HOME", "")
+		want = filepath.Join(home, "Library", "Caches", "go-build")
+	default:
+		t.Setenv("XDG_CACHE_HOME", "")
+		want = filepath.Join(home, ".cache", "go-build")
+	}
+	os.MkdirAll(filepath.Join(want, "entry"), 0755)
+	os.WriteFile(filepath.Join(want, "entry", "blob"), []byte("x"), 0644)
+
+	results, err := (&BuildCacheAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, r := range results {
+		if r.ID == "go-build" && r.Path == want {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("%s: go-build not reported at native default %q; results: %+v", runtime.GOOS, want, results)
 	}
 }

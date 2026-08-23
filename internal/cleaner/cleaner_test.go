@@ -1297,6 +1297,66 @@ func TestExecute_CommandCancellation(t *testing.T) {
 	}
 }
 
+func TestExecute_RefusesGoCleanWhenLiveGOCACHEDiffers(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	planned := filepath.Join(home, ".cache", "go-build")
+	os.MkdirAll(planned, 0755)
+	os.WriteFile(filepath.Join(planned, "file"), []byte("data"), 0644)
+	live := filepath.Join(home, "Library", "Caches", "go-build")
+	t.Setenv("GOCACHE", live)
+
+	total, err := Execute([]types.DebrisInfo{{
+		ID:             "go-build",
+		Tool:           types.ToolBuildCache,
+		Category:       types.CategoryBuildCache,
+		Path:           planned,
+		Size:           4,
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{"go", "clean", "-cache"},
+	}})
+	if err == nil {
+		t.Fatal("expected refusal error when live GOCACHE differs from planned path")
+	}
+	if !strings.Contains(err.Error(), "refusing") {
+		t.Errorf("err = %v; want refusal message", err)
+	}
+	if total != 0 {
+		t.Fatalf("total = %d; want 0", total)
+	}
+	if _, statErr := os.Stat(planned); statErr != nil {
+		t.Errorf("planned path should remain untouched after refusal; stat err = %v", statErr)
+	}
+}
+
+func TestExecute_GoCleanAllowedWhenLiveGOCACHAMatches(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	binDir := t.TempDir()
+	writeExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\nexit 0\n")
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	path := filepath.Join(home, ".cache", "go-build")
+	os.MkdirAll(path, 0755)
+	os.WriteFile(filepath.Join(path, "file"), []byte("data"), 0644)
+	t.Setenv("GOCACHE", path)
+
+	total, err := Execute([]types.DebrisInfo{{
+		ID:             "go-build",
+		Tool:           types.ToolBuildCache,
+		Category:       types.CategoryBuildCache,
+		Path:           path,
+		Size:           4,
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{"go", "clean", "-cache"},
+	}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if total != 4 {
+		t.Fatalf("total = %d; want 4", total)
+	}
+}
+
 func writeExecutable(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0755); err != nil {

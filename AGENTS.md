@@ -99,7 +99,7 @@ skills/
 | cursor | agent-state | orphaned만 ✅ (분류는 증명 기반; `--age` 미적용; `--agent-state-grace`가 기본 선택을 지연; live/undetermined 보호) | `~/.cursor/projects/<name>/` |
 | windsurf | ai-logs | 🚫 `--risky` | `~/.codeium/windsurf/` |
 | node_modules | node_modules | ✅ | `$HOME/**/node_modules/` with noisy directories pruned |
-| build-cache | build-cache | ✅ | `~/.cache/go-build/`, `~/.gradle/caches/`, `~/.npm/_cacache/`, `~/.cargo/registry/`, `~/Library/Caches/Xcode/`, `~/Library/Caches/Homebrew/` (`brew cleanup --prune=all`), `~/Library/Developer/Xcode/DerivedData/`, `~/Library/Caches/CocoaPods/`, `~/.dartServer/` (never `~/.pub-cache`) |
+| build-cache | build-cache | ✅ | go-build: `$GOCACHE` (설정시, 존재+root 범위 내) 또는 `os.UserCacheDir()/go-build` (미설정시; Linux `~/.cache/go-build/`, macOS `~/Library/Caches/go-build/`, Windows `%LocalAppData%/go-build`), `~/.gradle/caches/`, `~/.npm/_cacache/`, `~/.cargo/registry/`, `~/Library/Caches/Xcode/`, `~/Library/Caches/Homebrew/` (`brew cleanup --prune=all`), `~/Library/Developer/Xcode/DerivedData/`, `~/Library/Caches/CocoaPods/`, `~/.dartServer/` (never `~/.pub-cache`) |
 | pip-cache | other-cache | ✅ | `~/.cache/pip/`, `~/.cache/uv/` |
 | ai-logs | ai-logs | 🚫 `--risky` | `$CODEX_HOME/logs_2.sqlite`, `$CODEX_HOME/archived_sessions/` (`$CODEX_HOME` 기본값 `~/.codex`; `$AIBRIS_CODEX_HOMES` 추가 home 지원), `~/.claude/command-audit.log`, `~/.claude/file-history/` |
 
