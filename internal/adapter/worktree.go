@@ -281,13 +281,15 @@ func isWorktreeContainerMember(path string, containers []registeredWorktreeConta
 	if worktreeUnitMeta(path, containers).memberDepth == registeredWorktreeMemberDepth {
 		return true
 	}
-	return isWorktreeRootDir(filepath.Base(filepath.Dir(path)))
+	return isWorktreeRootDir(filepath.Base(filepath.Dir(canonicalExistingPath(path))))
 }
 
 func worktreeUnitMeta(path string, containers []registeredWorktreeContainer) worktreeRoot {
+	canonical := canonicalExistingPath(path)
+	parent := filepath.Dir(canonical)
 	for _, registered := range containers {
 		container := canonicalExistingPath(filepath.Join(registered.base, registered.relativePath))
-		if pathUnderRoots(path, []string{container}) && canonicalExistingPath(path) != container {
+		if parent == container {
 			return worktreeRoot{
 				path:        path,
 				source:      registered.source,

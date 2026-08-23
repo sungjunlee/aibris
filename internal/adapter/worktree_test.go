@@ -738,6 +738,33 @@ func TestWorktreeAdapter_ExplicitRootDirectOwnerDiscoversOneUnit(t *testing.T) {
 	}
 }
 
+func TestWorktreeAdapter_NestedCheckoutIsNotAnOuterOwner(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	owner := filepath.Join(home, ".relay", "worktrees", "repo-hash")
+	createWorktreeGit(t, filepath.Join(owner, "good"), filepath.Join(home, "parent"), "good")
+	if err := os.MkdirAll(filepath.Join(owner, "bad", ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	nested := filepath.Join(owner, "good")
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{Roots: []string{nested}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 0 {
+		t.Fatalf("nested checkout became a worktree unit: %+v", results)
+	}
+
+	ownerRows, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{Roots: []string{owner}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ownerRows) != 1 || ownerRows[0].Status != types.WorktreePlain {
+		t.Fatalf("owner scan = %+v; want one protected plain-dir", ownerRows)
+	}
+}
+
 func TestWorktreeAdapter_ExplicitPlainDirIsNotAWorktreeUnit(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)

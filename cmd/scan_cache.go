@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -164,6 +165,17 @@ func lastScanIdentityReason(cache lastScanCache, roots []string, explicit bool) 
 		return "scan roots changed"
 	}
 	return ""
+}
+
+func emitCachedExplicitRootWarning(roots []string, explicit bool) {
+	warning, err := adapter.UncoveredCodexHomeWarning(types.ScanOptions{
+		Roots:         roots,
+		ExplicitRoots: explicit,
+	})
+	if err != nil || warning == "" {
+		return
+	}
+	fmt.Fprint(os.Stderr, "warning: "+warning+"\n")
 }
 
 func lastScanSelectorReason(cached, want string) string {

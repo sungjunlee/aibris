@@ -777,6 +777,7 @@ func tryCachedCleanScan(roots, excludes []string, selector string, explicit, sho
 		printLastScanRescan(cachedScanMissReason(ok, reason), showProgress)
 		return nil, scanSource{}, false
 	}
+	emitCachedExplicitRootWarning(roots, explicit)
 	printLastScanReuse(age, showProgress)
 	return result, scanSource{
 		Kind:       scanSourceCached,
