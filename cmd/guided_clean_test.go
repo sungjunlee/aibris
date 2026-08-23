@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -225,6 +226,58 @@ func TestGuidedProjectedFreedSizeUsesNormalizedTargets(t *testing.T) {
 
 	if got := guidedProjectedFreedSize(state); got != parent.Size {
 		t.Fatalf("projected freed = %d; want normalized parent size %d", got, parent.Size)
+	}
+}
+
+func TestReplanGuidedCleanAgeProbesNewlyEligibleUnits(t *testing.T) {
+	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	mergedPath := createCleanCodexGitWorktree(t, home, "merged-old")
+	uniquePath := createCleanCodexGitWorktree(t, home, "unique-old")
+	writeGitFixtureFile(t, uniquePath, "extra.txt", "extra\n")
+	runGitFixture(t, uniquePath, "add", "extra.txt")
+	runGitFixture(t, uniquePath, "commit", "-m", "unique leftover")
+
+	repo := "/repos/replan/.git"
+	merged := cleanupPolicyUnit("merged-old", now.Add(-10*24*time.Hour), 512*cleanupPolicyMiB, repo)
+	merged.Members[0].DefaultBranchUniqueness = ""
+	merged.Members[0].WorktreePath = mergedPath
+	unique := cleanupPolicyUnit("unique-old", now.Add(-10*24*time.Hour), 512*cleanupPolicyMiB, repo)
+	unique.Members[0].DefaultBranchUniqueness = ""
+	unique.Members[0].WorktreePath = uniquePath
+	units := []WorktreeCleanupUnit{
+		cleanupPolicyUnit("newer-one", now.Add(-4*24*time.Hour), 512*cleanupPolicyMiB, repo),
+		cleanupPolicyUnit("newer-two", now.Add(-5*24*time.Hour), 512*cleanupPolicyMiB, repo),
+		cleanupPolicyUnit("newer-three", now.Add(-6*24*time.Hour), 512*cleanupPolicyMiB, repo),
+		merged,
+		unique,
+	}
+	policy := DefaultCleanupPolicy(now)
+	policy.MinIdleAge = 14 * 24 * time.Hour
+	items := guidedCleanupItems(units)
+	state := newGuidedCleanStateFromCleanupPlan(
+		scanSource{}, "", guidedCleanTestActivity(), policy, units, items, PlanWorktreeCleanup(units, policy),
+	)
+	mergedRow := guidedRowByKey(t, state, merged.TargetPath)
+	if mergedRow.Policy != guidedCleanPolicyReviewable {
+		t.Fatalf("initial merged-old = %+v; want idle reviewable", mergedRow)
+	}
+
+	next, _, ok := applyGuidedCleanCommand(state, "age 7d")
+	if !ok {
+		t.Fatal("age 7d not handled")
+	}
+	mergedNext := guidedRowByKey(t, next, merged.TargetPath)
+	if mergedNext.Policy != guidedCleanPolicyRecommended || !mergedNext.Selected {
+		t.Fatalf("replanned merged-old = %+v; want recommended after probe", mergedNext)
+	}
+	uniqueNext := guidedRowByKey(t, next, unique.TargetPath)
+	if uniqueNext.Policy != guidedCleanPolicyReviewable || uniqueNext.Selected {
+		t.Fatalf("replanned unique-old = %+v; want unselected reviewable", uniqueNext)
+	}
+	if !slicesContainsReason(uniqueNext.ReasonCodes, DecisionReasonUniqueCommits) {
+		t.Fatalf("unique-old codes = %v; want unique_commits_not_in_default", uniqueNext.ReasonCodes)
 	}
 }
 

@@ -127,6 +127,45 @@ func TestInspectCleanupUnitsUniquenessRecordsUnlockedMembers(t *testing.T) {
 	assertUniqueness(t, units[0].Members[0], UniquenessNotMerged)
 }
 
+func TestGitCommandEnvDisablesLazyFetch(t *testing.T) {
+	found := false
+	for _, entry := range gitCommandEnv() {
+		if entry == "GIT_NO_LAZY_FETCH=1" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("gitCommandEnv missing GIT_NO_LAZY_FETCH=1")
+	}
+}
+
+func TestInspectRecommendedCandidateUniquenessProbesEligibleUnique(t *testing.T) {
+	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	_, path := newUniquenessWorktree(t, "eligible-unique")
+	writeGitFixtureFile(t, path, "unique.txt", "unique\n")
+	runGitFixture(t, path, "add", "unique.txt")
+	runGitFixture(t, path, "commit", "-m", "unique")
+	member := BuildGitWorktreeMember(context.Background(), path)
+	unique := WorktreeCleanupUnit{
+		TargetPath:                  path,
+		Size:                        512 * cleanupPolicyMiB,
+		LastActivity:                now.Add(-7 * 24 * time.Hour),
+		ActivityAvailable:           true,
+		RegisteredActivityAvailable: true,
+		Members:                     []GitWorktreeMember{member},
+	}
+	repo := member.RepositoryID
+	units := []WorktreeCleanupUnit{
+		cleanupPolicyUnit("r1", now.Add(-4*24*time.Hour), 512*cleanupPolicyMiB, repo),
+		cleanupPolicyUnit("r2", now.Add(-5*24*time.Hour), 512*cleanupPolicyMiB, repo),
+		cleanupPolicyUnit("r3", now.Add(-6*24*time.Hour), 512*cleanupPolicyMiB, repo),
+		unique,
+	}
+	InspectRecommendedCandidateUniqueness(context.Background(), units, DefaultCleanupPolicy(now))
+	assertUniqueness(t, units[3].Members[0], UniquenessNotMerged)
+}
+
 func TestInspectRecommendedCandidateUniquenessSkipsRecentUnits(t *testing.T) {
 	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
 	unit := cleanupPolicyUnit("recent", now.Add(-time.Hour), 512*cleanupPolicyMiB, "/repos/r/.git")

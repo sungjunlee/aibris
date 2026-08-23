@@ -173,6 +173,26 @@ func TestPlanWorktreeCleanupPolicyMatrix(t *testing.T) {
 			},
 		},
 		{
+			name: "unprobed eligible unit fail-closes as unknown",
+			units: []WorktreeCleanupUnit{
+				cleanupPolicyUnit("first", now.Add(-4*24*time.Hour), 512*cleanupPolicyMiB, "/repos/empty/.git"),
+				cleanupPolicyUnit("second", now.Add(-5*24*time.Hour), 512*cleanupPolicyMiB, "/repos/empty/.git"),
+				cleanupPolicyUnit("third", now.Add(-6*24*time.Hour), 512*cleanupPolicyMiB, "/repos/empty/.git"),
+				func() WorktreeCleanupUnit {
+					unit := cleanupPolicyUnit("empty", now.Add(-7*24*time.Hour), 512*cleanupPolicyMiB, "/repos/empty/.git")
+					unit.Members[0].DefaultBranchUniqueness = ""
+					return unit
+				}(),
+			},
+			policy: defaultPolicy,
+			want: map[string]cleanupPolicyWant{
+				"first":  {DecisionReviewable, []DecisionReasonCode{DecisionReasonRepositoryRetention}},
+				"second": {DecisionReviewable, []DecisionReasonCode{DecisionReasonRepositoryRetention}},
+				"third":  {DecisionReviewable, []DecisionReasonCode{DecisionReasonRepositoryRetention}},
+				"empty":  {DecisionReviewable, []DecisionReasonCode{DecisionReasonMergeEvidenceUnknown}},
+			},
+		},
+		{
 			name: "unique idle large unit is reviewable not recommended",
 			units: []WorktreeCleanupUnit{
 				cleanupPolicyUnit("first", now.Add(-4*24*time.Hour), 512*cleanupPolicyMiB, "/repos/unique/.git"),

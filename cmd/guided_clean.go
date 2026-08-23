@@ -531,8 +531,10 @@ func replanGuidedCleanAge(state guidedCleanState, age time.Duration) (guidedClea
 	}
 	next.Policy = fillCleanupPolicy(state.Policy)
 	next.Policy.MinIdleAge = age
-	decisions := make(map[string]WorktreeCleanupDecision, len(state.Units))
-	for _, decision := range worktree.PlanWorktreeCleanup(state.Units, next.Policy).Decisions {
+	next.Units = append([]WorktreeCleanupUnit(nil), state.Units...)
+	worktree.InspectRecommendedCandidateUniqueness(context.Background(), next.Units, next.Policy)
+	decisions := make(map[string]WorktreeCleanupDecision, len(next.Units))
+	for _, decision := range worktree.PlanWorktreeCleanup(next.Units, next.Policy).Decisions {
 		decisions[cleanupUnitStableKey(decision.Unit)] = decision
 	}
 	for i := range next.Rows {

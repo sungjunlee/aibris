@@ -268,7 +268,7 @@ func InspectRecommendedCandidateUniqueness(ctx context.Context, units []Worktree
 func inspectCleanupUnitUniqueness(ctx context.Context, unit *WorktreeCleanupUnit) {
 	for j := range unit.Members {
 		member := &unit.Members[j]
-		if member.HardLocked {
+		if member.HardLocked || member.DefaultBranchUniqueness != "" {
 			continue
 		}
 		inspectDefaultBranchUniquenessWithTimeout(ctx, member)
