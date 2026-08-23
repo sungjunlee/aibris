@@ -762,6 +762,17 @@ func printExecutionReceiptSummary(targetCount int, receipt cleanExecutionReceipt
 	fmt.Printf("  partial    %d %s\n", partial, itemNoun(partial))
 	fmt.Printf("  failed     %d %s\n", failed, itemNoun(failed))
 	fmt.Printf("  freed      %s\n", cleaner.FormatSize(receipt.FreedBytes))
+	if remaining := receiptRemainingBytes(receipt); remaining > 0 {
+		fmt.Printf("  remaining  %s\n", cleaner.FormatSize(remaining))
+	}
+}
+
+func receiptRemainingBytes(receipt cleanExecutionReceipt) int64 {
+	var remaining int64
+	for _, unit := range receipt.Units {
+		remaining += unit.ResidualBytes
+	}
+	return remaining
 }
 
 func printWorktreeExecutionReceipts(receipt cleanExecutionReceipt) {

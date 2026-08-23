@@ -1447,6 +1447,42 @@ func TestExecute_CommandFailureDoesNotFallback(t *testing.T) {
 	}
 }
 
+func TestExecute_CommandCancellationDoesNotCreditRemainingPayload(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	binDir := t.TempDir()
+	writeExecutable(t, filepath.Join(binDir, "fake-sleep"), "#!/bin/sh\nsleep 2\n")
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	path := filepath.Join(home, ".cache", "uv")
+	if err := os.MkdirAll(path, 0755); err != nil {
+		t.Fatal(err)
+	}
+	payload := []byte("still-here")
+	if err := os.WriteFile(filepath.Join(path, "file"), payload, 0644); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	total, err := ExecuteWithContext(ctx, []types.DebrisInfo{{
+		ID:             "uv",
+		Tool:           types.ToolPipCache,
+		Path:           path,
+		Size:           int64(len(payload)),
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{"fake-sleep"},
+	}})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v; want context.Canceled", err)
+	}
+	if total != 0 {
+		t.Fatalf("total = %d; want 0 when payload remains after cancel", total)
+	}
+	if _, err := os.Stat(filepath.Join(path, "file")); err != nil {
+		t.Errorf("payload should remain; stat err = %v", err)
+	}
+}
+
 func TestExecute_CommandCancellation(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)

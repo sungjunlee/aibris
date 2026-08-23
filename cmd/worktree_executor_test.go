@@ -111,6 +111,10 @@ func TestExecutePreparedCommandCancellationAfterStartRemainsFailed(t *testing.T)
 	if err := os.MkdirAll(targetPath, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	payload := []byte("cancelled-command-payload")
+	if err := os.WriteFile(filepath.Join(targetPath, "payload"), payload, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	marker := filepath.Join(home, "command-started")
 	command := filepath.Join(t.TempDir(), "cancel-after-start")
 	writeJSONReceiptExecutable(t, command, "#!/bin/sh\ntouch \"$1\"\nsleep 5\n")
@@ -119,7 +123,7 @@ func TestExecutePreparedCommandCancellationAfterStartRemainsFailed(t *testing.T)
 		Tool:           types.ToolBuildCache,
 		Category:       types.CategoryBuildCache,
 		Path:           targetPath,
-		Size:           17,
+		Size:           int64(len(payload)),
 		CleanupKind:    types.CleanupCommand,
 		CleanupCommand: []string{command, marker},
 	}
@@ -148,6 +152,9 @@ func TestExecutePreparedCommandCancellationAfterStartRemainsFailed(t *testing.T)
 	unit := singleExecutionUnit(t, receipt)
 	if unit.State != cleanExecutionFailed || unit.PhysicalRemoved || unit.FreedBytes != 0 {
 		t.Fatalf("cancelled command receipt = %+v; want failed with retained physical owner", unit)
+	}
+	if unit.ResidualBytes != int64(len(payload)) {
+		t.Fatalf("cancelled residual = %d; want remaining payload %d", unit.ResidualBytes, len(payload))
 	}
 	assertPathExists(t, targetPath)
 }

@@ -356,6 +356,9 @@ func TestCleanJSONReceiptCommandSuccessDoesNotInventFreedBytes(t *testing.T) {
 	if !found {
 		t.Fatalf("reason codes = %v; want no_bytes_reclaimed", codes)
 	}
+	if _, ok := targets[0]["residual_bytes"]; !ok {
+		t.Fatalf("retained owner missing residual_bytes: %+v", targets[0])
+	}
 	if _, err := os.Lstat(goCache); err != nil {
 		t.Fatalf("command cleanup should preserve its physical owner: %v", err)
 	}

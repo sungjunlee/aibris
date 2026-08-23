@@ -57,7 +57,7 @@ type cleanJSONReceiptPhysicalTarget struct {
 	Requested       bool     `json:"requested"`
 	Bytes           int64    `json:"bytes"`
 	FreedBytes      int64    `json:"freed_bytes"`
-	ResidualBytes   int64    `json:"residual_bytes,omitempty"`
+	ResidualBytes   *int64   `json:"residual_bytes,omitempty"`
 	PhysicalRemoved bool     `json:"physical_removed"`
 	Category        string   `json:"category"`
 	Tool            string   `json:"tool"`
@@ -518,10 +518,7 @@ func applyCleanJSONExecutionReceipt(
 			if target.FreedBytes < 0 {
 				target.FreedBytes = 0
 			}
-			target.ResidualBytes = unit.ResidualBytes
-			if unit.PhysicalRemoved {
-				target.ResidualBytes = 0
-			}
+			target.ResidualBytes = residualBytesJSON(unit)
 			target.ReasonCodes = uniqueCleanJSONReasonCodes(
 				append(target.ReasonCodes, cleanJSONReceiptStateReasons(unit)...),
 			)
@@ -532,6 +529,14 @@ func applyCleanJSONExecutionReceipt(
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func residualBytesJSON(unit cleanUnitExecutionReceipt) *int64 {
+	if unit.PhysicalRemoved {
+		return nil
+	}
+	residual := unit.ResidualBytes
+	return &residual
 }
 
 func cleanJSONReceiptStateReasons(unit cleanUnitExecutionReceipt) []string {

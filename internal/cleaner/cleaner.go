@@ -266,6 +266,7 @@ func executeWithContextOutput(
 				continue
 			} else if !errors.Is(err, errCleanupCommandNotFound) {
 				total += freed
+				reportCommandResidual(output, w, freed, residual)
 				if observer != nil {
 					observer(CleanupMutationOutcome{
 						Item: w, MutationAttempted: true, FreedBytes: freed, ResidualBytes: residual,
@@ -363,6 +364,14 @@ func reportCommandCleaned(output io.Writer, w types.DebrisInfo, freed, residual 
 	}
 	fmt.Fprintf(output, "cleaned: %s (%s) via %s — %s\n",
 		w.ID, w.Tool, strings.Join(w.CleanupCommand, " "), FormatSize(freed))
+}
+
+func reportCommandResidual(output io.Writer, w types.DebrisInfo, freed, residual int64) {
+	if freed == 0 && residual == 0 {
+		return
+	}
+	fmt.Fprintf(output, "failed: %s remaining %s (freed %s)\n",
+		w.ID, FormatSize(residual), FormatSize(freed))
 }
 
 func runCleanupCommand(ctx context.Context, argv []string, beforeStart func()) error {

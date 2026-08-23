@@ -18,8 +18,16 @@ func reclaimedBytes(before, after int64) int64 {
 }
 
 func observeReclamation(ctx context.Context, path string, mutate func() error) (int64, int64, error) {
-	before := observedSize(ctx, path)
+	measure := measureAfterContext(ctx)
+	before := observedSize(measure, path)
 	err := mutate()
-	after := observedSize(ctx, path)
+	after := observedSize(measureAfterContext(ctx), path)
 	return reclaimedBytes(before, after), after, err
+}
+
+func measureAfterContext(ctx context.Context) context.Context {
+	if ctx.Err() != nil {
+		return context.Background()
+	}
+	return ctx
 }
