@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/scanreport"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -322,7 +323,8 @@ func buildPhysicalCleanAuditWithLogicalInputs(
 		}
 		return left.FoundSize > right.FoundSize
 	})
-	audit.ReviewOnlyCount, audit.ReviewOnlySize = reviewOnlyWorktreeStats(items)
+	stats := scanreport.ReviewOnlyStats(items)
+	audit.ReviewOnlyCount, audit.ReviewOnlySize = stats.Count, stats.Size
 	return audit
 }
 
