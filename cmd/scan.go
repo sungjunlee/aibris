@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/scanner"
+	"github.com/sungjunlee/aibris/internal/scanreport"
 	"github.com/sungjunlee/aibris/internal/types"
 	"github.com/sungjunlee/aibris/internal/volume"
 )
@@ -315,7 +316,7 @@ func printJSON(r *types.ScanResult) {
 			Message: providerErr.Message,
 		}
 	}
-	if report := homeVolumeReport(r.Worktrees); report != nil {
+	if report := scanreport.HomeVolumeReport(r.Worktrees); report != nil {
 		out.Volume = jsonVolumeFromReport(*report)
 	}
 	for cat, s := range r.ByCategory {
@@ -554,11 +555,12 @@ func printHumanScanResult(ctx context.Context, r *types.ScanResult) {
 			fmt.Printf("  failed      %-12s %s\n", providerErr.Tool, providerErr.Message)
 		}
 	}
-	report := homeVolumeReport(r.Worktrees)
-	printScanHeadline(r, report)
+	defaultPolicy := scanreport.DefaultCleanPolicy()
+	view := scanreport.New(r.Worktrees, defaultPolicy)
+	printScanHeadline(r, view)
 	fmt.Printf("  found       %d %s\n", r.TotalCount, itemNoun(r.TotalCount))
 	fmt.Printf("  found size  %s\n", cleaner.FormatSize(r.PhysicalTotalBytes))
-	printVolumePressureReport(report)
+	printVolumePressureReport(view.Volume)
 	if r.TotalStrippableBytes > 0 {
 		fmt.Printf("  strippable  %s regenerable subtrees inside worktrees (clean --strip)\n",
 			cleaner.FormatSize(r.TotalStrippableBytes))
@@ -566,13 +568,10 @@ func printHumanScanResult(ctx context.Context, r *types.ScanResult) {
 	if r.Partial() {
 		fmt.Println("  default clean unavailable until a complete scan succeeds")
 	} else {
-		// Mirror clean's own defaults, including the agent-state idle floor:
-		// the AI workflow starts from this estimate, so a figure that counts
-		// entries clean would not select is worse than no figure.
-		defaultPolicy := scanDefaultCleanPolicy()
-		diagnostics := summarizeCleanup(r.Worktrees, defaultPolicy)
-		fmt.Printf("  default clean (estimate) %s\n", cleaner.FormatSize(diagnostics.EligibleSize))
-		printCleanupDiagnostics(diagnostics, defaultPolicy)
+		// Printers format the view-model only. EligibleSize already went
+		// through the same eligibility + normalize path clean uses.
+		fmt.Printf("  default clean (estimate) %s\n", cleaner.FormatSize(view.DefaultCleanSize))
+		printCleanupDiagnostics(view.DefaultClean, defaultPolicy)
 	}
 
 	printExclusionDiagnostics(r)
@@ -582,149 +581,44 @@ func printHumanScanResult(ctx context.Context, r *types.ScanResult) {
 	printCodexActivityRecommendations(ctx, r.Worktrees)
 	printProviderDiagnostics(r)
 
-	printScanNext(r)
+	printScanNext(r, view)
 }
 
-func scanDefaultCleanPolicy() types.PruneOptions {
-	opts := types.PruneOptions{
-		Age:                  7 * 24 * time.Hour,
-		AgentStateMinIdleAge: cleaner.DefaultAgentStateMinIdleAge,
-	}
-	opts.RelaxCacheAge, opts.PressureDevice = shouldRelaxCacheAge(false)
-	return opts
-}
-
-type reclaimPath struct {
-	label   string
-	size    int64
-	command string
-}
-
-func printScanNext(r *types.ScanResult) {
+func printScanNext(r *types.ScanResult, view scanreport.View) {
 	fmt.Println("\nnext")
 	if r.Partial() {
 		fmt.Println("  retry aibris scan; cleanup is disabled for this result")
 	} else {
-		printReclaimLadder(scanReclaimPaths(r.Worktrees, scanDefaultCleanPolicy()))
+		printReclaimLadder(view.ReclaimPaths)
 	}
-	printReviewOnlyWorktrees(r.Worktrees)
+	printReviewOnlyWorktreeLine(view.ReviewOnly.Count, view.ReviewOnly.Size)
 	fmt.Println("  aibris scan --json")
 }
 
-func printScanHeadline(r *types.ScanResult, report *volume.Report) {
+func printScanHeadline(r *types.ScanResult, view scanreport.View) {
 	if r.Partial() {
 		return
 	}
-	printScanHeadlinePaths(
-		r.PhysicalTotalBytes,
-		scanReclaimPaths(r.Worktrees, scanDefaultCleanPolicy()),
-		report,
-	)
+	printScanHeadlinePaths(r.PhysicalTotalBytes, view.ReclaimPaths, view.Volume)
 }
 
-func printScanHeadlinePaths(found int64, paths []reclaimPath, report *volume.Report) {
-	fmt.Println(scanHeadline(found, paths, report))
+func printScanHeadlinePaths(found int64, paths []scanreport.ReclaimPath, report *volume.Report) {
+	fmt.Println(scanreport.Headline(found, paths, report))
 	printPressureHint(paths, report)
 }
 
-func scanHeadline(found int64, paths []reclaimPath, report *volume.Report) string {
-	parts := []string{fmt.Sprintf("%s found", cleaner.FormatSize(found))}
-	if path, ok := largestNonDefaultReclaim(paths); ok {
-		parts = append(parts, fmt.Sprintf("largest reclaim %s (%s)",
-			cleaner.FormatSize(path.size), reclaimFlag(path)))
-	}
-	if report != nil {
-		parts = append(parts, fmt.Sprintf("%.0f%% used   %s free   %s",
-			report.UsedPercent,
-			cleaner.FormatSize(int64(report.AvailableBytes)),
-			volume.HumanWord(report.Band)))
-	}
-	return "  " + strings.Join(parts, "   ")
-}
-
-func largestNonDefaultReclaim(paths []reclaimPath) (reclaimPath, bool) {
-	def := reclaimSizeByLabel(paths, "default delete")
-	var best reclaimPath
-	found := false
-	for _, path := range paths {
-		if !beatsDefaultReclaim(path, def) {
-			continue
-		}
-		if !found || path.size > best.size {
-			best = path
-			found = true
-		}
-	}
-	return best, found
-}
-
-func beatsDefaultReclaim(path reclaimPath, defaultSize int64) bool {
-	switch path.label {
-	case "default delete":
-		return false
-	case "pressure caches":
-		return true
-	default:
-		return path.size > defaultSize
-	}
-}
-
-func reclaimSizeByLabel(paths []reclaimPath, label string) int64 {
-	for _, path := range paths {
-		if path.label == label {
-			return path.size
-		}
-	}
-	return 0
-}
-
-func reclaimFlag(path reclaimPath) string {
-	switch path.label {
-	case "pressure caches":
-		return "--pressure"
-	case "strip (keep trees)":
-		return "--strip"
-	default:
-		return "default"
-	}
-}
-
-func printPressureHint(paths []reclaimPath, report *volume.Report) {
+func printPressureHint(paths []scanreport.ReclaimPath, report *volume.Report) {
 	if report == nil || (report.Band != volume.BandLow && report.Band != volume.BandCritical) {
 		return
 	}
-	pressure := reclaimSizeByLabel(paths, "pressure caches")
+	pressure := scanreport.SizeByLabel(paths, "pressure caches")
 	if pressure <= 0 {
 		return
 	}
-	if largest, ok := largestNonDefaultReclaim(paths); ok && reclaimFlag(largest) == "--pressure" {
+	if largest, ok := scanreport.LargestNonDefault(paths); ok && largest.Flag() == "--pressure" {
 		return
 	}
 	fmt.Printf("  reclaim --pressure %s\n", cleaner.FormatSize(pressure))
-}
-
-func isReviewOnlyWorktree(item types.DebrisInfo) bool {
-	return item.Category == types.CategoryWorktree &&
-		item.Status != types.WorktreeActive &&
-		item.Status != types.WorktreeOrphaned
-}
-
-func reviewOnlyWorktreeStats(items []types.DebrisInfo) (int, int64) {
-	n := 0
-	var size int64
-	for _, item := range items {
-		if !isReviewOnlyWorktree(item) {
-			continue
-		}
-		n++
-		size += item.Size
-	}
-	return n, size
-}
-
-func printReviewOnlyWorktrees(items []types.DebrisInfo) {
-	n, size := reviewOnlyWorktreeStats(items)
-	printReviewOnlyWorktreeLine(n, size)
 }
 
 func printReviewOnlyWorktreeLine(n int, size int64) {
@@ -742,116 +636,10 @@ func reviewOnlyNoun(n int) string {
 	return "units"
 }
 
-func printReclaimLadder(paths []reclaimPath) {
+func printReclaimLadder(paths []scanreport.ReclaimPath) {
 	for _, path := range paths {
-		fmt.Printf("  %-20s %10s   %s\n", path.label, cleaner.FormatSize(path.size), path.command)
+		fmt.Printf("  %-20s %10s   %s\n", path.Label, cleaner.FormatSize(path.Size), path.Command)
 	}
-}
-
-func scanReclaimPaths(items []types.DebrisInfo, defaultPolicy types.PruneOptions) []reclaimPath {
-	var paths []reclaimPath
-	defaultSize := summarizeCleanup(items, defaultPolicy).EligibleSize
-	paths = appendReclaimPath(paths, "default delete", defaultSize, "aibris clean --dry-run")
-	stripSize := scanStripEstimate(items, defaultPolicy)
-	paths = appendReclaimPath(paths, "strip (keep trees)", stripSize, "aibris clean --strip --dry-run")
-	pressure := scanPressureEstimate(items, defaultPolicy)
-	if pressure > homeDefaultCleanSize(items, defaultPolicy, defaultSize) {
-		paths = appendReclaimPath(paths, "pressure caches", pressure, "aibris clean --pressure --dry-run")
-	}
-	return paths
-}
-
-func homeDefaultCleanSize(items []types.DebrisInfo, defaultPolicy types.PruneOptions, fallback int64) int64 {
-	homeItems, ok := itemsOnHomeVolume(items)
-	if !ok {
-		return fallback
-	}
-	return summarizeCleanup(homeItems, defaultPolicy).EligibleSize
-}
-
-func appendReclaimPath(paths []reclaimPath, label string, size int64, command string) []reclaimPath {
-	if size <= 0 {
-		return paths
-	}
-	return append(paths, reclaimPath{label: label, size: size, command: command})
-}
-
-func scanStripEstimate(items []types.DebrisInfo, opts types.PruneOptions) int64 {
-	cwd, _ := os.Getwd()
-	return stripEstimateForCWD(items, opts, cwd)
-}
-
-func stripEstimateForCWD(items []types.DebrisInfo, opts types.PruneOptions, cwd string) int64 {
-	targets, _ := selectStripTargets(items, opts, cwd)
-	var total int64
-	for _, target := range targets {
-		total += target.StrippableBytes
-	}
-	return total
-}
-
-var lookupPathDevice = volume.PathDevice
-
-func scanPressureEstimate(items []types.DebrisInfo, defaultPolicy types.PruneOptions) int64 {
-	homeItems, ok := itemsOnHomeVolume(items)
-	if !ok {
-		return summarizeCleanup(items, defaultPolicy).EligibleSize
-	}
-	pressure := defaultPolicy
-	pressure.RelaxCacheAge = true
-	pressure.PressureDevice = ""
-	return summarizeCleanup(homeItems, pressure).EligibleSize
-}
-
-func itemsOnHomeVolume(items []types.DebrisInfo) ([]types.DebrisInfo, bool) {
-	dev, ok := homePressureDevice()
-	if !ok {
-		return nil, false
-	}
-	home := make([]types.DebrisInfo, 0, len(items))
-	for _, item := range items {
-		if itemOnDevice(item.Path, dev) {
-			home = append(home, item)
-		}
-	}
-	return home, true
-}
-
-func homePressureDevice() (string, bool) {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return "", false
-	}
-	dev, err := lookupPathDevice(home)
-	if err != nil || dev == "" {
-		return "", false
-	}
-	return dev, true
-}
-
-func itemOnDevice(path, device string) bool {
-	got, err := lookupPathDevice(path)
-	return err == nil && got == device
-}
-
-func homeVolumeReport(items []types.DebrisInfo) *volume.Report {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return nil
-	}
-	report, err := volume.Inspect(home)
-	if err != nil {
-		return nil
-	}
-	report.Role = "home"
-	dev, err := volume.PathDevice(home)
-	if err != nil {
-		dev = ""
-	}
-	on, other := volume.SplitDebris(dev, cleaner.PhysicalInventory(items))
-	report.DebrisBytes = on
-	report.OtherVolumeDebrisBytes = other
-	return &report
 }
 
 func jsonVolumeFromReport(report volume.Report) *jsonVolume {
@@ -870,7 +658,7 @@ func jsonVolumeFromReport(report volume.Report) *jsonVolume {
 }
 
 func printVolumePressure(items []types.DebrisInfo) {
-	printVolumePressureReport(homeVolumeReport(items))
+	printVolumePressureReport(scanreport.HomeVolumeReport(items))
 }
 
 func printVolumePressureReport(report *volume.Report) {
@@ -1099,81 +887,12 @@ func itemNoun(count int) string {
 	return "items"
 }
 
-type cleanupDiagnostics struct {
-	EligibleCount               int
-	EligibleSize                int64
-	ActiveCount                 int
-	ActiveSize                  int64
-	RiskyCount                  int
-	RiskySize                   int64
-	AgeCount                    int
-	AgeSize                     int64
-	FilterCount                 int
-	FilterSize                  int64
-	AgentStateLiveCount         int
-	AgentStateLiveSize          int64
-	AgentStateUndeterminedCount int
-	AgentStateUndeterminedSize  int64
-	OtherBlocked                map[cleaner.EligibilityReason]cleanupDiagnosticBucket
-}
+type cleanupDiagnostics = scanreport.CleanupProjection
 
-type cleanupDiagnosticBucket struct {
-	Count int
-	Size  int64
-}
+type cleanupDiagnosticBucket = scanreport.CleanupBucket
 
 func summarizeCleanup(items []types.DebrisInfo, opts types.PruneOptions) cleanupDiagnostics {
-	observedAt := time.Now()
-	var summary cleanupDiagnostics
-	var eligible []types.DebrisInfo
-	for _, item := range items {
-		isEligible, reason := cleaner.EvaluateEligibility(item, opts, observedAt)
-		if isEligible {
-			eligible = append(eligible, item)
-			continue
-		}
-		switch reason {
-		case cleaner.EligibilityReasonFiltered:
-			summary.FilterCount++
-			summary.FilterSize += item.Size
-		case cleaner.EligibilityReasonRisky:
-			summary.RiskyCount++
-			summary.RiskySize += item.Size
-		case cleaner.EligibilityReasonActiveWorktree:
-			summary.ActiveCount++
-			summary.ActiveSize += item.Size
-		case cleaner.EligibilityReasonAge:
-			summary.AgeCount++
-			summary.AgeSize += item.Size
-		case cleaner.EligibilityReasonAgentStateLive:
-			summary.AgentStateLiveCount++
-			summary.AgentStateLiveSize += item.Size
-		case cleaner.EligibilityReasonAgentStateUndetermined:
-			summary.AgentStateUndeterminedCount++
-			summary.AgentStateUndeterminedSize += item.Size
-		default:
-			if summary.OtherBlocked == nil {
-				summary.OtherBlocked = make(map[cleaner.EligibilityReason]cleanupDiagnosticBucket)
-			}
-			bucket := summary.OtherBlocked[reason]
-			bucket.Count++
-			bucket.Size += item.Size
-			summary.OtherBlocked[reason] = bucket
-		}
-	}
-	// clean applies the same existence filter and target normalization before
-	// planning an execution, so the estimate counts each physical deletion
-	// once: canonical aliases dedupe, eligible children nested inside an
-	// eligible parent collapse to the parent, and vanished paths drop out.
-	// Remaining clean-time safety protections (git safety, overlap safety,
-	// scan-evidence filtering, physical owner checks) can only reduce the final
-	// plan, which is why the figure is labelled an estimate.
-	planned := cleaner.NormalizeTargets(cleaner.FilterExistingTargets(eligible))
-	for _, target := range planned {
-		summary.EligibleCount++
-		summary.EligibleSize += target.Size
-	}
-	return summary
+	return scanreport.SummarizeCleanup(items, opts)
 }
 
 func printCleanupDiagnostics(summary cleanupDiagnostics, opts types.PruneOptions) {

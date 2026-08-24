@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/scanreport"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -609,7 +610,7 @@ func cleanJSONReceiptInventory(components []cleanJSONSnapshotComponent) []cleanJ
 // as "unavailable" and no thinning is recommended.
 func buildCleanJSONPostClean(owners []types.DebrisInfo) *cleanJSONPostClean {
 	post := cleanJSONPostClean{}
-	if report := homeVolumeReport(owners); report != nil {
+	if report := scanreport.HomeVolumeReport(owners); report != nil {
 		post.Volume = jsonVolumeFromReport(*report)
 	}
 	count, err := listLocalAPFSSnapshots()
