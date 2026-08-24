@@ -67,11 +67,14 @@ func DefaultCleanPolicy() types.PruneOptions {
 		Age:                  7 * 24 * time.Hour,
 		AgentStateMinIdleAge: cleaner.DefaultAgentStateMinIdleAge,
 	}
-	opts.RelaxCacheAge, opts.PressureDevice = autoRelaxCacheAge()
+	opts.RelaxCacheAge, opts.PressureDevice = AutoRelaxCacheAge()
 	return opts
 }
 
-func autoRelaxCacheAge() (bool, string) {
+// AutoRelaxCacheAge reports whether default-clean should ignore --age for
+// official regenerable caches on the home volume. True only when that volume
+// is critical. The returned device limits relaxation to that volume.
+func AutoRelaxCacheAge() (bool, string) {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
 		return false, ""
