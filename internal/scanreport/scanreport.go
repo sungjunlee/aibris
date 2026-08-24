@@ -24,6 +24,7 @@ const (
 type View struct {
 	ReclaimPaths     []ReclaimPath
 	DefaultCleanSize int64
+	DefaultClean     CleanupProjection
 	StripEstimate    int64
 	PressureEstimate int64
 	Volume           *volume.Report
@@ -46,9 +47,11 @@ type ReviewOnly struct {
 
 // New projects items through the default-clean policy into the scan view-model.
 func New(items []types.DebrisInfo, policy types.PruneOptions) View {
+	cleanup := SummarizeCleanup(items, policy)
 	return View{
 		ReclaimPaths:     ReclaimPaths(items, policy),
-		DefaultCleanSize: eligibleCleanupSize(items, policy),
+		DefaultCleanSize: cleanup.EligibleSize,
+		DefaultClean:     cleanup,
 		StripEstimate:    StripEstimate(items, policy),
 		PressureEstimate: PressureEstimate(items, policy),
 		Volume:           HomeVolumeReport(items),
@@ -113,22 +116,6 @@ func appendReclaimPath(paths []ReclaimPath, label string, size int64, command st
 		return paths
 	}
 	return append(paths, ReclaimPath{Label: label, Size: size, Command: command})
-}
-
-func eligibleCleanupSize(items []types.DebrisInfo, opts types.PruneOptions) int64 {
-	observedAt := time.Now()
-	var eligible []types.DebrisInfo
-	for _, item := range items {
-		if ok, _ := cleaner.EvaluateEligibility(item, opts, observedAt); ok {
-			eligible = append(eligible, item)
-		}
-	}
-	planned := cleaner.NormalizeTargets(cleaner.FilterExistingTargets(eligible))
-	var size int64
-	for _, target := range planned {
-		size += target.Size
-	}
-	return size
 }
 
 var lookupPathDevice = volume.PathDevice

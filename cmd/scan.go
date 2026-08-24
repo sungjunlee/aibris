@@ -568,12 +568,10 @@ func printHumanScanResult(ctx context.Context, r *types.ScanResult) {
 	if r.Partial() {
 		fmt.Println("  default clean unavailable until a complete scan succeeds")
 	} else {
-		// Mirror clean's own defaults, including the agent-state idle floor:
-		// the AI workflow starts from this estimate, so a figure that counts
-		// entries clean would not select is worse than no figure.
-		diagnostics := summarizeCleanup(r.Worktrees, defaultPolicy)
-		fmt.Printf("  default clean (estimate) %s\n", cleaner.FormatSize(diagnostics.EligibleSize))
-		printCleanupDiagnostics(diagnostics, defaultPolicy)
+		// Printers format the view-model only. EligibleSize already went
+		// through the same eligibility + normalize path clean uses.
+		fmt.Printf("  default clean (estimate) %s\n", cleaner.FormatSize(view.DefaultCleanSize))
+		printCleanupDiagnostics(view.DefaultClean, defaultPolicy)
 	}
 
 	printExclusionDiagnostics(r)
@@ -889,81 +887,12 @@ func itemNoun(count int) string {
 	return "items"
 }
 
-type cleanupDiagnostics struct {
-	EligibleCount               int
-	EligibleSize                int64
-	ActiveCount                 int
-	ActiveSize                  int64
-	RiskyCount                  int
-	RiskySize                   int64
-	AgeCount                    int
-	AgeSize                     int64
-	FilterCount                 int
-	FilterSize                  int64
-	AgentStateLiveCount         int
-	AgentStateLiveSize          int64
-	AgentStateUndeterminedCount int
-	AgentStateUndeterminedSize  int64
-	OtherBlocked                map[cleaner.EligibilityReason]cleanupDiagnosticBucket
-}
+type cleanupDiagnostics = scanreport.CleanupProjection
 
-type cleanupDiagnosticBucket struct {
-	Count int
-	Size  int64
-}
+type cleanupDiagnosticBucket = scanreport.CleanupBucket
 
 func summarizeCleanup(items []types.DebrisInfo, opts types.PruneOptions) cleanupDiagnostics {
-	observedAt := time.Now()
-	var summary cleanupDiagnostics
-	var eligible []types.DebrisInfo
-	for _, item := range items {
-		isEligible, reason := cleaner.EvaluateEligibility(item, opts, observedAt)
-		if isEligible {
-			eligible = append(eligible, item)
-			continue
-		}
-		switch reason {
-		case cleaner.EligibilityReasonFiltered:
-			summary.FilterCount++
-			summary.FilterSize += item.Size
-		case cleaner.EligibilityReasonRisky:
-			summary.RiskyCount++
-			summary.RiskySize += item.Size
-		case cleaner.EligibilityReasonActiveWorktree:
-			summary.ActiveCount++
-			summary.ActiveSize += item.Size
-		case cleaner.EligibilityReasonAge:
-			summary.AgeCount++
-			summary.AgeSize += item.Size
-		case cleaner.EligibilityReasonAgentStateLive:
-			summary.AgentStateLiveCount++
-			summary.AgentStateLiveSize += item.Size
-		case cleaner.EligibilityReasonAgentStateUndetermined:
-			summary.AgentStateUndeterminedCount++
-			summary.AgentStateUndeterminedSize += item.Size
-		default:
-			if summary.OtherBlocked == nil {
-				summary.OtherBlocked = make(map[cleaner.EligibilityReason]cleanupDiagnosticBucket)
-			}
-			bucket := summary.OtherBlocked[reason]
-			bucket.Count++
-			bucket.Size += item.Size
-			summary.OtherBlocked[reason] = bucket
-		}
-	}
-	// clean applies the same existence filter and target normalization before
-	// planning an execution, so the estimate counts each physical deletion
-	// once: canonical aliases dedupe, eligible children nested inside an
-	// eligible parent collapse to the parent, and vanished paths drop out.
-	// Remaining clean-time safety protections (git safety, overlap safety,
-	// scan-evidence filtering, physical owner checks) can only reduce the final
-	// plan, which is why the figure is labelled an estimate.
-	planned := cleaner.NormalizeTargets(cleaner.FilterExistingTargets(eligible))
-	for _, target := range planned {
-		summary.EligibleCount++
-		summary.EligibleSize += target.Size
-	}
-	return summary
+	return scanreport.SummarizeCleanup(items, opts)
 }
 
 func printCleanupDiagnostics(summary cleanupDiagnostics, opts types.PruneOptions) {
