@@ -18,8 +18,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/scanner"
+	"github.com/sungjunlee/aibris/internal/scanreport"
 	"github.com/sungjunlee/aibris/internal/types"
-	"github.com/sungjunlee/aibris/internal/volume"
 	"github.com/sungjunlee/aibris/internal/worktree"
 )
 
@@ -629,19 +629,7 @@ func shouldRelaxCacheAge(explicit bool) (bool, string) {
 	if explicit {
 		return true, ""
 	}
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return false, ""
-	}
-	report, err := volume.Inspect(home)
-	if err != nil || report.Band != volume.BandCritical {
-		return false, ""
-	}
-	dev, err := volume.PathDevice(home)
-	if err != nil {
-		return false, ""
-	}
-	return true, dev
+	return scanreport.AutoRelaxCacheAge()
 }
 
 func (input cleanExperienceInput) hasClassicSelector() bool {
