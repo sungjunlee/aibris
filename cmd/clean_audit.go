@@ -119,45 +119,6 @@ func cleanupOverlapLogicalInputsForAudit(
 	return inputs
 }
 
-// cleanJSONPolicyForAuditItem is the classic policy boundary for the JSON
-// projection. It runs alongside the human audit, while all of the original
-// safety inputs are still available. JSON rendering must only carry this
-// recorded decision forward; it must not re-stat paths or re-evaluate age or
-// filters later in the run.
-func cleanJSONPolicyForAuditItem(
-	item types.DebrisInfo,
-	opts types.PruneOptions,
-	protectedTargets map[string]cleanAuditReason,
-	observedAt time.Time,
-) (string, []string) {
-	if protected := protectedTargets[cleanAuditItemKey(item)]; protected != "" {
-		return cleanJSONPolicyProtected, []string{cleanJSONReasonCodeForAuditReason(protected)}
-	}
-	eligible, reason := cleaner.EvaluateEligibility(item, opts, observedAt)
-	if eligible {
-		if reason == cleaner.EligibilityReasonVolumePressure {
-			return cleanJSONPolicyEligible, []string{"volume_pressure"}
-		}
-		if item.Category == types.CategoryAgentState && item.Classification == types.EntryClassOrphaned {
-			return cleanJSONPolicyEligible, []string{"agent_state_orphaned"}
-		}
-		return cleanJSONPolicyEligible, []string{"classic_eligible"}
-	}
-	switch reason {
-	case cleaner.EligibilityReasonActiveWorktree,
-		cleaner.EligibilityReasonAgentStateLive,
-		cleaner.EligibilityReasonAgentStateUndetermined:
-		return cleanJSONPolicyProtected, []string{cleanJSONReasonCodeForEligibility(reason)}
-	case cleaner.EligibilityReasonAgentStateMinIdleAge:
-		// Reported rather than offered: the entry is dropped before a plan is
-		// built, so it is not a togglable row anywhere. Cleaning it means
-		// rerunning with a shorter or zero --agent-state-grace.
-		return cleanJSONPolicyReviewable, []string{cleanJSONReasonCodeForEligibility(reason)}
-	default:
-		return cleanJSONPolicySkipped, []string{cleanJSONReasonCodeForEligibility(reason)}
-	}
-}
-
 func buildCleanAudit(items, targets []types.DebrisInfo, opts types.PruneOptions, scannedSources int, source scanSource, protectedTargets map[string]cleanAuditReason) cleanAudit {
 	return buildPhysicalCleanAudit(
 		items,
