@@ -49,6 +49,8 @@ curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/i
 ```bash
 # aibris 스캔 (CLI 빌트인)
 aibris scan --json
+# 에이전트가 경로를 읽어 항목을 묶을 때는 clean JSON에 --include-paths를 쓴다.
+# scan JSON의 physical_target_id(target-N)는 문서 안 번호일 뿐 프로세스 간 신원이 아니다.
 
 # Docker 사용 중이면 추가 스캔
 docker system df 2>/dev/null
@@ -133,10 +135,19 @@ aibris JSON과 Docker 출력을 파싱해 **크기 순으로 정렬**하여 사�
 - 승인받은 `--category`, `--tool`, 반복 가능한 `--root`, `--age` 값은 모두
   동일하게 유지한다
 - `--guide`, `--no-guide`, `--risky`, `--include-active-worktrees`,
-  `--interactive`, `--force`, `--strip` 같은 적용 가능한 routing/safety flag도
-  동일하게 유지한다
+  `--interactive`, `--force`, `--strip`, `--json`, `--include-paths` 같은
+  적용 가능한 routing/safety flag도 동일하게 유지한다
 - 실제 실행에서는 preview 명령에서 `--dry-run`만 제거한다
 - scoped preview 뒤에 plain `aibris clean`을 실행해서는 안 된다
+- 에이전트가 로컬에서 `clean --json`을 쓰면 preview와 execute 모두
+  `--include-paths`를 다른 selector와 함께 유지한다. 기본 JSON은
+  경로가 가려져 있어서 byte size로 행을 합치면 안 된다
+- `physical_target_id`의 `target-N`은 그 JSON 문서 안의 번호다. 다음
+  프로세스·다음 실행의 같은 경로와 동일하지 않다. 후속 명령은 path /
+  `--root` / `--category`로 고른다
+- node_modules는 classic 7d floor 뒤에 둔다. 더 젊은 정리는 사용자가
+  `--root <project> --category node_modules --age <n>`을 승인한 뒤에만
+  한다. 볼륨 압박만으로 floor를 내리지 않는다
 
 예를 들어 scoped cleanup은 다음 두 명령처럼 selector가 정확히 대응해야 한다:
 
@@ -144,6 +155,26 @@ aibris JSON과 Docker 출력을 파싱해 **크기 순으로 정렬**하여 사�
 aibris clean --no-guide --root ~/path/to/project --category node_modules --tool node_modules --age 30d --dry-run
 aibris clean --no-guide --root ~/path/to/project --category node_modules --tool node_modules --age 30d
 ```
+
+에이전트가 경로를 읽어 실행할 때는 `--json --include-paths`를 preview와
+execute에 같이 붙인다:
+
+```bash
+aibris clean --no-guide --json --include-paths --root ~/path/to/project --category node_modules --age 7d --dry-run
+aibris clean --no-guide --json --include-paths --force --root ~/path/to/project --category node_modules --age 7d
+```
+
+JSON receipt의 `post_clean.snapshot_thinning_recommended`가 true이면
+정리가 APFS snapshot을 이미 줄인 것이 아니다. 사용자에게 물은 뒤
+별도 명령으로만 진행한다:
+
+```bash
+aibris clean --apfs-snapshots --dry-run
+aibris clean --apfs-snapshots --force
+```
+
+`--apfs-snapshots`는 기본 clean/strip에 섞이지 않는다. dry-run 없이
+바로 `--force`하지 않는다.
 
 아래 plain-command guided flow는 사용자가 selector나 safety flag 없는
 guided 정리를 승인한 경우에만 사용하는 별도 분기다:
@@ -225,6 +256,10 @@ aibris scan --root ~/.codex --json  # 특정 HOME 하위 경로만 스캔
 
 기본 스캔 root는 `$HOME`이다. `--root`는 여러 번 지정할 수 있고, 반드시
 `$HOME` 아래로 해석되어야 한다. `/`, `/tmp`, symlink escape는 거부된다.
+명시적 `--root`는 hard boundary다. 기본 `$HOME` 스캔만 `$CODEX_HOME` /
+`$AIBRIS_CODEX_HOMES`를 덮는다. 지정한 root가 Codex home을 포함하지
+않으면 경고 한 줄만 내고 범위를 넓히지 않는다. `--root`가 valid
+worktree outer owner이면 그 unit 하나만 발견한다.
 
 ### clean
 
@@ -249,8 +284,16 @@ aibris clean --strip --dry-run
 # category + tool AND 조합
 aibris clean --category worktree --tool codex --dry-run
 
-# scan root 제한
+# scan root 제한 (명시적 --root는 hard boundary)
 aibris clean --root ~/path/to/project --category node_modules --dry-run
+
+# 에이전트 JSON: 경로를 읽으려면 --include-paths. preview/execute 동일
+aibris clean --no-guide --json --include-paths --dry-run
+aibris clean --no-guide --json --include-paths --force
+
+# JSON receipt가 snapshot_thinning_recommended이면 별도 승인 후
+aibris clean --apfs-snapshots --dry-run
+aibris clean --apfs-snapshots --force
 
 # age: guided에서는 minimum idle, classic에서는 필터
 aibris clean --age 3d --dry-run        # guided 기본 minimum idle 3일
@@ -288,7 +331,10 @@ aibris clean --category node_modules
 ## 주의사항
 
 - 절대 경로나 시스템 경로(`/`, `/usr`, `/etc` 등)는 삭제 방지되어 있음
-- 기본 스캔 root는 `$HOME`. `--root`로 HOME 하위 경로만 좁힐 수 있음
+- 기본 스캔 root는 `$HOME`. 명시적 `--root`는 hard boundary이며 HOME 하위만 허용한다. Codex home을 포함하지 않으면 범위를 넓히지 않는다
+- `clean --json`의 `target-N` (`physical_target_id`)은 그 문서 안의 번호일 뿐 다음 실행과 같은 신원이 아니다
+- node_modules는 7d floor. 더 젊은 `--age`는 사용자가 `--root <project> --category node_modules --age <n>`을 승인한 뒤에만
+- `snapshot_thinning_recommended`는 후속 `aibris clean --apfs-snapshots` 힌트다. 방금 끝난 clean이 snapshot을 줄였다는 뜻이 아니다
 - worktree는 `$HOME` 아래 `worktrees`, `worktree`, `worktree-*`, `worktrees-*` convention을 찾고 direct/nested `.git` 파일로 검증함
 - hidden owner 디렉토리(`.codex`, `.somename` 등)는 worktree source일 수 있으므로 일반적으로 스캔 대상임
 - 전체 `$HOME`을 무제한 재귀 탐색하지 않고, scan root에서 얕은 컨테이너 depth 안의 convention을 찾음
