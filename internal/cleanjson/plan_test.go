@@ -220,6 +220,15 @@ func TestBuildPreservesUniquenessDemotionReasonCodes(t *testing.T) {
 				Reasons:   []string{string(worktree.DecisionReasonUniqueCommits)},
 			}},
 		},
+		Audit: []AuditComponent{{
+			CanonicalPath: path,
+			Owner:         item,
+			LogicalRows: []AuditRow{{
+				Item: item, CanonicalPath: path, Relation: overlapOwner,
+				PolicyDecision: PolicyReviewable,
+				ReasonCodes:    []string{string(worktree.DecisionReasonUniqueCommits)},
+			}},
+		}},
 		Inventory: []types.DebrisInfo{item},
 	})
 	row := jsonRowWithReason(t, document, string(worktree.DecisionReasonUniqueCommits))

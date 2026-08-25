@@ -9,8 +9,10 @@ import (
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
-// SnapshotComponents projects a unified plan, audit snapshot, and inventory
-// onto containment-connected mutation owners with disjoint byte accounting.
+// SnapshotComponents maps a supplied unified plan and audit snapshot onto
+// mutation owners with disjoint byte accounting. It does not rebuild overlap
+// component groups; leftover inventory attaches only to an already-planned
+// component and otherwise stays unassigned.
 func SnapshotComponents(
 	plan UnifiedPlan,
 	auditComponents []AuditComponent,
@@ -97,15 +99,14 @@ func SnapshotComponents(
 		components = append(components, component)
 	}
 
-	// A scanner row normally appears in audit components. Keep the
-	// projection total and row accounting defensive for synthetic/unit inputs.
+	// A scanner row normally appears in audit components. Leftover inventory
+	// is evidence on an existing plan component, not a new overlap group.
 	assigned := make(map[string]int)
 	for _, component := range components {
 		for _, row := range component.Rows {
 			assigned[RowIdentityKey(row.Item)]++
 		}
 	}
-	unassigned := make([]types.DebrisInfo, 0)
 	for _, item := range inventory {
 		key := RowIdentityKey(item)
 		if assigned[key] >= 1 {
@@ -113,34 +114,14 @@ func SnapshotComponents(
 			continue
 		}
 		componentIndex, matched := planComponentForPath(item.Path, plan.Components)
-		if matched {
-			appendInventoryRow(
-				&components[componentIndex],
-				item,
-				protections,
-			)
+		if !matched {
 			continue
 		}
-		unassigned = append(unassigned, item)
-	}
-	if len(unassigned) > 0 {
-		for _, fallback := range fallbackAuditComponents(unassigned) {
-			component := SnapshotComponent{
-				Key:      fallback.CanonicalPath,
-				Owner:    fallback.Owner,
-				Decision: decisionForAuditComponent(fallback, protections),
-				Rows:     []SnapshotRow{},
-			}
-			for _, row := range fallback.LogicalRows {
-				appendAuditRow(
-					&component,
-					row,
-					fallback,
-					protections,
-				)
-			}
-			components = append(components, component)
-		}
+		appendInventoryRow(
+			&components[componentIndex],
+			item,
+			protections,
+		)
 	}
 
 	for i := range components {
@@ -557,90 +538,4 @@ func RowIdentityKey(item types.DebrisInfo) string {
 
 func itemKey(item types.DebrisInfo) string {
 	return string(item.Category) + "\x00" + string(item.Tool) + "\x00" + item.ID + "\x00" + item.Path
-}
-
-func fallbackAuditComponents(items []types.DebrisInfo) []AuditComponent {
-	owners := cleaner.NormalizeTargets(items)
-	components := make([]AuditComponent, 0, len(owners))
-	attached := make([]bool, len(items))
-	for _, owner := range owners {
-		path, ok := cleaner.TargetPathKey(owner.Path)
-		if !ok {
-			continue
-		}
-		component := AuditComponent{
-			CanonicalPath: path,
-			Owner:         owner,
-		}
-		for i, item := range items {
-			if attached[i] {
-				continue
-			}
-			rowPath, rowOK := cleaner.TargetPathKey(item.Path)
-			if !rowOK {
-				continue
-			}
-			relation, overlaps := overlapRelation(path, rowPath)
-			if !overlaps {
-				continue
-			}
-			component.LogicalRows = append(component.LogicalRows, AuditRow{
-				Item:          item,
-				CanonicalPath: rowPath,
-				Relation:      relation,
-			})
-			attached[i] = true
-		}
-		if len(component.LogicalRows) == 0 {
-			continue
-		}
-		component.LogicalRows = ensureOwnerAuditRow(component.LogicalRows, owner, path)
-		components = append(components, component)
-	}
-	sort.Slice(components, func(i, j int) bool {
-		if components[i].CanonicalPath == components[j].CanonicalPath {
-			return cleaner.TargetStableKey(components[i].Owner) < cleaner.TargetStableKey(components[j].Owner)
-		}
-		return components[i].CanonicalPath < components[j].CanonicalPath
-	})
-	return components
-}
-
-func overlapRelation(ownerPath, rowPath string) (string, bool) {
-	switch {
-	case ownerPath == rowPath:
-		return overlapExact, true
-	case cleaner.PathContains(ownerPath, rowPath):
-		return overlapDescendant, true
-	case cleaner.PathContains(rowPath, ownerPath):
-		return overlapAncestor, true
-	default:
-		return "", false
-	}
-}
-
-func ensureOwnerAuditRow(rows []AuditRow, owner types.DebrisInfo, canonicalPath string) []AuditRow {
-	for _, row := range rows {
-		if row.CanonicalPath == canonicalPath &&
-			cleaner.TargetStableKey(row.Item) == cleaner.TargetStableKey(owner) {
-			return promoteOwnerAuditRow(rows, owner)
-		}
-	}
-	rows = append(rows, AuditRow{
-		Item:          owner,
-		CanonicalPath: canonicalPath,
-		Relation:      overlapExact,
-	})
-	return promoteOwnerAuditRow(rows, owner)
-}
-
-func promoteOwnerAuditRow(rows []AuditRow, owner types.DebrisInfo) []AuditRow {
-	for i := range rows {
-		if rows[i].Relation == overlapExact &&
-			cleaner.TargetStableKey(rows[i].Item) == cleaner.TargetStableKey(owner) {
-			rows[i].Relation = overlapOwner
-			break
-		}
-	}
-	return rows
 }
