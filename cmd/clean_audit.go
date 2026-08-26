@@ -546,7 +546,7 @@ func (s *cleanAuditTargetSet) exclusionReason(item types.DebrisInfo) cleanAuditR
 }
 
 func cleanAuditItemKey(item types.DebrisInfo) string {
-	return string(item.Category) + "\x00" + string(item.Tool) + "\x00" + item.ID + "\x00" + item.Path
+	return cleaner.PhysicalOwnerItemKey(item)
 }
 
 func cleanAuditReasonsFromEligibility(reasons map[string]cleaner.EligibilityReason) map[string]cleanAuditReason {

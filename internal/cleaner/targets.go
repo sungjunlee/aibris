@@ -46,7 +46,7 @@ func ApplyPhysicalOwnerSafety(
 			}
 			path, ok := TargetPathKey(item.Path)
 			if ok && activeOwners[path] {
-				protections[physicalOwnerItemKey(item)] = EligibilityReasonActiveWorktree
+				protections[PhysicalOwnerItemKey(item)] = EligibilityReasonActiveWorktree
 			}
 		}
 	}
@@ -261,6 +261,8 @@ func isActiveWorktreeTarget(target types.DebrisInfo) bool {
 	return target.Category == types.CategoryWorktree && target.Status == types.WorktreeActive
 }
 
-func physicalOwnerItemKey(item types.DebrisInfo) string {
+// PhysicalOwnerItemKey identifies one debris item for protection-map lookup.
+// Path is the raw item.Path; it is not canonicalized.
+func PhysicalOwnerItemKey(item types.DebrisInfo) string {
 	return string(item.Category) + "\x00" + string(item.Tool) + "\x00" + item.ID + "\x00" + item.Path
 }
