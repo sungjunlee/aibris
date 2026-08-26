@@ -537,5 +537,5 @@ func RowIdentityKey(item types.DebrisInfo) string {
 }
 
 func itemKey(item types.DebrisInfo) string {
-	return string(item.Category) + "\x00" + string(item.Tool) + "\x00" + item.ID + "\x00" + item.Path
+	return cleaner.PhysicalOwnerItemKey(item)
 }
