@@ -7,14 +7,20 @@ date, or compatibility promise.
 Milestones are capability and quality gates rather than schedules. Releases
 are cut only after the relevant behavior is dogfooded and explicitly approved.
 
-## Current: after v0.11.0
+## Current: after v0.12.0
 
-v0.11.0 is the next published tag after dogfood. Remaining 0.x work is the
-open OSS distribution track (#118, #120, #121, #122), not more 0.11
-implementation. #218 stays a keep-current decision: `node_modules` still
-uses container mtime, and `ai-logs` stay behind `--risky`.
+v0.12.0 is published. Remaining 0.x work is the open OSS distribution track
+(#118, #120, #121, #122) and continued dogfood of reclaim UX. #218 stays a
+keep-current decision: `node_modules` still uses container mtime, and
+`ai-logs` stay behind `--risky`.
 
 ## Shipped
+
+### 0.12.0 Reclaim Accuracy
+
+Published 2026-08-30. Safer guided uniqueness, worktree leftover/sidecar
+classification, scan reclaim headline, live GOCACHE / explicit `--root`,
+observed command `freed_bytes`, and `post_clean` receipt fields.
 
 ### 0.11.0 Protected-Weight Reclamation
 

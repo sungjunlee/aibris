@@ -76,7 +76,7 @@ curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/i
 Install a specific release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.sh | bash -s -- 0.11.0
+curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.sh | bash -s -- 0.12.0
 ```
 
 The installer downloads GitHub Release binaries and verifies `checksums.txt`.
