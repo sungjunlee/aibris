@@ -2,17 +2,22 @@
 
 ## [Unreleased]
 
-### Fixed
+## [0.12.0] - 2026-08-30
 
-- Scan inventory counts nested worktree members under one outer owner once in
-  physical totals. Evidence rows remain, each with a document-local
-  `physical_target_id` (`target-N`). `summary.total_size` is still the row
-  sum; `physical_unit_count` / `physical_total_bytes` (also on by-category
-  and by-tool) feed the human headline and volume debris and match clean-plan
-  physical totals for the same fixture.
+### Added
+
+- `clean --json` receipts include a path-free `post_clean` object with remaining
+  home-volume used%/free/band and whether local APFS snapshot thinning is still
+  recommended. Deleted owners are dropped from `post_clean` debris.
+- Tagged releases publish an SPDX SBOM per archive and a GitHub artifact
+  attestation. The Homebrew tap Formula is committed only after the GitHub
+  release is public.
 
 ### Changed
 
+- Guided cleanup no longer auto-selects worktree units whose HEAD still has
+  content not in the local `origin/HEAD`. Squash-equivalent trees stay
+  unpromoted. Uniqueness is a local Git probe and never calls GitHub.
 - Worktree member classification no longer fail-closes an owner for an empty
   leftover sibling, or for the registered sidecar `.orca-worktree-trash`
   even when that sidecar has contents. Mixed valid/invalid Git markers still
@@ -25,7 +30,6 @@
   reclaim is success with `no_bytes_reclaimed`. uv's full-cache argv is
   `uv cache clean`. remove-path that shrinks then fails is `partial` with
   remaining bytes.
-
 - Go build-cache discovery uses process `$GOCACHE`, then the `go env -w` file
   (`$GOENV` or `UserConfigDir/go/env`), then `UserCacheDir/go-build` (Darwin
   `~/Library/Caches/go-build`, Windows `%LocalAppData%\go-build`, Linux
@@ -33,13 +37,11 @@
   and is under requested roots; it does not fall back to UserCacheDir.
   Execution of `go clean -cache` refuses if the live path no longer matches
   the planned path. Last-scan cache schema is 10.
-
 - Explicit `--root` is a hard scan boundary for worktree and ai-logs. Default
   `$HOME` scans still cover `$CODEX_HOME` / `$AIBRIS_CODEX_HOMES`. An explicit
   root that does not cover a configured Codex home emits one warning and does
   not silently widen. A `--root` that is itself a valid worktree outer owner is
   discovered as that one unit.
-
 - Human `scan` summary now leads with found size, the largest reclaim path
   among default / strip / pressure when that path is larger than default, and
   home-volume used% / free bytes / band. JSON `volume.band` `low` still means
@@ -61,6 +63,15 @@
 - Human `scan` lists `--pressure` when it beats home-volume default clean,
   even if other volumes have a larger default-cleanable total. The `default
   delete` row stays the all-volume estimate.
+
+### Fixed
+
+- Scan inventory counts nested worktree members under one outer owner once in
+  physical totals. Evidence rows remain, each with a document-local
+  `physical_target_id` (`target-N`). `summary.total_size` is still the row
+  sum; `physical_unit_count` / `physical_total_bytes` (also on by-category
+  and by-tool) feed the human headline and volume debris and match clean-plan
+  physical totals for the same fixture.
 
 ## [0.11.1] - 2026-08-18
 
