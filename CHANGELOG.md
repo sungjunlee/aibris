@@ -4,6 +4,10 @@
 
 ### Changed
 
+- Worktree member classification no longer fail-closes an owner for an empty
+  leftover sibling, or for the registered sidecar `.orca-worktree-trash`
+  even when that sidecar has contents. Mixed valid/invalid Git markers still
+  make the whole owner review-only `plain-dir`.
 - Command cleanup credits `freed_bytes = max(0, size_before − size_after)`
   measured with the scan estimator. Human output and JSON share that number.
   A leftover command container is success (`physical_owner_present`); zero

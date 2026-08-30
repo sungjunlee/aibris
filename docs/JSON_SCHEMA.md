@@ -220,7 +220,9 @@ Worktree units support only a direct `.git` marker or markers in immediate
 project children. A readable unit without valid metadata is emitted once as
 `plain-dir` with an explicit `reason`. If valid and invalid immediate members
 are mixed, that same one-row owner representation prevents the valid sibling
-from becoming executable. An I/O failure while inspecting a container or
+from becoming executable. Empty leftover members are not mixed markers.
+Registered sidecar names (currently `.orca-worktree-trash`) are skipped even
+when occupied. An I/O failure while inspecting a container or
 marker is not `plain-dir`; it is a top-level partial provider error.
 
 For Cursor `agent-state`, `project` is the final path segment of the recorded

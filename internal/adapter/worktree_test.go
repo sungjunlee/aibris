@@ -1152,7 +1152,10 @@ func TestWorktreeAdapter_MixedValidAndInvalidNestedMarkersProtectOwner(t *testin
 		{
 			name: "missing",
 			create: func(path string) error {
-				return os.MkdirAll(path, 0755)
+				if err := os.MkdirAll(path, 0755); err != nil {
+					return err
+				}
+				return os.WriteFile(filepath.Join(path, "README"), []byte("notes"), 0644)
 			},
 			want: "missing .git marker",
 		},
@@ -1206,6 +1209,58 @@ func TestWorktreeAdapter_MixedValidAndInvalidNestedMarkersProtectOwner(t *testin
 				t.Fatalf("mixed owner row = %+v; want protected plain-dir containing %q", results[0], tt.want)
 			}
 		})
+	}
+}
+
+func TestWorktreeAdapter_EmptyLeftoverSiblingKeepsValidMembers(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	unit := filepath.Join(home, "workspace", "worktrees", "owner")
+	createWorktreeGit(t, filepath.Join(unit, "valid"), filepath.Join(home, "parent"), "valid")
+	if err := os.MkdirAll(filepath.Join(unit, "empty-leftover"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("rows = %d; want 1 valid member: %+v", len(results), results)
+	}
+	if results[0].Status == types.WorktreePlain {
+		t.Fatalf("empty leftover poisoned owner: %+v", results[0])
+	}
+	if results[0].Path != canonicalExistingPath(unit) || results[0].Project != "valid" {
+		t.Fatalf("row = %+v; want owner path with valid project", results[0])
+	}
+}
+
+func TestWorktreeAdapter_RegisteredSidecarDoesNotPoisonOwner(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	unit := filepath.Join(home, ".codex", "worktrees", "848f")
+	createWorktreeGit(t, filepath.Join(unit, "baby_ops-401-final"), filepath.Join(home, "parent"), "401-final")
+	trash := filepath.Join(unit, ".orca-worktree-trash")
+	if err := os.MkdirAll(filepath.Join(trash, "dropped"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(trash, "dropped", "note.txt"), []byte("trashed"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("rows = %d; want 1 valid member: %+v", len(results), results)
+	}
+	if results[0].Status == types.WorktreePlain {
+		t.Fatalf("registered sidecar poisoned owner: %+v", results[0])
+	}
+	if results[0].Project != "baby_ops-401-final" {
+		t.Fatalf("project = %q; want baby_ops-401-final", results[0].Project)
 	}
 }
 

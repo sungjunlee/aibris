@@ -123,6 +123,7 @@ func TestBuiltCLI_RegisteredLayoutsAndReviewOnlyOwners(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(mixedOwner, "invalid"), 0755); err != nil {
 		t.Fatal(err)
 	}
+	writeCLIContractFile(t, filepath.Join(mixedOwner, "invalid", "README"), "notes\n")
 	old := time.Now().Add(-30 * 24 * time.Hour)
 	for _, owner := range []string{direct, nestedOwner, invalidOwner, mixedOwner} {
 		if err := os.Chtimes(owner, old, old); err != nil {
@@ -223,6 +224,65 @@ func TestBuiltCLI_RegisteredLayoutsAndReviewOnlyOwners(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestBuiltCLI_EmptyLeftoverAndSidecarStayLinked(t *testing.T) {
+	binary := buildCLIContractBinary(t)
+	home := t.TempDir()
+	writeValidMarker := func(path, name string) {
+		t.Helper()
+		gitdir := filepath.Join(home, "_missing-gitdirs", name)
+		writeCLIContractFile(t, filepath.Join(path, ".git"), "gitdir: "+gitdir+"\n")
+	}
+
+	leftover := filepath.Join(home, ".codex", "worktrees", "leftover")
+	writeValidMarker(filepath.Join(leftover, "valid"), "leftover-valid")
+	if err := os.MkdirAll(filepath.Join(leftover, "empty-leftover"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	sidecar := filepath.Join(home, ".codex", "worktrees", "sidecar")
+	writeValidMarker(filepath.Join(sidecar, "valid"), "sidecar-valid")
+	if err := os.MkdirAll(filepath.Join(sidecar, ".orca-worktree-trash", "dropped"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeCLIContractFile(t, filepath.Join(sidecar, ".orca-worktree-trash", "dropped", "note.txt"), "trashed\n")
+
+	unknown := filepath.Join(home, ".codex", "worktrees", "unknown")
+	writeValidMarker(filepath.Join(unknown, "valid"), "unknown-valid")
+	if err := os.MkdirAll(filepath.Join(unknown, "notes"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeCLIContractFile(t, filepath.Join(unknown, "notes", "README"), "keep\n")
+
+	scanOutput, err := runCLIContract(binary, home, "scan", "--json")
+	if err != nil {
+		t.Fatalf("built-CLI scan failed: %v\n%s", err, scanOutput)
+	}
+	var inventory jsonOutput
+	if err := json.Unmarshal([]byte(scanOutput), &inventory); err != nil {
+		t.Fatalf("decoding scan JSON: %v\n%s", err, scanOutput)
+	}
+	rows := make(map[string]jsonWorktree, len(inventory.Worktrees))
+	for _, row := range inventory.Worktrees {
+		rows[row.ID] = row
+	}
+	for _, want := range []struct {
+		id     string
+		status types.WorktreeStatus
+	}{
+		{id: "leftover", status: types.WorktreeOrphaned},
+		{id: "sidecar", status: types.WorktreeOrphaned},
+		{id: "unknown", status: types.WorktreePlain},
+	} {
+		row, ok := rows[want.id]
+		if !ok {
+			t.Fatalf("missing owner %q: %+v", want.id, inventory.Worktrees)
+		}
+		if row.Status != string(want.status) {
+			t.Fatalf("owner %q status = %q; want %q (%+v)", want.id, row.Status, want.status, row)
+		}
 	}
 }
 

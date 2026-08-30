@@ -296,7 +296,8 @@ independent defaults are a 6-hour recent-activity hard lock, three retained
 units per repository, a 3-day minimum idle age, and a 256 MB recommendation
 threshold. Missing upstream does not lock a row; dirty state, unavailable
 evidence, and an unreferenced detached HEAD do. `plain-dir` rows stay
-review-only and never enter the plan.
+review-only and never enter the plan. Empty leftover members and the
+registered sidecar `.orca-worktree-trash` are not mixed markers.
 
 `clean --strip` is a third disposition beside protect and delete. It removes
 only inventoried regenerable subtrees from units that deletion would protect.

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -141,7 +142,7 @@ func discoverGitWorktreeMembers(ctx context.Context, targetPath string) ([]GitWo
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if !entry.IsDir() {
+		if !entry.IsDir() || adapter.IsWorktreeSidecarName(entry.Name()) {
 			continue
 		}
 		memberPath := filepath.Join(targetPath, entry.Name())
@@ -196,7 +197,7 @@ func twoLevelGitWorktreePaths(ctx context.Context, leafPath string) ([]string, b
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
 		}
-		if !entry.IsDir() {
+		if !entry.IsDir() || adapter.IsWorktreeSidecarName(entry.Name()) {
 			continue
 		}
 		checkout := filepath.Join(leafPath, entry.Name())

@@ -113,6 +113,39 @@ func TestBuildWorktreeCleanupUnits(t *testing.T) {
 			wantSources: []string{".relay"},
 		},
 		{
+			name: "empty leftover sibling next to nested member is kept",
+			buildItems: func(t *testing.T, root string) []types.DebrisInfo {
+				target := filepath.Join(root, "worktrees", "owner")
+				createCleanupUnitGitFile(t, filepath.Join(target, "valid"), "valid")
+				if err := os.MkdirAll(filepath.Join(target, "empty-leftover"), 0755); err != nil {
+					t.Fatal(err)
+				}
+				return []types.DebrisInfo{cleanupUnitItem(target, 400, ".codex")}
+			},
+			wantUnits:   1,
+			wantTargets: []string{"worktrees/owner"},
+			wantMembers: [][]string{{"worktrees/owner/valid"}},
+			wantSizes:   []int64{400},
+			wantSources: []string{".codex"},
+		},
+		{
+			name: "registered sidecar next to nested member is kept",
+			buildItems: func(t *testing.T, root string) []types.DebrisInfo {
+				target := filepath.Join(root, "worktrees", "848f")
+				createCleanupUnitGitFile(t, filepath.Join(target, "baby_ops-401-final"), "401-final")
+				trash := filepath.Join(target, ".orca-worktree-trash", "dropped")
+				if err := os.MkdirAll(trash, 0755); err != nil {
+					t.Fatal(err)
+				}
+				return []types.DebrisInfo{cleanupUnitItem(target, 900, ".codex")}
+			},
+			wantUnits:   1,
+			wantTargets: []string{"worktrees/848f"},
+			wantMembers: [][]string{{"worktrees/848f/baby_ops-401-final"}},
+			wantSizes:   []int64{900},
+			wantSources: []string{".codex"},
+		},
+		{
 			name: "two-level mixed sibling is dropped",
 			buildItems: func(t *testing.T, root string) []types.DebrisInfo {
 				target := filepath.Join(root, "worktrees", "mixed")
