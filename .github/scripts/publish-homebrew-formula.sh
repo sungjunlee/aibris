@@ -82,6 +82,12 @@ publish_push_tap() {
 		git -C "$tap_dir" push origin HEAD
 }
 
+# EXIT runs after publish_main returns, when its locals are gone.
+# Bake paths now so `set -u` does not abort a successful tap push.
+publish_install_cleanup() {
+	trap "rm -f -- $(printf '%q' "$1"); rm -rf -- $(printf '%q' "$2")" EXIT
+}
+
 publish_main() {
 	local dist=${1:-dist}
 	local formula key tap
@@ -89,7 +95,7 @@ publish_main() {
 	formula=$(publish_find_formula "$dist")
 	key=$(mktemp)
 	tap=$(mktemp -d)
-	trap 'rm -f "$key"; rm -rf "$tap"' EXIT
+	publish_install_cleanup "$key" "$tap"
 	publish_write_key "$key"
 	publish_clone_tap "$tap" "$key"
 	publish_commit_formula "$tap" "$formula"

@@ -85,6 +85,44 @@ publish_require_token
 	}
 }
 
+func TestPublishMainExitTrapAfterSuccessfulPush(t *testing.T) {
+	dist := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dist, "aibris.rb"), []byte("url v0.12.0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	work := initTapRepo(t, "url v0.11.1")
+	bareDir := t.TempDir()
+	runGit(t, bareDir, "clone", "--bare", work, "homebrew-tap.git")
+	bare := filepath.Join(bareDir, "homebrew-tap.git")
+
+	cmd := exec.Command("bash", filepath.Join(".github", "scripts", "publish-homebrew-formula.sh"), dist)
+	cmd.Dir = "."
+	cmd.Env = append(os.Environ(),
+		"PATH=/usr/bin:/bin",
+		"HOMEBREW_TAP_TOKEN=test-deploy-key",
+		"AIBRIS_TAP_CLONE_URL="+bare,
+		"GITHUB_REF_NAME=v0.12.0",
+		"GIT_CONFIG_NOSYSTEM=1",
+		"GIT_CONFIG_GLOBAL=/dev/null",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("publish script: %v\n%s", err, out)
+	}
+	if strings.Contains(string(out), "unbound variable") {
+		t.Fatalf("exit trap tripped nounset:\n%s", out)
+	}
+
+	show := exec.Command("git", "--git-dir="+bare, "show", "HEAD:Formula/aibris.rb")
+	body, err := show.CombinedOutput()
+	if err != nil {
+		t.Fatalf("show formula: %v\n%s", err, body)
+	}
+	if !strings.Contains(string(body), "url v0.12.0") {
+		t.Fatalf("pushed formula = %q", body)
+	}
+}
+
 func TestPublishCommitFormulaCreatesAndSkips(t *testing.T) {
 	tap := initTapRepo(t, "url v0.10.0")
 	formula := filepath.Join(t.TempDir(), "aibris.rb")

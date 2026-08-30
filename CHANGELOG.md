@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Homebrew formula publish no longer fails after a successful tap push. The
+  EXIT cleanup trap records temp paths before `publish_main` locals go out of
+  scope, so `set -u` does not skip `brew-pour`.
+
 ## [0.12.0] - 2026-08-30
 
 ### Added
