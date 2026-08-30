@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -127,7 +128,14 @@ func discoverGitWorktreeMembers(ctx context.Context, targetPath string) ([]GitWo
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if HasGitWorktreeMetadata(targetPath) {
+	linked, invalidPresent, err := ownerGitMarkerState(targetPath)
+	if err != nil {
+		return nil, err
+	}
+	if invalidPresent {
+		return nil, nil
+	}
+	if linked {
 		return []GitWorktreeMember{BuildGitWorktreeMember(ctx, targetPath)}, nil
 	}
 
@@ -141,7 +149,7 @@ func discoverGitWorktreeMembers(ctx context.Context, targetPath string) ([]GitWo
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if !entry.IsDir() {
+		if !entry.IsDir() || adapter.IsWorktreeSidecarName(entry.Name()) {
 			continue
 		}
 		memberPath := filepath.Join(targetPath, entry.Name())
@@ -151,18 +159,12 @@ func discoverGitWorktreeMembers(ctx context.Context, targetPath string) ([]GitWo
 			}
 			continue
 		}
-		// Registered two-level layout: <owner>/<leaf>/<checkout>/.git.
-		// A mixed leaf fail-closes the whole owner; empty leftover leaves
-		// are ignored.
-		nested, mixed, err := twoLevelGitWorktreePaths(ctx, memberPath)
+		keep, nested, err := classifyMissingCleanupMember(ctx, memberPath)
 		if err != nil {
 			return nil, err
 		}
-		if mixed {
+		if !keep {
 			return nil, nil
-		}
-		if len(nested) == 0 {
-			continue
 		}
 		for _, nestedPath := range nested {
 			memberPaths[nestedPath] = true
@@ -185,6 +187,27 @@ func discoverGitWorktreeMembers(ctx context.Context, targetPath string) ([]GitWo
 	return members, nil
 }
 
+func classifyMissingCleanupMember(ctx context.Context, memberPath string) (bool, []string, error) {
+	empty, hasSubdirs, err := adapter.LeftoverMemberState(memberPath)
+	if err != nil {
+		return false, nil, err
+	}
+	if empty {
+		return true, nil, nil
+	}
+	if !hasSubdirs {
+		return false, nil, nil
+	}
+	nested, mixed, err := twoLevelGitWorktreePaths(ctx, memberPath)
+	if err != nil {
+		return false, nil, err
+	}
+	if mixed || len(nested) == 0 {
+		return false, nil, nil
+	}
+	return true, nested, nil
+}
+
 func twoLevelGitWorktreePaths(ctx context.Context, leafPath string) ([]string, bool, error) {
 	entries, err := os.ReadDir(leafPath)
 	if err != nil {
@@ -196,7 +219,7 @@ func twoLevelGitWorktreePaths(ctx context.Context, leafPath string) ([]string, b
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
 		}
-		if !entry.IsDir() {
+		if !entry.IsDir() || adapter.IsWorktreeSidecarName(entry.Name()) {
 			continue
 		}
 		checkout := filepath.Join(leafPath, entry.Name())
@@ -216,10 +239,35 @@ func twoLevelGitWorktreePaths(ctx context.Context, leafPath string) ([]string, b
 	return paths, false, nil
 }
 
+func ownerGitMarkerState(path string) (linked bool, invalidPresent bool, err error) {
+	_, err = os.Lstat(filepath.Join(path, ".git"))
+	if os.IsNotExist(err) {
+		return false, false, nil
+	}
+	if err != nil {
+		return false, false, err
+	}
+	if HasGitWorktreeMetadata(path) {
+		return true, false, nil
+	}
+	return false, true, nil
+}
+
 func HasGitWorktreeMetadata(path string) bool {
 	gitFilePath := filepath.Join(path, ".git")
 	info, err := os.Lstat(gitFilePath)
-	return err == nil && (info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0)
+	if err != nil || (!info.Mode().IsRegular() && info.Mode()&os.ModeSymlink == 0) {
+		return false
+	}
+	data, err := os.ReadFile(gitFilePath)
+	if err != nil {
+		return false
+	}
+	line := strings.TrimSpace(strings.SplitN(string(data), "\n", 2)[0])
+	if !strings.HasPrefix(line, "gitdir: ") {
+		return false
+	}
+	return strings.TrimSpace(strings.TrimPrefix(line, "gitdir: ")) != ""
 }
 
 func BuildGitWorktreeMember(ctx context.Context, worktreePath string) GitWorktreeMember {

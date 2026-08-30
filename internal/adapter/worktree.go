@@ -698,7 +698,7 @@ func (a *WorktreeAdapter) scanEntry(ctx context.Context, entryPath, source strin
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if !entry.IsDir() {
+		if !entry.IsDir() || IsWorktreeSidecarName(entry.Name()) {
 			continue
 		}
 		worktreePath := filepath.Join(entryPath, entry.Name())
@@ -719,18 +719,17 @@ func (a *WorktreeAdapter) scanEntry(ctx context.Context, entryPath, source strin
 			item.StrippableBytes, item.StrippablePaths = a.strippableSubtrees(ctx, worktreePath, inspection.status)
 			valid = append(valid, item)
 		case worktreeMarkerMissing:
-			if memberDepth >= registeredWorktreeMemberDepth {
-				nestedValid, nestedInvalid, err := a.inspectTwoLevelMembers(ctx, entryPath, worktreePath, entry.Name(), source, entryInfo.ModTime())
-				if err != nil {
-					return nil, err
-				}
-				if len(nestedValid) > 0 || len(nestedInvalid) > 0 {
-					valid = append(valid, nestedValid...)
-					invalidReasons = append(invalidReasons, nestedInvalid...)
-					continue
-				}
+			nestedValid, nestedInvalid, ignore, err := a.inspectMissingMember(
+				ctx, entryPath, worktreePath, entry.Name(), source, entryInfo.ModTime(), memberDepth,
+			)
+			if err != nil {
+				return nil, err
 			}
-			invalidReasons = append(invalidReasons, fmt.Sprintf("%s: missing .git marker", entry.Name()))
+			if ignore {
+				continue
+			}
+			valid = append(valid, nestedValid...)
+			invalidReasons = append(invalidReasons, nestedInvalid...)
 		case worktreeMarkerInvalid:
 			invalidReasons = append(invalidReasons, fmt.Sprintf("%s: %s", entry.Name(), inspection.reason))
 		}
@@ -764,6 +763,61 @@ func (a *WorktreeAdapter) scanEntry(ctx context.Context, entryPath, source strin
 	return valid, nil
 }
 
+func (a *WorktreeAdapter) inspectMissingMember(
+	ctx context.Context,
+	ownerPath, memberPath, memberName, source string,
+	ownerMod time.Time,
+	memberDepth int,
+) ([]types.DebrisInfo, []string, bool, error) {
+	empty, hasSubdirs, err := LeftoverMemberState(memberPath)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	if empty {
+		return nil, nil, true, nil
+	}
+	if !hasSubdirs || memberDepth < registeredWorktreeMemberDepth {
+		return nil, []string{memberName + ": missing .git marker"}, false, nil
+	}
+	return a.inspectRegisteredMissingLeaf(ctx, ownerPath, memberPath, memberName, source, ownerMod)
+}
+
+// LeftoverMemberState reports whether path is an empty leftover directory
+// and whether it contains any subdirectory. Sidecar names are handled
+// separately by IsWorktreeSidecarName.
+func LeftoverMemberState(path string) (empty bool, hasSubdirs bool, err error) {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return false, false, fmt.Errorf("reading leftover member %q: %w", path, err)
+	}
+	if len(entries) == 0 {
+		return true, false, nil
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			return false, true, nil
+		}
+	}
+	return false, false, nil
+}
+
+func (a *WorktreeAdapter) inspectRegisteredMissingLeaf(
+	ctx context.Context,
+	ownerPath, leafPath, leafName, source string,
+	ownerMod time.Time,
+) ([]types.DebrisInfo, []string, bool, error) {
+	nestedValid, nestedInvalid, err := a.inspectTwoLevelMembers(
+		ctx, ownerPath, leafPath, leafName, source, ownerMod,
+	)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	if len(nestedValid) == 0 && len(nestedInvalid) == 0 {
+		return nil, []string{leafName + ": missing .git marker"}, false, nil
+	}
+	return nestedValid, nestedInvalid, false, nil
+}
+
 // inspectTwoLevelMembers looks at <owner>/<leaf>/<checkout>/.git. Only
 // registered containers request this. Empty leftover leaves are ignored.
 func (a *WorktreeAdapter) inspectTwoLevelMembers(
@@ -781,7 +835,7 @@ func (a *WorktreeAdapter) inspectTwoLevelMembers(
 		if err := ctx.Err(); err != nil {
 			return nil, nil, err
 		}
-		if !entry.IsDir() {
+		if !entry.IsDir() || IsWorktreeSidecarName(entry.Name()) {
 			continue
 		}
 		checkoutPath := filepath.Join(leafPath, entry.Name())

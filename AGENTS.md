@@ -49,7 +49,7 @@ registry를 함께 사용하고 `.git` metadata로 검증한다.
 - 전체 `$HOME`이나 hidden owner를 무제한 재귀 탐색하지 않는다. hidden owner는 immediate convention child까지만 확인한다
 - 후보는 direct `<entry>/.git` 또는 nested `<entry>/<project>/.git` 파일이 있어야 한다. registered container owner는 `<owner>/<leaf>/<checkout>/.git` 두 단계까지 허용한다
 - member 탐색은 convention fallback에서 direct 또는 one-level nested까지만 허용한다. registered container만 two-level member를 본다. 전체 `$HOME` 재귀는 하지 않는다
-- outer `<entry>` 하나가 물리 mutation owner 하나다. valid/invalid marker가 섞이면 valid sibling을 내보내지 않고 owner 하나를 `plain-dir`로 보고한다
+- outer `<entry>` 하나가 물리 mutation owner 하나다. valid/invalid marker가 섞이면 valid sibling을 내보내지 않고 owner 하나를 `plain-dir`로 보고한다. 빈 leftover member(엔트리 없음)는 invalid marker가 아니다. registered sidecar 이름은 finite exact registry이며 현재 `.orca-worktree-trash`만 해당한다. sidecar는 내용이 있어도 member 분류에서 건너뛴다
 - readable missing/empty/malformed/directory marker는 explicit `Reason`이 있는 review-only `plain-dir`; I/O 실패는 provider error/partial scan이다
 - `.git` 파일의 `gitdir:`를 읽어 `active`/`orphaned`를 판정한다. referenced gitdir가 없으면 `orphaned`
 - `Source`는 path-derived owner(`.codex`, `.somename`, `project-local`) 또는 registered `superpowers`로 채운다

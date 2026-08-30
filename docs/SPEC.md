@@ -447,7 +447,11 @@ owner. Convention fallback inspects only `<entry>/.git` and
 `<entry>/<leaf>/<checkout>/.git`. Multiple valid nested members produce
 logical rows sharing the outer owner path. If any candidate marker is
 missing, a directory, empty, or malformed, the owner produces one explicit
-`plain-dir` row and no valid sibling can be executed. Metadata I/O failures
+`plain-dir` row and no valid sibling can be executed. Empty leftover members
+(no directory entries) are not invalid markers. Registered sidecar names are
+a finite exact registry; the current name is `.orca-worktree-trash`. Sidecars
+are skipped during member classification even when occupied, so they cannot
+fail-close a valid owner. Metadata I/O failures
 instead make the provider scan partial. A syntactically valid marker whose
 referenced gitdir is missing remains `orphaned`. Traversal never walks the
 whole `$HOME` or hidden owners unbounded.

@@ -67,7 +67,7 @@ aibris JSON과 Docker 출력을 파싱해 **크기 순으로 정렬**하여 사�
 - scan의 `active`는 상위 Git metadata가 연결되어 있다는 뜻이지 최근 사용 중이라는 뜻이 아니다. classic clean에서는 제외되므로 일반 정리 제안에서는 `orphaned`를 우선한다
 - 검증된 **active** worktree가 큰 비중을 차지하면 `aibris clean --dry-run` 경로를 우선 제안한다. 도구가 Codex가 아니어도 같다. 필터가 없고 검증된 active cleanup unit이 256 MB 이상이거나 3개 이상이면, 추천이 0개여도 기본 guided review가 열린다. 등록된 session-activity reader는 Codex만 있다. reader가 없는 도구는 그 이유만으로 자동 추천되지 않고, dirty/recent/retention 같은 다른 hard lock이 없으면 `reviewable` + `activity_source_not_registered`가 된다.
 - guided 결과는 `recommended`(기본 선택), `reviewable`(사용자 선택 가능), `locked`(선택 불가)로 해석한다. scan JSON의 project label만으로 active 항목의 안전을 추정하지 않는다
-- `plain-dir` / review-only owner는 절대 선택·삭제·strip 대상이 아니다. metadata를 검사하라고만 안내한다.
+- `plain-dir` / review-only owner는 절대 선택·삭제·strip 대상이 아니다. metadata를 검사하라고만 안내한다. 빈 leftover member와 등록된 sidecar(`.orca-worktree-trash`)는 mixed marker가 아니다.
 - 삭제하면 안 되는 **protected active** 체크아웃에서 regenerable subtree만 걷어내려면 `aibris clean --strip --dry-run`을 제안한다. strip은 세 번째 disposition이다. unit을 지우지 않는다. cwd가 unit 또는 그 subtree 안이면 거부한다.
 - Codex activity 판단은 session metadata, cwd, timestamp만 사용한다. 대화 본문은 읽거나 요약하지 않는다.
 - `by_category`에 없는 카테고리는 출력에서 제외한다
