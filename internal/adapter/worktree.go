@@ -769,7 +769,7 @@ func (a *WorktreeAdapter) inspectMissingMember(
 	ownerMod time.Time,
 	memberDepth int,
 ) ([]types.DebrisInfo, []string, bool, error) {
-	empty, hasSubdirs, err := leftoverDirState(memberPath)
+	empty, hasSubdirs, err := LeftoverMemberState(memberPath)
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -782,7 +782,10 @@ func (a *WorktreeAdapter) inspectMissingMember(
 	return a.inspectRegisteredMissingLeaf(ctx, ownerPath, memberPath, memberName, source, ownerMod)
 }
 
-func leftoverDirState(path string) (empty bool, hasSubdirs bool, err error) {
+// LeftoverMemberState reports whether path is an empty leftover directory
+// and whether it contains any subdirectory. Sidecar names are handled
+// separately by IsWorktreeSidecarName.
+func LeftoverMemberState(path string) (empty bool, hasSubdirs bool, err error) {
 	entries, err := os.ReadDir(path)
 	if err != nil {
 		return false, false, fmt.Errorf("reading leftover member %q: %w", path, err)

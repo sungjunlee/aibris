@@ -8,7 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -129,6 +131,21 @@ func TestBuildWorktreeCleanupUnits(t *testing.T) {
 			wantSources: []string{".codex"},
 		},
 		{
+			name: "occupied unknown sibling drops the owner",
+			buildItems: func(t *testing.T, root string) []types.DebrisInfo {
+				target := filepath.Join(root, "worktrees", "unknown")
+				createCleanupUnitGitFile(t, filepath.Join(target, "valid"), "valid")
+				if err := os.MkdirAll(filepath.Join(target, "notes"), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(target, "notes", "README"), []byte("keep"), 0644); err != nil {
+					t.Fatal(err)
+				}
+				return []types.DebrisInfo{cleanupUnitItem(target, 400, ".codex")}
+			},
+			wantUnits: 0,
+		},
+		{
 			name: "registered sidecar next to nested member is kept",
 			buildItems: func(t *testing.T, root string) []types.DebrisInfo {
 				target := filepath.Join(root, "worktrees", "848f")
@@ -225,6 +242,77 @@ func TestBuildWorktreeCleanupUnits(t *testing.T) {
 				t.Fatalf("units depend on scanner row order:\nfirst:  %+v\nsecond: %+v", units, gotAgain)
 			}
 		})
+	}
+}
+
+func TestBuildWorktreeCleanupUnitsAgreesWithScanSkipRules(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	writeMarker := func(path, name string) {
+		t.Helper()
+		if err := os.MkdirAll(path, 0755); err != nil {
+			t.Fatal(err)
+		}
+		gitdir := filepath.Join(home, "_missing-gitdirs", name)
+		if err := os.WriteFile(filepath.Join(path, ".git"), []byte("gitdir: "+gitdir+"\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	leftover := filepath.Join(home, ".codex", "worktrees", "leftover")
+	writeMarker(filepath.Join(leftover, "valid"), "leftover")
+	if err := os.MkdirAll(filepath.Join(leftover, "empty-leftover"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	sidecar := filepath.Join(home, ".codex", "worktrees", "sidecar")
+	writeMarker(filepath.Join(sidecar, "valid"), "sidecar")
+	if err := os.MkdirAll(filepath.Join(sidecar, ".orca-worktree-trash", "dropped"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	unknown := filepath.Join(home, ".codex", "worktrees", "unknown")
+	writeMarker(filepath.Join(unknown, "valid"), "unknown")
+	if err := os.MkdirAll(filepath.Join(unknown, "notes"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(unknown, "notes", "README"), []byte("keep"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := (&adapter.WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := map[string]types.WorktreeStatus{}
+	for _, item := range results {
+		status[item.ID] = item.Status
+	}
+	if status["leftover"] == types.WorktreePlain || status["sidecar"] == types.WorktreePlain {
+		t.Fatalf("scan statuses = %+v; leftover/sidecar must stay linked", status)
+	}
+	if status["unknown"] != types.WorktreePlain {
+		t.Fatalf("scan unknown status = %q; want plain-dir", status["unknown"])
+	}
+
+	units, err := BuildWorktreeCleanupUnits(context.Background(), results)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kept := map[string]bool{}
+	for _, unit := range units {
+		kept[filepath.Base(unit.TargetPath)] = true
+		for _, member := range unit.Members {
+			if filepath.Base(member.WorktreePath) == ".orca-worktree-trash" {
+				t.Fatalf("sidecar became a cleanup member: %+v", unit.Members)
+			}
+		}
+	}
+	if !kept["leftover"] || !kept["sidecar"] {
+		t.Fatalf("kept = %+v; want leftover and sidecar units", kept)
+	}
+	if kept["unknown"] {
+		t.Fatal("occupied unknown sibling still produced a cleanup unit")
 	}
 }
 

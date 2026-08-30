@@ -152,18 +152,12 @@ func discoverGitWorktreeMembers(ctx context.Context, targetPath string) ([]GitWo
 			}
 			continue
 		}
-		// Registered two-level layout: <owner>/<leaf>/<checkout>/.git.
-		// A mixed leaf fail-closes the whole owner; empty leftover leaves
-		// are ignored.
-		nested, mixed, err := twoLevelGitWorktreePaths(ctx, memberPath)
+		keep, nested, err := classifyMissingCleanupMember(ctx, memberPath)
 		if err != nil {
 			return nil, err
 		}
-		if mixed {
+		if !keep {
 			return nil, nil
-		}
-		if len(nested) == 0 {
-			continue
 		}
 		for _, nestedPath := range nested {
 			memberPaths[nestedPath] = true
@@ -184,6 +178,27 @@ func discoverGitWorktreeMembers(ctx context.Context, targetPath string) ([]GitWo
 		members = append(members, BuildGitWorktreeMember(ctx, path))
 	}
 	return members, nil
+}
+
+func classifyMissingCleanupMember(ctx context.Context, memberPath string) (bool, []string, error) {
+	empty, hasSubdirs, err := adapter.LeftoverMemberState(memberPath)
+	if err != nil {
+		return false, nil, err
+	}
+	if empty {
+		return true, nil, nil
+	}
+	if !hasSubdirs {
+		return false, nil, nil
+	}
+	nested, mixed, err := twoLevelGitWorktreePaths(ctx, memberPath)
+	if err != nil {
+		return false, nil, err
+	}
+	if mixed || len(nested) == 0 {
+		return false, nil, nil
+	}
+	return true, nested, nil
 }
 
 func twoLevelGitWorktreePaths(ctx context.Context, leafPath string) ([]string, bool, error) {

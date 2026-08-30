@@ -284,6 +284,22 @@ func TestBuiltCLI_EmptyLeftoverAndSidecarStayLinked(t *testing.T) {
 			t.Fatalf("owner %q status = %q; want %q (%+v)", want.id, row.Status, want.status, row)
 		}
 	}
+
+	cleanOutput, err := runCLIContract(
+		binary,
+		home,
+		"clean", "--dry-run", "--no-guide", "--age=1ns", "--category=worktree",
+	)
+	if err != nil {
+		t.Fatalf("built-CLI dry-run failed: %v\n%s", err, cleanOutput)
+	}
+	if !strings.Contains(cleanOutput, ".codex/worktrees/leftover") ||
+		!strings.Contains(cleanOutput, ".codex/worktrees/sidecar") {
+		t.Fatalf("dry-run missing leftover/sidecar targets:\n%s", cleanOutput)
+	}
+	if strings.Contains(cleanOutput, ".codex/worktrees/unknown") {
+		t.Fatalf("occupied unknown sibling was planned:\n%s", cleanOutput)
+	}
 }
 
 func TestBuiltCLI_MixedActiveOrphanedOwnerFailsClosed(t *testing.T) {
