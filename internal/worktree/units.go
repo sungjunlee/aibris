@@ -235,7 +235,18 @@ func twoLevelGitWorktreePaths(ctx context.Context, leafPath string) ([]string, b
 func HasGitWorktreeMetadata(path string) bool {
 	gitFilePath := filepath.Join(path, ".git")
 	info, err := os.Lstat(gitFilePath)
-	return err == nil && (info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0)
+	if err != nil || (!info.Mode().IsRegular() && info.Mode()&os.ModeSymlink == 0) {
+		return false
+	}
+	data, err := os.ReadFile(gitFilePath)
+	if err != nil {
+		return false
+	}
+	line := strings.TrimSpace(strings.SplitN(string(data), "\n", 2)[0])
+	if !strings.HasPrefix(line, "gitdir: ") {
+		return false
+	}
+	return strings.TrimSpace(strings.TrimPrefix(line, "gitdir: ")) != ""
 }
 
 func BuildGitWorktreeMember(ctx context.Context, worktreePath string) GitWorktreeMember {
