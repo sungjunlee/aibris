@@ -256,6 +256,12 @@ func TestBuiltCLI_EmptyLeftoverAndSidecarStayLinked(t *testing.T) {
 	}
 	writeCLIContractFile(t, filepath.Join(unknown, "notes", "README"), "keep\n")
 
+	nestedSidecar := filepath.Join(home, ".codex", "worktrees", "nested-sidecar")
+	writeValidMarker(filepath.Join(nestedSidecar, "valid"), "nested-sidecar-valid")
+	if err := os.MkdirAll(filepath.Join(nestedSidecar, "unknown", ".orca-worktree-trash", "dropped"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
 	scanOutput, err := runCLIContract(binary, home, "scan", "--json")
 	if err != nil {
 		t.Fatalf("built-CLI scan failed: %v\n%s", err, scanOutput)
@@ -275,6 +281,7 @@ func TestBuiltCLI_EmptyLeftoverAndSidecarStayLinked(t *testing.T) {
 		{id: "leftover", status: types.WorktreeOrphaned},
 		{id: "sidecar", status: types.WorktreeOrphaned},
 		{id: "unknown", status: types.WorktreePlain},
+		{id: "nested-sidecar", status: types.WorktreePlain},
 	} {
 		row, ok := rows[want.id]
 		if !ok {
@@ -297,7 +304,8 @@ func TestBuiltCLI_EmptyLeftoverAndSidecarStayLinked(t *testing.T) {
 		!strings.Contains(cleanOutput, ".codex/worktrees/sidecar") {
 		t.Fatalf("dry-run missing leftover/sidecar targets:\n%s", cleanOutput)
 	}
-	if strings.Contains(cleanOutput, ".codex/worktrees/unknown") {
+	if strings.Contains(cleanOutput, ".codex/worktrees/unknown") ||
+		strings.Contains(cleanOutput, ".codex/worktrees/nested-sidecar") {
 		t.Fatalf("occupied unknown sibling was planned:\n%s", cleanOutput)
 	}
 }

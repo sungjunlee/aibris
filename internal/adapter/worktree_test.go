@@ -1264,6 +1264,27 @@ func TestWorktreeAdapter_RegisteredSidecarDoesNotPoisonOwner(t *testing.T) {
 	}
 }
 
+func TestWorktreeAdapter_NestedSidecarOnlySiblingProtectsOwner(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	unit := filepath.Join(home, ".codex", "worktrees", "owner")
+	createWorktreeGit(t, filepath.Join(unit, "valid"), filepath.Join(home, "parent"), "valid")
+	if err := os.MkdirAll(filepath.Join(unit, "unknown", ".orca-worktree-trash", "dropped"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].Status != types.WorktreePlain {
+		t.Fatalf("nested sidecar-only sibling = %+v; want protected plain-dir", results)
+	}
+	if !strings.Contains(results[0].Reason, "unknown: missing .git marker") {
+		t.Fatalf("reason = %q; want unknown missing marker", results[0].Reason)
+	}
+}
+
 func TestWorktreeAdapter_InvalidReasonsAreSortedAndConventionStopsAtOneLevel(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)

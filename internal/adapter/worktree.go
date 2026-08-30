@@ -813,7 +813,7 @@ func (a *WorktreeAdapter) inspectRegisteredMissingLeaf(
 		return nil, nil, false, err
 	}
 	if len(nestedValid) == 0 && len(nestedInvalid) == 0 {
-		return nil, nil, true, nil
+		return nil, []string{leafName + ": missing .git marker"}, false, nil
 	}
 	return nestedValid, nestedInvalid, false, nil
 }

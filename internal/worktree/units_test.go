@@ -131,6 +131,18 @@ func TestBuildWorktreeCleanupUnits(t *testing.T) {
 			wantSources: []string{".codex"},
 		},
 		{
+			name: "nested sidecar-only sibling drops the owner",
+			buildItems: func(t *testing.T, root string) []types.DebrisInfo {
+				target := filepath.Join(root, "worktrees", "owner")
+				createCleanupUnitGitFile(t, filepath.Join(target, "valid"), "valid")
+				if err := os.MkdirAll(filepath.Join(target, "unknown", ".orca-worktree-trash", "dropped"), 0755); err != nil {
+					t.Fatal(err)
+				}
+				return []types.DebrisInfo{cleanupUnitItem(target, 400, ".codex")}
+			},
+			wantUnits: 0,
+		},
+		{
 			name: "occupied unknown sibling drops the owner",
 			buildItems: func(t *testing.T, root string) []types.DebrisInfo {
 				target := filepath.Join(root, "worktrees", "unknown")
@@ -280,6 +292,12 @@ func TestBuildWorktreeCleanupUnitsAgreesWithScanSkipRules(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	nested := filepath.Join(home, ".codex", "worktrees", "nested-sidecar")
+	writeMarker(filepath.Join(nested, "valid"), "nested")
+	if err := os.MkdirAll(filepath.Join(nested, "unknown", ".orca-worktree-trash", "dropped"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
 	results, err := (&adapter.WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -291,8 +309,8 @@ func TestBuildWorktreeCleanupUnitsAgreesWithScanSkipRules(t *testing.T) {
 	if status["leftover"] == types.WorktreePlain || status["sidecar"] == types.WorktreePlain {
 		t.Fatalf("scan statuses = %+v; leftover/sidecar must stay linked", status)
 	}
-	if status["unknown"] != types.WorktreePlain {
-		t.Fatalf("scan unknown status = %q; want plain-dir", status["unknown"])
+	if status["unknown"] != types.WorktreePlain || status["nested-sidecar"] != types.WorktreePlain {
+		t.Fatalf("scan statuses = %+v; unknown/nested-sidecar must be plain-dir", status)
 	}
 
 	units, err := BuildWorktreeCleanupUnits(context.Background(), results)
@@ -311,7 +329,7 @@ func TestBuildWorktreeCleanupUnitsAgreesWithScanSkipRules(t *testing.T) {
 	if !kept["leftover"] || !kept["sidecar"] {
 		t.Fatalf("kept = %+v; want leftover and sidecar units", kept)
 	}
-	if kept["unknown"] {
+	if kept["unknown"] || kept["nested-sidecar"] {
 		t.Fatal("occupied unknown sibling still produced a cleanup unit")
 	}
 }
