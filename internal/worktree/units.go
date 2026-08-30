@@ -128,7 +128,14 @@ func discoverGitWorktreeMembers(ctx context.Context, targetPath string) ([]GitWo
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if HasGitWorktreeMetadata(targetPath) {
+	linked, invalidPresent, err := ownerGitMarkerState(targetPath)
+	if err != nil {
+		return nil, err
+	}
+	if invalidPresent {
+		return nil, nil
+	}
+	if linked {
 		return []GitWorktreeMember{BuildGitWorktreeMember(ctx, targetPath)}, nil
 	}
 
@@ -230,6 +237,20 @@ func twoLevelGitWorktreePaths(ctx context.Context, leafPath string) ([]string, b
 	}
 	sort.Strings(paths)
 	return paths, false, nil
+}
+
+func ownerGitMarkerState(path string) (linked bool, invalidPresent bool, err error) {
+	_, err = os.Lstat(filepath.Join(path, ".git"))
+	if os.IsNotExist(err) {
+		return false, false, nil
+	}
+	if err != nil {
+		return false, false, err
+	}
+	if HasGitWorktreeMetadata(path) {
+		return true, false, nil
+	}
+	return false, true, nil
 }
 
 func HasGitWorktreeMetadata(path string) bool {

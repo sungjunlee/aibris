@@ -143,6 +143,18 @@ func TestBuildWorktreeCleanupUnits(t *testing.T) {
 			wantUnits: 0,
 		},
 		{
+			name: "invalid owner git marker drops nested valid member",
+			buildItems: func(t *testing.T, root string) []types.DebrisInfo {
+				target := filepath.Join(root, "worktrees", "owner")
+				createCleanupUnitGitFile(t, filepath.Join(target, "valid"), "valid")
+				if err := os.WriteFile(filepath.Join(target, ".git"), nil, 0644); err != nil {
+					t.Fatal(err)
+				}
+				return []types.DebrisInfo{cleanupUnitItem(target, 400, ".codex")}
+			},
+			wantUnits: 0,
+		},
+		{
 			name: "empty git marker sibling drops the owner",
 			buildItems: func(t *testing.T, root string) []types.DebrisInfo {
 				target := filepath.Join(root, "worktrees", "owner")
