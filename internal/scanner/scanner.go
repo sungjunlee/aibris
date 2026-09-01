@@ -447,7 +447,7 @@ func NormalizeRoots(rawRoots []string) ([]string, error) {
 	for _, root := range roots {
 		nested := false
 		for _, parent := range deduped {
-			if root == parent || isWithin(parent, root) {
+			if root == parent || adapter.IsWithin(parent, root) {
 				nested = true
 				break
 			}
@@ -483,7 +483,7 @@ func normalizeRoot(raw, home string) (string, error) {
 	if !info.IsDir() {
 		return "", fmt.Errorf("scan root %q is not a directory", raw)
 	}
-	if resolved != home && !isWithin(home, resolved) && !isResolvedSystemTempDir(resolved) {
+	if resolved != home && !adapter.IsWithin(home, resolved) && !isResolvedSystemTempDir(resolved) {
 		return "", fmt.Errorf("scan root %q must be under %s", raw, home)
 	}
 	return resolved, nil
@@ -510,11 +510,6 @@ func resolveExistingPath(path string) (string, error) {
 	return filepath.Clean(resolved), nil
 }
 
-func isWithin(parent, child string) bool {
-	rel, err := filepath.Rel(parent, child)
-	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
-}
-
 // optedInSystemTempRoot returns the normalized scan root that is the
 // resolved system temp dir, or "" when the temp dir was not explicitly rooted
 // or already sits inside the home tree. The ownership gate applies only to
@@ -532,7 +527,7 @@ func optedInSystemTempRoot(roots []string) string {
 	if err != nil {
 		return ""
 	}
-	if tempDir == resolvedHome || isWithin(resolvedHome, tempDir) {
+	if tempDir == resolvedHome || adapter.IsWithin(resolvedHome, tempDir) {
 		return ""
 	}
 	for _, root := range roots {
@@ -561,7 +556,7 @@ func requireTempDirOwnership(ctx context.Context, items []types.DebrisInfo, root
 	}
 	gated := items[:0]
 	for _, item := range items {
-		if item.Path != tempRoot && !isWithin(tempRoot, item.Path) {
+		if item.Path != tempRoot && !adapter.IsWithin(tempRoot, item.Path) {
 			gated = append(gated, item)
 			continue
 		}
@@ -596,7 +591,7 @@ func owningRecordedCWD(path string, owners map[string]types.Tool) (string, types
 	sort.Strings(cwds)
 	for _, cwd := range cwds {
 		resolved := resolveForOwnershipMatch(cwd)
-		if resolved == unit || isWithin(resolved, unit) || isWithin(unit, resolved) {
+		if resolved == unit || adapter.IsWithin(resolved, unit) || adapter.IsWithin(unit, resolved) {
 			return cwd, owners[cwd], true
 		}
 	}
