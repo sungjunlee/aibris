@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -726,22 +725,11 @@ func printCleanHeader(roots []string) {
 }
 
 func scanForClean(ctx context.Context, roots, excludes []string, explicit bool) (*types.ScanResult, scanSource, error) {
-	return scanForCleanWithProgress(ctx, roots, excludes, explicit, true)
+	return loadLastScanSession(ctx, roots, excludes, cleanScanSelector(), explicit, true)
 }
 
 func scanForCleanQuiet(ctx context.Context, roots, excludes []string, explicit bool) (*types.ScanResult, scanSource, error) {
-	return scanForCleanWithProgress(ctx, roots, excludes, explicit, false)
-}
-
-func scanForCleanWithProgress(ctx context.Context, roots, excludes []string, explicit, showProgress bool) (*types.ScanResult, scanSource, error) {
-	selector := cleanScanSelector()
-	if result, source, ok := tryCachedCleanScan(roots, excludes, selector, explicit, showProgress); ok {
-		if err := requireCompleteScan(result); err != nil {
-			return nil, scanSource{}, err
-		}
-		return result, source, nil
-	}
-	return liveCleanScan(ctx, roots, excludes, selector, explicit, showProgress)
+	return loadLastScanSession(ctx, roots, excludes, cleanScanSelector(), explicit, false)
 }
 
 func cleanScanSelector() string {
@@ -754,113 +742,7 @@ func cleanScanSelector() string {
 	return "delete"
 }
 
-func tryCachedCleanScan(roots, excludes []string, selector string, explicit, showProgress bool) (*types.ScanResult, scanSource, bool) {
-	if reason, skip := excludedCleanScanReason(roots, selector, excludes, explicit); skip {
-		printLastScanRescan(reason, showProgress)
-		return nil, scanSource{}, false
-	}
-	readAt := time.Now()
-	result, age, reason, ok := inspectCachedCleanScan(roots, selector, explicit)
-	if !ok || !claimLastScanSelector(selector) {
-		printLastScanRescan(cachedScanMissReason(ok, reason), showProgress)
-		return nil, scanSource{}, false
-	}
-	emitCachedExplicitRootWarning(roots, explicit)
-	printLastScanReuse(age, showProgress)
-	return result, scanSource{
-		Kind:       scanSourceCached,
-		Age:        age,
-		ObservedAt: readAt.Add(-age),
-	}, true
-}
-
-func excludedCleanScanReason(roots []string, selector string, excludes []string, explicit bool) (string, bool) {
-	if len(excludes) == 0 {
-		return "", false
-	}
-	_, _, reason, ok := inspectLastScanCache(roots, selector, explicit)
-	if !ok && reason == "" {
-		return "", true
-	}
-	return "cleanup exclusions requested", true
-}
-
-func cachedScanMissReason(ok bool, reason string) string {
-	if !ok {
-		return reason
-	}
-	return "cache selector unavailable"
-}
-
-func inspectCachedCleanScan(roots []string, selector string, explicit bool) (*types.ScanResult, time.Duration, string, bool) {
-	result, age, reason, ok := inspectLastScanCache(roots, selector, explicit)
-	if ok && scanResultHasExclusions(result) {
-		return nil, age, "cached scan used exclusions", false
-	}
-	return result, age, reason, ok
-}
-
-func printLastScanReuse(age time.Duration, show bool) {
-	if !show {
-		return
-	}
-	fmt.Printf("using last scan from %s ago\n", shortDurationString(age))
-}
-
-func printLastScanRescan(reason string, show bool) {
-	if !show || reason == "" {
-		return
-	}
-	fmt.Printf("scanning again: %s\n", reason)
-}
-
-func liveCleanScan(ctx context.Context, roots, excludes []string, selector string, explicit, showProgress bool) (*types.ScanResult, scanSource, error) {
-	result, err := runCleanScan(ctx, roots, excludes, explicit, showProgress)
-	if err != nil {
-		return nil, scanSource{}, err
-	}
-	if err := requireCompleteScan(result); err != nil {
-		return nil, scanSource{}, err
-	}
-	writeLastScanCacheForSelector(roots, scanner.DefaultScanner.ProviderIdentity(), selector, explicit, result)
-	return result, scanSource{Kind: scanSourceLive}, nil
-}
-
-func runCleanScan(ctx context.Context, roots, excludes []string, explicit, showProgress bool) (*types.ScanResult, error) {
-	if showProgress {
-		return runLiveCleanScan(ctx, roots, excludes, explicit)
-	}
-	quietScanner := scanner.NewWithRetentionProviders(
-		scanner.DefaultScanner.Providers,
-		scanner.DefaultScanner.RetentionProviders,
-	)
-	quietScanner.ErrorWriter = io.Discard
-	return quietScanner.ScanWithOptions(ctx, types.ScanOptions{
-		Roots:         roots,
-		ExplicitRoots: explicit,
-		Excludes:      excludes,
-	})
-}
-
-func runLiveCleanScan(ctx context.Context, roots, excludes []string, explicit bool) (*types.ScanResult, error) {
-	progress := newScanProgressPrinter(os.Stdout)
-	result, err := scanner.ScanWithOptions(ctx, types.ScanOptions{
-		Roots:         roots,
-		ExplicitRoots: explicit,
-		Excludes:      excludes,
-		OnProgress:    progress.Handle,
-	})
-	progress.Stop()
-	return result, err
-}
-
 var errIncompleteCleanupScan = errors.New("cleanup requires a complete scan")
-
-// scanResultHasExclusions reports whether a cached scan was produced with
-// user exclusions applied, so a plain clean never reuses a filtered cache.
-func scanResultHasExclusions(result *types.ScanResult) bool {
-	return result.ExcludedByUser > 0 || len(result.ExcludedScopes) > 0 || len(result.RejectedExcludes) > 0
-}
 
 func requireCompleteScan(result *types.ScanResult) error {
 	if result == nil || !result.Partial() {

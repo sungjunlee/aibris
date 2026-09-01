@@ -343,6 +343,123 @@ func TestReadFreshLastScanCacheRejectsAgentStateEntryWithoutPathModTime(t *testi
 	}
 }
 
+func TestLastScanCacheIdentityWriteAndReadAgree(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	roots := []string{home}
+
+	writeLastScanCache(roots, scanner.DefaultScanner.ProviderIdentity(), &types.ScanResult{TotalCount: 1}, true)
+	cache, ok := readLastScanCache()
+	if !ok {
+		t.Fatal("scan write did not produce last-scan.json")
+	}
+
+	written := lastScanCacheIdentityOf(roots, scanner.DefaultScanner.ProviderIdentity(), true)
+	if reason := written.mismatchReason(cache); reason != "" {
+		t.Fatalf("scan write identity refused its own cache: %s", reason)
+	}
+	if reason := currentLastScanCacheIdentity(roots, true).mismatchReason(cache); reason != "" {
+		t.Fatalf("clean read identity refused a matching scan write: %s", reason)
+	}
+	if reason := currentLastScanCacheIdentity(roots, false).mismatchReason(cache); reason != "scan roots changed" {
+		t.Fatalf("explicit-root mismatch = %q; want scan roots changed", reason)
+	}
+
+	foreign := adapter.Identity([]adapter.DebrisProvider{adapter.NewWorktreeAdapter()})
+	if foreign == adapter.DefaultProviderIdentity() {
+		t.Fatal("fixture requires a foreign provider identity")
+	}
+	writeLastScanCache(roots, foreign, &types.ScanResult{TotalCount: 1}, true)
+	cache, ok = readLastScanCache()
+	if !ok {
+		t.Fatal("foreign identity cache was not written")
+	}
+	if reason := currentLastScanCacheIdentity(roots, true).mismatchReason(cache); reason != "provider set changed" {
+		t.Fatalf("foreign provider mismatch = %q; want provider set changed", reason)
+	}
+}
+
+func TestLastScanCacheIdentityMismatchReasons(t *testing.T) {
+	roots := []string{"/tmp/a"}
+	id := lastScanCacheIdentityOf(roots, "sha256:abc", true)
+	cache := lastScanCache{
+		ProviderIdentity:          id.providerIdentity,
+		RetentionProviderIdentity: id.retentionProviderIdentity,
+		Roots:                     append([]string(nil), id.roots...),
+		ExplicitRoots:             true,
+	}
+	if reason := id.mismatchReason(cache); reason != "" {
+		t.Fatalf("matching identity refused: %s", reason)
+	}
+
+	otherRoots := lastScanCacheIdentityOf([]string{"/tmp/b"}, "sha256:abc", true)
+	if reason := otherRoots.mismatchReason(cache); reason != "scan roots changed" {
+		t.Fatalf("root mismatch = %q", reason)
+	}
+	implicit := lastScanCacheIdentityOf(roots, "sha256:abc", false)
+	if reason := implicit.mismatchReason(cache); reason != "scan roots changed" {
+		t.Fatalf("explicit mismatch = %q", reason)
+	}
+	otherProvider := lastScanCacheIdentityOf(roots, "sha256:def", true)
+	if reason := otherProvider.mismatchReason(cache); reason != "provider set changed" {
+		t.Fatalf("provider mismatch = %q", reason)
+	}
+
+	cache.RetentionProviderIdentity = "other-retention"
+	if reason := id.mismatchReason(cache); reason != "provider set changed" {
+		t.Fatalf("retention mismatch = %q", reason)
+	}
+}
+
+func TestLastScanSessionReusesMatchingIdentity(t *testing.T) {
+	_, workspace := seededReuseWorkspace(t)
+	roots := mustNormalizeRoots(t, workspace)
+	result, source, err := loadLastScanSession(context.Background(), roots, nil, "delete", true, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if source.Kind != scanSourceCached {
+		t.Fatalf("source = %q; want cached", source.Kind)
+	}
+	if result == nil {
+		t.Fatal("cached session returned nil result")
+	}
+}
+
+func TestLastScanSessionMismatchForcesLiveScan(t *testing.T) {
+	_, workspace := reuseScanFixture(t)
+	roots := mustNormalizeRoots(t, workspace)
+	foreign := adapter.Identity([]adapter.DebrisProvider{adapter.NewWorktreeAdapter()})
+	cache := validReuseCache(roots, "delete")
+	cache.ProviderIdentity = foreign
+	if err := saveLastScanCache(cache); err != nil {
+		t.Fatal(err)
+	}
+
+	result, source, err := loadLastScanSession(context.Background(), roots, nil, "delete", true, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if source.Kind != scanSourceLive {
+		t.Fatalf("source = %q; want live", source.Kind)
+	}
+	if result == nil {
+		t.Fatal("live session returned nil result")
+	}
+
+	stored, ok := readLastScanCache()
+	if !ok {
+		t.Fatal("live scan did not write last-scan.json")
+	}
+	if stored.SchemaVersion != lastScanCacheSchemaVersion {
+		t.Fatalf("schema_version = %d; want %d", stored.SchemaVersion, lastScanCacheSchemaVersion)
+	}
+	if reason := currentLastScanCacheIdentity(roots, true).mismatchReason(stored); reason != "" {
+		t.Fatalf("live scan wrote an identity the helper refuses: %s", reason)
+	}
+	assertOnlyLastScanCacheFile(t)
+}
+
 func TestReadLastScanCacheRejectsMalformedPayload(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)

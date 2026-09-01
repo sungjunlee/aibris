@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -10,6 +12,7 @@ import (
 
 	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/retention"
+	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -32,6 +35,44 @@ type lastScanCache struct {
 	TargetEvidence            map[string]lastScanTargetEvidence `json:"target_evidence,omitempty"`
 }
 
+// lastScanCacheIdentity is the reuse key shared by `aibris scan` writes and
+// `aibris clean` reads. Roots, provider membership, retention membership, and
+// the explicit-root flag are the identity. Schema freshness is separate; there
+// is no second fingerprint or on-disk cache format.
+type lastScanCacheIdentity struct {
+	providerIdentity          string
+	retentionProviderIdentity string
+	roots                     []string
+	explicitRoots             bool
+}
+
+func lastScanCacheIdentityOf(roots []string, providerIdentity string, explicit bool) lastScanCacheIdentity {
+	return lastScanCacheIdentity{
+		providerIdentity:          providerIdentity,
+		retentionProviderIdentity: retention.DefaultProviderIdentity(),
+		roots:                     append([]string(nil), roots...),
+		explicitRoots:             explicit,
+	}
+}
+
+func currentLastScanCacheIdentity(roots []string, explicit bool) lastScanCacheIdentity {
+	return lastScanCacheIdentityOf(roots, adapter.DefaultProviderIdentity(), explicit)
+}
+
+func (id lastScanCacheIdentity) mismatchReason(cache lastScanCache) string {
+	if cache.ProviderIdentity == "" || cache.ProviderIdentity != id.providerIdentity {
+		return "provider set changed"
+	}
+	if cache.RetentionProviderIdentity == "" ||
+		cache.RetentionProviderIdentity != id.retentionProviderIdentity {
+		return "provider set changed"
+	}
+	if !slices.Equal(cache.Roots, id.roots) || cache.ExplicitRoots != id.explicitRoots {
+		return "scan roots changed"
+	}
+	return ""
+}
+
 func writeLastScanCache(roots []string, identity string, result *types.ScanResult, explicit bool) {
 	writeLastScanCacheForSelector(roots, identity, "", explicit, result)
 }
@@ -44,14 +85,15 @@ func writeLastScanCacheForSelector(roots []string, identity, selector string, ex
 	if !ok {
 		return
 	}
+	id := lastScanCacheIdentityOf(roots, identity, explicit)
 	_ = saveLastScanCache(lastScanCache{
 		SchemaVersion:             lastScanCacheSchemaVersion,
-		ProviderIdentity:          identity,
-		RetentionProviderIdentity: retention.DefaultProviderIdentity(),
+		ProviderIdentity:          id.providerIdentity,
+		RetentionProviderIdentity: id.retentionProviderIdentity,
 		Selector:                  selector,
 		CreatedAt:                 time.Now(),
-		Roots:                     append([]string(nil), roots...),
-		ExplicitRoots:             explicit,
+		Roots:                     id.roots,
+		ExplicitRoots:             id.explicitRoots,
 		Result:                    *result,
 		TargetEvidence:            evidence,
 	})
@@ -154,17 +196,7 @@ func lastScanFreshnessReason(cache lastScanCache, age time.Duration) string {
 }
 
 func lastScanIdentityReason(cache lastScanCache, roots []string, explicit bool) string {
-	if cache.ProviderIdentity == "" || cache.ProviderIdentity != adapter.DefaultProviderIdentity() {
-		return "provider set changed"
-	}
-	if cache.RetentionProviderIdentity == "" ||
-		cache.RetentionProviderIdentity != retention.DefaultProviderIdentity() {
-		return "provider set changed"
-	}
-	if !slices.Equal(cache.Roots, roots) || cache.ExplicitRoots != explicit {
-		return "scan roots changed"
-	}
-	return ""
+	return currentLastScanCacheIdentity(roots, explicit).mismatchReason(cache)
 }
 
 func emitCachedExplicitRootWarning(roots []string, explicit bool) {
@@ -234,4 +266,133 @@ func lastScanCachePath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, "aibris", "last-scan.json"), nil
+}
+
+// lastScanSession is the shared cache session used by scan (write) and clean
+// (reuse or live scan). Clean's scan-for-clean path loads through this type
+// rather than a private fingerprint or schema.
+type lastScanSession struct {
+	roots    []string
+	excludes []string
+	selector string
+	explicit bool
+	progress bool
+}
+
+func loadLastScanSession(ctx context.Context, roots, excludes []string, selector string, explicit, progress bool) (*types.ScanResult, scanSource, error) {
+	return lastScanSession{
+		roots:    roots,
+		excludes: excludes,
+		selector: selector,
+		explicit: explicit,
+		progress: progress,
+	}.load(ctx)
+}
+
+func (s lastScanSession) load(ctx context.Context) (*types.ScanResult, scanSource, error) {
+	if result, source, ok := s.tryCached(); ok {
+		if err := requireCompleteScan(result); err != nil {
+			return nil, scanSource{}, err
+		}
+		return result, source, nil
+	}
+	return s.liveScan(ctx)
+}
+
+func (s lastScanSession) tryCached() (*types.ScanResult, scanSource, bool) {
+	if reason, skip := s.excludedReason(); skip {
+		printLastScanRescan(reason, s.progress)
+		return nil, scanSource{}, false
+	}
+	readAt := time.Now()
+	result, age, reason, ok := inspectLastScanCache(s.roots, s.selector, s.explicit)
+	if ok && scanResultHasExclusions(result) {
+		ok = false
+		reason = "cached scan used exclusions"
+	}
+	if !ok || !claimLastScanSelector(s.selector) {
+		printLastScanRescan(cachedScanMissReason(ok, reason), s.progress)
+		return nil, scanSource{}, false
+	}
+	emitCachedExplicitRootWarning(s.roots, s.explicit)
+	printLastScanReuse(age, s.progress)
+	return result, scanSource{
+		Kind:       scanSourceCached,
+		Age:        age,
+		ObservedAt: readAt.Add(-age),
+	}, true
+}
+
+func (s lastScanSession) excludedReason() (string, bool) {
+	if len(s.excludes) == 0 {
+		return "", false
+	}
+	_, _, reason, ok := inspectLastScanCache(s.roots, s.selector, s.explicit)
+	if !ok && reason == "" {
+		return "", true
+	}
+	return "cleanup exclusions requested", true
+}
+
+func cachedScanMissReason(ok bool, reason string) string {
+	if !ok {
+		return reason
+	}
+	return "cache selector unavailable"
+}
+
+func printLastScanReuse(age time.Duration, show bool) {
+	if !show {
+		return
+	}
+	fmt.Printf("using last scan from %s ago\n", shortDurationString(age))
+}
+
+func printLastScanRescan(reason string, show bool) {
+	if !show || reason == "" {
+		return
+	}
+	fmt.Printf("scanning again: %s\n", reason)
+}
+
+func (s lastScanSession) liveScan(ctx context.Context) (*types.ScanResult, scanSource, error) {
+	result, err := s.runLive(ctx)
+	if err != nil {
+		return nil, scanSource{}, err
+	}
+	if err := requireCompleteScan(result); err != nil {
+		return nil, scanSource{}, err
+	}
+	writeLastScanCacheForSelector(s.roots, scanner.DefaultScanner.ProviderIdentity(), s.selector, s.explicit, result)
+	return result, scanSource{Kind: scanSourceLive}, nil
+}
+
+func (s lastScanSession) runLive(ctx context.Context) (*types.ScanResult, error) {
+	if s.progress {
+		progress := newScanProgressPrinter(os.Stdout)
+		result, err := scanner.ScanWithOptions(ctx, types.ScanOptions{
+			Roots:         s.roots,
+			ExplicitRoots: s.explicit,
+			Excludes:      s.excludes,
+			OnProgress:    progress.Handle,
+		})
+		progress.Stop()
+		return result, err
+	}
+	quietScanner := scanner.NewWithRetentionProviders(
+		scanner.DefaultScanner.Providers,
+		scanner.DefaultScanner.RetentionProviders,
+	)
+	quietScanner.ErrorWriter = io.Discard
+	return quietScanner.ScanWithOptions(ctx, types.ScanOptions{
+		Roots:         s.roots,
+		ExplicitRoots: s.explicit,
+		Excludes:      s.excludes,
+	})
+}
+
+// scanResultHasExclusions reports whether a cached scan was produced with
+// user exclusions applied, so a plain clean never reuses a filtered cache.
+func scanResultHasExclusions(result *types.ScanResult) bool {
+	return result.ExcludedByUser > 0 || len(result.ExcludedScopes) > 0 || len(result.RejectedExcludes) > 0
 }
