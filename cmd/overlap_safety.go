@@ -471,6 +471,36 @@ func mergeCleanAuditProtections(
 	return merged
 }
 
+type worktreeGitInspector func(context.Context, string) worktreeGitSafety
+
+func filterGitUnsafeActiveWorktreeTargets(ctx context.Context, targets []types.DebrisInfo) ([]types.DebrisInfo, map[string]cleanAuditReason) {
+	return filterGitUnsafeActiveWorktreeTargetsWithInspector(ctx, targets, inspectActiveWorktreeCleanupSafety)
+}
+
+func filterGitUnsafeActiveWorktreeTargetsWithInspector(ctx context.Context, targets []types.DebrisInfo, inspector worktreeGitInspector) ([]types.DebrisInfo, map[string]cleanAuditReason) {
+	protections := make(map[string]cleanAuditReason)
+	filtered := targets[:0]
+	for _, target := range targets {
+		if target.Category != types.CategoryWorktree || target.Status != types.WorktreeActive {
+			filtered = append(filtered, target)
+			continue
+		}
+
+		safety := inspector(ctx, target.Path)
+		if !safety.Protected {
+			filtered = append(filtered, target)
+			continue
+		}
+
+		reason := gitProtectionGitStatusUnavailable
+		if len(safety.ProtectionReasons) > 0 {
+			reason = strings.Join(safety.ProtectionReasons, ", ")
+		}
+		protections[cleanAuditItemKey(target)] = cleanAuditReason(reason)
+	}
+	return filtered, protections
+}
+
 func printOverlapSafetyRefusals(selection cleanupOverlapSafetySelection) {
 	for _, component := range selection.Components {
 		if component.Refusal != nil {
