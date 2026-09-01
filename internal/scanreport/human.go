@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
@@ -24,7 +23,7 @@ func WriteHuman(w io.Writer, view View) {
 		}
 	}
 	writeScanHeadline(w, view)
-	fmt.Fprintf(w, "  found       %d %s\n", view.TotalCount, itemNoun(view.TotalCount))
+	fmt.Fprintf(w, "  found       %d %s\n", view.TotalCount, ItemNoun(view.TotalCount))
 	fmt.Fprintf(w, "  found size  %s\n", cleaner.FormatSize(view.PhysicalTotalBytes))
 	WriteVolumePressure(w, view.Volume)
 	if view.TotalStrippableBytes > 0 {
@@ -135,7 +134,7 @@ func WriteHumanExclusions(w io.Writer, view View) {
 	fmt.Fprintln(w, "\nexclusions (discovery only)")
 	fmt.Fprintf(w, "  patterns  %d flag, %d ignore-file\n", flagPatterns, filePatterns)
 	if view.ExcludedByUser > 0 {
-		fmt.Fprintf(w, "  excluded  %d %s hidden from discovery\n", view.ExcludedByUser, itemNoun(view.ExcludedByUser))
+		fmt.Fprintf(w, "  excluded  %d %s hidden from discovery\n", view.ExcludedByUser, ItemNoun(view.ExcludedByUser))
 	}
 
 	home := ""
@@ -147,7 +146,7 @@ func WriteHumanExclusions(w io.Writer, view View) {
 		if home != "" {
 			display = DisplayHomePath(home, scope.Resolved)
 		}
-		fmt.Fprintf(w, "  scope     %-11s %s  %d %s\n", scope.Source, display, scope.Count, itemNoun(scope.Count))
+		fmt.Fprintf(w, "  scope     %-11s %s  %d %s\n", scope.Source, display, scope.Count, ItemNoun(scope.Count))
 	}
 	for _, rejected := range view.RejectedExcludes {
 		fmt.Fprintf(w, "  rejected  %-11s %s  %s\n", rejected.Source, rejected.Pattern, rejected.Reason)
@@ -231,7 +230,7 @@ func writeDiagnostics(w io.Writer, diagnostics []types.ProviderDiagnostic) {
 			diagnostic.Tool,
 			diagnostic.State,
 			diagnostic.Count,
-			itemNoun(diagnostic.Count),
+			ItemNoun(diagnostic.Count),
 			cleaner.FormatSize(diagnostic.Bytes),
 			diagnostic.Duration,
 		)
@@ -310,13 +309,6 @@ func sortedCategories(summary map[types.Category]types.CategorySummary) []types.
 	return categories
 }
 
-func itemNoun(count int) string {
-	if count == 1 {
-		return "item"
-	}
-	return "items"
-}
-
 // WriteCleanupDiagnostics prints default-clean blocked-reason buckets.
 func WriteCleanupDiagnostics(w io.Writer, summary CleanupProjection, opts types.PruneOptions) {
 	if summary.ActiveCount > 0 {
@@ -325,7 +317,7 @@ func WriteCleanupDiagnostics(w io.Writer, summary CleanupProjection, opts types.
 	}
 	if summary.AgeCount > 0 {
 		fmt.Fprintf(w, "  age-blocked %s younger than %s\n",
-			cleaner.FormatSize(summary.AgeSize), cleanAgeDisplay(opts.Age))
+			cleaner.FormatSize(summary.AgeSize), CleanAgeDisplay(opts.Age))
 	}
 	if summary.RiskyCount > 0 {
 		fmt.Fprintf(w, "  risky       %s requires --risky\n", cleaner.FormatSize(summary.RiskySize))
@@ -354,50 +346,14 @@ func WriteCleanupDiagnostics(w io.Writer, summary CleanupProjection, opts types.
 	}
 }
 
-func cleanAgeDisplay(age time.Duration) string {
-	if age%(24*time.Hour) == 0 {
-		return fmt.Sprintf("%dd", int(age/(24*time.Hour)))
-	}
-	if age%time.Hour == 0 {
-		return fmt.Sprintf("%dh", int(age/time.Hour))
-	}
-	return age.String()
-}
-
 func itemName(item Item) string {
-	if item.Category == types.CategoryWorktree && item.Tool == types.ToolUnknown && item.Source != "" {
-		return item.Source + "/" + item.ID
-	}
-	if item.ID != "" {
-		return item.ID
-	}
-	return string(item.Tool)
+	return ItemName(item.debrisInfo())
 }
 
 func itemProject(item Item) string {
-	if item.Project != "" {
-		return item.Project
-	}
-	switch item.Category {
-	case types.CategoryBuildCache, types.CategoryOtherCache, types.CategoryAILogs:
-		return "global"
-	default:
-		return "-"
-	}
+	return ItemProject(item.debrisInfo())
 }
 
 func itemAgeAndStatus(item Item) string {
-	age := ageString(time.Since(item.ModTime).Round(time.Hour))
-	if item.Status == "" {
-		return age
-	}
-	return fmt.Sprintf("%s %s", item.Status, age)
-}
-
-func ageString(d time.Duration) string {
-	if d.Hours() < 24 {
-		return "today"
-	}
-	days := int(d.Hours() / 24)
-	return fmt.Sprintf("%dd", days)
+	return ItemAgeAndStatus(item.debrisInfo())
 }

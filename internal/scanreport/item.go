@@ -2,6 +2,7 @@ package scanreport
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
@@ -28,7 +29,7 @@ func projectItems(items []types.DebrisInfo) []Item {
 			Classification:   w.Classification,
 			Risk:             ItemRisk(w),
 			Reason:           ItemReason(w),
-			CleanupKind:      itemCleanupKind(w),
+			CleanupKind:      ItemCleanupKind(w),
 			CleanupCommand:   cleanupCommand,
 			PhysicalTargetID: ids[i],
 			StrippableBytes:  w.StrippableBytes,
@@ -39,7 +40,8 @@ func projectItems(items []types.DebrisInfo) []Item {
 	return out
 }
 
-func itemCleanupKind(w types.DebrisInfo) types.CleanupKind {
+// ItemCleanupKind is the effective cleanup kind, defaulting to remove-path.
+func ItemCleanupKind(w types.DebrisInfo) types.CleanupKind {
 	if w.CleanupKind != "" {
 		return w.CleanupKind
 	}
@@ -124,29 +126,97 @@ func physicalUnitOwns(unit, item types.DebrisInfo, itemPath string, itemOK bool)
 	return unit.Path == item.Path && unit.ID == item.ID
 }
 
+// ItemName is the display name shared by scan largest rows and clean target rows.
+func ItemName(w types.DebrisInfo) string {
+	if w.Category == types.CategoryWorktree && w.Tool == types.ToolUnknown && w.Source != "" {
+		return w.Source + "/" + w.ID
+	}
+	if w.ID != "" {
+		return w.ID
+	}
+	return string(w.Tool)
+}
+
+// ItemProject is the project label shared by scan largest rows and clean target rows.
+func ItemProject(w types.DebrisInfo) string {
+	if w.Project != "" {
+		return w.Project
+	}
+	switch w.Category {
+	case types.CategoryBuildCache, types.CategoryOtherCache, types.CategoryAILogs:
+		return "global"
+	default:
+		return "-"
+	}
+}
+
+// ItemAgeAndStatus is the age/status label shared by scan largest rows and
+// clean target rows.
+func ItemAgeAndStatus(w types.DebrisInfo) string {
+	age := AgeString(time.Since(w.ModTime).Round(time.Hour))
+	if w.Status == "" {
+		return age
+	}
+	return fmt.Sprintf("%s %s", w.Status, age)
+}
+
+// ItemNoun pluralizes "item" for counts.
+func ItemNoun(count int) string {
+	if count == 1 {
+		return "item"
+	}
+	return "items"
+}
+
+// AgeString renders a rounded age as "today" or whole days.
+func AgeString(d time.Duration) string {
+	if d.Hours() < 24 {
+		return "today"
+	}
+	days := int(d.Hours() / 24)
+	return fmt.Sprintf("%dd", days)
+}
+
+// CleanAgeDisplay renders a policy age as days, hours, or a Go duration.
+func CleanAgeDisplay(age time.Duration) string {
+	if age%(24*time.Hour) == 0 {
+		return fmt.Sprintf("%dd", int(age/(24*time.Hour)))
+	}
+	if age%time.Hour == 0 {
+		return fmt.Sprintf("%dh", int(age/time.Hour))
+	}
+	return age.String()
+}
+
+// debrisInfo reconstructs the source DebrisInfo fields the shared display
+// helpers need.
+func (it Item) debrisInfo() types.DebrisInfo {
+	return types.DebrisInfo{
+		Tool:            it.Tool,
+		Category:        it.Category,
+		ID:              it.ID,
+		Project:         it.Project,
+		Source:          it.Source,
+		Path:            it.Path,
+		Size:            it.Size,
+		ModTime:         it.ModTime,
+		Status:          it.Status,
+		Classification:  it.Classification,
+		Reason:          it.Reason,
+		CleanupKind:     it.CleanupKind,
+		CleanupCommand:  it.CleanupCommand,
+		StrippableBytes: it.StrippableBytes,
+		StrippablePaths: it.StrippablePaths,
+	}
+}
+
 func (v View) sourceDebris() []types.DebrisInfo {
 	if v.debris != nil {
 		return v.debris
 	}
 	out := make([]types.DebrisInfo, len(v.Items))
 	for i, it := range v.Items {
-		out[i] = types.DebrisInfo{
-			Tool:            it.Tool,
-			Category:        it.Category,
-			ID:              it.ID,
-			Project:         it.Project,
-			Source:          it.Source,
-			Path:            it.Path,
-			Size:            it.Size,
-			ModTime:         it.ModTime,
-			Status:          it.Status,
-			Classification:  it.Classification,
-			Reason:          it.Reason,
-			CleanupKind:     it.CleanupKind,
-			CleanupCommand:  it.CleanupCommand,
-			StrippableBytes: it.StrippableBytes,
-			StrippablePaths: it.StrippablePaths,
-		}
+		out[i] = it.debrisInfo()
 	}
 	return out
 }

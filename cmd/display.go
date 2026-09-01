@@ -65,63 +65,29 @@ func itemReason(w types.DebrisInfo) string {
 }
 
 func itemNoun(count int) string {
-	if count == 1 {
-		return "item"
-	}
-	return "items"
+	return scanreport.ItemNoun(count)
 }
 
 func itemName(item types.DebrisInfo) string {
-	if item.Category == types.CategoryWorktree && item.Tool == types.ToolUnknown && item.Source != "" {
-		return item.Source + "/" + item.ID
-	}
-	if item.ID != "" {
-		return item.ID
-	}
-	return string(item.Tool)
+	return scanreport.ItemName(item)
 }
 
 func itemProject(item types.DebrisInfo) string {
-	if item.Project != "" {
-		return item.Project
-	}
-	switch item.Category {
-	case types.CategoryBuildCache, types.CategoryOtherCache, types.CategoryAILogs:
-		return "global"
-	default:
-		return "-"
-	}
+	return scanreport.ItemProject(item)
 }
 
 func itemAgeAndStatus(item types.DebrisInfo) string {
-	age := ageString(time.Since(item.ModTime).Round(time.Hour))
-	if item.Status == "" {
-		return age
-	}
-	return fmt.Sprintf("%s %s", item.Status, age)
+	return scanreport.ItemAgeAndStatus(item)
 }
 
 func cleanupKind(w types.DebrisInfo) types.CleanupKind {
-	if w.CleanupKind != "" {
-		return w.CleanupKind
-	}
-	return types.CleanupRemovePath
+	return scanreport.ItemCleanupKind(w)
 }
 
 func cleanAgeDisplay(age time.Duration) string {
-	if age%(24*time.Hour) == 0 {
-		return fmt.Sprintf("%dd", int(age/(24*time.Hour)))
-	}
-	if age%time.Hour == 0 {
-		return fmt.Sprintf("%dh", int(age/time.Hour))
-	}
-	return age.String()
+	return scanreport.CleanAgeDisplay(age)
 }
 
 func ageString(d time.Duration) string {
-	if d.Hours() < 24 {
-		return "today"
-	}
-	days := int(d.Hours() / 24)
-	return fmt.Sprintf("%dd", days)
+	return scanreport.AgeString(d)
 }
