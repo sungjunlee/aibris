@@ -12,6 +12,7 @@ import (
 	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/retention"
 	"github.com/sungjunlee/aibris/internal/scanner"
+	"github.com/sungjunlee/aibris/internal/scanreport"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -81,7 +82,7 @@ func TestPrintHumanRetentionProjectionDoesNotExposePrivateMemberEvidence(t *test
 			OrphanedBytes: 3000,
 		}},
 	}
-	output := captureOutput(func() { printRetentionProjection(projection) })
+	output := captureOutput(func() { scanreport.WriteRetention(os.Stdout, projection) })
 	for _, want := range []string{"retention (protected content, read-only)", "2026-03", "units 3", "orphaned 1"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("human output missing %q:\n%s", want, output)
@@ -100,7 +101,7 @@ func TestPrintHumanRetentionProjectionPartialIsPathFree(t *testing.T) {
 			Message: "reading store: permission denied or unreadable store subtree",
 		}},
 	}
-	output := captureOutput(func() { printRetentionProjection(projection) })
+	output := captureOutput(func() { scanreport.WriteRetention(os.Stdout, projection) })
 	if !strings.Contains(output, "completeness partial (retention inventory only)") {
 		t.Fatalf("human output missing partial marker:\n%s", output)
 	}

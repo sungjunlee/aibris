@@ -1,5 +1,6 @@
-// Package scanreport is the cobra-free scan view-model: reclaim paths,
-// default-clean projection, volume pressure, and review-only worktrees.
+// Package scanreport is the cobra-free scan report: one in-memory View,
+// with JSON and human renderers. jsonOutput and friends are encode-only
+// projections of View, not a second domain graph.
 package scanreport
 
 import (
@@ -19,9 +20,28 @@ const (
 	labelPressure      = "pressure caches"
 )
 
-// View is the typed scan report printers format. Tests should assert this
-// model rather than cobra output snapshots.
+// View is the only in-memory scan report model. JSON and human printers
+// render from this type. Tests should assert this model rather than cobra
+// output snapshots.
 type View struct {
+	Partial              bool
+	ProviderErrors       []types.ScanProviderError
+	Items                []Item
+	TotalCount           int
+	TotalSize            int64
+	PhysicalUnitCount    int
+	PhysicalTotalBytes   int64
+	TotalStrippableBytes int64
+	ByCategory           map[types.Category]types.CategorySummary
+	ByTool               map[types.Tool]types.ToolSummary
+	Retention            types.RetentionProjection
+	Diagnostics          []types.ProviderDiagnostic
+	ExcludedByUser       int
+	ExcludedScopes       []types.ExcludedScope
+	RejectedExcludes     []types.RejectedExclude
+	Policy               types.PruneOptions
+	CodexActivity        *CodexActivityNotice
+
 	ReclaimPaths     []ReclaimPath
 	DefaultCleanSize int64
 	DefaultClean     CleanupProjection
@@ -29,6 +49,37 @@ type View struct {
 	PressureEstimate int64
 	Volume           *volume.Report
 	ReviewOnly       ReviewOnly
+
+	debris []types.DebrisInfo
+}
+
+// Item is one scan-report row with derived presentation fields. JSON encoding
+// projects this onto the public schema; it is not a second debris graph.
+type Item struct {
+	Tool             types.Tool
+	Category         types.Category
+	ID               string
+	Project          string
+	Source           string
+	Path             string
+	Size             int64
+	ModTime          time.Time
+	Status           types.WorktreeStatus
+	Classification   types.EntryClass
+	Risk             string
+	Reason           string
+	CleanupKind      types.CleanupKind
+	CleanupCommand   []string
+	PhysicalTargetID string
+	StrippableBytes  int64
+	StrippablePaths  []string
+	ReviewOnly       bool
+}
+
+// CodexActivityNotice is the optional human-only Codex activity line. JSON
+// does not serialize it. cmd fills it from the session index.
+type CodexActivityNotice struct {
+	ProtectedCount int
 }
 
 // ReclaimPath is one operator-facing reclaim command and its estimated size.
@@ -49,6 +100,8 @@ type ReviewOnly struct {
 func New(items []types.DebrisInfo, policy types.PruneOptions) View {
 	cleanup := SummarizeCleanup(items, policy)
 	return View{
+		Items:            projectItems(items),
+		Policy:           policy,
 		ReclaimPaths:     ReclaimPaths(items, policy),
 		DefaultCleanSize: cleanup.EligibleSize,
 		DefaultClean:     cleanup,
@@ -56,7 +109,32 @@ func New(items []types.DebrisInfo, policy types.PruneOptions) View {
 		PressureEstimate: PressureEstimate(items, policy),
 		Volume:           HomeVolumeReport(items),
 		ReviewOnly:       ReviewOnlyStats(items),
+		debris:           items,
 	}
+}
+
+// FromResult projects a ScanResult plus default-clean policy into the single
+// in-memory scan report. Both JSON and human renderers take this View.
+func FromResult(r *types.ScanResult, policy types.PruneOptions) View {
+	if r == nil {
+		r = &types.ScanResult{}
+	}
+	view := New(r.Worktrees, policy)
+	view.Partial = r.Partial()
+	view.ProviderErrors = r.ProviderErrors
+	view.TotalCount = r.TotalCount
+	view.TotalSize = r.TotalSize
+	view.PhysicalUnitCount = r.PhysicalUnitCount
+	view.PhysicalTotalBytes = r.PhysicalTotalBytes
+	view.TotalStrippableBytes = r.TotalStrippableBytes
+	view.ByCategory = r.ByCategory
+	view.ByTool = r.ByTool
+	view.Retention = r.Retention
+	view.Diagnostics = r.Diagnostics
+	view.ExcludedByUser = r.ExcludedByUser
+	view.ExcludedScopes = r.ExcludedScopes
+	view.RejectedExcludes = r.RejectedExcludes
+	return view
 }
 
 // DefaultCleanPolicy is the prune policy scan uses for the default-clean

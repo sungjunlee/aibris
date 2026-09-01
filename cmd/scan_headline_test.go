@@ -26,7 +26,7 @@ func TestPrintScanHeadlinePinsPressureOnTightVolume(t *testing.T) {
 	}
 
 	output := captureOutput(func() {
-		printScanHeadlinePaths(7*1024*1024*1024, paths, report)
+		scanreport.WriteHeadline(os.Stdout, 7*1024*1024*1024, paths, report)
 	})
 	if !strings.Contains(output, "--pressure") || !strings.Contains(output, "tight") {
 		t.Fatalf("printed headline missing --pressure on tight volume:\n%s", output)
