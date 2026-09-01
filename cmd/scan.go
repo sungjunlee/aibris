@@ -104,7 +104,7 @@ var scanCmd = &cobra.Command{
 }
 
 func printJSON(r *types.ScanResult) {
-	scanreport.WriteJSON(os.Stdout, scanreport.FromResult(r, scanreport.DefaultCleanPolicy()))
+	scanreport.WriteJSON(os.Stdout, scanreport.FromResultJSON(r))
 }
 
 func printScanHeader(roots []string) {

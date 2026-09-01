@@ -114,7 +114,8 @@ func New(items []types.DebrisInfo, policy types.PruneOptions) View {
 }
 
 // FromResult projects a ScanResult plus default-clean policy into the single
-// in-memory scan report. Both JSON and human renderers take this View.
+// in-memory scan report, including the cleanup/reclaim projections the human
+// report prints. The JSON encode path uses FromResultJSON instead.
 func FromResult(r *types.ScanResult, policy types.PruneOptions) View {
 	if r == nil {
 		r = &types.ScanResult{}
@@ -135,6 +136,35 @@ func FromResult(r *types.ScanResult, policy types.PruneOptions) View {
 	view.ExcludedScopes = r.ExcludedScopes
 	view.RejectedExcludes = r.RejectedExcludes
 	return view
+}
+
+// FromResultJSON projects a ScanResult into the scan view-model for the JSON
+// encode path only. It fills exactly the fields EncodeJSON consumes and skips
+// the cleanup/reclaim/strip/pressure projections FromResult computes for the
+// human report, so scan --json pays only the HomeVolumeReport inspect.
+func FromResultJSON(r *types.ScanResult) View {
+	if r == nil {
+		r = &types.ScanResult{}
+	}
+	return View{
+		Items:                projectItems(r.Worktrees),
+		Partial:              r.Partial(),
+		ProviderErrors:       r.ProviderErrors,
+		TotalCount:           r.TotalCount,
+		TotalSize:            r.TotalSize,
+		PhysicalUnitCount:    r.PhysicalUnitCount,
+		PhysicalTotalBytes:   r.PhysicalTotalBytes,
+		TotalStrippableBytes: r.TotalStrippableBytes,
+		ByCategory:           r.ByCategory,
+		ByTool:               r.ByTool,
+		Retention:            r.Retention,
+		Diagnostics:          r.Diagnostics,
+		ExcludedByUser:       r.ExcludedByUser,
+		ExcludedScopes:       r.ExcludedScopes,
+		RejectedExcludes:     r.RejectedExcludes,
+		Volume:               HomeVolumeReport(r.Worktrees),
+		debris:               r.Worktrees,
+	}
 }
 
 // DefaultCleanPolicy is the prune policy scan uses for the default-clean
