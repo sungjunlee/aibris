@@ -34,6 +34,54 @@ func TestExcludeCleanSaysWhyItScansAgain(t *testing.T) {
 	assertReuseLine(t, output, "scanning again: cleanup exclusions requested", home)
 }
 
+func TestDifferentRootsRescansWithReason(t *testing.T) {
+	home, workspace := reuseScanFixture(t)
+	mustSaveReuseCache(t, workspace, "delete")
+	other := filepath.Join(home, "other")
+	if err := os.MkdirAll(other, 0755); err != nil {
+		t.Fatal(err)
+	}
+	output := runCleanDryRun(t, other, "--category=node_modules")
+	assertReuseLine(t, output, "scanning again: scan roots changed", home)
+}
+
+func TestForeignProviderIdentityRescansWithReason(t *testing.T) {
+	home, workspace := reuseScanFixture(t)
+	cache := validReuseCache(mustNormalizeRoots(t, workspace), "delete")
+	cache.ProviderIdentity = adapter.Identity([]adapter.DebrisProvider{adapter.NewWorktreeAdapter()})
+	if err := saveLastScanCache(cache); err != nil {
+		t.Fatal(err)
+	}
+	output := runCleanDryRun(t, workspace, "--category=node_modules")
+	assertReuseLine(t, output, "scanning again: provider set changed", home)
+}
+
+func TestCleanDryRunDoesNotWriteSecondCacheFormat(t *testing.T) {
+	_, workspace := reuseScanFixture(t)
+	_ = runCleanDryRun(t, workspace, "--category=node_modules")
+	assertOnlyLastScanCacheFile(t)
+	cache, ok := readLastScanCache()
+	if !ok {
+		t.Fatal("dry-run live scan did not write last-scan.json")
+	}
+	if cache.SchemaVersion != lastScanCacheSchemaVersion {
+		t.Fatalf("schema_version = %d; want %d", cache.SchemaVersion, lastScanCacheSchemaVersion)
+	}
+}
+
+func TestCleanDryRunReuseDoesNotWriteSecondCacheFormat(t *testing.T) {
+	_, workspace := seededReuseWorkspace(t)
+	_ = runCleanDryRun(t, workspace, "--category=node_modules")
+	assertOnlyLastScanCacheFile(t)
+	cache, ok := readLastScanCache()
+	if !ok {
+		t.Fatal("dry-run reuse lost last-scan.json")
+	}
+	if cache.SchemaVersion != lastScanCacheSchemaVersion {
+		t.Fatalf("schema_version = %d; want %d", cache.SchemaVersion, lastScanCacheSchemaVersion)
+	}
+}
+
 func TestPreSelectorSchemaLastScanCacheIsStale(t *testing.T) {
 	_, workspace := reuseScanFixture(t)
 	cache := validReuseCache(mustNormalizeRoots(t, workspace), "delete")
@@ -154,6 +202,25 @@ func validReuseCache(roots []string, selector string) lastScanCache {
 		Roots:                     append([]string(nil), roots...),
 		ExplicitRoots:             true,
 		Result:                    types.ScanResult{},
+	}
+}
+
+func assertOnlyLastScanCacheFile(t *testing.T) {
+	t.Helper()
+	path, err := lastScanCachePath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(filepath.Dir(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+	if len(names) != 1 || names[0] != filepath.Base(path) {
+		t.Fatalf("cache dir = %v; want only %s", names, filepath.Base(path))
 	}
 }
 
