@@ -288,6 +288,13 @@ func scanRootsOrHome(roots []string) ([]string, error) {
 	return []string{home}, nil
 }
 
+// IsWithin reports whether child is parent or nested under parent.
+// Equality is within (filepath.Rel "." is true).
+func IsWithin(parent, child string) bool {
+	rel, err := filepath.Rel(parent, child)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
+}
+
 func pathUnderRoots(path string, roots []string) bool {
 	if len(roots) == 0 {
 		return true
@@ -301,11 +308,7 @@ func pathUnderRoots(path string, roots []string) bool {
 		if resolved, err := filepath.EvalSymlinks(cleanRoot); err == nil {
 			cleanRoot = filepath.Clean(resolved)
 		}
-		if cleanPath == cleanRoot {
-			return true
-		}
-		rel, err := filepath.Rel(cleanRoot, cleanPath)
-		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel) {
+		if cleanPath == cleanRoot || IsWithin(cleanRoot, cleanPath) {
 			return true
 		}
 	}

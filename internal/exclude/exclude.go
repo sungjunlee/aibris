@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -138,7 +139,7 @@ func expandPattern(raw, home string, roots []string) []string {
 func scopeWithinRoots(path string, roots []string) (string, bool) {
 	canonical := canonicalize(path)
 	for _, root := range roots {
-		if canonical == root || isWithin(root, canonical) {
+		if canonical == root || adapter.IsWithin(root, canonical) {
 			return canonical, true
 		}
 	}
@@ -193,7 +194,7 @@ func (m *Matcher) Match(path string) bool {
 	}
 	for _, candidate := range candidates {
 		for _, scope := range m.scopes {
-			if candidate == scope.Resolved || isWithin(scope.Resolved, candidate) {
+			if candidate == scope.Resolved || adapter.IsWithin(scope.Resolved, candidate) {
 				scope.Count++
 				return true
 			}
@@ -214,11 +215,6 @@ func (m *Matcher) Scopes() []types.ExcludedScope {
 // Rejected returns the exclusion patterns that were not honored.
 func (m *Matcher) Rejected() []types.RejectedExclude {
 	return append([]types.RejectedExclude(nil), m.rejected...)
-}
-
-func isWithin(parent, child string) bool {
-	rel, err := filepath.Rel(parent, child)
-	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }
 
 // UserIgnoreFile returns the documented per-user ignore file location:
