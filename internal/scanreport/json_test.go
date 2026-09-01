@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -194,5 +195,43 @@ func TestEncodeJSONOmitsWorktreeClassification(t *testing.T) {
 	}
 	if _, ok := raw.Worktrees[1]["classification"]; ok {
 		t.Error("worktree without classification emitted classification")
+	}
+}
+
+// TestFromResultJSONSkipsCleanupProjection guards #338: the JSON encode path
+// must not pay the SummarizeCleanup/home-volume reclaim projections the
+// encoded schema does not consume, while encoding the same public document.
+func TestFromResultJSONSkipsCleanupProjection(t *testing.T) {
+	r := &types.ScanResult{
+		Worktrees: []types.DebrisInfo{{
+			ID:       "nm",
+			Tool:     types.ToolCodex,
+			Category: types.CategoryNodeModules,
+			Path:     t.TempDir(),
+			Size:     1 << 20,
+			ModTime:  time.Now().Add(-30 * 24 * time.Hour),
+		}},
+		TotalCount: 1,
+		TotalSize:  1 << 20,
+		ByCategory: map[types.Category]types.CategorySummary{},
+		ByTool:     map[types.Tool]types.ToolSummary{},
+	}
+
+	full := FromResult(r, testPolicy())
+	if full.DefaultCleanSize == 0 || len(full.ReclaimPaths) == 0 {
+		t.Fatalf("human projection lost the cleanup fixture: %+v", full)
+	}
+
+	jsonView := FromResultJSON(r)
+	if jsonView.DefaultCleanSize != 0 || jsonView.DefaultClean.EligibleCount != 0 ||
+		len(jsonView.ReclaimPaths) != 0 || jsonView.StripEstimate != 0 ||
+		jsonView.PressureEstimate != 0 {
+		t.Fatalf("JSON view ran cleanup/reclaim projections: %+v", jsonView)
+	}
+
+	got, want := EncodeJSON(jsonView), EncodeJSON(full)
+	got.Volume, want.Volume = nil, nil
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("JSON schema drifted between FromResultJSON and FromResult:\n got %+v\nwant %+v", got, want)
 	}
 }
