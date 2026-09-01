@@ -47,7 +47,7 @@ func TestReviewOnlyWorktreesStayOffCleanupFlags(t *testing.T) {
 	plain, items := reviewOnlyScanFixture(t)
 	view := scanreport.New(items, scanreport.DefaultCleanPolicy())
 	output := captureOutput(func() {
-		printScanNext(&types.ScanResult{Worktrees: items, TotalCount: 1}, view)
+		scanreport.WriteNext(os.Stdout, view)
 	})
 	assertReviewOnlyNextLine(t, output, plain)
 	if !strings.Contains(output, "aibris scan --json") {

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/scanreport"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -63,7 +64,7 @@ func TestSummarizeCleanup_EligibilityMatchesFilterForMixedCategories(t *testing.
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			opts := types.PruneOptions{Age: tt.age}
-			diagnostics := summarizeCleanup(items, opts)
+			diagnostics := scanreport.SummarizeCleanup(items, opts)
 			targets := cleaner.Filter(items, opts)
 
 			var filteredSize int64
@@ -92,7 +93,7 @@ func TestSummarizeCleanup_EligibilityMatchesFilterForMixedCategories(t *testing.
 			}
 
 			output := captureOutput(func() {
-				printCleanupDiagnostics(diagnostics, opts)
+				scanreport.WriteCleanupDiagnostics(os.Stdout, diagnostics, opts)
 			})
 			for _, want := range []string{
 				"agent-state 13 B live agent-state protected",
@@ -120,7 +121,7 @@ func TestSummarizeCleanup_CollapsesNestedEligibleTargetsLikeClean(t *testing.T) 
 	}
 	opts := types.PruneOptions{Age: 7 * 24 * time.Hour}
 
-	diagnostics := summarizeCleanup(items, opts)
+	diagnostics := scanreport.SummarizeCleanup(items, opts)
 	if diagnostics.EligibleCount != 1 || diagnostics.EligibleSize != 100 {
 		t.Fatalf("scan diagnostics eligible = %d/%d; want 1 target with the parent size 100",
 			diagnostics.EligibleCount, diagnostics.EligibleSize)
@@ -149,7 +150,7 @@ func TestSummarizeCleanup_DropsTargetsRemovedBetweenScanAndSummary(t *testing.T)
 	}
 	opts := types.PruneOptions{Age: 7 * 24 * time.Hour}
 
-	diagnostics := summarizeCleanup(items, opts)
+	diagnostics := scanreport.SummarizeCleanup(items, opts)
 	if diagnostics.EligibleCount != 0 || diagnostics.EligibleSize != 0 {
 		t.Fatalf("scan diagnostics eligible = %d/%d; want vanished target excluded",
 			diagnostics.EligibleCount, diagnostics.EligibleSize)
