@@ -380,6 +380,23 @@ func TestBuildWorktreeCleanupUnitsUsesScanStatusNotGitdir(t *testing.T) {
 		}
 	})
 
+	t.Run("orphaned status builds a unit when git members exist on disk", func(t *testing.T) {
+		target := filepath.Join(root, "worktrees", "orphaned-status")
+		createCleanupUnitGitFile(t, filepath.Join(target, "project"), "orphaned-status")
+		item := cleanupUnitItem(target, 400, ".codex")
+		item.Status = types.WorktreeOrphaned
+		units, err := BuildWorktreeCleanupUnits(context.Background(), []types.DebrisInfo{item})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(units) != 1 {
+			t.Fatalf("orphaned-status units = %+v; want one unit when git members exist", units)
+		}
+		if len(units[0].Members) != 1 {
+			t.Fatalf("orphaned-status unit members = %+v; want the git member", units[0].Members)
+		}
+	})
+
 	t.Run("empty status skips even when git members exist on disk", func(t *testing.T) {
 		target := filepath.Join(root, "worktrees", "empty-status")
 		createCleanupUnitGitFile(t, filepath.Join(target, "project"), "empty-status")

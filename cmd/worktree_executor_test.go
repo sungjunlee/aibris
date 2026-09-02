@@ -592,6 +592,10 @@ func TestGitWorktreeRemoveArgsNeverIncludeForce(t *testing.T) {
 	}
 }
 
+// TestExecutePlainDirWorktreeRefusesDespiteGitdir exercises the executor-side
+// refusal via isActiveWorktreeTarget / cleaner eligibility. The units.go status
+// gate that drops plain-dir Scan rows before unit building is covered by
+// TestBuildWorktreeCleanupUnitsUsesScanStatusNotGitdir in internal/worktree.
 func TestExecutePlainDirWorktreeRefusesDespiteGitdir(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
