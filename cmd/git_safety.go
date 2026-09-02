@@ -31,6 +31,9 @@ func inspectActiveWorktreeCleanupSafety(ctx context.Context, candidatePath strin
 	units, err := worktree.BuildWorktreeCleanupUnits(ctx, []types.DebrisInfo{{
 		Category: types.CategoryWorktree,
 		Path:     candidatePath,
+		// Safety inspector for an already-selected active worktree, not a
+		// cleanup selector. Empty Status is fail-closed in unit construction.
+		Status: types.WorktreeActive,
 	}})
 	if err != nil {
 		return protectedWorktreeGitSafety(gitProtectionGitStatusUnavailable)

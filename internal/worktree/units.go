@@ -72,6 +72,8 @@ type worktreeCleanupUnitRows struct {
 
 // BuildWorktreeCleanupUnits adapts scanner rows into deterministic physical
 // cleanup units without changing the persisted DebrisInfo or scan JSON shape.
+// Scan DebrisInfo.Status is the only active/orphaned/plain-dir source after
+// discovery: review-only statuses never become cleanup units.
 func BuildWorktreeCleanupUnits(ctx context.Context, items []types.DebrisInfo) ([]WorktreeCleanupUnit, error) {
 	grouped := make(map[string][]types.DebrisInfo)
 	for _, item := range items {
@@ -101,6 +103,9 @@ func BuildWorktreeCleanupUnits(ctx context.Context, items []types.DebrisInfo) ([
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
+		if cleanupUnitHasReviewOnlyStatus(group.items) {
+			continue
+		}
 		members, err := discoverGitWorktreeMembers(ctx, group.targetPath)
 		if err != nil {
 			return nil, fmt.Errorf("enumerating Git worktree members under %q: %w", group.targetPath, err)
@@ -122,6 +127,26 @@ func BuildWorktreeCleanupUnits(ctx context.Context, items []types.DebrisInfo) ([
 		})
 	}
 	return units, nil
+}
+
+// worktreeScanStatusBlocksCleanup reports review-only Scan statuses. Empty,
+// unknown, and plain-dir statuses never become cleanup units.
+func worktreeScanStatusBlocksCleanup(status types.WorktreeStatus) bool {
+	switch status {
+	case types.WorktreeActive, types.WorktreeOrphaned:
+		return false
+	default:
+		return true
+	}
+}
+
+func cleanupUnitHasReviewOnlyStatus(items []types.DebrisInfo) bool {
+	for _, item := range items {
+		if worktreeScanStatusBlocksCleanup(item.Status) {
+			return true
+		}
+	}
+	return false
 }
 
 func discoverGitWorktreeMembers(ctx context.Context, targetPath string) ([]GitWorktreeMember, error) {

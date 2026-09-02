@@ -142,6 +142,8 @@ func prepareCleanExecutionWithOptions(
 		} else {
 			entry.MutationSafety = safety
 		}
+		// Git-aware execution follows Scan DebrisInfo.Status; gitdir is not
+		// re-parsed here to decide active/orphaned/plain-dir.
 		if isActiveWorktreeTarget(target) {
 			units, err := worktree.BuildWorktreeCleanupUnits(ctx, []types.DebrisInfo{target})
 			switch {
