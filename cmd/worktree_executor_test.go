@@ -592,6 +592,48 @@ func TestGitWorktreeRemoveArgsNeverIncludeForce(t *testing.T) {
 	}
 }
 
+func TestExecutePlainDirWorktreeRefusesDespiteGitdir(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	target := filepath.Join(home, ".codex", "worktrees", "plain")
+	if err := os.MkdirAll(target, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(target, ".git"), []byte("gitdir: "+filepath.Join(home, "missing", ".git", "worktrees", "plain")+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	item := types.DebrisInfo{
+		Tool:     types.ToolCodex,
+		Category: types.CategoryWorktree,
+		ID:       "plain",
+		Path:     target,
+		Size:     77,
+		Status:   types.WorktreePlain,
+	}
+
+	runtime := staticOverlapSafetyRuntime(nil, nil)
+	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{item})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared := prepareCleanExecutionWithSafety(context.Background(), selection, runtime)
+	if len(prepared) != 1 || prepared[0].ActiveUnit != nil {
+		t.Fatalf("prepared = %+v; want no active unit from Scan plain-dir status", prepared)
+	}
+
+	receipt, err := executePreparedCleanTargets(context.Background(), prepared, defaultActiveWorktreeExecutionOptions())
+	if err == nil {
+		t.Fatal("executePreparedCleanTargets() error = nil; want plain-dir refusal")
+	}
+	unit := singleExecutionUnit(t, receipt)
+	if unit.State != cleanExecutionFailed || unit.PhysicalRemoved || unit.MutationAttempted {
+		t.Errorf("plain-dir receipt = %+v; want failed with no mutation", unit)
+	}
+	if pathDoesNotExist(target) {
+		t.Errorf("plain-dir target %q was removed", target)
+	}
+}
+
 func TestExecuteOrphanedWorktreeKeepsRawPathCleanup(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)

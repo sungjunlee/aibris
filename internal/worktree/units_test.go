@@ -362,6 +362,68 @@ func TestBuildWorktreeCleanupUnitsAgreesWithScanSkipRules(t *testing.T) {
 	}
 }
 
+func TestBuildWorktreeCleanupUnitsUsesScanStatusNotGitdir(t *testing.T) {
+	root := t.TempDir()
+	root, _ = cleaner.TargetPathKey(root)
+
+	t.Run("plain-dir skips even when git members exist on disk", func(t *testing.T) {
+		target := filepath.Join(root, "worktrees", "plain")
+		createCleanupUnitGitFile(t, filepath.Join(target, "project"), "plain")
+		units, err := BuildWorktreeCleanupUnits(context.Background(), []types.DebrisInfo{
+			cleanupUnitReviewItem(target, 400, ".codex"),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(units) != 0 {
+			t.Fatalf("plain-dir units = %+v; want none even with git members on disk", units)
+		}
+	})
+
+	t.Run("empty status skips even when git members exist on disk", func(t *testing.T) {
+		target := filepath.Join(root, "worktrees", "empty-status")
+		createCleanupUnitGitFile(t, filepath.Join(target, "project"), "empty-status")
+		item := cleanupUnitItem(target, 400, ".codex")
+		item.Status = ""
+		units, err := BuildWorktreeCleanupUnits(context.Background(), []types.DebrisInfo{item})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(units) != 0 {
+			t.Fatalf("empty-status units = %+v; want none even with git members on disk", units)
+		}
+	})
+
+	t.Run("unknown status skips", func(t *testing.T) {
+		target := filepath.Join(root, "worktrees", "future")
+		createCleanupUnitGitFile(t, target, "future")
+		item := cleanupUnitItem(target, 100, ".codex")
+		item.Status = "future-status"
+		units, err := BuildWorktreeCleanupUnits(context.Background(), []types.DebrisInfo{item})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(units) != 0 {
+			t.Fatalf("unknown-status units = %+v; want none", units)
+		}
+	})
+
+	t.Run("mixed active and plain-dir group skips the whole owner", func(t *testing.T) {
+		target := filepath.Join(root, "worktrees", "mixed-rows")
+		createCleanupUnitGitFile(t, filepath.Join(target, "project"), "mixed-rows")
+		units, err := BuildWorktreeCleanupUnits(context.Background(), []types.DebrisInfo{
+			cleanupUnitItem(target, 200, ".codex"),
+			cleanupUnitReviewItem(target, 200, ".codex"),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(units) != 0 {
+			t.Fatalf("mixed active+plain-dir units = %+v; want none", units)
+		}
+	})
+}
+
 func TestBuildWorktreeCleanupUnitsReturnsErrorWhenTargetDisappears(t *testing.T) {
 	root := t.TempDir()
 	target := filepath.Join(root, "worktrees", "disappeared")
@@ -629,6 +691,12 @@ func cleanupUnitItem(path string, size int64, source string) types.DebrisInfo {
 		Source:   source,
 		Status:   types.WorktreeActive,
 	}
+}
+
+func cleanupUnitReviewItem(path string, size int64, source string) types.DebrisInfo {
+	item := cleanupUnitItem(path, size, source)
+	item.Status = types.WorktreePlain
+	return item
 }
 
 func relativeCleanupUnitPath(t *testing.T, root, path string) string {
