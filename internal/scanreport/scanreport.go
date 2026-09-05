@@ -366,20 +366,11 @@ func (p ReclaimPath) Flag() string {
 }
 
 func isReviewOnlyWorktree(item types.DebrisInfo) bool {
-	return item.Category == types.CategoryWorktree &&
-		item.Status != types.WorktreeActive &&
-		item.Status != types.WorktreeOrphaned
+	return cleaner.IsReviewOnlyWorktree(item)
 }
 
 // ReviewOnlyStats counts worktree units that are not cleanup or --strip targets.
 func ReviewOnlyStats(items []types.DebrisInfo) ReviewOnly {
-	var stats ReviewOnly
-	for _, item := range items {
-		if !isReviewOnlyWorktree(item) {
-			continue
-		}
-		stats.Count++
-		stats.Size += item.Size
-	}
-	return stats
+	count, size := cleaner.ReviewOnlyWorktreeStats(items)
+	return ReviewOnly{Count: count, Size: size}
 }

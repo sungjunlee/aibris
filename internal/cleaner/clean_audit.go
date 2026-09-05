@@ -303,7 +303,7 @@ func BuildPhysicalCleanAuditWithLogicalInputs(
 		}
 		return left.FoundSize > right.FoundSize
 	})
-	audit.ReviewOnlyCount, audit.ReviewOnlySize = auditReviewOnlyStats(items)
+	audit.ReviewOnlyCount, audit.ReviewOnlySize = ReviewOnlyWorktreeStats(items)
 	return audit
 }
 
@@ -628,7 +628,7 @@ func mixedWorktreeSkipReason(row CleanAuditCategory, stats map[CleanAuditReason]
 func AuditReasonText(reason CleanAuditReason, opts types.PruneOptions) string {
 	switch reason {
 	case CleanReasonAge:
-		return "younger than " + auditAgeDisplay(opts.Age)
+		return "younger than " + AgeDisplay(opts.Age)
 	case CleanReasonRisky:
 		return "requires --risky"
 	case CleanReasonActiveWorktree:
@@ -636,7 +636,7 @@ func AuditReasonText(reason CleanAuditReason, opts types.PruneOptions) string {
 	case CleanReasonWorktreeReview:
 		return "worktree status requires review"
 	case CleanReasonAgentStateMinIdleAge:
-		return "idle less than " + auditAgeDisplay(opts.AgentStateMinIdleAge)
+		return "idle less than " + AgeDisplay(opts.AgentStateMinIdleAge)
 	case CleanReasonVolumePressure:
 		return "selected because of volume pressure"
 	case CleanReasonFiltered:
@@ -693,7 +693,9 @@ func MergeAuditProtections(
 	return merged
 }
 
-func auditAgeDisplay(age time.Duration) string {
+// AgeDisplay renders a policy age as days, hours, or a Go duration.
+// scanreport.CleanAgeDisplay delegates here so audit and scan share one copy.
+func AgeDisplay(age time.Duration) string {
 	if age%(24*time.Hour) == 0 {
 		return fmt.Sprintf("%dd", int(age/(24*time.Hour)))
 	}
@@ -703,14 +705,21 @@ func auditAgeDisplay(age time.Duration) string {
 	return age.String()
 }
 
-func auditReviewOnlyStats(items []types.DebrisInfo) (count int, size int64) {
+// IsReviewOnlyWorktree reports worktree units that are not cleanup or --strip
+// targets. scanreport.ReviewOnlyStats delegates here.
+func IsReviewOnlyWorktree(item types.DebrisInfo) bool {
+	return item.Category == types.CategoryWorktree &&
+		item.Status != types.WorktreeActive &&
+		item.Status != types.WorktreeOrphaned
+}
+
+func ReviewOnlyWorktreeStats(items []types.DebrisInfo) (count int, size int64) {
 	for _, item := range items {
-		if item.Category == types.CategoryWorktree &&
-			item.Status != types.WorktreeActive &&
-			item.Status != types.WorktreeOrphaned {
-			count++
-			size += item.Size
+		if !IsReviewOnlyWorktree(item) {
+			continue
 		}
+		count++
+		size += item.Size
 	}
 	return count, size
 }
