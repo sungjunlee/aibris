@@ -8,30 +8,31 @@ import (
 	"testing"
 )
 
-func TestOverlapMutationValidationLivesApartFromPlanBuilding(t *testing.T) {
-	mutationNames := []string{
-		"ValidateBeforeMutation",
-		"ValidateBeforeMutationWithReport",
-		"overlapValidationForObligations",
-		"passObligation",
-		"blockObligation",
-		"blockOutcomeAtPath",
-		"ensureBlockedOutcome",
-		"revalidationOutcomeKey",
-		"overlapRefusalBlockingPath",
-		"overlapMatchClassification",
-		"overlapMatchForPath",
-		"mergedAgentStateObligations",
+func TestOverlapPlanHelpersLiveApartFromPlanFacade(t *testing.T) {
+	planHelperNames := []string{
+		"canonicalAgentStateEntries",
+		"buildOverlapSafetyComponent",
+		"lookupAgentStateRevalidator",
+		"entryForMatch",
+		"overlapRefusal",
+		"protectedOverlapReason",
+		"protectedEntryClass",
+		"agentStateObligationKey",
+		"agentStateEntryStableKey",
+		"agentStateItemStableKey",
 	}
-	planNames := []string{
+	facadeNames := []string{
 		"BuildOverlapSafetyPlan",
+		"AllowedTargets",
+		"ComponentForTarget",
+		"PathContains",
 	}
 
-	wanted := make(map[string]string, len(mutationNames)+len(planNames))
-	for _, name := range mutationNames {
-		wanted[name] = "overlap_mutation.go"
+	wanted := make(map[string]string, len(planHelperNames)+len(facadeNames))
+	for _, name := range planHelperNames {
+		wanted[name] = "overlap_plan.go"
 	}
-	for _, name := range planNames {
+	for _, name := range facadeNames {
 		wanted[name] = "overlap.go"
 	}
 
