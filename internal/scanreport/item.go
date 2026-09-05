@@ -179,13 +179,7 @@ func AgeString(d time.Duration) string {
 
 // CleanAgeDisplay renders a policy age as days, hours, or a Go duration.
 func CleanAgeDisplay(age time.Duration) string {
-	if age%(24*time.Hour) == 0 {
-		return fmt.Sprintf("%dd", int(age/(24*time.Hour)))
-	}
-	if age%time.Hour == 0 {
-		return fmt.Sprintf("%dh", int(age/time.Hour))
-	}
-	return age.String()
+	return cleaner.AgeDisplay(age)
 }
 
 // debrisInfo reconstructs the source DebrisInfo fields the shared display

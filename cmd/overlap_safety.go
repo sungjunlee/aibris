@@ -27,46 +27,6 @@ type cleanupOverlapSafetySelection struct {
 	Protections map[string]cleanAuditReason
 }
 
-type cleanupOverlapRelation string
-
-const (
-	cleanupOverlapOwner      cleanupOverlapRelation = "physical-owner"
-	cleanupOverlapExact      cleanupOverlapRelation = "exact-path"
-	cleanupOverlapDescendant cleanupOverlapRelation = "nested-descendant"
-	cleanupOverlapAncestor   cleanupOverlapRelation = "containing-ancestor"
-	cleanupOverlapAmbiguous  cleanupOverlapRelation = "ambiguous-path"
-)
-
-type cleanupOverlapLogicalInput struct {
-	Item           types.DebrisInfo
-	PolicyReason   string
-	PolicyDecision string
-	ReasonCodes    []string
-}
-
-type cleanupOverlapLogicalRow struct {
-	Key                  string
-	Item                 types.DebrisInfo
-	CanonicalPath        string
-	Relation             cleanupOverlapRelation
-	PolicyReason         string
-	PolicyDecision       string
-	ReasonCodes          []string
-	L1Reason             string
-	RevalidationRequired bool
-	PhysicalBytes        int64
-	DiscoveryOrdinal     int
-}
-
-type cleanupOverlapComponent struct {
-	Key           string
-	CanonicalPath string
-	Owner         types.DebrisInfo
-	LogicalRows   []cleanupOverlapLogicalRow
-	Obligations   []cleaner.AgentStateObligation
-	Refusal       *cleaner.OverlapSafetyRefusal
-}
-
 func newDefaultCleanupOverlapSafetyRuntime(
 	ctx context.Context,
 ) (cleanupOverlapSafetyRuntime, error) {
@@ -238,39 +198,6 @@ func cleanupSafetyMatchForInput(
 	return cleaner.OverlapSafetyMatch{}, false
 }
 
-func cleanupLogicalRelation(ownerPath, rowPath string) (cleanupOverlapRelation, bool) {
-	switch {
-	case ownerPath == rowPath:
-		return cleanupOverlapExact, true
-	case cleaner.PathContains(ownerPath, rowPath):
-		return cleanupOverlapDescendant, true
-	case cleaner.PathContains(rowPath, ownerPath):
-		return cleanupOverlapAncestor, true
-	default:
-		return "", false
-	}
-}
-
-func cleanupLogicalPolicyReason(input cleanupOverlapLogicalInput) string {
-	if input.PolicyReason != "" {
-		return input.PolicyReason
-	}
-	if input.Item.Reason != "" {
-		return input.Item.Reason
-	}
-	if input.Item.Category == types.CategoryAgentState {
-		switch input.Item.Classification {
-		case types.EntryClassOrphaned:
-			return "recorded working directory is absent"
-		case types.EntryClassLive:
-			return "live agent-state protected"
-		default:
-			return "undetermined agent-state protected"
-		}
-	}
-	return "discovered cleanup evidence"
-}
-
 func cleanupLogicalL1Reason(
 	component cleaner.OverlapSafetyComponent,
 	item types.DebrisInfo,
@@ -346,72 +273,6 @@ func cleanupLogicalRevalidationRequired(
 	return false
 }
 
-func ensureCleanupOwnerLogicalRow(
-	rows []cleanupOverlapLogicalRow,
-	owner types.DebrisInfo,
-	canonicalPath string,
-) []cleanupOverlapLogicalRow {
-	for _, row := range rows {
-		if row.CanonicalPath == canonicalPath &&
-			cleaner.TargetStableKey(row.Item) == cleaner.TargetStableKey(owner) {
-			return rows
-		}
-	}
-	return append(rows, cleanupOverlapLogicalRow{
-		Item:          owner,
-		CanonicalPath: canonicalPath,
-		Relation:      cleanupOverlapExact,
-		PolicyReason:  "selected cleanup target",
-	})
-}
-
-func sortCleanupOverlapLogicalRows(
-	rows []cleanupOverlapLogicalRow,
-	owner types.DebrisInfo,
-) {
-	sort.SliceStable(rows, func(i, j int) bool {
-		return cleanupOverlapLogicalRowStableKey(rows[i], owner) <
-			cleanupOverlapLogicalRowStableKey(rows[j], owner)
-	})
-	ordinals := make(map[string]int)
-	ownerAssigned := false
-	for i := range rows {
-		baseKey := cleanupOverlapLogicalRowStableKey(rows[i], owner)
-		ordinals[baseKey]++
-		rows[i].DiscoveryOrdinal = ordinals[baseKey]
-		if !ownerAssigned &&
-			rows[i].Relation == cleanupOverlapExact &&
-			cleaner.TargetStableKey(rows[i].Item) == cleaner.TargetStableKey(owner) {
-			rows[i].Relation = cleanupOverlapOwner
-			ownerAssigned = true
-		}
-		rows[i].Key = fmt.Sprintf("%s#%d", baseKey, rows[i].DiscoveryOrdinal)
-	}
-}
-
-func cleanupOverlapLogicalRowStableKey(
-	row cleanupOverlapLogicalRow,
-	owner types.DebrisInfo,
-) string {
-	ownerRank := "1"
-	if row.CanonicalPath != "" &&
-		cleaner.TargetStableKey(row.Item) == cleaner.TargetStableKey(owner) {
-		ownerRank = "0"
-	}
-	return strings.Join([]string{
-		ownerRank,
-		row.CanonicalPath,
-		string(row.Relation),
-		string(row.Item.Category),
-		string(row.Item.Tool),
-		row.Item.ID,
-		row.Item.Path,
-		string(row.Item.Classification),
-		row.PolicyReason,
-		row.L1Reason,
-	}, "\x00")
-}
-
 func cleanupOverlapComponentForTarget(
 	selection cleanupOverlapSafetySelection,
 	target types.DebrisInfo,
@@ -442,33 +303,6 @@ func overlapSafetyAuditProtections(plan cleaner.OverlapSafetyPlan) map[string]cl
 		}
 	}
 	return protections
-}
-
-func cleanAuditReasonForOverlapSafety(reason cleaner.OverlapSafetyReason) cleanAuditReason {
-	switch reason {
-	case cleaner.OverlapSafetyProtectedAncestor:
-		return cleanReasonProtectedAgentStateAncestor
-	case cleaner.OverlapSafetyProtectedDescendant, cleaner.OverlapSafetyProtectedExact:
-		return cleanReasonProtectedAgentStateDescendant
-	case cleaner.OverlapSafetyAmbiguousIdentity:
-		return cleanReasonAmbiguousOverlapIdentity
-	case cleaner.OverlapSafetyCommandOverlap:
-		return cleanReasonCommandOverlap
-	default:
-		return cleanReasonNestedRevalidation
-	}
-}
-
-func mergeCleanAuditProtections(
-	protectionSets ...map[string]cleanAuditReason,
-) map[string]cleanAuditReason {
-	merged := make(map[string]cleanAuditReason)
-	for _, protections := range protectionSets {
-		for key, reason := range protections {
-			merged[key] = reason
-		}
-	}
-	return merged
 }
 
 type worktreeGitInspector func(context.Context, string) worktreeGitSafety
