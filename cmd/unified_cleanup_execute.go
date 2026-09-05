@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/cleanjson"
 	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -281,7 +282,7 @@ func prepareGuidedCleanExecutionReceipt(
 	if cleanReceiptFile == "" {
 		return nil
 	}
-	if err := rejectCleanReceiptSinkOverlap(cleanReceiptFile, plan.SelectedPhysicalTargets()); err != nil {
+	if err := cleanjson.RejectReceiptSinkOverlap(cleanReceiptFile, plan.SelectedPhysicalTargets()); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}

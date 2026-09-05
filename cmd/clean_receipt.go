@@ -8,13 +8,13 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/cleanjson"
 	"github.com/sungjunlee/aibris/internal/scanreport"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -718,28 +718,6 @@ func encodeCleanJSONReceipt(output io.Writer, receipt cleanJSONReceipt) error {
 	return encoder.Encode(receipt)
 }
 
-// writeCleanJSONReceiptFile stores one execution receipt at the explicit sink
-// requested by --receipt-file. With --include-paths the document carries
-// absolute paths, so the file stays owner-only.
-func writeCleanJSONReceiptFile(path string, receipt cleanJSONReceipt) error {
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
-	if err != nil {
-		return err
-	}
-	// The open mode only applies to a file this call creates, so an existing
-	// sink would keep whatever permissions it already had while gaining the
-	// document's contents.
-	if err := file.Chmod(0600); err != nil {
-		file.Close()
-		return err
-	}
-	if err := encodeCleanJSONReceipt(file, receipt); err != nil {
-		file.Close()
-		return err
-	}
-	return file.Close()
-}
-
 // guidedCleanExecutionReceipt carries the pre-execution receipt document and
 // the physical target identities of a guided run that asked for a receipt
 // file. Identities are captured before mutation: a removed path can no longer
@@ -823,7 +801,7 @@ func writeGuidedCleanExecutionReceipt(
 		return
 	}
 	receipt, finishErr := pending.finish(execution, executionErr)
-	if err := writeCleanJSONReceiptFile(cleanReceiptFile, receipt); err != nil {
+	if err := cleanjson.WriteOwnerOnlyJSON(cleanReceiptFile, receipt); err != nil {
 		fmt.Fprintf(os.Stderr, "error: the cleanup already ran; writing the receipt file failed: %v\n", err)
 		os.Exit(1)
 	}
@@ -839,41 +817,4 @@ func writeGuidedCleanExecutionReceipt(
 		fmt.Fprintf(os.Stderr, "error: cleanup receipt status is %q\n", receipt.Status)
 		os.Exit(1)
 	}
-}
-
-// resolveCleanReceiptSink normalizes the requested sink for containment
-// comparison. The file need not exist yet, so only its parent directory can be
-// resolved through symlinks.
-func resolveCleanReceiptSink(path string) (string, error) {
-	absolute, err := filepath.Abs(path)
-	if err != nil {
-		return "", err
-	}
-	absolute = filepath.Clean(absolute)
-	parent, err := filepath.EvalSymlinks(filepath.Dir(absolute))
-	if err != nil {
-		return absolute, nil
-	}
-	return filepath.Join(filepath.Clean(parent), filepath.Base(absolute)), nil
-}
-
-// rejectCleanReceiptSinkOverlap refuses a sink that is, or lives inside, a
-// target this run is about to remove. Writing there would recreate the path
-// after its removal, so the receipt would claim a target was removed while it
-// exists again.
-func rejectCleanReceiptSinkOverlap(path string, targets []types.DebrisInfo) error {
-	sink, err := resolveCleanReceiptSink(path)
-	if err != nil {
-		return fmt.Errorf("resolving receipt file %q: %w", path, err)
-	}
-	for _, target := range targets {
-		targetPath, ok := cleaner.TargetPathKey(target.Path)
-		if !ok {
-			continue
-		}
-		if sink == targetPath || cleaner.PathContains(targetPath, sink) {
-			return fmt.Errorf("receipt file %q is inside a cleanup target", path)
-		}
-	}
-	return nil
 }

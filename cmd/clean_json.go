@@ -217,7 +217,7 @@ func runCleanJSON(cmd *cobra.Command) {
 		failCleanJSON("cleanup execution safety preparation failed")
 	}
 	if cleanReceiptFile != "" {
-		if err := rejectCleanReceiptSinkOverlap(cleanReceiptFile, selected); err != nil {
+		if err := cleanjson.RejectReceiptSinkOverlap(cleanReceiptFile, selected); err != nil {
 			failCleanJSON(err.Error())
 		}
 	}
@@ -241,7 +241,7 @@ func runCleanJSON(cmd *cobra.Command) {
 		failCleanJSON("cleanup receipt encoding failed")
 	}
 	if cleanReceiptFile != "" {
-		if err := writeCleanJSONReceiptFile(cleanReceiptFile, receipt); err != nil {
+		if err := cleanjson.WriteOwnerOnlyJSON(cleanReceiptFile, receipt); err != nil {
 			failCleanJSON("cleanup already ran; writing the receipt file failed")
 		}
 	}
