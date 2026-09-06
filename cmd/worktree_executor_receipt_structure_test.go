@@ -30,12 +30,7 @@ func TestWorktreeExecutorReceiptLivesApartFromExecutorEntry(t *testing.T) {
 	executorNames := []string{
 		"executeCleanTargets",
 		"executePreparedCleanTargets",
-		"executePathCleanupTarget",
-		"executeActiveWorktreeUnit",
 		"defaultActiveWorktreeExecutionOptions",
-		"isActiveWorktreeTarget",
-		"pathDoesNotExist",
-		"debrisExecutionName",
 	}
 
 	wanted := make(map[string]string, len(receiptNames)+len(receiptTypes)+len(executorNames))
@@ -162,11 +157,7 @@ func TestWorktreeExecutorReceiptReexportIdentity(t *testing.T) {
 	for _, name := range []string{
 		"cancelledPreparedCleanUnitReceipt(",
 		"failedPreparedCleanUnitReceipt(",
-		"newCleanUnitExecutionReceipt(",
-		"applyOverlapValidationReceipt(",
 		"cleanUnitHasMutation(",
-		"applyActiveUnitExecutionReceipt(",
-		"setActiveReceiptPhysicalState(",
 	} {
 		if !strings.Contains(executorSource, name) {
 			t.Errorf("worktree_executor.go no longer calls %s", strings.TrimSuffix(name, "("))

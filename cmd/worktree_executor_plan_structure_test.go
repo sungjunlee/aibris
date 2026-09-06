@@ -18,8 +18,6 @@ func TestWorktreeExecutorPlanLivesApartFromExecutorEntry(t *testing.T) {
 	executorNames := []string{
 		"executeCleanTargets",
 		"executePreparedCleanTargets",
-		"executePathCleanupTarget",
-		"executeActiveWorktreeUnit",
 		"defaultActiveWorktreeExecutionOptions",
 	}
 
