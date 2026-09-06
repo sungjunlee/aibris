@@ -12,6 +12,8 @@ func TestCleanJSONReceiptExecuteLivesApartFromDocumentTypes(t *testing.T) {
 	executeNames := []string{
 		"executeCleanJSONReceipt",
 		"executeInteractiveCleanJSONReceipt",
+	}
+	finalizeNames := []string{
 		"applyCleanJSONExecutionReceipt",
 		"finishCleanJSONReceipt",
 		"finalizeCleanJSONReceipt",
@@ -21,9 +23,12 @@ func TestCleanJSONReceiptExecuteLivesApartFromDocumentTypes(t *testing.T) {
 		"encodeCleanJSONReceipt",
 	}
 
-	wanted := make(map[string]string, len(executeNames)+len(documentNames))
+	wanted := make(map[string]string, len(executeNames)+len(finalizeNames)+len(documentNames))
 	for _, name := range executeNames {
 		wanted[name] = "clean_receipt_execute.go"
+	}
+	for _, name := range finalizeNames {
+		wanted[name] = "clean_receipt_execute_finalize.go"
 	}
 	for _, name := range documentNames {
 		wanted[name] = "clean_receipt.go"
