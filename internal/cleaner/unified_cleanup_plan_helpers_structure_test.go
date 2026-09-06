@@ -20,16 +20,18 @@ func TestUnifiedCleanupPlanHelpersLiveApartFromPlanEntry(t *testing.T) {
 		"cleanupPlanOwnerRowKey",
 		"cleanupPlanRowContainsLockedTarget",
 		"appendUniqueCleanupPlanReason",
-	}
-	facadeNames := []string{
-		"BuildUnifiedCleanupPlan",
-		"ValidateForExecution",
 		"SelectedPhysicalTargets",
 		"Totals",
 		"validCleanupPlanSelection",
 		"aggregateCleanupPlanSelection",
 		"cleanupPlanRepresentative",
 		"cleanupPlanCandidateStableKey",
+		"cleanupPlanRowStableKey",
+		"sortedProviderErrors",
+	}
+	facadeNames := []string{
+		"BuildUnifiedCleanupPlan",
+		"ValidateForExecution",
 	}
 
 	wanted := make(map[string]string, len(helperNames)+len(facadeNames))
@@ -82,6 +84,12 @@ func TestUnifiedCleanupPlanHelpersReexportIdentity(t *testing.T) {
 		cleanupPlanOwnerRowKey,
 		cleanupPlanRowContainsLockedTarget,
 		appendUniqueCleanupPlanReason,
+		validCleanupPlanSelection,
+		aggregateCleanupPlanSelection,
+		cleanupPlanRepresentative,
+		cleanupPlanCandidateStableKey,
+		cleanupPlanRowStableKey,
+		sortedProviderErrors,
 	}
 	public := []any{
 		BuildUnifiedCleanupPlan,
