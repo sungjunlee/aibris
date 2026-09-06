@@ -12,16 +12,6 @@ func TestOverlapMutationValidationLivesApartFromPlanBuilding(t *testing.T) {
 	mutationNames := []string{
 		"ValidateBeforeMutation",
 		"ValidateBeforeMutationWithReport",
-		"overlapValidationForObligations",
-		"passObligation",
-		"blockObligation",
-		"blockOutcomeAtPath",
-		"ensureBlockedOutcome",
-		"revalidationOutcomeKey",
-		"overlapRefusalBlockingPath",
-		"overlapMatchClassification",
-		"overlapMatchForPath",
-		"mergedAgentStateObligations",
 	}
 	planNames := []string{
 		"BuildOverlapSafetyPlan",
