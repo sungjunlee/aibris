@@ -5,13 +5,28 @@ import (
 	"go/parser"
 	"go/token"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
+// Compile-time re-export identity: the original helper names still resolve
+// in package cleaner after the same-package extract.
+var (
+	_ = executeWithContext
+	_ = executeWithContextOutput
+	_ = Execute
+	_ = ExecuteWithContext
+	_ = ExecuteWithContextAndBarrier
+	_ = ExecuteWithContextAndBarrierWithOutput
+	_ = ExecuteWithContextAndBarrierWithOutputAndObserver
+)
+
 func TestExecuteMutationHelpersLiveApartFromExecuteEntry(t *testing.T) {
 	helperNames := []string{
+		"executeWithContext",
+		"executeWithContextOutput",
 		"runMutationBarrier",
 		"debrisName",
 		"cleanupKind",
@@ -27,8 +42,6 @@ func TestExecuteMutationHelpersLiveApartFromExecuteEntry(t *testing.T) {
 		"ExecuteWithContextAndBarrier",
 		"ExecuteWithContextAndBarrierWithOutput",
 		"ExecuteWithContextAndBarrierWithOutputAndObserver",
-		"executeWithContext",
-		"executeWithContextOutput",
 	}
 
 	wanted := make(map[string]string, len(helperNames)+len(executeNames))
@@ -71,6 +84,28 @@ func TestExecuteMutationHelpersLiveApartFromExecuteEntry(t *testing.T) {
 }
 
 func TestExecuteEntryReexportIdentity(t *testing.T) {
+	helpers := []any{
+		executeWithContext,
+		executeWithContextOutput,
+	}
+	public := []any{
+		Execute,
+		ExecuteWithContext,
+		ExecuteWithContextAndBarrier,
+		ExecuteWithContextAndBarrierWithOutput,
+		ExecuteWithContextAndBarrierWithOutputAndObserver,
+	}
+	for i, fn := range helpers {
+		if fn == nil {
+			t.Errorf("helper %d is nil", i)
+		}
+	}
+	for i, fn := range public {
+		if fn == nil {
+			t.Errorf("public %d is nil", i)
+		}
+	}
+
 	var (
 		_ func([]types.DebrisInfo) (int64, error) = Execute
 		_                                         = ExecuteWithContext
@@ -78,4 +113,32 @@ func TestExecuteEntryReexportIdentity(t *testing.T) {
 		_                                         = ExecuteWithContextAndBarrierWithOutput
 		_                                         = ExecuteWithContextAndBarrierWithOutputAndObserver
 	)
+
+	executeSource := readCleanerSource(t, "execute.go")
+	helperSource := readCleanerSource(t, "execute_helpers.go")
+	for _, name := range []string{
+		"Execute",
+		"ExecuteWithContext",
+		"ExecuteWithContextAndBarrier",
+		"ExecuteWithContextAndBarrierWithOutput",
+		"ExecuteWithContextAndBarrierWithOutputAndObserver",
+	} {
+		if !strings.Contains(executeSource, "func "+name+"(") {
+			t.Errorf("%s is not defined in execute.go", name)
+		}
+		if strings.Contains(helperSource, "func "+name+"(") {
+			t.Errorf("%s moved out of the public execute entry", name)
+		}
+	}
+	for _, name := range []string{
+		"executeWithContext",
+		"executeWithContextOutput",
+	} {
+		if strings.Contains(executeSource, "func "+name+"(") {
+			t.Errorf("%s is still defined in execute.go", name)
+		}
+		if !strings.Contains(helperSource, "func "+name+"(") {
+			t.Errorf("%s is not defined in execute_helpers.go", name)
+		}
+	}
 }
