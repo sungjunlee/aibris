@@ -45,8 +45,6 @@ func TestCleanerHelpersLiveApartFromExecuteEntry(t *testing.T) {
 		"ExecuteWithContextAndBarrier",
 		"ExecuteWithContextAndBarrierWithOutput",
 		"ExecuteWithContextAndBarrierWithOutputAndObserver",
-		"executeWithContext",
-		"executeWithContextOutput",
 	}
 
 	wanted := make(map[string]string, len(helperNames)+len(facadeNames)+len(executeNames))
