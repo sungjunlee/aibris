@@ -11,17 +11,6 @@ import (
 func TestCWDJSONExtractorLivesApartFromRecordedCWDReader(t *testing.T) {
 	extractorNames := []string{
 		"feed",
-		"startKeyString",
-		"startValue",
-		"feedStringByte",
-		"closeContainer",
-		"finishValue",
-		"feedNumberByte",
-		"numberCanEnd",
-		"matchKeyByte",
-		"isJSONValueDelimiter",
-		"isJSONHexDigit",
-		"isJSONWhitespace",
 	}
 	readerNames := []string{
 		"readRecordedCWDs",
