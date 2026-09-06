@@ -70,12 +70,16 @@ func TestCodexActivityHelpersReexportIdentity(t *testing.T) {
 	if !strings.Contains(original, "func loadCodexActivityIndexWithOptions(") {
 		t.Error("loadCodexActivityIndexWithOptions is not defined in codex_activity.go")
 	}
+	cacheSource := readCmdSource(t, "codex_activity_cache.go")
 	for _, name := range []string{"findCodexSessionFiles", "readCodexSessionFileRecord"} {
 		if strings.Contains(original, "func "+name+"(") {
 			t.Errorf("%s is still defined in codex_activity.go", name)
 		}
-		if !strings.Contains(original, name+"(") {
-			t.Errorf("codex_activity.go no longer delegates to %s", name)
+		if strings.Contains(cacheSource, "func "+name+"(") {
+			t.Errorf("%s is defined in codex_activity_cache.go; want only codex_activity_helpers.go", name)
+		}
+		if !strings.Contains(cacheSource, name+"(") {
+			t.Errorf("codex_activity_cache.go no longer delegates to %s", name)
 		}
 	}
 }

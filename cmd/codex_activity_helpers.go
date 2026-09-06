@@ -15,8 +15,8 @@ import (
 )
 
 // Session-file discovery, record parsing, and CWD worktree identity for the
-// Codex activity index. Index loading, cache I/O, and aggregation stay in
-// codex_activity.go.
+// Codex activity index. Index loading stays in codex_activity.go. Cache I/O
+// and aggregation live in codex_activity_cache.go.
 
 type codexSessionFileInfo struct {
 	path    string
