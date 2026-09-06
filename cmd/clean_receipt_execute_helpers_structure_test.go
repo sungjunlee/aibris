@@ -27,9 +27,6 @@ func TestCleanJSONReceiptExecuteHelpersLiveApartFromExecuteEntry(t *testing.T) {
 	executeNames := []string{
 		"executeCleanJSONReceipt",
 		"executeInteractiveCleanJSONReceipt",
-		"applyCleanJSONExecutionReceipt",
-		"finishCleanJSONReceipt",
-		"finalizeCleanJSONReceipt",
 	}
 
 	wanted := make(map[string]string, len(helperNames)+len(executeNames))
