@@ -55,7 +55,30 @@ func inspectGitWorktreeEvidence(ctx context.Context, member *GitWorktreeMember, 
 		return
 	}
 	member.Dirty = len(status) > 0
+	inspectGitWorktreeEvidenceAfterStatus(ctx, member, runner)
+}
 
+// inspectGitStripBaselineEvidence inspects recoverability for the strip
+// baseline. A failure of the full-checkout untracked status walk (for
+// example a timeout caused by a huge untracked tree elsewhere in the
+// checkout) is recorded in GitStatusError instead of invalidating the
+// evidence: strip recoverability rests on HEAD and ref inspection, while
+// per-subtree scoped porcelain/ls-files gates prove each subtree is safe.
+func inspectGitStripBaselineEvidence(ctx context.Context, member *GitWorktreeMember, runner GitCommandRunner) {
+	statusCtx, cancelStatus := context.WithTimeout(ctx, GitEvidenceCommandTimeout)
+	status, statusErr := runner(statusCtx, member.WorktreePath, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+	cancelStatus()
+	if statusErr != nil {
+		member.GitStatusError = statusErr.Error()
+	} else {
+		member.Dirty = len(status) > 0
+	}
+	evidenceCtx, cancel := context.WithTimeout(ctx, GitEvidenceCommandTimeout)
+	defer cancel()
+	inspectGitWorktreeEvidenceAfterStatus(evidenceCtx, member, runner)
+}
+
+func inspectGitWorktreeEvidenceAfterStatus(ctx context.Context, member *GitWorktreeMember, runner GitCommandRunner) {
 	headOutput, err := runner(ctx, member.WorktreePath, "rev-parse", "--verify", "HEAD^{commit}")
 	if err != nil {
 		markGitEvidenceUnavailable(member, fmt.Errorf("resolving HEAD: %w", err))

@@ -109,6 +109,10 @@ func buildGitWorktreeMember(ctx context.Context, worktreePath string) GitWorktre
 	return worktree.BuildGitWorktreeMember(ctx, worktreePath)
 }
 
+func buildGitStripBaselineMember(ctx context.Context, worktreePath string) GitWorktreeMember {
+	return worktree.BuildGitStripBaselineMember(ctx, worktreePath)
+}
+
 func runWorktreeGitCommand(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	return worktree.RunGitCommand(ctx, dir, args...)
 }

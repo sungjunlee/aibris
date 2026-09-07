@@ -54,6 +54,9 @@ type GitWorktreeMember struct {
 	EvidenceError               string
 	GitEvidenceAvailable        bool
 	GitEvidenceError            string
+	// GitStatusError records a failed full-checkout untracked status walk
+	// that did not invalidate HEAD/ref evidence (strip baseline only).
+	GitStatusError              string
 	LastActivity                time.Time
 	ActivitySource              WorktreeActivitySource
 	ActivityAvailable           bool
@@ -181,6 +184,30 @@ func BuildGitWorktreeMember(ctx context.Context, worktreePath string) GitWorktre
 	member.DisplayRepository = displayRepository
 	member.EvidenceAvailable = true
 	inspectGitWorktreeEvidenceWithTimeout(ctx, &member)
+	return member
+}
+
+// BuildGitStripBaselineMember inspects a checkout for the strip baseline.
+// Recoverability comes from HEAD/ref inspection; a full-checkout untracked
+// status failure (for example a timeout caused by a large untracked tree
+// elsewhere) is recorded in GitStatusError without making the Git evidence
+// unavailable. Real Git failures still fail closed.
+func BuildGitStripBaselineMember(ctx context.Context, worktreePath string) GitWorktreeMember {
+	member := GitWorktreeMember{
+		WorktreePath: worktreePath,
+		Upstream:     GitUpstreamMetadata{State: GitUpstreamUnavailable},
+	}
+	repositoryID, displayRepository, err := resolveRepositoryIdentity(worktreePath)
+	if err != nil {
+		member.EvidenceError = err.Error()
+		markGitEvidenceUnavailable(&member, err)
+		return member
+	}
+
+	member.RepositoryID = repositoryID
+	member.DisplayRepository = displayRepository
+	member.EvidenceAvailable = true
+	inspectGitStripBaselineEvidence(ctx, &member, RunGitCommand)
 	return member
 }
 

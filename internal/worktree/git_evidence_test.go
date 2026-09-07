@@ -211,6 +211,46 @@ func TestInspectGitWorktreeEvidenceFailsClosedOnCommandFailure(t *testing.T) {
 	}
 }
 
+func TestInspectGitStripBaselineEvidenceToleratesFullStatusFailure(t *testing.T) {
+	_, worktree := newCleanupUnitWorktree(t, "strip-status-timeout")
+	member := GitWorktreeMember{WorktreePath: worktree}
+	inspectGitStripBaselineEvidence(context.Background(), &member, func(ctx context.Context, dir string, args ...string) ([]byte, error) {
+		if len(args) > 0 && args[0] == "status" {
+			return nil, errors.New("context deadline exceeded")
+		}
+		return RunGitCommand(ctx, dir, args...)
+	})
+
+	if !member.GitEvidenceAvailable || member.GitEvidenceError != "" {
+		t.Fatalf("Git evidence = (%t, %q); want available despite status failure",
+			member.GitEvidenceAvailable, member.GitEvidenceError)
+	}
+	if member.GitStatusError == "" {
+		t.Error("GitStatusError is empty; want the status failure recorded")
+	}
+	if member.Dirty || member.HardLocked {
+		t.Errorf("member = dirty %t locked %t; want clean-unlocked", member.Dirty, member.HardLocked)
+	}
+	assertCleanupMemberReason(t, member, false, true, GitReasonAttachedBranch)
+}
+
+func TestInspectGitStripBaselineEvidenceFailsClosedOnHeadFailure(t *testing.T) {
+	member := GitWorktreeMember{WorktreePath: "/fixture/member", EvidenceAvailable: true}
+	inspectGitStripBaselineEvidence(context.Background(), &member, func(ctx context.Context, dir string, args ...string) ([]byte, error) {
+		if len(args) > 0 && args[0] == "status" {
+			return nil, nil
+		}
+		return nil, errors.New("fixture failure")
+	})
+
+	if member.GitEvidenceAvailable || member.GitEvidenceError == "" {
+		t.Errorf("Git evidence = (%t, %q); want unavailable with error", member.GitEvidenceAvailable, member.GitEvidenceError)
+	}
+	if !member.HardLocked || member.Recoverable || member.Reason.Code != GitReasonEvidenceUnavailable {
+		t.Errorf("member safety = %+v; want unavailable hard lock", member)
+	}
+}
+
 func newCleanupUnitWorktree(t *testing.T, branch string) (string, string) {
 	t.Helper()
 	repository := newGitFixtureRepo(t)
