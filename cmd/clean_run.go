@@ -43,6 +43,10 @@ func runCleanCommand(cmd *cobra.Command) {
 	case cleanCommandRouteJSON:
 		runCleanJSON(cmd)
 		return
+	case cleanCommandRouteScan:
+		// classic scan-and-delete continues below
+	default:
+		panic("unknown clean command route: " + string(route))
 	}
 
 	age, err := parseAge(cleanAge)
