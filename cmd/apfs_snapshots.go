@@ -15,6 +15,7 @@ import (
 // Time Machine backups on an external disk.
 const apfsSnapshotPurgeBytes = 20 * 1024 * 1024 * 1024
 const apfsSnapshotUrgency = "4"
+const apfsSnapshotMaxThinPasses = 8
 
 func apfsSnapshotFlagConflict(cmd *cobra.Command) string {
 	if cleanJSON || cleanInteractive || cleanGuide || cleanReceiptFile != "" || cleanNoGuide {
@@ -79,7 +80,7 @@ func thinAndReportAPFSSnapshots(startCount int) error {
 	var remainingErr error
 	var report *volume.Report
 	var volumeErr error
-	for {
+	for pass := 0; pass < apfsSnapshotMaxThinPasses; pass++ {
 		if err := thinLocalAPFSSnapshots(); err != nil {
 			return err
 		}
@@ -108,7 +109,7 @@ func apfsThinPassProgressed(prevCount, remaining int, prevFree uint64, prevFreeO
 		return true
 	}
 	free, ok := apfsHomeVolumeFree(report, volumeErr)
-	return prevFreeOK && ok && free != prevFree
+	return prevFreeOK && ok && free > prevFree
 }
 
 func printAPFSThinResult(remaining int, remainingErr error, report *volume.Report, volumeErr error) {
