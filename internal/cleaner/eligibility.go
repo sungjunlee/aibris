@@ -105,6 +105,28 @@ func itemOnPressureVolume(path, device string) bool {
 	return err == nil && got == device
 }
 
+// applyPressureCleanupCommand rewrites official cache argv that only reclaim
+// under volume pressure. Default uv cleanup stays `uv cache clean`; --pressure
+// and critical home-volume selection pass --force so archive-v0 is emptied.
+func applyPressureCleanupCommand(item types.DebrisInfo, opts types.PruneOptions) types.DebrisInfo {
+	if !ShouldRelaxCacheAge(item, opts) || !isDefaultUvCacheClean(item.CleanupCommand) {
+		return item
+	}
+	item.CleanupCommand = uvCacheCleanCommand(true)
+	return item
+}
+
+func isDefaultUvCacheClean(argv []string) bool {
+	return len(argv) == 3 && argv[0] == "uv" && argv[1] == "cache" && argv[2] == "clean"
+}
+
+func uvCacheCleanCommand(force bool) []string {
+	if force {
+		return []string{"uv", "cache", "clean", "--force"}
+	}
+	return []string{"uv", "cache", "clean"}
+}
+
 // EvaluateStripEligibility reports whether an item may have its regenerable
 // subtrees stripped. Strip is a separate disposition from deletion: it only
 // applies to worktree units that deletion refuses for protective reasons

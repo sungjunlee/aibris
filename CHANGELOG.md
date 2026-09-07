@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `clean --pressure` and automatic critical home-volume selection run
+  `uv cache clean --force` so `archive-v0` is actually emptied. Default
+  cleanup stays `uv cache clean`. A leftover command container still
+  reports observed `residual_bytes` / `no_bytes_reclaimed` without
+  inventing a full-size free; `physical_owner_present` remains success.
+
 ### Fixed
 
 - Homebrew formula publish no longer fails after a successful tap push. The

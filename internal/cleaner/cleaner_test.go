@@ -712,6 +712,105 @@ func TestFilter_NoFilter(t *testing.T) {
 	}
 }
 
+func TestFilter_UvCacheCleanArgvDependsOnPressure(t *testing.T) {
+	now := time.Now()
+	defaultCmd := []string{"uv", "cache", "clean"}
+	forceCmd := []string{"uv", "cache", "clean", "--force"}
+	uv := types.DebrisInfo{
+		ID:             "uv",
+		Tool:           types.ToolPipCache,
+		Category:       types.CategoryOtherCache,
+		Path:           filepath.Join(t.TempDir(), ".cache", "uv"),
+		Size:           1500,
+		ModTime:        now.Add(-200 * time.Hour),
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: append([]string(nil), defaultCmd...),
+	}
+
+	got := Filter([]types.DebrisInfo{uv}, types.PruneOptions{Age: 168 * time.Hour})
+	if len(got) != 1 {
+		t.Fatalf("default Filter() = %d items; want 1", len(got))
+	}
+	if !equalStringSlice(got[0].CleanupCommand, defaultCmd) {
+		t.Errorf("default uv argv = %v; want %v", got[0].CleanupCommand, defaultCmd)
+	}
+
+	pressure := Filter([]types.DebrisInfo{uv}, types.PruneOptions{Age: 168 * time.Hour, RelaxCacheAge: true})
+	if len(pressure) != 1 {
+		t.Fatalf("pressure Filter() = %d items; want 1", len(pressure))
+	}
+	if !equalStringSlice(pressure[0].CleanupCommand, forceCmd) {
+		t.Errorf("pressure uv argv = %v; want %v", pressure[0].CleanupCommand, forceCmd)
+	}
+	if !equalStringSlice(uv.CleanupCommand, defaultCmd) {
+		t.Errorf("Filter mutated the scan item argv: %v", uv.CleanupCommand)
+	}
+
+	npm := types.DebrisInfo{
+		ID:             "npm",
+		Tool:           types.ToolBuildCache,
+		Category:       types.CategoryBuildCache,
+		Path:           filepath.Join(t.TempDir(), ".npm", "_cacache"),
+		ModTime:        now.Add(-200 * time.Hour),
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{"npm", "cache", "clean", "--force"},
+	}
+	gotNPM := Filter([]types.DebrisInfo{npm}, types.PruneOptions{Age: 168 * time.Hour, RelaxCacheAge: true})
+	if len(gotNPM) != 1 || !equalStringSlice(gotNPM[0].CleanupCommand, npm.CleanupCommand) {
+		t.Errorf("pressure npm argv = %v; want unchanged %v", gotNPM, npm.CleanupCommand)
+	}
+}
+
+func TestFilter_YoungUvCacheCleanGetsForceOnlyUnderPressure(t *testing.T) {
+	uv := types.DebrisInfo{
+		ID:             "uv",
+		Tool:           types.ToolPipCache,
+		Category:       types.CategoryOtherCache,
+		Path:           filepath.Join(t.TempDir(), ".cache", "uv"),
+		ModTime:        time.Now().Add(-time.Hour),
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{"uv", "cache", "clean"},
+	}
+	opts := types.PruneOptions{Age: 7 * 24 * time.Hour}
+	if got := Filter([]types.DebrisInfo{uv}, opts); len(got) != 0 {
+		t.Fatalf("young uv without pressure = %+v; want none", got)
+	}
+
+	opts.RelaxCacheAge = true
+	got := Filter([]types.DebrisInfo{uv}, opts)
+	if len(got) != 1 {
+		t.Fatalf("young uv under pressure = %d items; want 1", len(got))
+	}
+	want := []string{"uv", "cache", "clean", "--force"}
+	if !equalStringSlice(got[0].CleanupCommand, want) {
+		t.Errorf("pressure uv argv = %v; want %v", got[0].CleanupCommand, want)
+	}
+}
+
+func TestFilter_PinnedPressureDeviceDoesNotForceOffVolumeUv(t *testing.T) {
+	uv := types.DebrisInfo{
+		ID:             "uv",
+		Tool:           types.ToolPipCache,
+		Category:       types.CategoryOtherCache,
+		Path:           filepath.Join(t.TempDir(), ".cache", "uv"),
+		ModTime:        time.Now().Add(-200 * time.Hour),
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{"uv", "cache", "clean"},
+	}
+	got := Filter([]types.DebrisInfo{uv}, types.PruneOptions{
+		Age:            168 * time.Hour,
+		RelaxCacheAge:  true,
+		PressureDevice: "device:other",
+	})
+	if len(got) != 1 {
+		t.Fatalf("age-eligible off-volume uv = %d items; want 1", len(got))
+	}
+	want := []string{"uv", "cache", "clean"}
+	if !equalStringSlice(got[0].CleanupCommand, want) {
+		t.Errorf("off-volume uv argv = %v; want %v", got[0].CleanupCommand, want)
+	}
+}
+
 func captureStdout(fn func()) string {
 	r, w, _ := os.Pipe()
 	old := os.Stdout
@@ -1358,6 +1457,128 @@ func TestExecute_CommandCleanupZeroReclaimWhenOwnerRemains(t *testing.T) {
 	}
 }
 
+func TestExecute_PressureUvForceLeavesResidualWithoutInventingFreedBytes(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	path := filepath.Join(home, ".cache", "uv")
+	if err := os.MkdirAll(path, 0755); err != nil {
+		t.Fatal(err)
+	}
+	payload := []byte("archive-v0-still-here")
+	if err := os.WriteFile(filepath.Join(path, "archive-v0"), payload, 0644); err != nil {
+		t.Fatal(err)
+	}
+	argvFile := filepath.Join(home, "uv-argv")
+	binDir := t.TempDir()
+	writeExecutable(t, filepath.Join(binDir, "uv"), "#!/bin/sh\nprintf '%s\\n' \"$@\" > \""+argvFile+"\"\nexit 0\n")
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	item := types.DebrisInfo{
+		ID:             "uv",
+		Tool:           types.ToolPipCache,
+		Category:       types.CategoryOtherCache,
+		Path:           path,
+		Size:           int64(len(payload)),
+		ModTime:        time.Now().Add(-time.Hour),
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{"uv", "cache", "clean"},
+	}
+	selected := Filter([]types.DebrisInfo{item}, types.PruneOptions{Age: 7 * 24 * time.Hour, RelaxCacheAge: true})
+	if len(selected) != 1 {
+		t.Fatalf("pressure Filter() = %d items; want 1", len(selected))
+	}
+
+	var outcome CleanupMutationOutcome
+	total, err := ExecuteWithContextAndBarrierWithOutputAndObserver(
+		context.Background(),
+		selected,
+		nil,
+		io.Discard,
+		io.Discard,
+		func(got CleanupMutationOutcome) { outcome = got },
+	)
+	if err != nil {
+		t.Fatalf("pressure uv leftover owner is success, not failure: %v", err)
+	}
+	if total != 0 {
+		t.Fatalf("total = %d; want 0 observed reclaim", total)
+	}
+	if outcome.FreedBytes != 0 || outcome.ResidualBytes <= 0 {
+		t.Fatalf("outcome freed=%d residual=%d; want 0 freed and leftover residual", outcome.FreedBytes, outcome.ResidualBytes)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("command cleanup should keep the owner; stat err = %v", err)
+	}
+	gotArgv, err := os.ReadFile(argvFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(gotArgv) != "cache\nclean\n--force\n" {
+		t.Errorf("uv argv = %q; want cache/clean/--force", gotArgv)
+	}
+}
+
+func TestExecute_PressureUvForceRejectionReportsResidualWithoutInventingFreedBytes(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	path := filepath.Join(home, ".cache", "uv")
+	if err := os.MkdirAll(path, 0755); err != nil {
+		t.Fatal(err)
+	}
+	payload := []byte("archive-v0-rejected-force")
+	if err := os.WriteFile(filepath.Join(path, "archive-v0"), payload, 0644); err != nil {
+		t.Fatal(err)
+	}
+	binDir := t.TempDir()
+	writeExecutable(t, filepath.Join(binDir, "uv"), `#!/bin/sh
+for arg in "$@"; do
+  if [ "$arg" = "--force" ]; then
+    echo "error: unexpected argument '--force' found"
+    exit 2
+  fi
+done
+exit 0
+`)
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	item := types.DebrisInfo{
+		ID:             "uv",
+		Tool:           types.ToolPipCache,
+		Category:       types.CategoryOtherCache,
+		Path:           path,
+		Size:           int64(len(payload)),
+		ModTime:        time.Now().Add(-time.Hour),
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{"uv", "cache", "clean"},
+	}
+	selected := Filter([]types.DebrisInfo{item}, types.PruneOptions{Age: 7 * 24 * time.Hour, RelaxCacheAge: true})
+	if len(selected) != 1 {
+		t.Fatalf("pressure Filter() = %d items; want 1", len(selected))
+	}
+
+	var outcome CleanupMutationOutcome
+	total, err := ExecuteWithContextAndBarrierWithOutputAndObserver(
+		context.Background(),
+		selected,
+		nil,
+		io.Discard,
+		io.Discard,
+		func(got CleanupMutationOutcome) { outcome = got },
+	)
+	if err == nil {
+		t.Fatal("rejected --force must not be silent success")
+	}
+	if total != 0 {
+		t.Fatalf("total = %d; want 0, not a full-size free", total)
+	}
+	if outcome.FreedBytes != 0 || outcome.ResidualBytes <= 0 {
+		t.Fatalf("outcome freed=%d residual=%d; want 0 freed and leftover residual", outcome.FreedBytes, outcome.ResidualBytes)
+	}
+	if _, err := os.Stat(filepath.Join(path, "archive-v0")); err != nil {
+		t.Errorf("rejected --force must leave the residual payload; stat err = %v", err)
+	}
+}
+
 func TestExecute_CommandCleanupSuccess(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
@@ -1518,6 +1739,18 @@ func writeExecutable(t *testing.T, path, content string) {
 	if err := os.WriteFile(path, []byte(content), 0755); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func equalStringSlice(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestFormatSize(t *testing.T) {
