@@ -7,38 +7,29 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/sungjunlee/aibris/internal/types"
+	"github.com/spf13/cobra"
 )
 
 // Compile-time re-export identity: the original helper names still resolve
 // in package cmd after the same-package extract.
 var (
-	_ = confirmCleanExecution
-	_ = parseAge
-	_ = printCleanHeader
-	_ = shortDurationString
-	_ = printCleanCandidateSummary
-	_ = candidateNoun
+	_ = runCleanCommand
+	_ = selectCleanCommandRoute
 )
 
-func TestCleanHelpersLiveApartFromCleanCommandEntry(t *testing.T) {
-	helperNames := []string{
-		"confirmCleanExecution",
-		"parseAge",
-		"printCleanHeader",
-		"shortDurationString",
-		"printCleanCandidateSummary",
-		"candidateNoun",
+func TestCleanRunLivesApartFromCleanCommandEntry(t *testing.T) {
+	runNames := []string{
+		"runCleanCommand",
+		"selectCleanCommandRoute",
 	}
 	entryNames := []string{
 		"cleanCmd",
 	}
 
-	wanted := make(map[string]string, len(helperNames)+len(entryNames))
-	for _, name := range helperNames {
-		wanted[name] = "clean_helpers.go"
+	wanted := make(map[string]string, len(runNames)+len(entryNames))
+	for _, name := range runNames {
+		wanted[name] = "clean_run.go"
 	}
 	for _, name := range entryNames {
 		wanted[name] = "clean.go"
@@ -90,45 +81,38 @@ func TestCleanHelpersLiveApartFromCleanCommandEntry(t *testing.T) {
 	}
 }
 
-func TestCleanHelpersReexportIdentity(t *testing.T) {
-	// Same-package split: helper identifiers keep their original names so
-	// existing cmd callers still resolve to the helper implementations.
+func TestCleanRunReexportIdentity(t *testing.T) {
 	var (
-		_ func() bool                         = confirmCleanExecution
-		_ func(string) (time.Duration, error) = parseAge
-		_ func([]string)                      = printCleanHeader
-		_ func(time.Duration) string          = shortDurationString
-		_ func([]types.DebrisInfo)            = printCleanCandidateSummary
-		_ func(int) string                    = candidateNoun
+		_ func(*cobra.Command)                             = runCleanCommand
+		_ func(*cobra.Command) (cleanCommandRoute, string) = selectCleanCommandRoute
 	)
 
 	cleanSource := readCmdSource(t, "clean.go")
 	if !strings.Contains(cleanSource, "var cleanCmd") {
 		t.Error("cleanCmd is not defined in clean.go")
 	}
+	if strings.Contains(cleanSource, "func runCleanCommand(") {
+		t.Error("runCleanCommand is still defined in clean.go")
+	}
+	if !strings.Contains(cleanSource, "runCleanCommand(") {
+		t.Error("clean.go no longer delegates to runCleanCommand")
+	}
+
 	runSource := readCmdSource(t, "clean_run.go")
-	for _, name := range []string{
-		"confirmCleanExecution",
-		"parseAge",
-		"printCleanHeader",
-		"printCleanCandidateSummary",
-	} {
-		if strings.Contains(cleanSource, "func "+name+"(") {
-			t.Errorf("%s is still defined in clean.go", name)
-		}
-		if strings.Contains(runSource, "func "+name+"(") {
-			t.Errorf("%s is defined in clean_run.go", name)
-		}
-		if !strings.Contains(runSource, name+"(") {
-			t.Errorf("clean_run.go no longer delegates to %s", name)
-		}
+	if !strings.Contains(runSource, "func runCleanCommand(") {
+		t.Error("runCleanCommand is not defined in clean_run.go")
 	}
 	for _, name := range []string{
-		"shortDurationString",
-		"candidateNoun",
+		"runStripClean",
+		"runAPFSSnapshotClean",
+		"runCleanJSON",
+		"chooseCleanExperience",
 	} {
-		if strings.Contains(cleanSource, "func "+name+"(") {
-			t.Errorf("%s is still defined in clean.go", name)
+		if strings.Contains(runSource, "func "+name+"(") {
+			t.Errorf("%s was rewritten into clean_run.go", name)
+		}
+		if !strings.Contains(runSource, name+"(") {
+			t.Errorf("clean_run.go no longer calls %s", name)
 		}
 	}
 }
