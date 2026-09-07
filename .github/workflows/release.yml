@@ -50,7 +50,7 @@ jobs:
       # release job, so no release is treated as trusted and brew-pour never
       # runs. Do not mark this step as optional (#121).
       - name: Attest release artifacts
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             dist/*.tar.gz
