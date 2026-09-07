@@ -36,11 +36,42 @@ func TestSelectCleanCommandRouteFlagConflicts(t *testing.T) {
 			wantErr: errClassicRouteReceiptFile,
 		},
 		{
+			name: "include-paths requires json",
+			setup: func() {
+				cleanIncludePaths = true
+			},
+			wantErr: "error: --include-paths requires --json",
+		},
+		{
+			name: "receipt-file with dry-run",
+			setup: func() {
+				cleanReceiptFile = "receipt.json"
+				cleanDryRun = true
+			},
+			wantErr: "error: --receipt-file requires an execution run (remove --dry-run)",
+		},
+		{
 			name: "json non-dry-run requires force or interactive",
 			setup: func() {
 				cleanJSON = true
 			},
 			wantErr: "error: non-dry-run --json requires --force or --interactive",
+		},
+		{
+			name: "json non-dry-run cannot use guide",
+			setup: func() {
+				cleanJSON = true
+				cleanGuide = true
+			},
+			wantErr: "error: non-dry-run --json cannot use --guide",
+		},
+		{
+			name: "strip vs json interactive guide receipt-file",
+			setup: func() {
+				cleanStrip = true
+				cleanJSON = true
+			},
+			wantErr: "error: --strip cannot be combined with --json, --interactive, --guide, or --receipt-file",
 		},
 		{
 			name: "json dry-run does not require force",
