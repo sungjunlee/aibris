@@ -36,7 +36,7 @@ func runAPFSSnapshotClean() {
 }
 
 func runAPFSSnapshotAction(dryRun, force bool) error {
-	count, err := apfsListLocalSnapshots()
+	count, err := listLocalAPFSSnapshots()
 	if err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func runAPFSSnapshotAction(dryRun, force bool) error {
 		fmt.Println("Aborted.")
 		return nil
 	}
-	return thinAndReportAPFSSnapshots()
+	return thinAndReportAPFSSnapshots(count)
 }
 
 func printAPFSSnapshotPlan(count int) {
@@ -70,14 +70,45 @@ func confirmAPFSSnapshotThin() bool {
 	return strings.EqualFold(strings.TrimSpace(answer), "y")
 }
 
-func thinAndReportAPFSSnapshots() error {
-	if err := apfsThinLocalSnapshots(); err != nil {
-		return err
+func thinAndReportAPFSSnapshots(startCount int) error {
+	prevCount := startCount
+	prevReport, prevErr := inspectHomeCapacityFn()
+	prevFree, prevFreeOK := apfsHomeVolumeFree(prevReport, prevErr)
+
+	var remaining int
+	var remainingErr error
+	var report *volume.Report
+	var volumeErr error
+	for {
+		if err := thinLocalAPFSSnapshots(); err != nil {
+			return err
+		}
+		remaining, remainingErr = listLocalAPFSSnapshots()
+		report, volumeErr = inspectHomeCapacityFn()
+		if remainingErr != nil || remaining == 0 ||
+			!apfsThinPassProgressed(prevCount, remaining, prevFree, prevFreeOK, report, volumeErr) {
+			break
+		}
+		prevCount = remaining
+		prevFree, prevFreeOK = apfsHomeVolumeFree(report, volumeErr)
 	}
-	remaining, remainingErr := apfsListLocalSnapshots()
-	report, volumeErr := inspectHomeCapacityFn()
 	printAPFSThinResult(remaining, remainingErr, report, volumeErr)
 	return nil
+}
+
+func apfsHomeVolumeFree(report *volume.Report, err error) (uint64, bool) {
+	if err != nil || report == nil {
+		return 0, false
+	}
+	return report.AvailableBytes, true
+}
+
+func apfsThinPassProgressed(prevCount, remaining int, prevFree uint64, prevFreeOK bool, report *volume.Report, volumeErr error) bool {
+	if remaining != prevCount {
+		return true
+	}
+	free, ok := apfsHomeVolumeFree(report, volumeErr)
+	return prevFreeOK && ok && free != prevFree
 }
 
 func printAPFSThinResult(remaining int, remainingErr error, report *volume.Report, volumeErr error) {
@@ -102,6 +133,7 @@ func printAPFSVolumeAfterThin(report *volume.Report, err error) {
 }
 
 var inspectHomeCapacityFn = readHomeVolumeCapacity
+var thinLocalAPFSSnapshots = apfsThinLocalSnapshots
 
 func readHomeVolumeCapacity() (*volume.Report, error) {
 	home, err := os.UserHomeDir()

@@ -11,6 +11,283 @@ import (
 	"github.com/sungjunlee/aibris/internal/volume"
 )
 
+func TestClassicCleanStripAndPressureNeverThinAPFSSnapshots(t *testing.T) {
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		if strings.HasPrefix(name, "apfs_snapshots") {
+			continue
+		}
+		src := readCmdSource(t, name)
+		for _, needle := range []string{"thinlocalsnapshots", "apfsThinLocalSnapshots"} {
+			if strings.Contains(src, needle) {
+				t.Errorf("%s must not call %s", name, needle)
+			}
+		}
+	}
+}
+
+func TestAPFSThinPassProgressed(t *testing.T) {
+	report := func(free uint64) *volume.Report {
+		return &volume.Report{AvailableBytes: free}
+	}
+	tests := []struct {
+		name       string
+		prevCount  int
+		remaining  int
+		prevFree   uint64
+		prevFreeOK bool
+		report     *volume.Report
+		volumeErr  error
+		want       bool
+	}{
+		{name: "count dropped", prevCount: 2, remaining: 1, prevFree: 10, prevFreeOK: true, report: report(10), want: true},
+		{name: "free grew", prevCount: 1, remaining: 1, prevFree: 10, prevFreeOK: true, report: report(20), want: true},
+		{name: "unchanged", prevCount: 1, remaining: 1, prevFree: 10, prevFreeOK: true, report: report(10), want: false},
+		{name: "volume failed", prevCount: 1, remaining: 1, prevFree: 10, prevFreeOK: true, volumeErr: errors.New("statfs failed"), want: false},
+		{name: "prev volume failed", prevCount: 1, remaining: 1, prevFreeOK: false, report: report(20), want: false},
+		{name: "count dropped despite volume fail", prevCount: 2, remaining: 1, volumeErr: errors.New("statfs failed"), want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := apfsThinPassProgressed(tt.prevCount, tt.remaining, tt.prevFree, tt.prevFreeOK, tt.report, tt.volumeErr)
+			if got != tt.want {
+				t.Fatalf("progressed = %t; want %t", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRunAPFSSnapshotActionDryRunListsOnceWithoutThinning(t *testing.T) {
+	lists := 0
+	thinned := 0
+	origList, origThin := listLocalAPFSSnapshots, thinLocalAPFSSnapshots
+	t.Cleanup(func() {
+		listLocalAPFSSnapshots, thinLocalAPFSSnapshots = origList, origThin
+	})
+	listLocalAPFSSnapshots = func() (int, error) {
+		lists++
+		return 3, nil
+	}
+	thinLocalAPFSSnapshots = func() error {
+		thinned++
+		return nil
+	}
+	output := captureOutput(func() {
+		if err := runAPFSSnapshotAction(true, true); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if thinned != 0 {
+		t.Fatalf("dry-run thinned %d times", thinned)
+	}
+	if lists != 1 {
+		t.Fatalf("dry-run list calls = %d; want 1", lists)
+	}
+	if !strings.Contains(output, "local     3") || !strings.Contains(output, "[DRY-RUN]") {
+		t.Fatalf("dry-run output:\n%s", output)
+	}
+}
+
+func TestRunAPFSSnapshotActionForceRepeatsUntilRemainingZero(t *testing.T) {
+	if apfsSnapshotPurgeBytes != 20*1024*1024*1024 || apfsSnapshotUrgency != "4" {
+		t.Fatalf("bounded request changed: bytes=%d urgency=%q", apfsSnapshotPurgeBytes, apfsSnapshotUrgency)
+	}
+	thinned := 0
+	remaining := 2
+	origList, origThin, origInspect := listLocalAPFSSnapshots, thinLocalAPFSSnapshots, inspectHomeCapacityFn
+	t.Cleanup(func() {
+		listLocalAPFSSnapshots, thinLocalAPFSSnapshots, inspectHomeCapacityFn = origList, origThin, origInspect
+	})
+	listLocalAPFSSnapshots = func() (int, error) { return remaining, nil }
+	thinLocalAPFSSnapshots = func() error {
+		thinned++
+		if remaining > 0 {
+			remaining--
+		}
+		return nil
+	}
+	inspectHomeCapacityFn = func() (*volume.Report, error) {
+		return &volume.Report{
+			Role: "home", FSType: "apfs", UsedPercent: 90,
+			AvailableBytes: 48 * 1024 * 1024 * 1024, Band: volume.BandLow,
+		}, nil
+	}
+	output := captureOutput(func() {
+		if err := runAPFSSnapshotAction(false, true); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if thinned != 2 {
+		t.Fatalf("thin calls = %d; want 2", thinned)
+	}
+	if !strings.Contains(output, "remaining 0") {
+		t.Fatalf("expected remaining 0:\n%s", output)
+	}
+}
+
+func TestRunAPFSSnapshotActionForceRepeatsWhenFreeSpaceGrows(t *testing.T) {
+	thinned := 0
+	inspects := 0
+	remaining := 1
+	frees := []uint64{
+		27 * 1024 * 1024 * 1024,
+		99 * 1024 * 1024 * 1024,
+		126 * 1024 * 1024 * 1024,
+	}
+	origList, origThin, origInspect := listLocalAPFSSnapshots, thinLocalAPFSSnapshots, inspectHomeCapacityFn
+	t.Cleanup(func() {
+		listLocalAPFSSnapshots, thinLocalAPFSSnapshots, inspectHomeCapacityFn = origList, origThin, origInspect
+	})
+	listLocalAPFSSnapshots = func() (int, error) { return remaining, nil }
+	thinLocalAPFSSnapshots = func() error {
+		thinned++
+		if thinned >= 2 {
+			remaining = 0
+		}
+		return nil
+	}
+	inspectHomeCapacityFn = func() (*volume.Report, error) {
+		free := frees[len(frees)-1]
+		if inspects < len(frees) {
+			free = frees[inspects]
+		}
+		inspects++
+		return &volume.Report{
+			Role: "home", FSType: "apfs", UsedPercent: 90,
+			AvailableBytes: free, Band: volume.BandLow,
+		}, nil
+	}
+	output := captureOutput(func() {
+		if err := runAPFSSnapshotAction(false, true); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if thinned != 2 {
+		t.Fatalf("thin calls = %d; want 2", thinned)
+	}
+	if !strings.Contains(output, "remaining 0") {
+		t.Fatalf("expected remaining 0:\n%s", output)
+	}
+}
+
+func TestRunAPFSSnapshotActionForceStopsWhenFreeSpaceStopsChanging(t *testing.T) {
+	thinned := 0
+	inspects := 0
+	frees := []uint64{
+		27 * 1024 * 1024 * 1024,
+		99 * 1024 * 1024 * 1024,
+		99 * 1024 * 1024 * 1024,
+	}
+	origList, origThin, origInspect := listLocalAPFSSnapshots, thinLocalAPFSSnapshots, inspectHomeCapacityFn
+	t.Cleanup(func() {
+		listLocalAPFSSnapshots, thinLocalAPFSSnapshots, inspectHomeCapacityFn = origList, origThin, origInspect
+	})
+	listLocalAPFSSnapshots = func() (int, error) { return 1, nil }
+	thinLocalAPFSSnapshots = func() error {
+		thinned++
+		return nil
+	}
+	inspectHomeCapacityFn = func() (*volume.Report, error) {
+		free := frees[len(frees)-1]
+		if inspects < len(frees) {
+			free = frees[inspects]
+		}
+		inspects++
+		return &volume.Report{
+			Role: "home", FSType: "apfs", UsedPercent: 90,
+			AvailableBytes: free, Band: volume.BandLow,
+		}, nil
+	}
+	output := captureOutput(func() {
+		if err := runAPFSSnapshotAction(false, true); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if thinned != 2 {
+		t.Fatalf("thin calls = %d; want 2", thinned)
+	}
+	if !strings.Contains(output, "remaining 1") {
+		t.Fatalf("expected remaining 1:\n%s", output)
+	}
+}
+
+func TestRunAPFSSnapshotActionForceStopsWhenCountAndFreeUnchanged(t *testing.T) {
+	thinned := 0
+	origList, origThin, origInspect := listLocalAPFSSnapshots, thinLocalAPFSSnapshots, inspectHomeCapacityFn
+	t.Cleanup(func() {
+		listLocalAPFSSnapshots, thinLocalAPFSSnapshots, inspectHomeCapacityFn = origList, origThin, origInspect
+	})
+	listLocalAPFSSnapshots = func() (int, error) { return 1, nil }
+	thinLocalAPFSSnapshots = func() error {
+		thinned++
+		return nil
+	}
+	inspectHomeCapacityFn = func() (*volume.Report, error) {
+		return &volume.Report{
+			Role: "home", FSType: "apfs", UsedPercent: 90,
+			AvailableBytes: 48 * 1024 * 1024 * 1024, Band: volume.BandLow,
+		}, nil
+	}
+	output := captureOutput(func() {
+		if err := runAPFSSnapshotAction(false, true); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if thinned != 1 {
+		t.Fatalf("thin calls = %d; want 1", thinned)
+	}
+	if !strings.Contains(output, "remaining 1") {
+		t.Fatalf("expected remaining 1:\n%s", output)
+	}
+}
+
+func TestRunAPFSSnapshotActionStopsWhenRemainingListFails(t *testing.T) {
+	thinned := 0
+	lists := 0
+	origList, origThin, origInspect := listLocalAPFSSnapshots, thinLocalAPFSSnapshots, inspectHomeCapacityFn
+	t.Cleanup(func() {
+		listLocalAPFSSnapshots, thinLocalAPFSSnapshots, inspectHomeCapacityFn = origList, origThin, origInspect
+	})
+	listLocalAPFSSnapshots = func() (int, error) {
+		lists++
+		if lists == 1 {
+			return 2, nil
+		}
+		return 0, errors.New("list failed")
+	}
+	thinLocalAPFSSnapshots = func() error {
+		thinned++
+		return nil
+	}
+	inspectHomeCapacityFn = func() (*volume.Report, error) {
+		return &volume.Report{
+			Role: "home", FSType: "apfs", UsedPercent: 90,
+			AvailableBytes: 48 * 1024 * 1024 * 1024, Band: volume.BandLow,
+		}, nil
+	}
+	stdout, stderr := captureStdStreams(func() {
+		if err := runAPFSSnapshotAction(false, true); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if thinned != 1 {
+		t.Fatalf("thin calls = %d; want 1", thinned)
+	}
+	if strings.Contains(stdout, "remaining") {
+		t.Fatalf("failed remaining list still printed a count:\n%s", stdout)
+	}
+	if !strings.Contains(stderr, "could not list remaining snapshots") {
+		t.Fatalf("missing remaining warning:\n%s", stderr)
+	}
+}
+
 func TestParseLocalSnapshotCount(t *testing.T) {
 	out := []byte("Snapshots for disk /:\ncom.apple.os.update-AAA\n2026-08-17-101530\n\n")
 	if got := parseLocalSnapshotCount(out); got != 2 {

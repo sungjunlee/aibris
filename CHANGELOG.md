@@ -15,6 +15,10 @@
 - Homebrew formula publish no longer fails after a successful tap push. The
   EXIT cleanup trap records temp paths before `publish_main` locals go out of
   scope, so `set -u` does not skip `brew-pour`.
+- `clean --apfs-snapshots --force` repeats the bounded
+  `tmutil thinlocalsnapshots` request (20 GiB, urgency 4) until remaining
+  local snapshots are 0 or a pass does not change remaining count and
+  home-volume free space. Dry-run still lists once and does not thin.
 
 ## [0.12.0] - 2026-08-30
 
