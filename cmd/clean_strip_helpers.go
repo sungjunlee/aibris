@@ -84,7 +84,10 @@ func stripWorktreeUnit(ctx context.Context, home string, target types.DebrisInfo
 		return outcome
 	}
 
-	// One baseline evidence inspection per checkout touched by this unit.
+	// One baseline evidence inspection per checkout touched by this unit. The
+	// strip baseline rests on HEAD/ref inspection: a full-checkout untracked
+	// status timeout (huge untracked trees elsewhere) must not be rewritten
+	// as unavailable evidence, while real Git failures still fail closed.
 	baselines := make(map[string]GitWorktreeMember)
 	// A checkout is only re-verified after strip if something was actually
 	// removed from it; all-skipped checkouts had no mutation to verify.
@@ -92,7 +95,7 @@ func stripWorktreeUnit(ctx context.Context, home string, target types.DebrisInfo
 	baselineReason := func(checkoutDir string) string {
 		baseline, ok := baselines[checkoutDir]
 		if !ok {
-			baseline = buildGitWorktreeMember(ctx, checkoutDir)
+			baseline = buildGitStripBaselineMember(ctx, checkoutDir)
 			baselines[checkoutDir] = baseline
 		}
 		switch {
@@ -151,13 +154,13 @@ func stripWorktreeUnit(ctx context.Context, home string, target types.DebrisInfo
 		if !mutated[checkoutDir] {
 			continue
 		}
-		after := buildGitWorktreeMember(ctx, checkoutDir)
+		after := buildGitStripBaselineMember(ctx, checkoutDir)
 		switch {
 		case !after.GitEvidenceAvailable:
 			outcome.Error = fmt.Sprintf("post-strip git evidence unavailable for %s", checkoutDir)
 		case after.HeadOID != baseline.HeadOID:
 			outcome.Error = fmt.Sprintf("HEAD changed during strip of %s", checkoutDir)
-		case after.Dirty != baseline.Dirty:
+		case baseline.GitStatusError == "" && after.GitStatusError == "" && after.Dirty != baseline.Dirty:
 			outcome.Error = fmt.Sprintf("git status changed during strip of %s", checkoutDir)
 		case !after.Recoverable:
 			outcome.Error = fmt.Sprintf("HEAD no longer reachable from a ref for %s", checkoutDir)
