@@ -77,6 +77,9 @@ func TestHumanHelpersLiveApartFromPublicHumanRenderEntry(t *testing.T) {
 	for _, name := range helperNames {
 		wanted[name] = "human_helpers.go"
 	}
+	for _, name := range itemHelperNames() {
+		wanted[name] = "human_items.go"
+	}
 	for _, name := range facadeNames {
 		wanted[name] = "human.go"
 	}
@@ -187,11 +190,16 @@ func TestHumanHelpersReexportIdentity(t *testing.T) {
 
 	humanSource := readScanreportSource(t, "human.go")
 	helperSource := readScanreportSource(t, "human_helpers.go")
+	itemSource := readScanreportSource(t, "human_items.go")
 	if !strings.Contains(humanSource, "func WriteHuman(") {
 		t.Error("WriteHuman is not defined in human.go")
 	}
 	if strings.Contains(helperSource, "func WriteHuman(") {
 		t.Error("WriteHuman moved out of the public human-render entry")
+	}
+	moved := make(map[string]bool)
+	for _, name := range itemHelperNames() {
+		moved[name] = true
 	}
 	for _, name := range []string{
 		"writeScanHeadline",
@@ -221,6 +229,15 @@ func TestHumanHelpersReexportIdentity(t *testing.T) {
 		if strings.Contains(humanSource, "func "+name+"(") {
 			t.Errorf("%s is still defined in human.go", name)
 		}
+		if moved[name] {
+			if !strings.Contains(itemSource, "func "+name+"(") {
+				t.Errorf("%s is not defined in human_items.go", name)
+			}
+			if strings.Contains(helperSource, "func "+name+"(") {
+				t.Errorf("%s is still defined in human_helpers.go", name)
+			}
+			continue
+		}
 		if !strings.Contains(helperSource, "func "+name+"(") {
 			t.Errorf("%s is not defined in human_helpers.go", name)
 		}
@@ -240,6 +257,19 @@ func TestHumanHelpersReexportIdentity(t *testing.T) {
 		if !strings.Contains(humanSource, name+"(") {
 			t.Errorf("human.go no longer delegates to %s", name)
 		}
+	}
+}
+
+// itemHelperNames lists the item-display helper cluster extracted to
+// human_items.go alongside the remaining human_helpers.go printers.
+func itemHelperNames() []string {
+	return []string{
+		"writeCategorySummary",
+		"writeLargestItems",
+		"sortedCategories",
+		"itemName",
+		"itemProject",
+		"itemAgeAndStatus",
 	}
 }
 
