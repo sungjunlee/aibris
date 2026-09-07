@@ -15,7 +15,9 @@ import (
 type WorktreeRemover func(ctx context.Context, repositoryID, worktreePath string) error
 
 // ExecutionOptions supplies mutation dependencies and optional barriers for
-// ExecuteActiveWorktreeUnit. Nil function fields use the production defaults.
+// ExecuteActiveWorktreeUnit. Nil Getwd, UserHomeDir, and RemoveAll fields use
+// the production defaults. RemoveWorktree is required: a missing remover is a
+// preflight refusal so callers cannot silently fall through to Git.
 // BeforeMutation and AfterMember stay optional so cmd can keep overlap-safety,
 // snapshots, receipts, and stdout on its side of the execute seam.
 type ExecutionOptions struct {
@@ -65,9 +67,6 @@ func DefaultExecutionOptions() ExecutionOptions {
 }
 
 func (opts ExecutionOptions) withDefaults() ExecutionOptions {
-	if opts.RemoveWorktree == nil {
-		opts.RemoveWorktree = RemoveGitWorktree
-	}
 	if opts.RemoveAll == nil {
 		opts.RemoveAll = os.RemoveAll
 	}
@@ -89,8 +88,11 @@ func ExecuteActiveWorktreeUnit(
 	selected WorktreeCleanupUnit,
 	opts ExecutionOptions,
 ) (UnitExecution, error) {
-	opts = opts.withDefaults()
 	result := UnitExecution{Members: memberExecutions(selected.Members)}
+	if opts.RemoveWorktree == nil {
+		return result, fmt.Errorf("worktree remover unavailable")
+	}
+	opts = opts.withDefaults()
 
 	refreshed, memberErrors, err := PreflightActiveWorktreeUnit(ctx, target, selected, opts)
 	if err != nil {

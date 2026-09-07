@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -89,6 +90,141 @@ func TestExecuteActiveWorktreeUnitRemovesMultiMemberUnit(t *testing.T) {
 	}
 }
 
+func TestExecuteActiveWorktreeUnitRunsBeforeMutationAfterPreflightAndBeforeEveryRemove(t *testing.T) {
+	home, _, target, _, _ := newExecutorMultiMemberUnit(t)
+	testutil.SetHome(t, home)
+	item := executorWorktreeItem(target, 900)
+	selected := buildExecutorUnit(t, item)
+	if len(selected.Members) != 2 {
+		t.Fatalf("members = %d; want 2", len(selected.Members))
+	}
+
+	var calls []string
+	opts := fixtureExecutionOptions(home)
+	realRemove := opts.RemoveWorktree
+	realRemoveAll := opts.RemoveAll
+	opts.BeforeMutation = func(context.Context) error {
+		calls = append(calls, "before-mutation")
+		return nil
+	}
+	opts.RemoveWorktree = func(ctx context.Context, repositoryID, worktreePath string) error {
+		calls = append(calls, "remove:"+worktreePath)
+		return realRemove(ctx, repositoryID, worktreePath)
+	}
+	opts.RemoveAll = func(path string) error {
+		calls = append(calls, "remove-all:"+path)
+		return realRemoveAll(path)
+	}
+
+	result, err := ExecuteActiveWorktreeUnit(context.Background(), item, selected, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.PhysicalRemoved || !result.MutationAttempted {
+		t.Fatalf("result = %+v; want removed", result)
+	}
+
+	want := []string{
+		"before-mutation",
+		"before-mutation",
+		"remove:" + selected.Members[0].WorktreePath,
+		"before-mutation",
+		"remove:" + selected.Members[1].WorktreePath,
+		"before-mutation",
+		"remove-all:" + selected.TargetPath,
+	}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("mutation order = %q; want %q", calls, want)
+	}
+}
+
+func TestExecuteActiveWorktreeUnitBeforeMutationFailureSkipsPhysicalRemove(t *testing.T) {
+	home, repository, tree := newExecutorWorktree(t, "before-mutation-fail")
+	testutil.SetHome(t, home)
+	item := executorWorktreeItem(tree, 321)
+	selected := buildExecutorUnit(t, item)
+
+	var calls []string
+	opts := fixtureExecutionOptions(home)
+	opts.BeforeMutation = func(context.Context) error {
+		calls = append(calls, "before-mutation")
+		return errors.New("injected before-mutation failure")
+	}
+	opts.RemoveWorktree = func(context.Context, string, string) error {
+		calls = append(calls, "remove")
+		return errors.New("unexpected worktree remove")
+	}
+	opts.RemoveAll = func(string) error {
+		calls = append(calls, "remove-all")
+		return errors.New("unexpected path remove")
+	}
+
+	result, err := ExecuteActiveWorktreeUnit(context.Background(), item, selected, opts)
+	if err == nil || !strings.Contains(err.Error(), "injected before-mutation failure") {
+		t.Fatalf("ExecuteActiveWorktreeUnit() error = %v; want before-mutation failure", err)
+	}
+	if result.PhysicalRemoved || result.MutationAttempted || result.StartedMembers {
+		t.Errorf("result = %+v; want failed with no mutation", result)
+	}
+	if !reflect.DeepEqual(calls, []string{"before-mutation"}) {
+		t.Fatalf("mutation order = %q; want only the post-preflight BeforeMutation", calls)
+	}
+	assertPathExists(t, tree)
+	assertRepositoryListsWorktree(t, repository, tree)
+}
+
+func TestExecuteActiveWorktreeUnitBeforeMutationFailureBeforeLaterRemoveKeepsPriorMember(t *testing.T) {
+	home, repository, target, first, second := newExecutorMultiMemberUnit(t)
+	testutil.SetHome(t, home)
+	item := executorWorktreeItem(target, 1024)
+	selected := buildExecutorUnit(t, item)
+
+	var calls []string
+	beforeCalls := 0
+	opts := fixtureExecutionOptions(home)
+	realRemove := opts.RemoveWorktree
+	opts.BeforeMutation = func(context.Context) error {
+		beforeCalls++
+		calls = append(calls, "before-mutation")
+		if beforeCalls >= 3 {
+			return errors.New("injected later before-mutation failure")
+		}
+		return nil
+	}
+	opts.RemoveWorktree = func(ctx context.Context, repositoryID, worktreePath string) error {
+		calls = append(calls, "remove:"+worktreePath)
+		return realRemove(ctx, repositoryID, worktreePath)
+	}
+	opts.RemoveAll = func(path string) error {
+		calls = append(calls, "remove-all:"+path)
+		return errors.New("unexpected path remove")
+	}
+
+	result, err := ExecuteActiveWorktreeUnit(context.Background(), item, selected, opts)
+	if err == nil || !strings.Contains(err.Error(), "injected later before-mutation failure") {
+		t.Fatalf("ExecuteActiveWorktreeUnit() error = %v; want later before-mutation failure", err)
+	}
+	if result.PhysicalRemoved || !result.MutationAttempted || !result.StartedMembers {
+		t.Errorf("result = %+v; want partial mutation without owner removal", result)
+	}
+	want := []string{
+		"before-mutation",
+		"before-mutation",
+		"remove:" + selected.Members[0].WorktreePath,
+		"before-mutation",
+	}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("mutation order = %q; want %q", calls, want)
+	}
+	if !pathDoesNotExist(first) {
+		t.Errorf("first member %q still exists", first)
+	}
+	assertPathExists(t, target)
+	assertPathExists(t, second)
+	assertRepositoryDoesNotListWorktree(t, repository, first)
+	assertRepositoryListsWorktree(t, repository, second)
+}
+
 func TestExecuteActiveWorktreeUnitPreflightsEveryMemberBeforeRemovingAny(t *testing.T) {
 	home, repository, target, first, second := newExecutorMultiMemberUnit(t)
 	testutil.SetHome(t, home)
@@ -96,12 +232,30 @@ func TestExecuteActiveWorktreeUnitPreflightsEveryMemberBeforeRemovingAny(t *test
 	selected := buildExecutorUnit(t, item)
 	writeGitFixtureFile(t, second, "became-dirty.txt", "changed after selection\n")
 
-	result, err := ExecuteActiveWorktreeUnit(context.Background(), item, selected, DefaultExecutionOptions())
+	var calls []string
+	opts := fixtureExecutionOptions(home)
+	opts.BeforeMutation = func(context.Context) error {
+		calls = append(calls, "before-mutation")
+		return nil
+	}
+	opts.RemoveWorktree = func(context.Context, string, string) error {
+		calls = append(calls, "remove")
+		return errors.New("unexpected worktree remove")
+	}
+	opts.RemoveAll = func(string) error {
+		calls = append(calls, "remove-all")
+		return errors.New("unexpected path remove")
+	}
+
+	result, err := ExecuteActiveWorktreeUnit(context.Background(), item, selected, opts)
 	if err == nil {
 		t.Fatal("ExecuteActiveWorktreeUnit() error = nil; want preflight failure")
 	}
 	if result.PhysicalRemoved || result.MutationAttempted || result.StartedMembers {
 		t.Errorf("result = %+v; want failed with no physical removal", result)
+	}
+	if len(calls) != 0 {
+		t.Errorf("mutation calls = %q; want none after hard-lock preflight", calls)
 	}
 	for _, member := range result.Members {
 		if member.Removed {
@@ -195,6 +349,100 @@ func TestExecuteActiveWorktreeUnitReportsPartialMultiMemberWithoutOwnerRemoval(t
 	assertRepositoryListsWorktree(t, repository, second)
 }
 
+func TestExecuteActiveWorktreeUnitPreflightRejectsCWDInsideUnit(t *testing.T) {
+	home := t.TempDir()
+	home, _ = cleaner.TargetPathKey(home)
+	testutil.SetHome(t, home)
+	target := filepath.Join(home, ".codex", "worktrees", "cwd-unit")
+	if err := os.MkdirAll(target, 0755); err != nil {
+		t.Fatal(err)
+	}
+	item := executorWorktreeItem(target, 50)
+	selected := WorktreeCleanupUnit{TargetPath: target, Size: 50}
+
+	var calls []string
+	opts := refusedMutationOptions(&calls)
+	opts.UserHomeDir = func() (string, error) { return home, nil }
+	opts.Getwd = func() (string, error) { return filepath.Join(target, "nested"), nil }
+
+	result, err := ExecuteActiveWorktreeUnit(context.Background(), item, selected, opts)
+	if err == nil || !strings.Contains(err.Error(), "current working directory is inside cleanup unit") {
+		t.Fatalf("ExecuteActiveWorktreeUnit() error = %v; want cwd preflight refusal", err)
+	}
+	if result.PhysicalRemoved || result.MutationAttempted || result.StartedMembers {
+		t.Errorf("result = %+v; want failed with no mutation", result)
+	}
+	if len(calls) != 0 {
+		t.Errorf("mutation calls = %q; want none after cwd preflight", calls)
+	}
+	assertPathExists(t, target)
+}
+
+func TestExecuteActiveWorktreeUnitPreflightRejectsUnsafeHomePath(t *testing.T) {
+	home := t.TempDir()
+	home, _ = cleaner.TargetPathKey(home)
+	otherHome := t.TempDir()
+	otherHome, _ = cleaner.TargetPathKey(otherHome)
+	testutil.SetHome(t, home)
+	target := filepath.Join(home, ".codex", "worktrees", "outside-home")
+	if err := os.MkdirAll(target, 0755); err != nil {
+		t.Fatal(err)
+	}
+	item := executorWorktreeItem(target, 50)
+	selected := WorktreeCleanupUnit{TargetPath: target, Size: 50}
+
+	var calls []string
+	opts := refusedMutationOptions(&calls)
+	opts.UserHomeDir = func() (string, error) { return otherHome, nil }
+	opts.Getwd = func() (string, error) { return home, nil }
+
+	result, err := ExecuteActiveWorktreeUnit(context.Background(), item, selected, opts)
+	if err == nil || !strings.Contains(err.Error(), "unsafe active worktree path") {
+		t.Fatalf("ExecuteActiveWorktreeUnit() error = %v; want home preflight refusal", err)
+	}
+	if result.PhysicalRemoved || result.MutationAttempted || result.StartedMembers {
+		t.Errorf("result = %+v; want failed with no mutation", result)
+	}
+	if len(calls) != 0 {
+		t.Errorf("mutation calls = %q; want none after home preflight", calls)
+	}
+	assertPathExists(t, target)
+}
+
+func TestExecuteActiveWorktreeUnitPreflightRejectsMissingRemover(t *testing.T) {
+	home, repository, tree := newExecutorWorktree(t, "missing-remover")
+	testutil.SetHome(t, home)
+	item := executorWorktreeItem(tree, 100)
+	selected := buildExecutorUnit(t, item)
+
+	var calls []string
+	opts := ExecutionOptions{
+		Getwd:       func() (string, error) { return home, nil },
+		UserHomeDir: func() (string, error) { return home, nil },
+		BeforeMutation: func(context.Context) error {
+			calls = append(calls, "before-mutation")
+			return nil
+		},
+		RemoveAll: func(string) error {
+			calls = append(calls, "remove-all")
+			return errors.New("unexpected path remove")
+		},
+	}
+
+	result, err := ExecuteActiveWorktreeUnit(context.Background(), item, selected, opts)
+	if err == nil || !strings.Contains(err.Error(), "worktree remover unavailable") {
+		t.Fatalf("ExecuteActiveWorktreeUnit() error = %v; want missing-remover preflight refusal", err)
+	}
+	if result.PhysicalRemoved || result.MutationAttempted || result.StartedMembers {
+		t.Errorf("result = %+v; want failed with no mutation", result)
+	}
+	if len(calls) != 0 {
+		t.Errorf("mutation calls = %q; want none after missing-remover preflight", calls)
+	}
+	assertPathExists(t, tree)
+	assertRepositoryListsWorktree(t, repository, tree)
+}
+
 func TestExecuteActiveWorktreeUnitRefusesPlainDir(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
@@ -271,6 +519,30 @@ func newExecutorMultiMemberUnit(t *testing.T) (home, repository, target, first, 
 	runGitFixture(t, repository, "worktree", "add", "-b", "executor-first", first, "HEAD")
 	runGitFixture(t, repository, "worktree", "add", "-b", "executor-second", second, "HEAD")
 	return home, repository, target, first, second
+}
+
+func fixtureExecutionOptions(home string) ExecutionOptions {
+	opts := DefaultExecutionOptions()
+	opts.Getwd = func() (string, error) { return home, nil }
+	opts.UserHomeDir = func() (string, error) { return home, nil }
+	return opts
+}
+
+func refusedMutationOptions(calls *[]string) ExecutionOptions {
+	return ExecutionOptions{
+		RemoveWorktree: func(context.Context, string, string) error {
+			*calls = append(*calls, "remove")
+			return errors.New("unexpected worktree remove")
+		},
+		RemoveAll: func(string) error {
+			*calls = append(*calls, "remove-all")
+			return errors.New("unexpected path remove")
+		},
+		BeforeMutation: func(context.Context) error {
+			*calls = append(*calls, "before-mutation")
+			return nil
+		},
+	}
 }
 
 func executorWorktreeItem(path string, size int64) types.DebrisInfo {
