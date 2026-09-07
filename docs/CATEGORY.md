@@ -320,7 +320,7 @@ Supported command-backed cleanup:
 | ------ | --------- |
 | `go-build` | `go clean -cache` |
 | `npm` | `npm cache clean --force` |
-| `uv` | `uv cache clean` |
+| `uv` | `uv cache clean` (`uv cache clean --force` under `--pressure` or a critical home volume) |
 
 If the command is missing, aibris falls back to safe path removal. If the
 command runs and fails, aibris reports the error and does not remove the path.
