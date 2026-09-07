@@ -4,6 +4,7 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -12,6 +13,7 @@ import (
 
 func TestRunAPFSSnapshotActionDryRunDoesNotThin(t *testing.T) {
 	thinned := false
+	lists := 0
 	origLook, origRun := lookPath, runTMUtil
 	t.Cleanup(func() {
 		lookPath, runTMUtil = origLook, origRun
@@ -20,6 +22,9 @@ func TestRunAPFSSnapshotActionDryRunDoesNotThin(t *testing.T) {
 	runTMUtil = func(args ...string) ([]byte, error) {
 		if len(args) > 0 && args[0] == "thinlocalsnapshots" {
 			thinned = true
+		}
+		if len(args) > 0 && args[0] == "listlocalsnapshots" {
+			lists++
 		}
 		return []byte("Snapshots for disk /:\n2026-08-17-101530\n"), nil
 	}
@@ -30,6 +35,9 @@ func TestRunAPFSSnapshotActionDryRunDoesNotThin(t *testing.T) {
 	})
 	if thinned {
 		t.Fatal("dry-run must not call thinlocalsnapshots")
+	}
+	if lists != 1 {
+		t.Fatalf("dry-run list calls = %d; want 1", lists)
 	}
 	if !strings.Contains(output, "local     1") || !strings.Contains(output, "[DRY-RUN]") {
 		t.Fatalf("dry-run output:\n%s", output)
@@ -184,5 +192,62 @@ func TestRunAPFSSnapshotActionReportsTMUtilFailure(t *testing.T) {
 	}
 	if err := runAPFSSnapshotAction(false, true); err == nil {
 		t.Fatal("tmutil failure must be visible")
+	}
+}
+
+func TestRunAPFSSnapshotActionForceRepeatsUntilRemainingZeroViaTMUtil(t *testing.T) {
+	if apfsSnapshotPurgeBytes != 20*1024*1024*1024 || apfsSnapshotUrgency != "4" {
+		t.Fatalf("bounded request changed: bytes=%d urgency=%q", apfsSnapshotPurgeBytes, apfsSnapshotUrgency)
+	}
+	thinned := 0
+	origLook, origRun, origInspect := lookPath, runTMUtil, inspectHomeCapacityFn
+	t.Cleanup(func() {
+		lookPath, runTMUtil, inspectHomeCapacityFn = origLook, origRun, origInspect
+	})
+	lookPath = func(string) (string, error) { return "/usr/bin/tmutil", nil }
+	runTMUtil = func(args ...string) ([]byte, error) {
+		if len(args) > 0 && args[0] == "thinlocalsnapshots" {
+			want := []string{"thinlocalsnapshots", "/", fmt.Sprintf("%d", apfsSnapshotPurgeBytes), apfsSnapshotUrgency}
+			if len(args) != len(want) {
+				t.Fatalf("thin args = %v; want %v", args, want)
+			}
+			for i := range want {
+				if args[i] != want[i] {
+					t.Fatalf("thin args = %v; want %v", args, want)
+				}
+			}
+			thinned++
+			return nil, nil
+		}
+		remaining := 2 - thinned
+		if remaining < 0 {
+			remaining = 0
+		}
+		var b strings.Builder
+		b.WriteString("Snapshots for disk /:\n")
+		for i := 0; i < remaining; i++ {
+			b.WriteString("2026-08-17-101530\n")
+		}
+		return []byte(b.String()), nil
+	}
+	inspectHomeCapacityFn = func() (*volume.Report, error) {
+		return &volume.Report{
+			Role: "home", FSType: "apfs", UsedPercent: 90,
+			AvailableBytes: 48 * 1024 * 1024 * 1024, Band: volume.BandLow,
+		}, nil
+	}
+	output := captureOutput(func() {
+		if err := runAPFSSnapshotAction(false, true); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if thinned != 2 {
+		t.Fatalf("thin calls = %d; want 2", thinned)
+	}
+	if !strings.Contains(output, "remaining 0") {
+		t.Fatalf("expected remaining 0:\n%s", output)
+	}
+	if strings.Contains(output, "2026-08-17") || strings.Contains(output, "urgency") {
+		t.Fatalf("leaked snapshot id or urgency:\n%s", output)
 	}
 }
