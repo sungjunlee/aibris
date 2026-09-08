@@ -6,6 +6,7 @@ import (
 	"go/parser"
 	"go/token"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/sungjunlee/aibris/internal/types"
@@ -26,13 +27,22 @@ func TestWorktreeMemberDiscoveryHelpersLiveApartFromCleanupUnitFacade(t *testing
 		"cleanupUnitSource",
 		"cleanupUnitHardLockReasons",
 	}
+	uniquenessNames := []string{
+		"InspectCleanupUnitsUniqueness",
+		"InspectRecommendedCandidateUniqueness",
+		"inspectCleanupUnitUniqueness",
+		"cleanupUnitNeedsUniquenessProbe",
+	}
 
-	wanted := make(map[string]string, len(helperNames)+len(facadeNames))
+	wanted := make(map[string]string, len(helperNames)+len(facadeNames)+len(uniquenessNames))
 	for _, name := range helperNames {
 		wanted[name] = "units_helpers.go"
 	}
 	for _, name := range facadeNames {
 		wanted[name] = "units.go"
+	}
+	for _, name := range uniquenessNames {
+		wanted[name] = "units_uniqueness.go"
 	}
 
 	fset := token.NewFileSet()
@@ -75,6 +85,8 @@ func TestWorktreeUnitsHelpersReexportIdentity(t *testing.T) {
 		classifyMissingCleanupMember,
 		twoLevelGitWorktreePaths,
 		ownerGitMarkerState,
+		inspectCleanupUnitUniqueness,
+		cleanupUnitNeedsUniquenessProbe,
 	}
 	public := []any{
 		BuildWorktreeCleanupUnits,
@@ -100,5 +112,34 @@ func TestWorktreeUnitsHelpersReexportIdentity(t *testing.T) {
 		_ func(context.Context, string) GitWorktreeMember                          = BuildGitWorktreeMember
 		_ func(context.Context, []WorktreeCleanupUnit)                             = InspectCleanupUnitsUniqueness
 		_ func(context.Context, []WorktreeCleanupUnit, CleanupPolicy)              = InspectRecommendedCandidateUniqueness
+		_ func(context.Context, *WorktreeCleanupUnit)                              = inspectCleanupUnitUniqueness
+		_ func(WorktreeCleanupUnit, CleanupPolicy, map[string]bool) bool           = cleanupUnitNeedsUniquenessProbe
 	)
+
+	unitsSource := readWorktreeSource(t, "units.go")
+	if !strings.Contains(unitsSource, "func BuildWorktreeCleanupUnits(") {
+		t.Error("BuildWorktreeCleanupUnits is not defined in units.go")
+	}
+	for _, name := range []string{
+		"InspectCleanupUnitsUniqueness",
+		"InspectRecommendedCandidateUniqueness",
+		"inspectCleanupUnitUniqueness",
+		"cleanupUnitNeedsUniquenessProbe",
+	} {
+		if strings.Contains(unitsSource, "func "+name+"(") {
+			t.Errorf("%s is still defined in units.go", name)
+		}
+	}
+
+	uniquenessSource := readWorktreeSource(t, "units_uniqueness.go")
+	for _, name := range []string{
+		"InspectCleanupUnitsUniqueness",
+		"InspectRecommendedCandidateUniqueness",
+		"inspectCleanupUnitUniqueness",
+		"cleanupUnitNeedsUniquenessProbe",
+	} {
+		if !strings.Contains(uniquenessSource, "func "+name+"(") {
+			t.Errorf("%s is not defined in units_uniqueness.go", name)
+		}
+	}
 }
