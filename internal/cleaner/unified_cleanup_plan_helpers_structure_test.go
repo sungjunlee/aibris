@@ -6,6 +6,7 @@ import (
 	"go/parser"
 	"go/token"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,15 +32,20 @@ func TestUnifiedCleanupPlanHelpersLiveApartFromPlanEntry(t *testing.T) {
 	}
 	facadeNames := []string{
 		"BuildUnifiedCleanupPlan",
+	}
+	validateNames := []string{
 		"ValidateForExecution",
 	}
 
-	wanted := make(map[string]string, len(helperNames)+len(facadeNames))
+	wanted := make(map[string]string, len(helperNames)+len(facadeNames)+len(validateNames))
 	for _, name := range helperNames {
 		wanted[name] = "unified_cleanup_plan_helpers.go"
 	}
 	for _, name := range facadeNames {
 		wanted[name] = "unified_cleanup_plan.go"
+	}
+	for _, name := range validateNames {
+		wanted[name] = "unified_cleanup_plan_validate.go"
 	}
 
 	fset := token.NewFileSet()
@@ -93,6 +99,7 @@ func TestUnifiedCleanupPlanHelpersReexportIdentity(t *testing.T) {
 	}
 	public := []any{
 		BuildUnifiedCleanupPlan,
+		(UnifiedCleanupPlan{}).ValidateForExecution,
 	}
 	for i, fn := range helpers {
 		if fn == nil {
@@ -111,4 +118,17 @@ func TestUnifiedCleanupPlanHelpersReexportIdentity(t *testing.T) {
 		_ func() []types.DebrisInfo                                                                      = (UnifiedCleanupPlan{}).SelectedPhysicalTargets
 		_ func() CleanupPlanTotals                                                                       = (UnifiedCleanupPlan{}).Totals
 	)
+
+	planSource := readCleanerSource(t, "unified_cleanup_plan.go")
+	if !strings.Contains(planSource, "func BuildUnifiedCleanupPlan(") {
+		t.Error("BuildUnifiedCleanupPlan is not defined in unified_cleanup_plan.go")
+	}
+	if strings.Contains(planSource, "func (p UnifiedCleanupPlan) ValidateForExecution(") {
+		t.Error("ValidateForExecution is still defined in unified_cleanup_plan.go")
+	}
+
+	validateSource := readCleanerSource(t, "unified_cleanup_plan_validate.go")
+	if !strings.Contains(validateSource, "func (p UnifiedCleanupPlan) ValidateForExecution(") {
+		t.Error("ValidateForExecution is not defined in unified_cleanup_plan_validate.go")
+	}
 }
