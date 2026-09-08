@@ -9,8 +9,9 @@ import (
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
-// Exclusion and retention post-scan helpers: user-exclusion merge and the
-// protected-content inventory. Scan orchestration stays in scanner.go.
+// Same-package helpers extracted from scanner.go: user-exclusion merge,
+// protected-content inventory, progress emission, and per-provider size
+// totals. Scan orchestration stays in scanner.go.
 
 // applyUserExclusions removes discovered items covered by user exclusion
 // patterns (--exclude flags, the per-user ignore file, and repo-local
@@ -100,4 +101,18 @@ func scanRetention(
 		return projection.ProviderErrors[i].StoreID < projection.ProviderErrors[j].StoreID
 	})
 	return projection
+}
+
+func emitProgress(fn func(types.ScanProgressEvent), event types.ScanProgressEvent) {
+	if fn != nil {
+		fn(event)
+	}
+}
+
+func totalSize(items []types.DebrisInfo) int64 {
+	var size int64
+	for _, item := range items {
+		size += item.Size
+	}
+	return size
 }
