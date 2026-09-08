@@ -32,6 +32,8 @@ func TestScannerHelpersLiveApartFromScanEntry(t *testing.T) {
 	helperNames := []string{
 		"applyUserExclusions",
 		"scanRetention",
+		"emitProgress",
+		"totalSize",
 	}
 	facadeNames := []string{
 		"Scan",
@@ -40,8 +42,6 @@ func TestScannerHelpersLiveApartFromScanEntry(t *testing.T) {
 		"NewWithRetentionProviders",
 		"DefaultScanOptions",
 		"ProviderIdentity",
-		"emitProgress",
-		"totalSize",
 	}
 
 	wanted := make(map[string]string, len(helperNames)+len(facadeNames))
@@ -92,6 +92,8 @@ func TestScannerHelpersReexportIdentity(t *testing.T) {
 	helpers := []any{
 		applyUserExclusions,
 		scanRetention,
+		emitProgress,
+		totalSize,
 	}
 	public := []any{
 		Scan,
@@ -114,6 +116,8 @@ func TestScannerHelpersReexportIdentity(t *testing.T) {
 	var (
 		_ func(*types.ScanResult, types.ScanOptions)                                                    = applyUserExclusions
 		_ func(context.Context, types.ScanOptions, []types.RetentionProvider) types.RetentionProjection = scanRetention
+		_ func(func(types.ScanProgressEvent), types.ScanProgressEvent)                                  = emitProgress
+		_ func([]types.DebrisInfo) int64                                                                = totalSize
 		_ func(context.Context) (*types.ScanResult, error)                                              = Scan
 		_ func(context.Context, types.ScanOptions) (*types.ScanResult, error)                           = ScanWithOptions
 		_ func() (types.ScanOptions, error)                                                             = DefaultScanOptions
@@ -140,6 +144,8 @@ func TestScannerHelpersReexportIdentity(t *testing.T) {
 	for _, name := range []string{
 		"applyUserExclusions",
 		"scanRetention",
+		"emitProgress",
+		"totalSize",
 	} {
 		if strings.Contains(scannerSource, "func "+name+"(") {
 			t.Errorf("%s is still defined in scanner.go", name)
@@ -150,6 +156,12 @@ func TestScannerHelpersReexportIdentity(t *testing.T) {
 	}
 	if !strings.Contains(scannerSource, "scanRetention(") {
 		t.Error("scanner.go no longer delegates to scanRetention")
+	}
+	if !strings.Contains(scannerSource, "emitProgress(") {
+		t.Error("scanner.go no longer delegates to emitProgress")
+	}
+	if !strings.Contains(scannerSource, "totalSize(") {
+		t.Error("scanner.go no longer delegates to totalSize")
 	}
 }
 

@@ -247,20 +247,6 @@ type providerScanResult struct {
 	duration time.Duration
 }
 
-func emitProgress(fn func(types.ScanProgressEvent), event types.ScanProgressEvent) {
-	if fn != nil {
-		fn(event)
-	}
-}
-
-func totalSize(items []types.DebrisInfo) int64 {
-	var size int64
-	for _, item := range items {
-		size += item.Size
-	}
-	return size
-}
-
 func DefaultScanOptions() (types.ScanOptions, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
