@@ -545,6 +545,20 @@ codes. Guided rows keep their aggregate explanation once; reason entries with
 empty descriptions are omitted from human text, while all stable codes remain
 available in the JSON plan.
 
+### `exclusions` object (additive)
+
+Present only when user exclusions (`--exclude` flags, the per-user
+`$XDG_CONFIG_HOME/aibris/ignore` file, or repo-local `.aibris-ignore` files)
+were honored or rejected. The object uses the same `excluded_count` /
+`scopes` / `rejected` shape as scan JSON (see above). It is omitted when no
+exclusion configuration was present, so `schema_version` stays `1`.
+
+Exclusions remain discovery-hide: excluded items are absent from
+`physical_targets` and `rows`, and exclusions never add targets or broaden
+deletion authority. Last-scan cache reuse is skipped when `--exclude` is
+requested, and a cached scan that already applied exclusions is not reused for
+a later unfiltered clean.
+
 ## Clean execution receipt
 
 Non-dry-run JSON execution emits a single top-level receipt:
@@ -606,6 +620,10 @@ document-local `target-*` IDs are reused by receipt `physical_targets`; no
 path-derived or externally supplied ID authorizes execution. Receipt target
 rows are physical owners only. Logical rows remain inside the embedded plan
 and never contribute bytes.
+
+When exclusions were honored or rejected, the receipt repeats the same
+additive `exclusions` object at the top level and on the embedded plan. The
+object is omitted when no exclusion configuration was present.
 
 `status` is one of `succeeded`, `partial_failure`, `failed`, or `cancelled`.
 Only `succeeded` exits zero. Receipt accounting is physical-target based:

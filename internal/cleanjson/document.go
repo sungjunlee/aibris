@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/scanreport"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -55,15 +56,16 @@ const (
 // Plan is the machine-readable clean-plan document. It is the test surface
 // for policy, reason-code, and snapshot-accounting mapping.
 type Plan struct {
-	SchemaVersion   int              `json:"schema_version"`
-	DocumentType    string           `json:"document_type"`
-	Mode            string           `json:"mode"`
-	PathsIncluded   bool             `json:"paths_included"`
-	Evidence        Evidence         `json:"evidence"`
-	Policy          Policy           `json:"policy"`
-	Totals          Totals           `json:"totals"`
-	PhysicalTargets []PhysicalTarget `json:"physical_targets"`
-	Rows            []Row            `json:"rows"`
+	SchemaVersion   int                        `json:"schema_version"`
+	DocumentType    string                     `json:"document_type"`
+	Mode            string                     `json:"mode"`
+	PathsIncluded   bool                       `json:"paths_included"`
+	Evidence        Evidence                   `json:"evidence"`
+	Policy          Policy                     `json:"policy"`
+	Totals          Totals                     `json:"totals"`
+	PhysicalTargets []PhysicalTarget           `json:"physical_targets"`
+	Rows            []Row                      `json:"rows"`
+	Exclusions      *scanreport.JSONExclusions `json:"exclusions,omitempty"`
 }
 
 type Evidence struct {
@@ -243,6 +245,7 @@ func Render(in Input, components []SnapshotComponent) Plan {
 		Totals:          totalsFor(components),
 		PhysicalTargets: physicalTargetsFor(components, in.IncludePaths),
 		Rows:            rowsFor(components, in.IncludePaths),
+		Exclusions:      scanreport.JSONExclusionsFromResult(in.Result),
 	}
 }
 
