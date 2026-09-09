@@ -446,6 +446,11 @@ func canonicalTestPath(path string) string {
 	if resolved, err := filepath.EvalSymlinks(path); err == nil {
 		return resolved
 	}
+	// After a real clean the leaf is gone; resolve the parent (Darwin /var -> /private/var).
+	dir := filepath.Dir(path)
+	if resolvedDir, err := filepath.EvalSymlinks(dir); err == nil {
+		return filepath.Join(resolvedDir, filepath.Base(path))
+	}
 	return path
 }
 
