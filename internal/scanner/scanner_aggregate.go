@@ -12,7 +12,10 @@ import (
 // aggregateProviderResults folds providerScanResult values into the inventory:
 // progress, diagnostics, provider errors, ownership, user exclusions, totals,
 // size order, and retention. Cancel/deadline errors abort before inventory
-// post-processing.
+// post-processing. ctx must be the caller's context, not the dispatch scanCtx:
+// dispatch pairs scanCtx with a cancel that provider goroutines fire on
+// cancel-type errors, and post-loop work must run under the caller's
+// lifetime, not the dispatch-internal one.
 func (s *Scanner) aggregateProviderResults(
 	ctx context.Context,
 	opts types.ScanOptions,

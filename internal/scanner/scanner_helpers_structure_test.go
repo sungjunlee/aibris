@@ -146,58 +146,17 @@ func TestScannerHelpersReexportIdentity(t *testing.T) {
 		_ func(*Scanner, context.Context, types.ScanOptions, []string, <-chan providerScanResult) (*types.ScanResult, error) = (*Scanner).aggregateProviderResults
 	)
 
-	scannerSource := readScannerSource(t, "scanner.go")
-	if !strings.Contains(scannerSource, "func (s *Scanner) Scan(") {
-		t.Error("Scan is not defined in scanner.go")
-	}
-	if !strings.Contains(scannerSource, "func (s *Scanner) ScanWithOptions(") {
-		t.Error("ScanWithOptions is not defined in scanner.go")
-	}
-	if !strings.Contains(scannerSource, "func Scan(") {
-		t.Error("package Scan is not defined in scanner.go")
-	}
-	if !strings.Contains(scannerSource, "func DefaultScanOptions(") {
-		t.Error("DefaultScanOptions is not defined in scanner.go")
-	}
-	for _, name := range []string{
-		"applyUserExclusions",
-		"scanRetention",
-		"emitProgress",
-		"totalSize",
-		"dispatchProviders",
-		"aggregateProviderResults",
-	} {
-		if strings.Contains(scannerSource, "func "+name+"(") || strings.Contains(scannerSource, "func (s *Scanner) "+name+"(") {
-			t.Errorf("%s is still defined in scanner.go", name)
-		}
-	}
-	if !strings.Contains(scannerSource, "dispatchProviders(") {
-		t.Error("scanner.go no longer delegates to dispatchProviders")
-	}
-	if !strings.Contains(scannerSource, "aggregateProviderResults(") {
-		t.Error("scanner.go no longer delegates to aggregateProviderResults")
-	}
-
+	// Definition sites, uniqueness, and the ScanWithOptions delegation are
+	// covered by the AST tests in this file; only assert source facts the AST
+	// tests do not restate.
 	dispatchSource := readScannerSource(t, "scanner_dispatch.go")
-	if !strings.Contains(dispatchSource, "func (s *Scanner) dispatchProviders(") {
-		t.Error("dispatchProviders is not defined in scanner_dispatch.go")
-	}
 	if !strings.Contains(dispatchSource, "emitProgress(") {
 		t.Error("scanner_dispatch.go no longer emits provider start progress")
 	}
 
 	aggregateSource := readScannerSource(t, "scanner_aggregate.go")
-	if !strings.Contains(aggregateSource, "func (s *Scanner) aggregateProviderResults(") {
-		t.Error("aggregateProviderResults is not defined in scanner_aggregate.go")
-	}
-	for _, name := range []string{
-		"applyUserExclusions",
-		"scanRetention",
-		"totalSize",
-	} {
-		if !strings.Contains(aggregateSource, name+"(") {
-			t.Errorf("scanner_aggregate.go no longer delegates to %s", name)
-		}
+	if !strings.Contains(aggregateSource, "totalSize(") {
+		t.Error("scanner_aggregate.go no longer delegates to totalSize")
 	}
 }
 
