@@ -12,6 +12,11 @@
 
 ### Fixed
 
+- `clean --json` honors `--exclude` and last-scan cache skip the same way as
+  human `clean`. Dry-run plans and execute receipts emit an additive
+  `exclusions` object (`excluded_count` / `scopes` / `rejected`) when
+  exclusions were honored or rejected, and omit it when no exclusion
+  configuration was present.
 - Homebrew formula publish no longer fails after a successful tap push. The
   EXIT cleanup trap records temp paths before `publish_main` locals go out of
   scope, so `set -u` does not skip `brew-pour`.

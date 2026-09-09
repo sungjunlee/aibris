@@ -83,6 +83,64 @@ func TestBuildCountsExactAndNestedRowsOnce(t *testing.T) {
 	}
 }
 
+func TestBuildProjectsScanExclusionsWithoutBumpingSchema(t *testing.T) {
+	root := t.TempDir()
+	item := types.DebrisInfo{
+		Tool:     types.ToolNodeModules,
+		Category: types.CategoryNodeModules,
+		ID:       "kept",
+		Path:     filepath.Join(root, "project", "node_modules"),
+		Size:     64,
+		ModTime:  time.Now().Add(-48 * time.Hour),
+	}
+	if err := os.MkdirAll(item.Path, 0755); err != nil {
+		t.Fatal(err)
+	}
+	in := Input{
+		Result:    &types.ScanResult{Worktrees: []types.DebrisInfo{item}},
+		Source:    Source{Kind: SourceLive, ObservedAt: time.Now()},
+		Opts:      types.PruneOptions{Age: time.Hour},
+		Plan:      selectedPlan(item, "classic_eligible"),
+		Inventory: []types.DebrisInfo{item},
+	}
+
+	omitted := mustBuild(t, in)
+	if omitted.Exclusions != nil {
+		t.Fatalf("exclusions = %+v; want omitted without configuration", omitted.Exclusions)
+	}
+	if omitted.SchemaVersion != SchemaVersion {
+		t.Fatalf("schema_version = %d; want %d", omitted.SchemaVersion, SchemaVersion)
+	}
+
+	in.Result.ExcludedByUser = 1
+	in.Result.ExcludedScopes = []types.ExcludedScope{{
+		Pattern:  "/hidden",
+		Resolved: "/hidden",
+		Source:   types.ExcludeSourceFlag,
+		Count:    1,
+	}}
+	in.Result.RejectedExcludes = []types.RejectedExclude{{
+		Pattern: "/outside",
+		Source:  types.ExcludeSourceFlag,
+		Reason:  "outside scan roots",
+	}}
+	document := mustBuild(t, in)
+	if document.SchemaVersion != SchemaVersion {
+		t.Fatalf("schema_version = %d; additive exclusions must not bump it", document.SchemaVersion)
+	}
+	if document.Exclusions == nil ||
+		document.Exclusions.ExcludedCount != 1 ||
+		len(document.Exclusions.Scopes) != 1 ||
+		document.Exclusions.Scopes[0].Source != "flag" ||
+		len(document.Exclusions.Rejected) != 1 ||
+		document.Exclusions.Rejected[0].Reason != "outside scan roots" {
+		t.Fatalf("exclusions = %+v; want scan JSON shape", document.Exclusions)
+	}
+	if document.Totals.Selected != 1 {
+		t.Fatalf("selected = %d; exclusions must not add targets", document.Totals.Selected)
+	}
+}
+
 func TestRowIdentityKeyCanonicalizesAliasesWithRawFallback(t *testing.T) {
 	root := t.TempDir()
 	targetPath := filepath.Join(root, "target")

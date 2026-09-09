@@ -50,28 +50,7 @@ func EncodeJSON(view View) JSONOutput {
 			Error:      diagnostic.Err,
 		})
 	}
-	if view.ExcludedByUser > 0 || len(view.ExcludedScopes) > 0 || len(view.RejectedExcludes) > 0 {
-		out.Exclusions = &JSONExclusions{
-			ExcludedCount: view.ExcludedByUser,
-			Scopes:        make([]JSONExcludedScope, 0, len(view.ExcludedScopes)),
-			Rejected:      make([]JSONRejectedExclude, 0, len(view.RejectedExcludes)),
-		}
-		for _, scope := range view.ExcludedScopes {
-			out.Exclusions.Scopes = append(out.Exclusions.Scopes, JSONExcludedScope{
-				Pattern:  scope.Pattern,
-				Resolved: scope.Resolved,
-				Source:   string(scope.Source),
-				Count:    scope.Count,
-			})
-		}
-		for _, rejected := range view.RejectedExcludes {
-			out.Exclusions.Rejected = append(out.Exclusions.Rejected, JSONRejectedExclude{
-				Pattern: rejected.Pattern,
-				Source:  string(rejected.Source),
-				Reason:  rejected.Reason,
-			})
-		}
-	}
+	out.Exclusions = JSONExclusionsFrom(view.ExcludedByUser, view.ExcludedScopes, view.RejectedExcludes)
 	for i, it := range view.Items {
 		items[i] = JSONItem{
 			Tool:             string(it.Tool),
@@ -160,4 +139,43 @@ func JSONVolumeFromReport(report volume.Report) *JSONVolume {
 		DebrisBytes:            report.DebrisBytes,
 		OtherVolumeDebrisBytes: report.OtherVolumeDebrisBytes,
 	}
+}
+
+// JSONExclusionsFrom is the encode-only exclusions object shared by scan JSON
+// and clean JSON. It is nil when no exclusion configuration was honored or
+// rejected, so schema_version stays 1.
+func JSONExclusionsFrom(excludedByUser int, scopes []types.ExcludedScope, rejected []types.RejectedExclude) *JSONExclusions {
+	if excludedByUser == 0 && len(scopes) == 0 && len(rejected) == 0 {
+		return nil
+	}
+	out := &JSONExclusions{
+		ExcludedCount: excludedByUser,
+		Scopes:        make([]JSONExcludedScope, 0, len(scopes)),
+		Rejected:      make([]JSONRejectedExclude, 0, len(rejected)),
+	}
+	for _, scope := range scopes {
+		out.Scopes = append(out.Scopes, JSONExcludedScope{
+			Pattern:  scope.Pattern,
+			Resolved: scope.Resolved,
+			Source:   string(scope.Source),
+			Count:    scope.Count,
+		})
+	}
+	for _, item := range rejected {
+		out.Rejected = append(out.Rejected, JSONRejectedExclude{
+			Pattern: item.Pattern,
+			Source:  string(item.Source),
+			Reason:  item.Reason,
+		})
+	}
+	return out
+}
+
+// JSONExclusionsFromResult projects ScanResult exclusion diagnostics. Nil
+// results and scans without exclusion configuration omit the object.
+func JSONExclusionsFromResult(result *types.ScanResult) *JSONExclusions {
+	if result == nil {
+		return nil
+	}
+	return JSONExclusionsFrom(result.ExcludedByUser, result.ExcludedScopes, result.RejectedExcludes)
 }

@@ -55,7 +55,7 @@ func runCleanJSON(cmd *cobra.Command) {
 	if err != nil {
 		failCleanJSON("invalid scan root")
 	}
-	result, source, err := scanForCleanQuiet(ctx, roots, nil, len(cleanRoots) > 0)
+	result, source, err := scanForCleanQuiet(ctx, roots, cleanExcludes, len(cleanRoots) > 0)
 	if err != nil {
 		if errors.Is(err, errIncompleteCleanupScan) {
 			failCleanJSON("cleanup requires a complete scan")

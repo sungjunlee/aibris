@@ -26,6 +26,7 @@ type cleanJSONReceipt struct {
 	PathsIncluded   bool                             `json:"paths_included"`
 	Status          string                           `json:"status"`
 	Plan            cleanJSONPlan                    `json:"plan"`
+	Exclusions      *jsonExclusions                  `json:"exclusions,omitempty"`
 	Totals          cleanJSONReceiptTotals           `json:"totals"`
 	PhysicalTargets []cleanJSONReceiptPhysicalTarget `json:"physical_targets"`
 	PostClean       *cleanJSONPostClean              `json:"post_clean"`
@@ -104,6 +105,7 @@ func newCleanJSONReceipt(
 		PathsIncluded:   cleanIncludePaths,
 		Status:          cleanJSONReceiptPending,
 		Plan:            document,
+		Exclusions:      document.Exclusions,
 		PhysicalTargets: targets,
 	}
 }
