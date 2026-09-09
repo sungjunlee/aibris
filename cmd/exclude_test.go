@@ -427,7 +427,7 @@ func assertCleanJSONSelectedPaths(t *testing.T, document cleanJSONPlan, want ...
 	for _, path := range want {
 		found := false
 		for _, selected := range got {
-			if selected == path {
+			if testPathsEqual(selected, path) {
 				found = true
 				break
 			}
@@ -436,6 +436,17 @@ func assertCleanJSONSelectedPaths(t *testing.T, document cleanJSONPlan, want ...
 			t.Fatalf("selected paths = %v; missing %s", got, path)
 		}
 	}
+}
+
+func testPathsEqual(a, b string) bool {
+	return canonicalTestPath(a) == canonicalTestPath(b)
+}
+
+func canonicalTestPath(path string) string {
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	return path
 }
 
 func assertCleanJSONHonoredExclude(t *testing.T, exclusions *jsonExclusions, hidden string) {
@@ -451,7 +462,7 @@ func assertCleanJSONHonoredExclude(t *testing.T, exclusions *jsonExclusions, hid
 	}
 	if (exclusions.Scopes[0].Source != "flag" && exclusions.Scopes[0].Source != "ignore-file") ||
 		exclusions.Scopes[0].Count != 1 ||
-		(exclusions.Scopes[0].Pattern != hidden && exclusions.Scopes[0].Resolved != hidden) {
+		(!testPathsEqual(exclusions.Scopes[0].Pattern, hidden) && !testPathsEqual(exclusions.Scopes[0].Resolved, hidden)) {
 		t.Errorf("scopes = %+v; want one honored scope for %s", exclusions.Scopes, hidden)
 	}
 }
@@ -463,7 +474,7 @@ func assertCleanJSONHonoredAndRejected(t *testing.T, exclusions *jsonExclusions,
 		t.Errorf("scope source = %q; want flag", exclusions.Scopes[0].Source)
 	}
 	if len(exclusions.Rejected) != 1 ||
-		exclusions.Rejected[0].Pattern != outside ||
+		!testPathsEqual(exclusions.Rejected[0].Pattern, outside) ||
 		exclusions.Rejected[0].Reason != "outside scan roots" {
 		t.Errorf("rejected = %+v; want the outside-root pattern reported", exclusions.Rejected)
 	}
