@@ -92,8 +92,11 @@ lsof -u "$USER" -d cwd 2>/dev/null | awk 'NR>1 {print $NF}' | sort -u
   protect/exclude는 clean 단계에서만 적용하고, dry-run과 실제 실행에 같은
   flag로 붙인다.
 - #507(JSON `--exclude` / receipt diagnostics)이 고쳐지기 전에는
-  `--exclude`를 붙여 JSON execute하지 않는다. 고쳐진 뒤에는 plan/receipt의
-  `exclusions`(또는 protect) diagnostic을 execute 전에 확인한다.
+  `--exclude`를 붙여 JSON execute하지 않는다. live outer owner 보호가
+  필요하면 preview/execute 모두에서 `--json`을 빼고 `--exclude`를 유지하거나,
+  JSON execute 자체를 건너뛴다. `--exclude`를 떼고 JSON execute하지 않는다.
+  고쳐진 뒤에는 plan/receipt의 `exclusions`(또는 protect) diagnostic을
+  execute 전에 확인한다.
 - Mole(`mo`)을 병행하는 환경에서는 live cwd가 Mole target 아래에 있을 때
   `mo clean`을 실행하지 않는다. dry-run으로 보고하는 것은 괜찮다.
 
@@ -181,8 +184,11 @@ aibris JSON과 Docker 출력을 파싱해 **크기 순으로 정렬**하여 사�
   `--include-paths`를 다른 selector와 함께 유지한다. 기본 JSON은
   경로가 가려져 있어서 byte size로 행을 합치면 안 된다
 - #507이 고쳐지기 전에는 `--exclude`와 `--json`을 함께 execute하지
-  않는다. 고쳐진 뒤에는 preview JSON plan과 execute receipt의
-  `exclusions`(또는 protect) diagnostic을 execute 전에 확인한다
+  않는다. live outer owner 보호가 필요하면 preview/execute 모두 `--json`을
+  빼고 `--exclude`를 유지하거나 JSON execute를 건너뛴다. `--exclude`를
+  떼고 JSON execute하지 않는다. 고쳐진 뒤에는 preview JSON plan과
+  execute receipt의 `exclusions`(또는 protect) diagnostic을 execute 전에
+  확인한다
 - home volume `critical`(≥95%)의 cache age auto-relax는 명시적
   `--pressure`와 동등한 selector다. 사용자에게 알리고, 사용자가 승인하지
   않은 default clean에 섞지 않으며, live checkout 아래에 있는 cache는
