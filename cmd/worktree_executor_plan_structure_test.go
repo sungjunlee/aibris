@@ -17,16 +17,21 @@ func TestWorktreeExecutorPlanLivesApartFromExecutorEntry(t *testing.T) {
 	}
 	executorNames := []string{
 		"executeCleanTargets",
-		"executePreparedCleanTargets",
 		"defaultActiveWorktreeExecutionOptions",
 	}
+	preparedNames := []string{
+		"executePreparedCleanTargets",
+	}
 
-	wanted := make(map[string]string, len(planNames)+len(executorNames))
+	wanted := make(map[string]string, len(planNames)+len(executorNames)+len(preparedNames))
 	for _, name := range planNames {
 		wanted[name] = "worktree_executor_plan.go"
 	}
 	for _, name := range executorNames {
 		wanted[name] = "worktree_executor.go"
+	}
+	for _, name := range preparedNames {
+		wanted[name] = "worktree_executor_prepared.go"
 	}
 
 	fset := token.NewFileSet()
@@ -71,12 +76,16 @@ func TestWorktreeExecutorPlanReexportIdentity(t *testing.T) {
 	}
 
 	executorSource := readCmdSource(t, "worktree_executor.go")
+	preparedSource := readCmdSource(t, "worktree_executor_prepared.go")
 	for _, name := range []string{
 		"prepareCleanExecutionWithSafety",
 		"prepareCleanExecutionWithOptions",
 	} {
 		if strings.Contains(executorSource, "func "+name+"(") {
 			t.Errorf("%s is still defined in worktree_executor.go", name)
+		}
+		if strings.Contains(preparedSource, "func "+name+"(") {
+			t.Errorf("%s is still defined in worktree_executor_prepared.go", name)
 		}
 	}
 	if !strings.Contains(executorSource, "prepareCleanExecutionWithSafety(") {
