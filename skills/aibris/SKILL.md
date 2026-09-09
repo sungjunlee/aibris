@@ -26,11 +26,22 @@ curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/i
 
 사용자가 "디스크 좀 정리해줘", "오래된 워크트리 지워줘" 등의 요청을 하면 이 워크플로우를 따른다.
 
-### Step 0: 설치 확인
+### Step 0: 설치 확인 + 버전 게이트
 
 ```bash
 command -v aibris
+aibris --version
 ```
+
+최소 버전은 **v0.12.0**이다. 이 스킬이 쓰는 flag/field(`scan --json`,
+`clean --json`, `--include-paths`, `--strip`, `--exclude`, `--pressure`)는
+그 미만 버전의 stale binary에 없을 수 있다. 버전 게이트는 로컬 binary의
+`--version`과 필요 시 `aibris clean --help` capability probe만 사용한다.
+GitHub releases를 scrape해서 게이트하지 않는다.
+
+`aibris --version`이 v0.12.0 미만이거나 `--help`에서 이 스킬이 쓰는 flag가
+없으면 사용자에게 아래 documented install path로 재설치를 요청하고,
+재설치 전에는 guided cleanup을 진행하지 않는다.
 
 `aibris`가 없으면 사용자에게 설치 여부를 묻고, 승인 후 아래 명령을 실행한다:
 
@@ -59,6 +70,32 @@ docker system df 2>/dev/null
 **실패 처리**: aibris 명령어 실패 시 사용자에게 에러를 보여주고 설치 안내 후 중단한다.
 Docker는 없으면 (command not found) 무시한다.
 **빈 결과 처리**: aibris `total_count`가 0이고 Docker도 없으면 "정리할 항목이 없습니다" 알리고 `/clear` 안내 후 중단한다.
+
+#### live cwd 확인 (advisory)
+
+scan의 `active`는 gitdir liveness이지 process liveness가 아니다. 실행 중
+프로세스의 cwd를 bounded하게 확인한다:
+
+```bash
+lsof -u "$USER" -d cwd 2>/dev/null | awk 'NR>1 {print $NF}' | sort -u
+```
+
+- 각 cwd를 scan inventory의 `Path` 값에 매핑한다. 매핑 단위는 **worktree
+  outer owner**다. nested checkout이 매칭되면 그 outer owner를 쓰고, #508
+  (nested-path matching)이 ship되기 전에는 nested checkout을 단독
+  protect/exclude 경로로 전달하지 않는다.
+- process cwd는 advisory다. quiescence 증명이 아니고, CLI에 `lsof` hard
+  lock을 요구하지 않는다.
+- live cwd만으로 sibling/global cache(uv, Gradle, npm, dart 등)가 사용
+  중이라고 추정하지 않는다.
+- `scan --json`은 필터 없이 실행해 live tree가 계속 보이게 한다.
+  protect/exclude는 clean 단계에서만 적용하고, dry-run과 실제 실행에 같은
+  flag로 붙인다.
+- #507(JSON `--exclude` / receipt diagnostics)이 고쳐지기 전에는
+  `--exclude`를 붙여 JSON execute하지 않는다. 고쳐진 뒤에는 plan/receipt의
+  `exclusions`(또는 protect) diagnostic을 execute 전에 확인한다.
+- Mole(`mo`)을 병행하는 환경에서는 live cwd가 Mole target 아래에 있을 때
+  `mo clean`을 실행하지 않는다. dry-run으로 보고하는 것은 괜찮다.
 
 ### Step 2: 분석 및 제시
 
@@ -135,13 +172,21 @@ aibris JSON과 Docker 출력을 파싱해 **크기 순으로 정렬**하여 사�
 - 승인받은 `--category`, `--tool`, 반복 가능한 `--root`, `--age` 값은 모두
   동일하게 유지한다
 - `--guide`, `--no-guide`, `--risky`, `--include-active-worktrees`,
-  `--interactive`, `--force`, `--strip`, `--json`, `--include-paths` 같은
+  `--interactive`, `--force`, `--strip`, `--json`, `--include-paths`,
+  `--exclude`(ship된 경우 `--protect-path`도), `--pressure` 같은
   적용 가능한 routing/safety flag도 동일하게 유지한다
 - 실제 실행에서는 preview 명령에서 `--dry-run`만 제거한다
 - scoped preview 뒤에 plain `aibris clean`을 실행해서는 안 된다
 - 에이전트가 로컬에서 `clean --json`을 쓰면 preview와 execute 모두
   `--include-paths`를 다른 selector와 함께 유지한다. 기본 JSON은
   경로가 가려져 있어서 byte size로 행을 합치면 안 된다
+- #507이 고쳐지기 전에는 `--exclude`와 `--json`을 함께 execute하지
+  않는다. 고쳐진 뒤에는 preview JSON plan과 execute receipt의
+  `exclusions`(또는 protect) diagnostic을 execute 전에 확인한다
+- home volume `critical`(≥95%)의 cache age auto-relax는 명시적
+  `--pressure`와 동등한 selector다. 사용자에게 알리고, 사용자가 승인하지
+  않은 default clean에 섞지 않으며, live checkout 아래에 있는 cache는
+  건너뛴다
 - `physical_target_id`의 `target-N`은 그 JSON 문서 안의 번호다. 다음
   프로세스·다음 실행의 같은 경로와 동일하지 않다. 후속 명령은 path /
   `--root` / `--category`로 고른다
@@ -280,6 +325,9 @@ aibris clean --guide --dry-run
 
 # 보호된 worktree에서 regenerable subtree만 제거 (unit은 유지)
 aibris clean --strip --dry-run
+
+# 재생성 가능 cache의 age relax를 명시적으로 선택 (home volume ≥95% critical일 때도 auto-relax되며 --pressure와 동등한 selector로 취급)
+aibris clean --pressure --dry-run
 
 # category + tool AND 조합
 aibris clean --category worktree --tool codex --dry-run
