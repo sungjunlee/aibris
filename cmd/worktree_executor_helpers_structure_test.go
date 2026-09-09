@@ -30,16 +30,21 @@ func TestWorktreeExecutorHelpersLiveApartFromExecutorEntry(t *testing.T) {
 	}
 	executorNames := []string{
 		"executeCleanTargets",
-		"executePreparedCleanTargets",
 		"defaultActiveWorktreeExecutionOptions",
 	}
+	preparedNames := []string{
+		"executePreparedCleanTargets",
+	}
 
-	wanted := make(map[string]string, len(helperNames)+len(executorNames))
+	wanted := make(map[string]string, len(helperNames)+len(executorNames)+len(preparedNames))
 	for _, name := range helperNames {
 		wanted[name] = "worktree_executor_helpers.go"
 	}
 	for _, name := range executorNames {
 		wanted[name] = "worktree_executor.go"
+	}
+	for _, name := range preparedNames {
+		wanted[name] = "worktree_executor_prepared.go"
 	}
 
 	fset := token.NewFileSet()
@@ -93,6 +98,7 @@ func TestWorktreeExecutorHelpersReexportIdentity(t *testing.T) {
 	}
 
 	executorSource := readCmdSource(t, "worktree_executor.go")
+	preparedSource := readCmdSource(t, "worktree_executor_prepared.go")
 	helperSource := readCmdSource(t, "worktree_executor_helpers.go")
 	for _, name := range []string{
 		"executePathCleanupTarget",
@@ -104,6 +110,9 @@ func TestWorktreeExecutorHelpersReexportIdentity(t *testing.T) {
 		if strings.Contains(executorSource, "func "+name+"(") {
 			t.Errorf("%s is still defined in worktree_executor.go", name)
 		}
+		if strings.Contains(preparedSource, "func "+name+"(") {
+			t.Errorf("%s is still defined in worktree_executor_prepared.go", name)
+		}
 		if !strings.Contains(helperSource, "func "+name+"(") {
 			t.Errorf("%s is not defined in worktree_executor_helpers.go", name)
 		}
@@ -113,8 +122,8 @@ func TestWorktreeExecutorHelpersReexportIdentity(t *testing.T) {
 		"executeActiveWorktreeUnit(",
 		"isActiveWorktreeTarget(",
 	} {
-		if !strings.Contains(executorSource, name) {
-			t.Errorf("worktree_executor.go no longer calls %s", strings.TrimSuffix(name, "("))
+		if !strings.Contains(preparedSource, name) {
+			t.Errorf("worktree_executor_prepared.go no longer calls %s", strings.TrimSuffix(name, "("))
 		}
 	}
 	for _, name := range []string{
