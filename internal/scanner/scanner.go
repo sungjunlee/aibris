@@ -2,12 +2,9 @@ package scanner
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
-	"sort"
-	"sync"
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
@@ -19,8 +16,6 @@ var defaultProviders = adapter.DefaultProviders()
 var defaultRetentionProviders = retention.DefaultProviders()
 
 var DefaultScanner = NewWithRetentionProviders(defaultProviders, defaultRetentionProviders)
-
-const maxParallelProviders = 2
 
 type Scanner struct {
 	Providers          []adapter.DebrisProvider
@@ -111,15 +106,6 @@ func (s *Scanner) ScanWithOptions(ctx context.Context, opts types.ScanOptions) (
 		return nil, err
 	}
 
-	result := &types.ScanResult{
-		ByCategory: make(map[types.Category]types.CategorySummary),
-		ByTool:     make(map[types.Tool]types.ToolSummary),
-	}
-	catByTool := make(map[types.Tool]types.Category)
-	for _, p := range s.Providers {
-		catByTool[p.Name()] = p.Category()
-	}
-
 	// Fast path: return immediately if context is already cancelled.
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -128,123 +114,8 @@ func (s *Scanner) ScanWithOptions(ctx context.Context, opts types.ScanOptions) (
 	scanCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	results := make(chan providerScanResult, len(s.Providers))
-	startGate := make(chan struct{})
-	sem := make(chan struct{}, maxParallelProviders)
-	var wg sync.WaitGroup
-
-	for _, p := range s.Providers {
-		emitProgress(opts.OnProgress, types.ScanProgressEvent{
-			State: types.ScanProgressStart,
-			Tool:  p.Name(),
-		})
-		wg.Add(1)
-		go func(p adapter.DebrisProvider) {
-			defer wg.Done()
-			select {
-			case <-scanCtx.Done():
-				results <- providerScanResult{provider: p, err: scanCtx.Err()}
-				return
-			case <-startGate:
-			}
-			select {
-			case sem <- struct{}{}:
-				defer func() { <-sem }()
-			case <-scanCtx.Done():
-				results <- providerScanResult{provider: p, err: scanCtx.Err()}
-				return
-			}
-			start := s.now()
-			items, err := p.Scan(scanCtx, opts)
-			dur := s.now().Sub(start)
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				cancel()
-			}
-			results <- providerScanResult{provider: p, items: items, err: err, duration: dur}
-		}(p)
-	}
-	close(startGate)
-
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-
-	var cancelErr error
-	for providerResult := range results {
-		p := providerResult.provider
-		worktrees := providerResult.items
-		err := providerResult.err
-		if err != nil {
-			emitProgress(opts.OnProgress, types.ScanProgressEvent{
-				State: types.ScanProgressError,
-				Tool:  p.Name(),
-				Err:   err,
-			})
-			fmt.Fprintf(s.errw(), "scan:%s:%v\n", p.Name(), err)
-			if opts.Diagnostics {
-				result.Diagnostics = append(result.Diagnostics, types.ProviderDiagnostic{
-					Tool:     p.Name(),
-					State:    types.ScanProgressError,
-					Duration: providerResult.duration,
-					Err:      err.Error(),
-				})
-			}
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				cancelErr = err
-			} else {
-				result.ProviderErrors = append(result.ProviderErrors, types.ScanProviderError{
-					Tool:    p.Name(),
-					Message: err.Error(),
-				})
-			}
-			continue
-		}
-		emitProgress(opts.OnProgress, types.ScanProgressEvent{
-			State: types.ScanProgressDone,
-			Tool:  p.Name(),
-			Count: len(worktrees),
-			Size:  totalSize(worktrees),
-		})
-		if opts.Diagnostics {
-			result.Diagnostics = append(result.Diagnostics, types.ProviderDiagnostic{
-				Tool:     p.Name(),
-				State:    types.ScanProgressDone,
-				Count:    len(worktrees),
-				Bytes:    totalSize(worktrees),
-				Duration: providerResult.duration,
-			})
-		}
-		result.Worktrees = append(result.Worktrees, worktrees...)
-	}
-	if cancelErr != nil {
-		return nil, cancelErr
-	}
-	sort.Slice(result.ProviderErrors, func(i, j int) bool {
-		return result.ProviderErrors[i].Tool < result.ProviderErrors[j].Tool
-	})
-	sort.Slice(result.Diagnostics, func(i, j int) bool {
-		return result.Diagnostics[i].Tool < result.Diagnostics[j].Tool
-	})
-
-	result.Worktrees = requireTempDirOwnership(ctx, result.Worktrees, roots)
-
-	applyUserExclusions(result, opts)
-	fillInventoryTotals(result, catByTool)
-
-	sort.Slice(result.Worktrees, func(i, j int) bool {
-		return result.Worktrees[i].Size > result.Worktrees[j].Size
-	})
-
-	result.Retention = scanRetention(ctx, opts, s.RetentionProviders)
-	return result, nil
-}
-
-type providerScanResult struct {
-	provider adapter.DebrisProvider
-	items    []types.DebrisInfo
-	err      error
-	duration time.Duration
+	results := s.dispatchProviders(scanCtx, cancel, opts)
+	return s.aggregateProviderResults(ctx, opts, roots, results)
 }
 
 func DefaultScanOptions() (types.ScanOptions, error) {
