@@ -65,6 +65,8 @@ func runStripClean() {
 		os.Exit(1)
 	}
 	printExclusionDiagnostics(result)
+	protectMatcher := newProtectPathMatcher(roots)
+	printProtectPathDiagnostics(protectMatcher)
 	refreshCleanupInventoryMetadataWithContext(ctx, result.Worktrees)
 
 	opts := types.PruneOptions{
@@ -83,7 +85,10 @@ func runStripClean() {
 		os.Exit(1)
 	}
 	targets, refusedForCWD := selectStripTargets(result.Worktrees, opts, cwd)
-	printStripPlan(targets, refusedForCWD, opts)
+	selected, protectPathProtections := applyProtectPathProtections(result.Worktrees, targets, protectMatcher)
+	refusedProtect := protectPathRefusedTargets(targets, protectPathProtections)
+	targets = selected
+	printStripPlan(targets, refusedForCWD, refusedProtect, opts)
 	if len(targets) == 0 {
 		fmt.Println("No strip-eligible worktrees.")
 		return
@@ -199,7 +204,7 @@ func stripUnitContainsCWD(item types.DebrisInfo, cwd string) bool {
 	return false
 }
 
-func printStripPlan(targets, refusedForCWD []types.DebrisInfo, opts types.PruneOptions) {
+func printStripPlan(targets, refusedForCWD, refusedProtect []types.DebrisInfo, opts types.PruneOptions) {
 	var total int64
 	for _, target := range targets {
 		total += target.StrippableBytes
@@ -218,6 +223,7 @@ func printStripPlan(targets, refusedForCWD []types.DebrisInfo, opts types.PruneO
 		home = resolvedDisplayHome(userHome)
 	}
 	printStripCWDRefusals(refusedForCWD, home)
+	printStripProtectRefusals(refusedProtect, home)
 	if len(targets) == 0 {
 		fmt.Println()
 		return

@@ -21,6 +21,7 @@ var (
 	cleanStrip                  bool
 	cleanRoots                  []string
 	cleanExcludes               []string
+	cleanProtectPaths           []string
 	cleanIncludeActiveWorktrees bool
 	cleanAgentStateGrace        string
 	cleanReceiptFile            string
@@ -48,6 +49,11 @@ an execution run and is not available on the classic route, which already has
 Across both routes, selected targets enter the cleanup plan, reviewable targets
 require explicit selection, and protected targets never enter the plan. Guided
 review displays protected targets as locked rows.
+
+--protect-path is clean-only: a nested checkout under a worktree outer owner
+protects that owner from delete and strip. Protected items stay in the plan
+with an explicit reason. Scan inventory and --exclude discovery-hide matching
+are unchanged. Sibling cache paths are not auto-protected.
 
 --strip is a separate disposition from deletion: it removes only the
 regenerable subtrees (dependency directories and platform build output)
@@ -87,6 +93,7 @@ func init() {
 	cleanCmd.Flags().BoolVar(&cleanPressure, "pressure", false, "Select official regenerable caches younger than --age (also auto when the home volume is critical, ≥95% used)")
 	cleanCmd.Flags().StringArrayVar(&cleanRoots, "root", nil, "Scan root under $HOME (repeatable)")
 	cleanCmd.Flags().StringArrayVar(&cleanExcludes, "exclude", nil, "Exclude a path or glob pattern under scan roots from discovery (repeatable)")
+	cleanCmd.Flags().StringArrayVar(&cleanProtectPaths, "protect-path", nil, "Protect a path under scan roots from delete and strip (repeatable). A nested checkout protects its worktree outer owner; protected items stay in the plan")
 	cleanCmd.Flags().BoolVar(&cleanIncludeActiveWorktrees, "include-active-worktrees", false, "Include active worktrees in cleanup candidates")
 	cleanCmd.Flags().StringVar(
 		&cleanAgentStateGrace,

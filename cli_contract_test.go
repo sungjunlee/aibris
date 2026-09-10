@@ -239,6 +239,7 @@ func TestCLIContractCleanHelpMatchesPolicyVocabulary(t *testing.T) {
 		"reviewable targets",
 		"protected targets",
 		"review displays protected targets as locked rows",
+		"--protect-path",
 	} {
 		if !strings.Contains(result.Stdout, want) {
 			t.Errorf("clean --help missing %q:\n%s", want, result.Stdout)

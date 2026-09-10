@@ -73,6 +73,7 @@ const (
 	CleanReasonNestedRevalidation            CleanAuditReason = "nested agent-state revalidation refused"
 	CleanReasonNestedRevalidationRequired    CleanAuditReason = "nested agent-state revalidation required"
 	CleanReasonScanEvidenceUnavailable       CleanAuditReason = "scan identity evidence unavailable"
+	CleanReasonProtectPath                   CleanAuditReason = "live nested path protected"
 	CleanReasonEligible                      CleanAuditReason = CleanAuditReason(EligibilityReasonEligible)
 )
 

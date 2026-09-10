@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- `clean --protect-path` is a repeatable clean-only pin. A nested checkout
+  under a worktree outer owner protects that owner from delete and strip;
+  the owner stays in the plan as protected (`live nested path protected` /
+  `protect_path`). Scan inventory and `--exclude` discovery-hide matching
+  are unchanged. Sibling cache paths are not auto-protected.
+
 ### Changed
 
 - `clean --pressure` and automatic critical home-volume selection run

@@ -54,6 +54,7 @@ registry를 함께 사용하고 `.git` metadata로 검증한다.
 - `.git` 파일의 `gitdir:`를 읽어 `active`/`orphaned`를 판정한다. referenced gitdir가 없으면 `orphaned`
 - `Source`는 path-derived owner(`.codex`, `.somename`, `project-local`) 또는 registered `superpowers`로 채운다
 - `plain-dir`, empty, unknown worktree status는 age/`--risky`/`--include-active-worktrees`와 무관하게 절대 정리 후보가 아니다
+- `--protect-path`는 clean-only(repeatable)다. nested checkout이나 debris item의 자손은 그 outer owner를 delete/strip에서 보호하고, owner는 plan에 protected로 남는다. scan inventory와 `--exclude` discovery-hide matching은 바꾸지 않는다
 - explicit `--root`는 hard boundary다. `appendUncoveredCodexHomes`는 기본 `$HOME` 스캔에만 적용한다. 명시적 root가 Codex home을 포함하지 않으면 한 줄 diagnostic만 내고 범위를 넓히지 않는다. `--root`가 valid worktree outer owner이면 그 unit 하나를 발견한다
 
 **2. Prune 안전장치**
@@ -62,6 +63,7 @@ registry를 함께 사용하고 `.git` metadata로 검증한다.
 - `--force`로만 confirm 생략 가능
 - `--interactive`는 항목별 y/N 확인
 - 절대 경로나 시스템 경로 삭제 금지
+- `--protect-path`는 nested checkout이 outer owner를 보호하는 clean-only pin이다. `--exclude`는 discovery-hide만 하고 ancestor-match하지 않는다
 
 **3. 코드 규칙**
 - 불필요한 추상화 금지. 인터페이스는 진짜 확장 지점에만

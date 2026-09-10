@@ -304,3 +304,108 @@ func TestIgnoreFilePatterns_MissingFilesContributeNothing(t *testing.T) {
 		t.Errorf("patterns = %+v; want none without ignore files", patterns)
 	}
 }
+
+func TestMatcher_ProtectMatchAncestorAndDescendant(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	root := filepath.Join(home, "work")
+	owner := filepath.Join(root, "e89b")
+	nested := filepath.Join(owner, "tamgu_note")
+	sibling := filepath.Join(root, "other")
+	caches := filepath.Join(root, "gradle", "caches")
+	daemon := filepath.Join(root, "gradle", "daemon")
+	for _, dir := range []string{nested, sibling, caches, daemon} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	resolvedRoot := evalPath(t, root)
+
+	tests := []struct {
+		name          string
+		protect       string
+		item          string
+		wantProtect   bool
+		wantDiscovery bool
+	}{
+		{name: "nested checkout protects outer owner", protect: nested, item: owner, wantProtect: true, wantDiscovery: false},
+		{name: "protecting the owner path itself", protect: owner, item: owner, wantProtect: true, wantDiscovery: true},
+		{name: "item descendant of protect path", protect: owner, item: nested, wantProtect: true, wantDiscovery: true},
+		{name: "gradle-like siblings are not auto-protected", protect: daemon, item: caches, wantProtect: false, wantDiscovery: false},
+		{name: "unrelated sibling is not protected", protect: nested, item: sibling, wantProtect: false, wantDiscovery: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := New([]Pattern{{Raw: tt.protect, Source: types.ExcludeSourceFlag}}, []string{resolvedRoot})
+			if got := m.ProtectMatch(tt.item); got != tt.wantProtect {
+				t.Errorf("ProtectMatch(%s) = %v; want %v", tt.item, got, tt.wantProtect)
+			}
+			discovery := New([]Pattern{{Raw: tt.protect, Source: types.ExcludeSourceFlag}}, []string{resolvedRoot})
+			if got := discovery.Match(tt.item); got != tt.wantDiscovery {
+				t.Errorf("Match(%s) = %v; want %v (discovery-hide must not ancestor-match)", tt.item, got, tt.wantDiscovery)
+			}
+		})
+	}
+}
+
+func TestMatcher_ProtectMatchOutsideRootRejected(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	root := filepath.Join(home, "work")
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "cwd")
+	if err := os.MkdirAll(outside, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	m := New([]Pattern{{Raw: outside, Source: types.ExcludeSourceFlag}}, []string{evalPath(t, root)})
+	if len(m.Scopes()) != 0 {
+		t.Fatalf("scopes = %+v; want outside-root protect-path rejected", m.Scopes())
+	}
+	if len(m.Rejected()) != 1 || m.Rejected()[0].Reason != "outside scan roots" {
+		t.Fatalf("rejected = %+v; want outside scan roots", m.Rejected())
+	}
+	if m.ProtectMatch(root) || m.ProtectMatch(outside) {
+		t.Error("rejected protect-path must not protect anything")
+	}
+}
+
+func TestMatcher_ProtectMatchDarwinSymlinkMissingLeaf(t *testing.T) {
+	tmp := t.TempDir()
+	linkParent := filepath.Join(tmp, "private")
+	if err := os.MkdirAll(linkParent, 0755); err != nil {
+		t.Fatal(err)
+	}
+	realDir := filepath.Join(linkParent, "real")
+	if err := os.MkdirAll(realDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(linkParent, "var")
+	if err := os.Symlink(realDir, alias); err != nil {
+		t.Skipf("symlink not supported: %v", err)
+	}
+
+	aliasRoot := filepath.Join(alias, "work")
+	owner := filepath.Join(aliasRoot, "e89b")
+	if err := os.MkdirAll(owner, 0755); err != nil {
+		t.Fatal(err)
+	}
+	nestedMissing := filepath.Join(owner, "tamgu_note")
+	resRoot, err := filepath.EvalSymlinks(aliasRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	m := New([]Pattern{{Raw: nestedMissing, Source: types.ExcludeSourceFlag}}, []string{resRoot})
+	if !m.ProtectMatch(owner) {
+		t.Error("missing nested checkout under a Darwin-style symlink prefix must protect the outer owner")
+	}
+	if m.Match(owner) {
+		t.Error("discovery-hide Match must not ancestor-match the owner from a nested protect path")
+	}
+	if !m.ProtectMatch(nestedMissing) {
+		t.Error("non-existent descendant under a symlinked prefix should still protect-match")
+	}
+}

@@ -177,30 +177,55 @@ func canonicalize(path string) string {
 }
 
 // Match reports whether path is covered by one honored exclusion scope and
-// records the match for diagnostics.
+// records the match for diagnostics. Discovery-hide matching is exact or
+// descendant only: a nested checkout does not hide its ancestor owner.
 func (m *Matcher) Match(path string) bool {
+	return m.match(path, false)
+}
+
+// ProtectMatch reports whether a debris item path is covered by a protect-path
+// after the same canonicalization as Match. A protect path matches when any of
+// these hold:
+//
+//  1. item.Path equals the protect path
+//  2. the protect path is a descendant of item.Path (nested checkout under an owner)
+//  3. item.Path is a descendant of the protect path (deleting the item would
+//     remove the given path)
+//
+// Sibling paths do not match. Match remains discovery-hide and does not
+// ancestor-match.
+func (m *Matcher) ProtectMatch(path string) bool {
+	return m.match(path, true)
+}
+
+func (m *Matcher) match(path string, ancestor bool) bool {
 	if len(m.scopes) == 0 {
 		return false
 	}
-	clean := filepath.Clean(path)
-	// canonicalize resolves symlinks — including the deepest existing ancestor
-	// when the candidate itself does not exist (e.g. a non-existent descendant
-	// under a symlinked prefix). This keeps candidate comparison consistent
-	// with the canonical (resolved) scope paths, matching on macOS/Linux where
-	// /tmp, /var/folders, etc. are symlinks.
-	candidates := []string{clean}
-	if canon := canonicalize(clean); canon != clean {
-		candidates = append(candidates, canon)
-	}
-	for _, candidate := range candidates {
+	for _, candidate := range canonicalCandidates(path) {
 		for _, scope := range m.scopes {
-			if candidate == scope.Resolved || adapter.IsWithin(scope.Resolved, candidate) {
+			if candidate == scope.Resolved ||
+				adapter.IsWithin(scope.Resolved, candidate) ||
+				(ancestor && adapter.IsWithin(candidate, scope.Resolved)) {
 				scope.Count++
 				return true
 			}
 		}
 	}
 	return false
+}
+
+// canonicalCandidates returns the lexical path and, when it differs, the
+// symlink-resolved form. canonicalize walks to the deepest existing ancestor
+// when the leaf is missing, so Darwin /var → /private/var prefixes compare
+// the same way for existing and non-existent descendants.
+func canonicalCandidates(path string) []string {
+	clean := filepath.Clean(path)
+	candidates := []string{clean}
+	if canon := canonicalize(clean); canon != clean {
+		candidates = append(candidates, canon)
+	}
+	return candidates
 }
 
 // Scopes returns the honored exclusion scopes with their match counts.

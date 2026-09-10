@@ -209,6 +209,7 @@ func applyReplannedGuidedCleanup(state *guidedCleanState) {
 	for i := range state.Rows {
 		applyReplannedGuidedRow(&state.Rows[i], decisions)
 	}
+	applyProtectPathToGuidedState(state, newProtectPathMatcher(currentProtectScanRoots()))
 }
 
 func applyReplannedGuidedRow(row *guidedCleanRow, decisions map[string]WorktreeCleanupDecision) {

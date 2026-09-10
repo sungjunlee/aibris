@@ -100,6 +100,8 @@ func runCleanCommand(cmd *cobra.Command) {
 		os.Exit(1)
 	}
 	printExclusionDiagnostics(result)
+	protectMatcher := newProtectPathMatcher(roots)
+	printProtectPathDiagnostics(protectMatcher)
 	refreshCleanupInventoryMetadataWithContext(ctx, result.Worktrees)
 	overlapSafety, err := newDefaultCleanupOverlapSafetyRuntime(ctx)
 	if err != nil {
@@ -175,12 +177,14 @@ func runCleanCommand(cmd *cobra.Command) {
 		opts.IncludeActiveWorktrees,
 	)
 	physicalOwnerProtections := cleanAuditReasonsFromEligibility(physicalOwnerEligibility)
+	targets, protectPathProtections := applyProtectPathProtections(result.Worktrees, targets, protectMatcher)
 	targets = cleaner.FilterExistingTargets(targets)
 	targets, scanEvidenceProtections := filterTargetsWithoutScanEvidence(targets)
 	targets = cleaner.NormalizeTargets(targets)
 	targets, gitSafetyProtections := filterGitUnsafeActiveWorktreeTargets(ctx, targets)
 	classicProtections := mergeCleanAuditProtections(
 		physicalOwnerProtections,
+		protectPathProtections,
 		scanEvidenceProtections,
 		gitSafetyProtections,
 	)

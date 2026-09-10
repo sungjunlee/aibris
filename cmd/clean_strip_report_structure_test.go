@@ -111,17 +111,17 @@ func TestStripReportHelpersReexportIdentity(t *testing.T) {
 	// Same-package split: helper identifiers keep their original names so
 	// existing cmd callers still resolve to the helper implementations.
 	var (
-		_ func([]types.DebrisInfo, string)                                 = printStripCWDRefusals
-		_ func(stripUnitOutcome)                                           = printStripUnitOutcome
-		_ func(stripSubtreeOutcome)                                        = printStripSubtreeLine
-		_ func([]stripUnitOutcome, int) stripCloser                        = summarizeStripOutcomes
-		_ func(stripUnitOutcome, *stripCloser, map[string]struct{})        = accountStripUnit
-		_ func(stripUnitOutcome, map[string]struct{}) bool                 = recordStripKeeps
-		_ func(map[string]struct{}) []string                               = sortedStripReasons
-		_ func(stripCloser)                                                = printStripCloser
-		_ func(int) string                                                 = unitNoun
-		_ func([]types.DebrisInfo, []types.DebrisInfo, types.PruneOptions) = printStripPlan
-		_ func([]stripUnitOutcome, int)                                    = printStripOutcomes
+		_ func([]types.DebrisInfo, string)                                                     = printStripCWDRefusals
+		_ func(stripUnitOutcome)                                                               = printStripUnitOutcome
+		_ func(stripSubtreeOutcome)                                                            = printStripSubtreeLine
+		_ func([]stripUnitOutcome, int) stripCloser                                            = summarizeStripOutcomes
+		_ func(stripUnitOutcome, *stripCloser, map[string]struct{})                            = accountStripUnit
+		_ func(stripUnitOutcome, map[string]struct{}) bool                                     = recordStripKeeps
+		_ func(map[string]struct{}) []string                                                   = sortedStripReasons
+		_ func(stripCloser)                                                                    = printStripCloser
+		_ func(int) string                                                                     = unitNoun
+		_ func([]types.DebrisInfo, []types.DebrisInfo, []types.DebrisInfo, types.PruneOptions) = printStripPlan
+		_ func([]stripUnitOutcome, int)                                                        = printStripOutcomes
 	)
 
 	facadeSource := readCmdSource(t, "clean_strip.go")
