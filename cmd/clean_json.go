@@ -167,6 +167,7 @@ func runCleanJSON(cmd *cobra.Command) {
 	if err != nil {
 		failCleanJSON("cleanup plan projection failed")
 	}
+	document.ProtectPaths = jsonProtectPathsFromMatcher(protectMatcher)
 	if cleanDryRun {
 		if err := encodeCleanJSON(os.Stdout, document); err != nil {
 			failCleanJSON("cleanup plan encoding failed")
