@@ -171,17 +171,21 @@ func TestStripProtectPathRemovesOtherwiseEligibleUnit(t *testing.T) {
 	if err := os.MkdirAll(nested, 0755); err != nil {
 		t.Fatal(err)
 	}
+	// Production scan roots are EvalSymlinks-canonical (NormalizeRoots).
+	// Pass the same form here so Darwin /var -> /private/var does not
+	// reject a nested protect-path as outside the lexical temp root.
+	resolvedHome := canonicalTestPath(home)
 	item := types.DebrisInfo{
 		Tool:            types.ToolCodex,
 		Category:        types.CategoryWorktree,
 		ID:              "e89b",
-		Path:            owner,
+		Path:            canonicalTestPath(owner),
 		Status:          types.WorktreeActive,
 		StrippableBytes: 12,
-		StrippablePaths: []string{filepath.Join(nested, "node_modules")},
+		StrippablePaths: []string{filepath.Join(canonicalTestPath(nested), "node_modules")},
 	}
 	opts := types.PruneOptions{Age: time.Hour}
-	targets, refusedForCWD := selectStripTargets([]types.DebrisInfo{item}, opts, filepath.Join(home, "elsewhere"))
+	targets, refusedForCWD := selectStripTargets([]types.DebrisInfo{item}, opts, filepath.Join(resolvedHome, "elsewhere"))
 	if len(targets) != 1 || len(refusedForCWD) != 0 {
 		t.Fatalf("strip targets = %d refused=%d; want 1 eligible unit", len(targets), len(refusedForCWD))
 	}
@@ -189,7 +193,7 @@ func TestStripProtectPathRemovesOtherwiseEligibleUnit(t *testing.T) {
 	matcher := exclude.New([]exclude.Pattern{{
 		Raw:    nested,
 		Source: types.ExcludeSourceFlag,
-	}}, []string{home})
+	}}, []string{resolvedHome})
 	selected, protections := applyProtectPathProtections([]types.DebrisInfo{item}, targets, matcher)
 	if len(selected) != 0 {
 		t.Fatalf("protect-path left strip targets selected: %+v", selected)
