@@ -179,3 +179,19 @@ func JSONExclusionsFromResult(result *types.ScanResult) *JSONExclusions {
 	}
 	return JSONExclusionsFrom(result.ExcludedByUser, result.ExcludedScopes, result.RejectedExcludes)
 }
+
+// JSONProtectPathsFrom is the encode-only protect-path object for clean JSON.
+// It is nil when no --protect-path flags were honored or rejected, so
+// schema_version stays 1. Honored pins that matched zero inventory items still
+// emit a scope with count 0.
+func JSONProtectPathsFrom(protectedCount int, scopes []types.ExcludedScope, rejected []types.RejectedExclude) *JSONProtectPaths {
+	exclusions := JSONExclusionsFrom(protectedCount, scopes, rejected)
+	if exclusions == nil {
+		return nil
+	}
+	return &JSONProtectPaths{
+		ProtectedCount: exclusions.ExcludedCount,
+		Scopes:         exclusions.Scopes,
+		Rejected:       exclusions.Rejected,
+	}
+}

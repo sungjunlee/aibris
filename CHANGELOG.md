@@ -9,6 +9,11 @@
   the owner stays in the plan as protected (`live nested path protected` /
   `protect_path`). Scan inventory and `--exclude` discovery-hide matching
   are unchanged. Sibling cache paths are not auto-protected.
+- `clean --json` reports `--protect-path` with an additive `protect_paths`
+  object (`protected_count` / `scopes` / `rejected`) when pins were honored
+  or rejected, including honored pins that matched zero inventory items.
+  Rejected rows use the same `{pattern, source, reason}` shape as
+  `exclusions.rejected`. Scan JSON is unchanged; `schema_version` stays `1`.
 
 ### Changed
 

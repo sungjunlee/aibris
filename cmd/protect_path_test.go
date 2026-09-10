@@ -234,6 +234,10 @@ func TestProtectPathOutsideScanRootsRejected(t *testing.T) {
 	if err := os.MkdirAll(outside, 0755); err != nil {
 		t.Fatal(err)
 	}
+	unmatched := filepath.Join(home, "unrelated-pin")
+	if err := os.MkdirAll(unmatched, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	resetScanFlags()
 	resetCleanFlags()
@@ -241,10 +245,44 @@ func TestProtectPathOutsideScanRootsRejected(t *testing.T) {
 		rootCmd.SetArgs([]string{
 			"clean", "--no-guide", "--dry-run", "--json", "--include-paths",
 			"--protect-path", outside,
+			"--protect-path", unmatched,
 		})
 		rootCmd.Execute()
 	}))
+	if document.SchemaVersion != 1 {
+		t.Fatalf("schema_version = %d; additive protect_paths must not bump it", document.SchemaVersion)
+	}
 	assertCleanJSONSelectedPaths(t, document, owner)
+	if document.ProtectPaths == nil {
+		t.Fatal("protect_paths object is missing")
+	}
+	if document.ProtectPaths.ProtectedCount != 0 {
+		t.Errorf("protected_count = %d; want 0", document.ProtectPaths.ProtectedCount)
+	}
+	if len(document.ProtectPaths.Rejected) != 1 ||
+		!testPathsEqual(document.ProtectPaths.Rejected[0].Pattern, outside) ||
+		document.ProtectPaths.Rejected[0].Reason != "outside scan roots" {
+		t.Errorf("rejected = %+v; want the outside-root pattern reported", document.ProtectPaths.Rejected)
+	}
+	if len(document.ProtectPaths.Scopes) != 1 ||
+		document.ProtectPaths.Scopes[0].Count != 0 ||
+		(!testPathsEqual(document.ProtectPaths.Scopes[0].Pattern, unmatched) &&
+			!testPathsEqual(document.ProtectPaths.Scopes[0].Resolved, unmatched)) {
+		t.Errorf("scopes = %+v; want honored unmatched protect-path with count 0", document.ProtectPaths.Scopes)
+	}
+
+	resetScanFlags()
+	scanOutput := captureOutput(func() {
+		rootCmd.SetArgs([]string{"scan", "--json"})
+		rootCmd.Execute()
+	})
+	var scanned map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(scanOutput), &scanned); err != nil {
+		t.Fatalf("scan JSON: %v\n%s", err, scanOutput)
+	}
+	if _, ok := scanned["protect_paths"]; ok {
+		t.Errorf("scan JSON must not include protect_paths:\n%s", scanOutput)
+	}
 }
 
 func nestedProtectPathFixture(t *testing.T) (home, owner, nested string) {

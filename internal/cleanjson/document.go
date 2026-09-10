@@ -56,16 +56,17 @@ const (
 // Plan is the machine-readable clean-plan document. It is the test surface
 // for policy, reason-code, and snapshot-accounting mapping.
 type Plan struct {
-	SchemaVersion   int                        `json:"schema_version"`
-	DocumentType    string                     `json:"document_type"`
-	Mode            string                     `json:"mode"`
-	PathsIncluded   bool                       `json:"paths_included"`
-	Evidence        Evidence                   `json:"evidence"`
-	Policy          Policy                     `json:"policy"`
-	Totals          Totals                     `json:"totals"`
-	PhysicalTargets []PhysicalTarget           `json:"physical_targets"`
-	Rows            []Row                      `json:"rows"`
-	Exclusions      *scanreport.JSONExclusions `json:"exclusions,omitempty"`
+	SchemaVersion   int                          `json:"schema_version"`
+	DocumentType    string                       `json:"document_type"`
+	Mode            string                       `json:"mode"`
+	PathsIncluded   bool                         `json:"paths_included"`
+	Evidence        Evidence                     `json:"evidence"`
+	Policy          Policy                       `json:"policy"`
+	Totals          Totals                       `json:"totals"`
+	PhysicalTargets []PhysicalTarget             `json:"physical_targets"`
+	Rows            []Row                        `json:"rows"`
+	Exclusions      *scanreport.JSONExclusions   `json:"exclusions,omitempty"`
+	ProtectPaths    *scanreport.JSONProtectPaths `json:"protect_paths,omitempty"`
 }
 
 type Evidence struct {

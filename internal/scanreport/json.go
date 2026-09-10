@@ -101,7 +101,7 @@ type JSONExcludedScope struct {
 	Count    int    `json:"count"`
 }
 
-// JSONRejectedExclude is the encode-only rejected exclusion row.
+// JSONRejectedExclude is the encode-only rejected exclusion or protect-path row.
 type JSONRejectedExclude struct {
 	Pattern string `json:"pattern"`
 	Source  string `json:"source"`
@@ -113,6 +113,15 @@ type JSONExclusions struct {
 	ExcludedCount int                   `json:"excluded_count"`
 	Scopes        []JSONExcludedScope   `json:"scopes"`
 	Rejected      []JSONRejectedExclude `json:"rejected"`
+}
+
+// JSONProtectPaths is the encode-only clean-only protect-path object. It uses
+// the same scopes/rejected row shape as JSONExclusions so JSON consumers can
+// parse rejected pins the same way. Scan JSON never includes this object.
+type JSONProtectPaths struct {
+	ProtectedCount int                   `json:"protected_count"`
+	Scopes         []JSONExcludedScope   `json:"scopes"`
+	Rejected       []JSONRejectedExclude `json:"rejected"`
 }
 
 // JSONVolume is the encode-only home-volume pressure object.

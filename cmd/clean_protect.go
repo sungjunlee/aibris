@@ -7,6 +7,7 @@ import (
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/exclude"
 	"github.com/sungjunlee/aibris/internal/scanner"
+	"github.com/sungjunlee/aibris/internal/scanreport"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -111,4 +112,16 @@ func printProtectPathDiagnostics(matcher *exclude.Matcher) {
 	for _, item := range rejected {
 		fmt.Fprintf(os.Stderr, "  rejected  %-11s %s  %s\n", item.Source, item.Pattern, item.Reason)
 	}
+}
+
+func jsonProtectPathsFromMatcher(matcher *exclude.Matcher) *scanreport.JSONProtectPaths {
+	if matcher == nil {
+		return nil
+	}
+	scopes := matcher.Scopes()
+	protectedCount := 0
+	for _, scope := range scopes {
+		protectedCount += scope.Count
+	}
+	return scanreport.JSONProtectPathsFrom(protectedCount, scopes, matcher.Rejected())
 }

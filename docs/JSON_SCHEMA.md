@@ -559,6 +559,22 @@ deletion authority. Last-scan cache reuse is skipped when `--exclude` is
 requested, and a cached scan that already applied exclusions is not reused for
 a later unfiltered clean.
 
+### `protect_paths` object (additive, clean-only)
+
+Present only when `--protect-path` flags were honored or rejected. The object
+uses the same `scopes` / `rejected` row shape as `exclusions` (see above). It
+is omitted when no protect-path flags were present, so `schema_version` stays
+`1`. Scan JSON never includes this object; `--protect-path` remains clean-only.
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `protected_count` | integer | Inventory items pinned by honored protect-path flags |
+| `scopes` | array | Honored protect-path patterns with their canonical path, `source` (`flag`), and the number of inventory items each protected. A pin that matched nothing is still listed with `count` 0. |
+| `rejected` | array | Patterns not honored because they could not be scoped inside the approved scan roots, each with a `reason` |
+
+Protect-path pins stay in the plan as protected; they never hide scan
+inventory and never add targets.
+
 ## Clean execution receipt
 
 Non-dry-run JSON execution emits a single top-level receipt:
@@ -623,7 +639,10 @@ and never contribute bytes.
 
 When exclusions were honored or rejected, the receipt repeats the same
 additive `exclusions` object at the top level and on the embedded plan. The
-object is omitted when no exclusion configuration was present.
+object is omitted when no exclusion configuration was present. When
+`--protect-path` flags were honored or rejected, the receipt repeats the same
+additive `protect_paths` object at the top level and on the embedded plan. The
+object is omitted when no protect-path flags were present.
 
 `status` is one of `succeeded`, `partial_failure`, `failed`, or `cancelled`.
 Only `succeeded` exits zero. Receipt accounting is physical-target based:
