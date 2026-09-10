@@ -34,7 +34,7 @@ aibris --version
 ```
 
 최소 버전은 **v0.12.0**이다. 이 스킬이 쓰는 flag/field(`scan --json`,
-`clean --json`, `--include-paths`, `--strip`, `--exclude`, `--pressure`)는
+`clean --json`, `--include-paths`, `--strip`, `--exclude`, `--protect-path`, `--pressure`)는
 그 미만 버전의 stale binary에 없을 수 있다. 버전 게이트는 로컬 binary의
 `--version`과 필요 시 `aibris clean --help` capability probe만 사용한다.
 GitHub releases를 scrape해서 게이트하지 않는다.
@@ -81,9 +81,8 @@ lsof -u "$USER" -d cwd 2>/dev/null | awk 'NR>1 {print $NF}' | sort -u
 ```
 
 - 각 cwd를 scan inventory의 `Path` 값에 매핑한다. 매핑 단위는 **worktree
-  outer owner**다. nested checkout이 매칭되면 그 outer owner를 쓰고, #508
-  (nested-path matching)이 ship되기 전에는 nested checkout을 단독
-  protect/exclude 경로로 전달하지 않는다.
+  outer owner**다. nested checkout cwd는 `clean --protect-path <nested>`로
+  그 outer owner를 보호한다. `--exclude <nested>`는 owner를 숨기지 않는다.
 - process cwd는 advisory다. quiescence 증명이 아니고, CLI에 `lsof` hard
   lock을 요구하지 않는다.
 - live cwd만으로 sibling/global cache(uv, Gradle, npm, dart 등)가 사용
@@ -176,7 +175,7 @@ aibris JSON과 Docker 출력을 파싱해 **크기 순으로 정렬**하여 사�
   동일하게 유지한다
 - `--guide`, `--no-guide`, `--risky`, `--include-active-worktrees`,
   `--interactive`, `--force`, `--strip`, `--json`, `--include-paths`,
-  `--exclude`(ship된 경우 `--protect-path`도), `--pressure` 같은
+  `--exclude`, `--protect-path`, `--pressure` 같은
   적용 가능한 routing/safety flag도 동일하게 유지한다
 - 실제 실행에서는 preview 명령에서 `--dry-run`만 제거한다
 - scoped preview 뒤에 plain `aibris clean`을 실행해서는 안 된다

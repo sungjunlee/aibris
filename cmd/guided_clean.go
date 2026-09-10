@@ -63,6 +63,7 @@ func planGuidedCleanState(ctx context.Context, result *types.ScanResult, source 
 	plan := worktree.PlanWorktreeCleanup(units, policy)
 	state := newGuidedCleanStateFromCleanupPlan(source, reason, activity, policy, units, items, plan)
 	state.Inventory = append([]types.DebrisInfo(nil), result.Worktrees...)
+	applyProtectPathToGuidedState(&state, newProtectPathMatcher(currentProtectScanRoots()))
 	return state, nil
 }
 

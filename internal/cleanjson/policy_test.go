@@ -143,6 +143,7 @@ func TestReasonCodeAllowListPreservesKnownCodes(t *testing.T) {
 		{"nested agent-state revalidation refused", "nested_revalidation"},
 		{"nested agent-state revalidation required", "nested_revalidation_required"},
 		{"scan identity evidence unavailable", "scan_evidence_unavailable"},
+		{string(cleaner.CleanReasonProtectPath), "protect_path"},
 		{string(cleaner.EligibilityReasonEligible), "eligible"},
 		{"dirty files", "git_dirty_files"},
 		{"git status unavailable", "git_evidence_unavailable"},

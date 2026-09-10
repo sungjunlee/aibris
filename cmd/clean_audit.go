@@ -45,6 +45,7 @@ const (
 	cleanReasonNestedRevalidation            = cleaner.CleanReasonNestedRevalidation
 	cleanReasonNestedRevalidationRequired    = cleaner.CleanReasonNestedRevalidationRequired
 	cleanReasonScanEvidenceUnavailable       = cleaner.CleanReasonScanEvidenceUnavailable
+	cleanReasonProtectPath                   = cleaner.CleanReasonProtectPath
 	cleanReasonEligible                      = cleaner.CleanReasonEligible
 
 	cleanupOverlapOwner      = cleaner.CleanupOverlapOwner

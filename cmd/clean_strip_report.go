@@ -28,6 +28,22 @@ func printStripCWDRefusals(refusedForCWD []types.DebrisInfo, home string) {
 	}
 }
 
+func printStripProtectRefusals(refused []types.DebrisInfo, home string) {
+	if len(refused) == 0 {
+		return
+	}
+	var total int64
+	for _, item := range refused {
+		total += item.StrippableBytes
+	}
+	fmt.Printf("  protected %d %s   %s  %s\n",
+		len(refused), candidateNoun(len(refused)), cleaner.FormatSize(total), string(cleanReasonProtectPath))
+	for _, item := range refused {
+		fmt.Printf("    kept %s — %s\n",
+			displayHomePath(home, item.Path), string(cleanReasonProtectPath))
+	}
+}
+
 func printStripUnitOutcome(outcome stripUnitOutcome) {
 	fmt.Printf("result: %s (%s) — %s freed\n",
 		itemName(outcome.Item), outcome.Item.Category, cleaner.FormatSize(outcome.Freed))

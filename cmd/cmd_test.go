@@ -284,16 +284,17 @@ func resetCleanFlags() {
 	cleanNoGuide = false
 	cleanRoots = nil
 	cleanExcludes = nil
+	cleanProtectPaths = nil
 	cleanIncludeActiveWorktrees = false
 	cleanAgentStateGrace = "24h"
 	cleanReceiptFile = ""
 	cleanStrip = false
 	cleanAPFSSnapshots = false
 	cleanPressure = false
-	for _, name := range []string{"age", "category", "tool", "dry-run", "json", "include-paths", "interactive", "risky", "force", "guide", "no-guide", "root", "exclude", "include-active-worktrees", "agent-state-grace", "receipt-file", "strip", "apfs-snapshots", "pressure", "help"} {
+	for _, name := range []string{"age", "category", "tool", "dry-run", "json", "include-paths", "interactive", "risky", "force", "guide", "no-guide", "root", "exclude", "protect-path", "include-active-worktrees", "agent-state-grace", "receipt-file", "strip", "apfs-snapshots", "pressure", "help"} {
 		if flag := cleanCmd.Flags().Lookup(name); flag != nil {
 			flag.Changed = false
-			if name != "root" && name != "exclude" {
+			if name != "root" && name != "exclude" && name != "protect-path" {
 				_ = flag.Value.Set(flag.DefValue)
 			}
 		}

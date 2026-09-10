@@ -121,6 +121,8 @@ func AuditReasonText(reason CleanAuditReason, opts types.PruneOptions) string {
 		return "nested agent-state revalidation refused"
 	case CleanReasonNestedRevalidationRequired:
 		return "nested agent-state revalidation required"
+	case CleanReasonProtectPath:
+		return "live nested path protected"
 	default:
 		return string(reason)
 	}
