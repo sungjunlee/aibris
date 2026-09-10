@@ -12,3 +12,6 @@ cover.html
 
 # local AI-tooling artifacts
 .pi-subagents/
+
+# local scratch artifacts
+.scratch/
