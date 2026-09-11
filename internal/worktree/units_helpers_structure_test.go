@@ -70,9 +70,6 @@ func TestWorktreeMemberDiscoveryHelpersLiveApartFromCleanupUnitFacade(t *testing
 	for _, pkg := range pkgs {
 		for filename, file := range pkg.Files {
 			base := filepath.Base(filename)
-			if strings.HasSuffix(base, "_test.go") {
-				continue
-			}
 			for _, decl := range file.Decls {
 				fn, ok := decl.(*ast.FuncDecl)
 				if !ok {
@@ -212,9 +209,13 @@ func TestWorktreeUnitsHelpersReexportIdentity(t *testing.T) {
 
 func TestWorktreeEligibilityDoesNotOpenGitdirFiles(t *testing.T) {
 	file := parseWorktreeFile(t, "eligibility.go")
+	// Allowlist must not include filesystem packages; eligibility must not open gitdir files.
+	allowedImports := map[string]bool{
+		`"github.com/sungjunlee/aibris/internal/types"`: true,
+	}
 	for _, spec := range file.Imports {
-		if spec.Path.Value == `"os"` {
-			t.Error("eligibility.go imports os; gitdir/file I/O leaked into eligibility")
+		if !allowedImports[spec.Path.Value] {
+			t.Errorf("eligibility.go imports %s; want only internal/types (no filesystem packages)", spec.Path.Value)
 		}
 	}
 
@@ -224,7 +225,7 @@ func TestWorktreeEligibilityDoesNotOpenGitdirFiles(t *testing.T) {
 			return true
 		}
 		switch ident.Name {
-		case "HasGitWorktreeMetadata", "resolveRepositoryIdentity", "readSingleGitMetadataPath", "canonicalGitDirectory", "displayRepositoryName", "ReadFile", "Open", "OpenFile", "Lstat":
+		case "HasGitWorktreeMetadata", "resolveRepositoryIdentity", "readSingleGitMetadataPath", "canonicalGitDirectory", "displayRepositoryName":
 			t.Errorf("eligibility.go uses %s; eligibility must not open gitdir files", ident.Name)
 		}
 		return true

@@ -773,6 +773,18 @@ func TestHasGitWorktreeMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	symlinkGit := filepath.Join(root, "symlink-git")
+	if err := os.MkdirAll(symlinkGit, 0755); err != nil {
+		t.Fatal(err)
+	}
+	symlinkTarget := filepath.Join(root, "symlink-git-target")
+	if err := os.WriteFile(symlinkTarget, []byte("gitdir: /tmp/example.git\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(symlinkTarget, filepath.Join(symlinkGit, ".git")); err != nil {
+		t.Fatal(err)
+	}
+
 	tests := []struct {
 		path string
 		want bool
@@ -783,6 +795,7 @@ func TestHasGitWorktreeMetadata(t *testing.T) {
 		{emptyFile, false},
 		{gitDir, false},
 		{missing, false},
+		{symlinkGit, true},
 	}
 	for _, tt := range tests {
 		if got := HasGitWorktreeMetadata(tt.path); got != tt.want {
