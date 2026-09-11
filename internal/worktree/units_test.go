@@ -668,6 +668,268 @@ func TestBuildWorktreeCleanupUnitsSurfacesRepositoryMetadataFailures(t *testing.
 	}
 }
 
+func TestWorktreeScanStatusBlocksCleanup(t *testing.T) {
+	tests := []struct {
+		status types.WorktreeStatus
+		blocks bool
+	}{
+		{types.WorktreeActive, false},
+		{types.WorktreeOrphaned, false},
+		{types.WorktreePlain, true},
+		{"", true},
+		{"future-status", true},
+	}
+	for _, tt := range tests {
+		if got := worktreeScanStatusBlocksCleanup(tt.status); got != tt.blocks {
+			t.Errorf("worktreeScanStatusBlocksCleanup(%q) = %t; want %t", tt.status, got, tt.blocks)
+		}
+	}
+}
+
+func TestCleanupUnitHasReviewOnlyStatus(t *testing.T) {
+	item := func(status types.WorktreeStatus) types.DebrisInfo {
+		return types.DebrisInfo{Status: status}
+	}
+
+	tests := []struct {
+		name  string
+		items []types.DebrisInfo
+		want  bool
+	}{
+		{name: "empty group", items: nil, want: false},
+		{name: "active only", items: []types.DebrisInfo{item(types.WorktreeActive)}, want: false},
+		{name: "orphaned only", items: []types.DebrisInfo{item(types.WorktreeOrphaned)}, want: false},
+		{name: "plain-dir", items: []types.DebrisInfo{item(types.WorktreePlain)}, want: true},
+		{name: "empty status", items: []types.DebrisInfo{item("")}, want: true},
+		{name: "unknown status", items: []types.DebrisInfo{item("future-status")}, want: true},
+		{
+			name: "mixed active and plain-dir",
+			items: []types.DebrisInfo{
+				item(types.WorktreeActive),
+				item(types.WorktreePlain),
+			},
+			want: true,
+		},
+		{
+			name: "mixed orphaned and empty",
+			items: []types.DebrisInfo{
+				item(types.WorktreeOrphaned),
+				item(""),
+			},
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := cleanupUnitHasReviewOnlyStatus(tt.items); got != tt.want {
+				t.Fatalf("cleanupUnitHasReviewOnlyStatus() = %t; want %t", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHasGitWorktreeMetadata(t *testing.T) {
+	root := t.TempDir()
+
+	valid := filepath.Join(root, "valid")
+	if err := os.MkdirAll(valid, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(valid, ".git"), []byte("gitdir: /tmp/example.git\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extraLines := filepath.Join(root, "extra-lines")
+	if err := os.MkdirAll(extraLines, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(extraLines, ".git"), []byte("gitdir: /tmp/example.git\nignored\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	emptyPath := filepath.Join(root, "empty-path")
+	if err := os.MkdirAll(emptyPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(emptyPath, ".git"), []byte("gitdir: \n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	emptyFile := filepath.Join(root, "empty-file")
+	if err := os.MkdirAll(emptyFile, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(emptyFile, ".git"), nil, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	gitDir := filepath.Join(root, "git-directory")
+	if err := os.MkdirAll(filepath.Join(gitDir, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	missing := filepath.Join(root, "missing")
+	if err := os.MkdirAll(missing, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{valid, true},
+		{extraLines, true},
+		{emptyPath, false},
+		{emptyFile, false},
+		{gitDir, false},
+		{missing, false},
+	}
+	for _, tt := range tests {
+		if got := HasGitWorktreeMetadata(tt.path); got != tt.want {
+			t.Errorf("HasGitWorktreeMetadata(%s) = %t; want %t", filepath.Base(tt.path), got, tt.want)
+		}
+	}
+}
+
+func TestResolveRepositoryIdentityCanonicalizesCommonDir(t *testing.T) {
+	root := t.TempDir()
+	root, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root = filepath.Clean(root)
+
+	repositoryPath := filepath.Join(root, "repositories", "canonical-name")
+	commonDir := filepath.Join(repositoryPath, ".git")
+	aliasPath := filepath.Join(root, "aliases", "display-alias")
+	if err := os.MkdirAll(filepath.Dir(aliasPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(repositoryPath, aliasPath); err != nil {
+		t.Fatal(err)
+	}
+
+	first := filepath.Join(root, "worktrees", "feature-one")
+	second := filepath.Join(root, "worktrees", "unrelated-worktree-name")
+	createCleanupUnitLinkedWorktree(t, first, commonDir, "first", commonDir)
+	createCleanupUnitLinkedWorktree(t, second, commonDir, "second", filepath.Join(aliasPath, ".git"))
+
+	for _, worktreePath := range []string{first, second} {
+		id, display, err := resolveRepositoryIdentity(worktreePath)
+		if err != nil {
+			t.Fatalf("resolveRepositoryIdentity(%q) error = %v", worktreePath, err)
+		}
+		if id != commonDir {
+			t.Errorf("RepositoryID = %q; want canonical common-dir %q", id, commonDir)
+		}
+		if display != "canonical-name" {
+			t.Errorf("DisplayRepository = %q; want canonical-name", display)
+		}
+	}
+}
+
+func TestResolveRepositoryIdentityRejectsAmbiguousGitdir(t *testing.T) {
+	root := t.TempDir()
+	worktreePath := filepath.Join(root, "ambiguous")
+	if err := os.MkdirAll(worktreePath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(worktreePath, ".git"), []byte("gitdir: one\ngitdir: two\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	id, display, err := resolveRepositoryIdentity(worktreePath)
+	if err == nil {
+		t.Fatal("resolveRepositoryIdentity() error = nil; want ambiguous Git metadata")
+	}
+	if !strings.Contains(err.Error(), "ambiguous Git metadata") {
+		t.Errorf("resolveRepositoryIdentity() error = %q; want ambiguous Git metadata", err)
+	}
+	if id != "" || display != "" {
+		t.Errorf("identity = (%q, %q); want empty on failure", id, display)
+	}
+}
+
+func TestReadSingleGitMetadataPath(t *testing.T) {
+	root := t.TempDir()
+	write := func(name, content string) string {
+		t.Helper()
+		path := filepath.Join(root, name)
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+
+	got, err := readSingleGitMetadataPath(write("ok", "gitdir: /tmp/example.git\n"), "gitdir: ")
+	if err != nil {
+		t.Fatalf("valid gitdir: %v", err)
+	}
+	if got != "/tmp/example.git" {
+		t.Errorf("readSingleGitMetadataPath() = %q; want /tmp/example.git", got)
+	}
+
+	if _, err := readSingleGitMetadataPath(write("two-lines", "gitdir: one\ngitdir: two\n"), "gitdir: "); err == nil {
+		t.Error("two-line gitdir: error = nil; want ambiguous")
+	}
+	if _, err := readSingleGitMetadataPath(write("empty", ""), "gitdir: "); err == nil {
+		t.Error("empty gitdir: error = nil; want ambiguous")
+	}
+	if _, err := readSingleGitMetadataPath(write("missing-prefix", "/tmp/example.git\n"), "gitdir: "); err == nil {
+		t.Error("missing prefix: error = nil; want ambiguous")
+	}
+}
+
+func TestCanonicalGitDirectory(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "repo")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(root, "alias")
+	if err := os.Symlink(dir, alias); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(root, "not-a-dir")
+	if err := os.WriteFile(file, []byte("nope"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := canonicalGitDirectory(alias)
+	if err != nil {
+		t.Fatalf("symlink directory: %v", err)
+	}
+	want, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != filepath.Clean(want) {
+		t.Errorf("canonicalGitDirectory(alias) = %q; want %q", got, filepath.Clean(want))
+	}
+
+	if _, err := canonicalGitDirectory(file); err == nil {
+		t.Fatal("canonicalGitDirectory(file) error = nil; want not a directory")
+	} else if !strings.Contains(err.Error(), "not a directory") {
+		t.Errorf("canonicalGitDirectory(file) error = %q; want not a directory", err)
+	}
+}
+
+func TestDisplayRepositoryName(t *testing.T) {
+	tests := []struct {
+		commonDir string
+		want      string
+	}{
+		{filepath.Join("home", "canonical-name", ".git"), "canonical-name"},
+		{filepath.Join("home", "canonical-name", ".git", "worktrees", "feature"), "feature"},
+		{filepath.Join("home", "bare.git"), "bare.git"},
+	}
+	for _, tt := range tests {
+		if got := displayRepositoryName(tt.commonDir); got != tt.want {
+			t.Errorf("displayRepositoryName(%q) = %q; want %q", tt.commonDir, got, tt.want)
+		}
+	}
+}
+
 func createCleanupUnitLinkedWorktree(t *testing.T, worktreePath, commonDir, name, gitFileCommonDir string) {
 	t.Helper()
 	gitDir := filepath.Join(commonDir, "worktrees", name)

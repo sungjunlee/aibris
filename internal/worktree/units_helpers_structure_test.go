@@ -21,11 +21,20 @@ func TestWorktreeMemberDiscoveryHelpersLiveApartFromCleanupUnitFacade(t *testing
 	}
 	facadeNames := []string{
 		"BuildWorktreeCleanupUnits",
-		"worktreeScanStatusBlocksCleanup",
-		"cleanupUnitHasReviewOnlyStatus",
 		"cleanupUnitSize",
 		"cleanupUnitSource",
 		"cleanupUnitHardLockReasons",
+	}
+	eligibilityNames := []string{
+		"worktreeScanStatusBlocksCleanup",
+		"cleanupUnitHasReviewOnlyStatus",
+	}
+	identityNames := []string{
+		"HasGitWorktreeMetadata",
+		"resolveRepositoryIdentity",
+		"readSingleGitMetadataPath",
+		"canonicalGitDirectory",
+		"displayRepositoryName",
 	}
 	uniquenessNames := []string{
 		"InspectCleanupUnitsUniqueness",
@@ -34,12 +43,18 @@ func TestWorktreeMemberDiscoveryHelpersLiveApartFromCleanupUnitFacade(t *testing
 		"cleanupUnitNeedsUniquenessProbe",
 	}
 
-	wanted := make(map[string]string, len(helperNames)+len(facadeNames)+len(uniquenessNames))
+	wanted := make(map[string]string, len(helperNames)+len(facadeNames)+len(eligibilityNames)+len(identityNames)+len(uniquenessNames))
 	for _, name := range helperNames {
 		wanted[name] = "units_helpers.go"
 	}
 	for _, name := range facadeNames {
 		wanted[name] = "units.go"
+	}
+	for _, name := range eligibilityNames {
+		wanted[name] = "eligibility.go"
+	}
+	for _, name := range identityNames {
+		wanted[name] = "identity.go"
 	}
 	for _, name := range uniquenessNames {
 		wanted[name] = "units_uniqueness.go"
@@ -55,6 +70,9 @@ func TestWorktreeMemberDiscoveryHelpersLiveApartFromCleanupUnitFacade(t *testing
 	for _, pkg := range pkgs {
 		for filename, file := range pkg.Files {
 			base := filepath.Base(filename)
+			if strings.HasSuffix(base, "_test.go") {
+				continue
+			}
 			for _, decl := range file.Decls {
 				fn, ok := decl.(*ast.FuncDecl)
 				if !ok {
@@ -87,6 +105,12 @@ func TestWorktreeUnitsHelpersReexportIdentity(t *testing.T) {
 		ownerGitMarkerState,
 		inspectCleanupUnitUniqueness,
 		cleanupUnitNeedsUniquenessProbe,
+		worktreeScanStatusBlocksCleanup,
+		cleanupUnitHasReviewOnlyStatus,
+		resolveRepositoryIdentity,
+		readSingleGitMetadataPath,
+		canonicalGitDirectory,
+		displayRepositoryName,
 	}
 	public := []any{
 		BuildWorktreeCleanupUnits,
@@ -114,17 +138,36 @@ func TestWorktreeUnitsHelpersReexportIdentity(t *testing.T) {
 		_ func(context.Context, []WorktreeCleanupUnit, CleanupPolicy)              = InspectRecommendedCandidateUniqueness
 		_ func(context.Context, *WorktreeCleanupUnit)                              = inspectCleanupUnitUniqueness
 		_ func(WorktreeCleanupUnit, CleanupPolicy, map[string]bool) bool           = cleanupUnitNeedsUniquenessProbe
+		_ func(types.WorktreeStatus) bool                                          = worktreeScanStatusBlocksCleanup
+		_ func([]types.DebrisInfo) bool                                            = cleanupUnitHasReviewOnlyStatus
+		_ func(string) (string, string, error)                                     = resolveRepositoryIdentity
+		_ func(string, string) (string, error)                                     = readSingleGitMetadataPath
+		_ func(string) (string, error)                                             = canonicalGitDirectory
+		_ func(string) string                                                      = displayRepositoryName
 	)
 
 	unitsSource := readWorktreeSource(t, "units.go")
 	if !strings.Contains(unitsSource, "func BuildWorktreeCleanupUnits(") {
 		t.Error("BuildWorktreeCleanupUnits is not defined in units.go")
 	}
+	if !strings.Contains(unitsSource, "cleanupUnitHasReviewOnlyStatus(") {
+		t.Error("units.go no longer delegates eligibility to cleanupUnitHasReviewOnlyStatus")
+	}
+	if !strings.Contains(unitsSource, "resolveRepositoryIdentity(") {
+		t.Error("units.go no longer delegates identity to resolveRepositoryIdentity")
+	}
 	for _, name := range []string{
 		"InspectCleanupUnitsUniqueness",
 		"InspectRecommendedCandidateUniqueness",
 		"inspectCleanupUnitUniqueness",
 		"cleanupUnitNeedsUniquenessProbe",
+		"worktreeScanStatusBlocksCleanup",
+		"cleanupUnitHasReviewOnlyStatus",
+		"HasGitWorktreeMetadata",
+		"resolveRepositoryIdentity",
+		"readSingleGitMetadataPath",
+		"canonicalGitDirectory",
+		"displayRepositoryName",
 	} {
 		if strings.Contains(unitsSource, "func "+name+"(") {
 			t.Errorf("%s is still defined in units.go", name)
@@ -142,4 +185,79 @@ func TestWorktreeUnitsHelpersReexportIdentity(t *testing.T) {
 			t.Errorf("%s is not defined in units_uniqueness.go", name)
 		}
 	}
+
+	eligibilitySource := readWorktreeSource(t, "eligibility.go")
+	for _, name := range []string{
+		"worktreeScanStatusBlocksCleanup",
+		"cleanupUnitHasReviewOnlyStatus",
+	} {
+		if !strings.Contains(eligibilitySource, "func "+name+"(") {
+			t.Errorf("%s is not defined in eligibility.go", name)
+		}
+	}
+
+	identitySource := readWorktreeSource(t, "identity.go")
+	for _, name := range []string{
+		"HasGitWorktreeMetadata",
+		"resolveRepositoryIdentity",
+		"readSingleGitMetadataPath",
+		"canonicalGitDirectory",
+		"displayRepositoryName",
+	} {
+		if !strings.Contains(identitySource, "func "+name+"(") {
+			t.Errorf("%s is not defined in identity.go", name)
+		}
+	}
+}
+
+func TestWorktreeEligibilityDoesNotOpenGitdirFiles(t *testing.T) {
+	file := parseWorktreeFile(t, "eligibility.go")
+	for _, spec := range file.Imports {
+		if spec.Path.Value == `"os"` {
+			t.Error("eligibility.go imports os; gitdir/file I/O leaked into eligibility")
+		}
+	}
+
+	ast.Inspect(file, func(node ast.Node) bool {
+		ident, ok := node.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		switch ident.Name {
+		case "HasGitWorktreeMetadata", "resolveRepositoryIdentity", "readSingleGitMetadataPath", "canonicalGitDirectory", "displayRepositoryName", "ReadFile", "Open", "OpenFile", "Lstat":
+			t.Errorf("eligibility.go uses %s; eligibility must not open gitdir files", ident.Name)
+		}
+		return true
+	})
+}
+
+func TestWorktreeIdentityDoesNotDecideCleanupEligibility(t *testing.T) {
+	file := parseWorktreeFile(t, "identity.go")
+	for _, spec := range file.Imports {
+		if spec.Path.Value == `"github.com/sungjunlee/aibris/internal/types"` {
+			t.Error("identity.go imports types; cleanup eligibility leaked into identity")
+		}
+	}
+
+	ast.Inspect(file, func(node ast.Node) bool {
+		ident, ok := node.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		switch ident.Name {
+		case "worktreeScanStatusBlocksCleanup", "cleanupUnitHasReviewOnlyStatus", "WorktreeActive", "WorktreeOrphaned", "WorktreePlain", "WorktreeStatus":
+			t.Errorf("identity.go uses %s; identity must not decide cleanup eligibility", ident.Name)
+		}
+		return true
+	})
+}
+
+func parseWorktreeFile(t *testing.T, path string) *ast.File {
+	t.Helper()
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, path, nil, 0)
+	if err != nil {
+		t.Fatalf("parse %s: %v", path, err)
+	}
+	return file
 }
