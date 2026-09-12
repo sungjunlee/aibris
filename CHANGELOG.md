@@ -22,6 +22,10 @@
   cleanup stays `uv cache clean`. A leftover command container still
   reports observed `residual_bytes` / `no_bytes_reclaimed` without
   inventing a full-size free; `physical_owner_present` remains success.
+- Human `scan` names official-cache age relax when the default-clean estimate
+  already includes it (critical home volume). `age-blocked` then says those
+  official caches are already in default, not still held by `--age`.
+  `clean --json` plans record the same fact as additive `policy.relax_cache_age`.
 
 ### Fixed
 

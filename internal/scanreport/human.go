@@ -28,6 +28,7 @@ func WriteHuman(w io.Writer, view View) {
 		fmt.Fprintln(w, "  default clean unavailable until a complete scan succeeds")
 	} else {
 		fmt.Fprintf(w, "  default clean (estimate) %s\n", cleaner.FormatSize(view.DefaultCleanSize))
+		writeDefaultCacheRelaxNote(w, view.Policy)
 		WriteCleanupDiagnostics(w, view.DefaultClean, view.Policy)
 	}
 

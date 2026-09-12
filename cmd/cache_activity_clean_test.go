@@ -16,7 +16,17 @@ import (
 	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
+	"github.com/sungjunlee/aibris/internal/volume"
 )
+
+func skipAgeGateWhenHomeVolumeCritical(t *testing.T, home string) {
+	t.Helper()
+	report, err := volume.Inspect(home)
+	if err != nil || report.Band != volume.BandCritical {
+		return
+	}
+	t.Skip("home volume is critical; default clean already auto-relaxes official cache age")
+}
 
 // writeCacheActivityFixture builds a gradle cache whose container is
 // containerAge old and whose single nested file is nestedAge old. Only the
@@ -62,6 +72,7 @@ func cacheActivityBuildCacheRow(t *testing.T, document cleanJSONPlan) cleanJSONR
 func TestCleanJSONCLIContractLiveNestedCacheRefusedByAgeGate(t *testing.T) {
 	binary := buildCLIContractBinary(t)
 	home := t.TempDir()
+	skipAgeGateWhenHomeVolumeCritical(t, home)
 	cache, _ := writeCacheActivityFixture(t, home, 30*24*time.Hour, 5*time.Minute)
 
 	stdout, stderr, err := runCleanJSONProcess(t, binary, home,
@@ -270,6 +281,7 @@ func TestValidateRechecksNestedActivityAtMutationBarrier(t *testing.T) {
 func TestCleanJSONCLIContractCachedScanLiveNestedCacheRefusedByAgeGate(t *testing.T) {
 	binary := buildCLIContractBinary(t)
 	home := t.TempDir()
+	skipAgeGateWhenHomeVolumeCritical(t, home)
 	cache, _ := writeCacheActivityFixture(t, home, 30*24*time.Hour, 5*time.Minute)
 
 	scanStdout, scanStderr, scanErr := runCleanJSONProcess(t, binary, home,
@@ -332,6 +344,7 @@ func TestCleanJSONCLIContractCachedScanLiveNestedCacheRefusedByAgeGate(t *testin
 func TestCleanJSONCLIContractPostScanInTreeWriteIsRefusedAsMinimumAge(t *testing.T) {
 	binary := buildCLIContractBinary(t)
 	home := t.TempDir()
+	skipAgeGateWhenHomeVolumeCritical(t, home)
 	cache, nested := writeCacheActivityFixture(t, home, 30*24*time.Hour, 30*24*time.Hour)
 
 	scanStdout, scanStderr, scanErr := runCleanJSONProcess(t, binary, home, "scan", "--json", "--root", home)

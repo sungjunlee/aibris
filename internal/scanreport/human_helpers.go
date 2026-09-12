@@ -43,6 +43,13 @@ func writePressureHint(w io.Writer, paths []ReclaimPath, report *volume.Report) 
 	fmt.Fprintf(w, "  reclaim --pressure %s\n", cleaner.FormatSize(pressure))
 }
 
+func writeDefaultCacheRelaxNote(w io.Writer, policy types.PruneOptions) {
+	if !policy.RelaxCacheAge {
+		return
+	}
+	fmt.Fprintln(w, "  official cache age relaxed (same as --pressure)")
+}
+
 // WriteNext prints the reclaim ladder, review-only line, and scan --json hint.
 func WriteNext(w io.Writer, view View) {
 	fmt.Fprintln(w, "\nnext")
@@ -234,8 +241,13 @@ func WriteCleanupDiagnostics(w io.Writer, summary CleanupProjection, opts types.
 			cleaner.FormatSize(summary.ActiveSize))
 	}
 	if summary.AgeCount > 0 {
-		fmt.Fprintf(w, "  age-blocked %s younger than %s\n",
-			cleaner.FormatSize(summary.AgeSize), CleanAgeDisplay(opts.Age))
+		if opts.RelaxCacheAge {
+			fmt.Fprintf(w, "  age-blocked %s younger than %s (official caches already in default)\n",
+				cleaner.FormatSize(summary.AgeSize), CleanAgeDisplay(opts.Age))
+		} else {
+			fmt.Fprintf(w, "  age-blocked %s younger than %s\n",
+				cleaner.FormatSize(summary.AgeSize), CleanAgeDisplay(opts.Age))
+		}
 	}
 	if summary.RiskyCount > 0 {
 		fmt.Fprintf(w, "  risky       %s requires --risky\n", cleaner.FormatSize(summary.RiskySize))

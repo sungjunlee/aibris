@@ -513,6 +513,11 @@ the default auto-guided route reports `minimum_age: "7d"`,
 `agent_state_grace: "1d"`, and `guided_min_idle_age: "3d"`; an explicit guided
 route with its omitted age uses `3d` for both guided and classic values.
 
+`policy.relax_cache_age` is `true` when official regenerable caches ignore
+`--age` because of `--pressure` or automatic critical home-volume selection.
+It is omitted when cache age was not relaxed, so `schema_version` stays `1`.
+Row `volume_pressure` reasons still name which caches were selected that way.
+
 `policy_decision: "reviewable"` is no longer guided-only. A classic
 (`--no-guide`) plan now emits it for a proof-classified orphaned `agent-state`
 row held by `agent_state_grace`. A consumer that keyed `reviewable` to the

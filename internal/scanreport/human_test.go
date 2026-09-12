@@ -78,6 +78,71 @@ func TestWriteHumanFixtureRendersFromView(t *testing.T) {
 	}
 }
 
+func TestWriteHumanNamesOfficialCacheAgeRelax(t *testing.T) {
+	base := t.TempDir()
+	cache := filepath.Join(base, "go-build")
+	node := filepath.Join(base, "node_modules")
+	if err := os.MkdirAll(cache, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(node, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	young := time.Now().Add(-time.Hour)
+	r := &types.ScanResult{
+		Worktrees: []types.DebrisInfo{
+			{
+				ID: "go-build", Tool: types.ToolBuildCache, Category: types.CategoryBuildCache,
+				Path: cache, Size: 100, ModTime: young,
+			},
+			{
+				ID: "node", Tool: types.ToolNodeModules, Category: types.CategoryNodeModules,
+				Path: node, Size: 50, ModTime: young,
+			},
+		},
+		TotalCount:         2,
+		TotalSize:          150,
+		PhysicalTotalBytes: 150,
+		ByCategory: map[types.Category]types.CategorySummary{
+			types.CategoryBuildCache:  {Count: 1, Size: 100, PhysicalUnitCount: 1, PhysicalTotalBytes: 100},
+			types.CategoryNodeModules: {Count: 1, Size: 50, PhysicalUnitCount: 1, PhysicalTotalBytes: 50},
+		},
+		ByTool: map[types.Tool]types.ToolSummary{
+			types.ToolBuildCache:  {Count: 1, Size: 100},
+			types.ToolNodeModules: {Count: 1, Size: 50},
+		},
+	}
+	policy := testPolicy()
+	policy.RelaxCacheAge = true
+	var buf bytes.Buffer
+	WriteHuman(&buf, FromResult(r, policy))
+	got := buf.String()
+	for _, want := range []string{
+		"default clean (estimate)",
+		"official cache age relaxed (same as --pressure)",
+		"age-blocked 50 B younger than 7d (official caches already in default)",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("relaxed human output missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "aibris clean --pressure --dry-run") {
+		t.Errorf("folded pressure should stay on the default estimate, not a second next command:\n%s", got)
+	}
+
+	policy.RelaxCacheAge = false
+	buf.Reset()
+	WriteHuman(&buf, FromResult(r, policy))
+	plain := buf.String()
+	if strings.Contains(plain, "official cache age relaxed") ||
+		strings.Contains(plain, "official caches already in default") {
+		t.Errorf("non-critical scan named cache age relax:\n%s", plain)
+	}
+	if !strings.Contains(plain, "age-blocked") || strings.Contains(plain, "already in default") {
+		t.Errorf("non-critical age-blocked lost the plain 7d copy:\n%s", plain)
+	}
+}
+
 func TestWriteHumanPartialDisablesCleanup(t *testing.T) {
 	r := &types.ScanResult{
 		ByCategory: make(map[types.Category]types.CategorySummary),
