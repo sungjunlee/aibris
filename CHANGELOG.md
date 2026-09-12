@@ -25,6 +25,10 @@
 
 ### Fixed
 
+- `clean --json --include-paths` now emits one uv argv per physical target.
+  An `exact` leftover row no longer keeps `uv cache clean` when the owner
+  was rewritten to `uv cache clean --force` under `--pressure` or critical
+  home-volume selection.
 - `clean --json` honors `--exclude` and last-scan cache skip the same way as
   human `clean`. Dry-run plans and execute receipts emit an additive
   `exclusions` object (`excluded_count` / `scopes` / `rejected`) when

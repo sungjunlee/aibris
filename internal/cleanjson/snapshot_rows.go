@@ -149,10 +149,7 @@ func rowsFor(components []SnapshotComponent, includePaths bool) []Row {
 			if includePaths {
 				path := snapshotRow.Item.Path
 				project := snapshotRow.Item.Project
-				command := append([]string{}, snapshotRow.Item.CleanupCommand...)
-				if command == nil {
-					command = []string{}
-				}
+				command := cleanupCommandForRow(component, snapshotRow)
 				row.Path = &path
 				row.Project = &project
 				row.CleanupCommand = &command
@@ -161,4 +158,18 @@ func rowsFor(components []SnapshotComponent, includePaths bool) []Row {
 		}
 	}
 	return rows
+}
+
+// cleanupCommandForRow emits one argv per physical command target. Owner and
+// exact rows share the owner's command so leftover inventory cannot keep a
+// pre-pressure uv argv on the same target.
+func cleanupCommandForRow(component SnapshotComponent, snapshotRow SnapshotRow) []string {
+	if (snapshotRow.Relation == RelationOwner || snapshotRow.Relation == RelationExact) &&
+		len(component.Owner.CleanupCommand) > 0 {
+		return append([]string{}, component.Owner.CleanupCommand...)
+	}
+	if snapshotRow.Item.CleanupCommand == nil {
+		return []string{}
+	}
+	return append([]string{}, snapshotRow.Item.CleanupCommand...)
 }
