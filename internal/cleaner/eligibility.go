@@ -119,13 +119,14 @@ func ApplyPressureCleanupCommand(item types.DebrisInfo, opts types.PruneOptions)
 // PhysicalCleanupCommand returns the argv an include-paths row should emit
 // for this item on a shared physical command target. Pressure uv rewrite
 // follows the owner so one physical_target_id never carries two selected
-// argv values.
+// argv values: every row on a uv command target reports the owner's final
+// argv, because the owner is the single mutation authority for the tree.
 func PhysicalCleanupCommand(item, owner types.DebrisInfo, opts types.PruneOptions) []string {
-	item = ApplyPressureCleanupCommand(item, opts)
 	owner = ApplyPressureCleanupCommand(owner, opts)
-	if isUvCacheClean(item.CleanupCommand) && isUvCacheClean(owner.CleanupCommand) {
+	if len(owner.CleanupCommand) > 0 {
 		return append([]string(nil), owner.CleanupCommand...)
 	}
+	item = ApplyPressureCleanupCommand(item, opts)
 	if item.CleanupCommand == nil {
 		return []string{}
 	}
