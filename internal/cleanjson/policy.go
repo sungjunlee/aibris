@@ -34,6 +34,7 @@ func PolicyFor(opts types.PruneOptions, guided *GuidedPolicy) Policy {
 		Tools:                  tools,
 		Risky:                  opts.Risky,
 		IncludeActiveWorktrees: opts.IncludeActiveWorktrees,
+		RelaxCacheAge:          opts.RelaxCacheAge,
 	}
 	if guided != nil {
 		policy.GuidedMinIdleAge = ageDisplay(guided.MinIdleAge)

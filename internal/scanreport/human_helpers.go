@@ -43,6 +43,13 @@ func writePressureHint(w io.Writer, paths []ReclaimPath, report *volume.Report) 
 	fmt.Fprintf(w, "  reclaim --pressure %s\n", cleaner.FormatSize(pressure))
 }
 
+func writeCacheAgeRelaxNote(w io.Writer, relaxed bool) {
+	if !relaxed {
+		return
+	}
+	fmt.Fprintln(w, "  default clean includes official-cache age relax")
+}
+
 // WriteNext prints the reclaim ladder, review-only line, and scan --json hint.
 func WriteNext(w io.Writer, view View) {
 	fmt.Fprintln(w, "\nnext")
@@ -50,6 +57,7 @@ func WriteNext(w io.Writer, view View) {
 		fmt.Fprintln(w, "  retry aibris scan; cleanup is disabled for this result")
 	} else {
 		writeReclaimLadder(w, view.ReclaimPaths)
+		writeCacheAgeRelaxNote(w, view.Policy.RelaxCacheAge)
 	}
 	WriteReviewOnlyLine(w, view.ReviewOnly.Count, view.ReviewOnly.Size)
 	fmt.Fprintln(w, "  aibris scan --json")
@@ -234,8 +242,13 @@ func WriteCleanupDiagnostics(w io.Writer, summary CleanupProjection, opts types.
 			cleaner.FormatSize(summary.ActiveSize))
 	}
 	if summary.AgeCount > 0 {
-		fmt.Fprintf(w, "  age-blocked %s younger than %s\n",
-			cleaner.FormatSize(summary.AgeSize), CleanAgeDisplay(opts.Age))
+		if opts.RelaxCacheAge {
+			fmt.Fprintf(w, "  age-blocked %s younger than %s (official caches already in default clean)\n",
+				cleaner.FormatSize(summary.AgeSize), CleanAgeDisplay(opts.Age))
+		} else {
+			fmt.Fprintf(w, "  age-blocked %s younger than %s\n",
+				cleaner.FormatSize(summary.AgeSize), CleanAgeDisplay(opts.Age))
+		}
 	}
 	if summary.RiskyCount > 0 {
 		fmt.Fprintf(w, "  risky       %s requires --risky\n", cleaner.FormatSize(summary.RiskySize))

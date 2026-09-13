@@ -1,6 +1,8 @@
 package cleanjson
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,6 +27,27 @@ func TestPolicySeparatesClassicAndGuidedAge(t *testing.T) {
 	classic := PolicyFor(types.PruneOptions{Age: classicAge}, nil)
 	if classic.GuidedMinIdleAge != "" {
 		t.Fatalf("classic guided_min_idle_age = %q; want omitted", classic.GuidedMinIdleAge)
+	}
+}
+
+func TestPolicyRecordsRelaxCacheAge(t *testing.T) {
+	off := PolicyFor(types.PruneOptions{Age: 7 * 24 * time.Hour}, nil)
+	if off.RelaxCacheAge {
+		t.Fatal("relax_cache_age = true; want false for a 7d plan without pressure")
+	}
+	on := PolicyFor(types.PruneOptions{Age: 7 * 24 * time.Hour, RelaxCacheAge: true}, nil)
+	if !on.RelaxCacheAge {
+		t.Fatal("relax_cache_age = false; want true when official caches ignore --age")
+	}
+	if on.MinimumAge != "7d" {
+		t.Fatalf("minimum_age = %q; relax must not rewrite the classic age", on.MinimumAge)
+	}
+	raw, err := json.Marshal(on)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"relax_cache_age":true`) {
+		t.Fatalf("plan policy JSON missing relax_cache_age: %s", raw)
 	}
 }
 

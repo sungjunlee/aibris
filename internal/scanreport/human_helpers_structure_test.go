@@ -38,6 +38,7 @@ var (
 	_ = writeLargestItems
 	_ = sortedCategories
 	_ = WriteCleanupDiagnostics
+	_ = writeCacheAgeRelaxNote
 	_ = itemName
 	_ = itemProject
 	_ = itemAgeAndStatus
@@ -65,6 +66,7 @@ func TestHumanHelpersLiveApartFromPublicHumanRenderEntry(t *testing.T) {
 		"writeLargestItems",
 		"sortedCategories",
 		"WriteCleanupDiagnostics",
+		"writeCacheAgeRelaxNote",
 		"itemName",
 		"itemProject",
 		"itemAgeAndStatus",
@@ -142,6 +144,7 @@ func TestHumanHelpersReexportIdentity(t *testing.T) {
 		writeLargestItems,
 		sortedCategories,
 		WriteCleanupDiagnostics,
+		writeCacheAgeRelaxNote,
 		itemName,
 		itemProject,
 		itemAgeAndStatus,
@@ -178,6 +181,7 @@ func TestHumanHelpersReexportIdentity(t *testing.T) {
 		_ func(string, string) string                                     = DisplayHomePath
 		_ func(io.Writer, types.RetentionProjection)                      = WriteRetention
 		_ func(io.Writer, CleanupProjection, types.PruneOptions)          = WriteCleanupDiagnostics
+		_ func(io.Writer, bool)                                           = writeCacheAgeRelaxNote
 		_ func(int) string                                                = reviewOnlyNoun
 		_ func(View) (int, int)                                           = excludeSourceCounts
 		_ func(string) string                                             = resolvedDisplayHome
@@ -222,6 +226,7 @@ func TestHumanHelpersReexportIdentity(t *testing.T) {
 		"writeLargestItems",
 		"sortedCategories",
 		"WriteCleanupDiagnostics",
+		"writeCacheAgeRelaxNote",
 		"itemName",
 		"itemProject",
 		"itemAgeAndStatus",
@@ -246,6 +251,7 @@ func TestHumanHelpersReexportIdentity(t *testing.T) {
 		"writeScanHeadline",
 		"WriteVolumePressure",
 		"WriteCleanupDiagnostics",
+		"writeCacheAgeRelaxNote",
 		"WriteHumanExclusions",
 		"writeCategorySummary",
 		"writeLargestItems",

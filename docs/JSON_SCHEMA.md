@@ -425,7 +425,8 @@ The clean-plan document has this top-level shape:
     "categories": [],
     "tools": [],
     "risky": false,
-    "include_active_worktrees": false
+    "include_active_worktrees": false,
+    "relax_cache_age": false
   },
   "totals": {
     "visible_rows": 1,
@@ -512,6 +513,13 @@ guided policy's minimum idle age. It is omitted for classic-only plans. Thus
 the default auto-guided route reports `minimum_age: "7d"`,
 `agent_state_grace: "1d"`, and `guided_min_idle_age: "3d"`; an explicit guided
 route with its omitted age uses `3d` for both guided and classic values.
+`policy.relax_cache_age` is true when official regenerable caches (`build-cache`,
+`other-cache`) ignore `minimum_age`, either because `clean --pressure` was set or
+because the home volume is `critical` (≥95% used). `minimum_age` stays the
+classic filter age. The field is always emitted, so a 7d plan that silently
+included young official caches is distinguishable from a conservative
+age-filtered plan. Per-row `volume_pressure` reasons remain; they are not the
+only record. Additive, so `schema_version` stays `1`.
 
 `policy_decision: "reviewable"` is no longer guided-only. A classic
 (`--no-guide`) plan now emits it for a proof-classified orphaned `agent-state`

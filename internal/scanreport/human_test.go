@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -140,5 +141,118 @@ func TestWriteHumanRetentionAndDiagnostics(t *testing.T) {
 	}
 	if strings.Contains(got, "session-private") || strings.Contains(got, ".jsonl") {
 		t.Errorf("retention leaked private evidence:\n%s", got)
+	}
+}
+
+func TestWriteHumanNamesOfficialCacheAgeRelax(t *testing.T) {
+	base := t.TempDir()
+	testutil.SetHome(t, base)
+	orphaned := filepath.Join(base, "orphaned")
+	cache := filepath.Join(base, "go-build")
+	modules := filepath.Join(base, "proj", "node_modules")
+	for _, path := range []string{orphaned, cache, modules} {
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := time.Now().Add(-30 * 24 * time.Hour)
+	recent := time.Now().Add(-time.Hour)
+	r := &types.ScanResult{
+		Worktrees: []types.DebrisInfo{
+			{
+				ID: "orphaned", Tool: types.ToolCodex, Category: types.CategoryWorktree,
+				Status: types.WorktreeOrphaned, Path: orphaned, Size: 42, ModTime: old,
+			},
+			{
+				ID: "go-build", Tool: types.ToolBuildCache, Category: types.CategoryBuildCache,
+				Path: cache, Size: 7 * 1024 * 1024 * 1024, ModTime: recent,
+			},
+			{
+				ID: "node", Tool: types.ToolNodeModules, Category: types.CategoryNodeModules,
+				Path: modules, Size: 2 * 1024 * 1024 * 1024, ModTime: recent,
+			},
+		},
+		TotalCount:         3,
+		TotalSize:          42 + 9*1024*1024*1024,
+		PhysicalTotalBytes: 42 + 9*1024*1024*1024,
+		ByCategory:         map[types.Category]types.CategorySummary{},
+		ByTool:             map[types.Tool]types.ToolSummary{},
+	}
+
+	policy := testPolicy()
+	policy.RelaxCacheAge = true
+	view := FromResult(r, policy)
+	var buf bytes.Buffer
+	WriteHuman(&buf, view)
+	got := buf.String()
+	for _, want := range []string{
+		"default clean (estimate)",
+		"default clean includes official-cache age relax",
+		"age-blocked",
+		"official caches already in default clean",
+		"aibris clean --dry-run",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("relaxed human output missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "reclaim --pressure") {
+		t.Errorf("relaxed default still advertised --pressure as a next step:\n%s", got)
+	}
+	if strings.Contains(got, "aibris clean --pressure --dry-run") {
+		t.Errorf("relaxed default kept a distinct pressure reclaim line:\n%s", got)
+	}
+	idx := strings.Index(got, "\nnext")
+	if idx < 0 {
+		t.Fatal("human output missing next section")
+	}
+	next := got[idx:]
+	if !strings.Contains(next, "default clean includes official-cache age relax") {
+		t.Errorf("next section missing cache age relax note:\n%s", next)
+	}
+}
+
+func TestWriteHumanKeepsPressureAsOptionalWithoutRelax(t *testing.T) {
+	base := t.TempDir()
+	testutil.SetHome(t, base)
+	orphaned := filepath.Join(base, "orphaned")
+	cache := filepath.Join(base, "go-build")
+	for _, path := range []string{orphaned, cache} {
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := time.Now().Add(-30 * 24 * time.Hour)
+	recent := time.Now().Add(-time.Hour)
+	r := &types.ScanResult{
+		Worktrees: []types.DebrisInfo{
+			{
+				ID: "orphaned", Tool: types.ToolCodex, Category: types.CategoryWorktree,
+				Status: types.WorktreeOrphaned, Path: orphaned, Size: 42 * 1024 * 1024, ModTime: old,
+			},
+			{
+				ID: "go-build", Tool: types.ToolBuildCache, Category: types.CategoryBuildCache,
+				Path: cache, Size: 7 * 1024 * 1024 * 1024, ModTime: recent,
+			},
+		},
+		TotalCount:         2,
+		TotalSize:          42*1024*1024 + 7*1024*1024*1024,
+		PhysicalTotalBytes: 42*1024*1024 + 7*1024*1024*1024,
+		ByCategory:         map[types.Category]types.CategorySummary{},
+		ByTool:             map[types.Tool]types.ToolSummary{},
+	}
+
+	view := FromResult(r, testPolicy())
+	var buf bytes.Buffer
+	WriteHuman(&buf, view)
+	got := buf.String()
+	if strings.Contains(got, "official-cache age relax") {
+		t.Errorf("non-relaxed scan named cache age relax:\n%s", got)
+	}
+	if strings.Contains(got, "official caches already in default clean") {
+		t.Errorf("non-relaxed age-blocked implied caches were already included:\n%s", got)
+	}
+	if !strings.Contains(got, "aibris clean --pressure --dry-run") {
+		t.Errorf("non-relaxed scan dropped pressure as an optional next step:\n%s", got)
 	}
 }

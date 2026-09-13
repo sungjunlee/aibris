@@ -213,9 +213,12 @@ Reading the summary:
   free bytes in this example are illustrative.
 - **found** — everything on disk in scope (94.2 MB here).
 - **default clean (estimate)** — what a default `aibris clean` would reclaim.
-  It is an estimate; run `aibris clean --dry-run` for the exact plan.
+  It is an estimate; run `aibris clean --dry-run` for the exact plan. On a
+  critical home volume (≥95% used) this figure already includes official
+  regenerable caches that ignore `--age`; scan says so next to the estimate.
 - **age-blocked** and **risky** — space held back by the default `7d` age
-  filter or by the explicit `--risky` gate for AI logs.
+  filter or by the explicit `--risky` gate for AI logs. When official caches
+  were already folded into default clean, age-blocked does not include them.
 - **retention** — a read-only inventory of protected Codex session content;
   it never becomes a cleanup candidate. See
   [docs/PROTECTED_RETENTION.md](docs/PROTECTED_RETENTION.md).

@@ -4,6 +4,10 @@
 
 ### Added
 
+- `clean --json` plans record `policy.relax_cache_age` when official
+  regenerable caches ignore `--age` (critical home volume or `--pressure`).
+  `minimum_age` stays the classic filter; `schema_version` stays `1`.
+
 - `clean --protect-path` is a repeatable clean-only pin. A nested checkout
   under a worktree outer owner protects that owner from delete and strip;
   the owner stays in the plan as protected (`live nested path protected` /
@@ -24,6 +28,11 @@
   inventing a full-size free; `physical_owner_present` remains success.
 
 ### Fixed
+
+- Human `scan` names when default-clean already includes official-cache age
+  relax on a critical home volume. `age-blocked` no longer implies those
+  official caches are still held by `--age`. Non-critical volumes still
+  offer `--pressure` as an optional next step.
 
 - `clean --json` honors `--exclude` and last-scan cache skip the same way as
   human `clean`. Dry-run plans and execute receipts emit an additive
