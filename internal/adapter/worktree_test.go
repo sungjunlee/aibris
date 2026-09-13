@@ -1586,6 +1586,30 @@ func TestWorktreeAdapter_LinkedSiblingOutsideConvention(t *testing.T) {
 	}
 }
 
+func TestWorktreeAdapter_LinkedSiblingRequiresBacklink(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	parentA := filepath.Join(home, "repo-a")
+	parentB := filepath.Join(home, "repo-b")
+	found := filepath.Join(home, "workspace", "repo-worktrees", "found")
+	reused := filepath.Join(home, "workspace", "reused-checkout")
+	createWorktreeGit(t, found, parentA, "found")
+	createWorktreeGit(t, reused, parentB, "b-name")
+	writeWorktreeAdminGitdir(t, found, parentA, "found")
+	writeWorktreeAdminGitdir(t, reused, parentA, "stale")
+
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected seed only, got %d: %+v", len(results), results)
+	}
+	if results[0].ID != "found" {
+		t.Errorf("ID = %q; want found", results[0].ID)
+	}
+}
+
 func TestWorktreeAdapter_LinkedSiblingRespectsRootBoundary(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)

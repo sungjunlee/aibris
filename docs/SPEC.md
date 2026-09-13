@@ -439,8 +439,10 @@ records that owner as `.some-tool`, or `project-local` for plain project-local
 Linked-sibling expansion is not a second filesystem crawler. It starts only
 from already-inventoried `active`/`orphaned` members, reads that repository's
 `.git/worktrees/*/gitdir` files, and adds existing sibling checkouts that stay
-inside the requested scan roots. The primary checkout (a `.git` directory),
-missing or prunable paths, paths outside `--root` / `$HOME`, and members of an
+inside the requested scan roots and whose `.git` pointer resolves back to that
+same admin entry. The primary checkout (a `.git` directory), missing or
+prunable paths, stale admin entries whose checkout now belongs to another
+repository, paths outside `--root` / `$HOME`, and members of an
 already-visited owner are skipped so mixed-marker `plain-dir` fail-close is
 preserved. Sibling rows may carry reason `linked sibling of a discovered
 worktree`. The CLI does not call GitHub and does not walk every git repository

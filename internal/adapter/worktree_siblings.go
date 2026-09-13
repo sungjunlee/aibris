@@ -172,11 +172,15 @@ func listLinkedSiblingCheckouts(ctx context.Context, admin string) ([]string, er
 		if !entry.IsDir() {
 			continue
 		}
-		checkout, ok := checkoutFromAdminGitdir(filepath.Join(admin, entry.Name(), "gitdir"))
+		adminEntry := filepath.Join(admin, entry.Name())
+		checkout, ok := checkoutFromAdminGitdir(filepath.Join(adminEntry, "gitdir"))
 		if !ok {
 			continue
 		}
 		if _, err := os.Stat(checkout); err != nil {
+			continue
+		}
+		if !checkoutBacklinksAdmin(checkout, adminEntry) {
 			continue
 		}
 		checkouts = append(checkouts, checkout)
@@ -194,6 +198,14 @@ func adminDirFromGitFile(gitFilePath string) (string, bool) {
 		return "", false
 	}
 	return admin, true
+}
+
+func checkoutBacklinksAdmin(checkout, adminEntry string) bool {
+	pointer, ok := readGitdirPointer(filepath.Join(checkout, ".git"))
+	if !ok {
+		return false
+	}
+	return canonicalExistingPath(pointer) == canonicalExistingPath(adminEntry)
 }
 
 func checkoutFromAdminGitdir(gitdirPath string) (string, bool) {

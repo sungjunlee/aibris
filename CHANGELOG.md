@@ -8,9 +8,11 @@
   containers such as `proj-manager-worktrees`.
 - After a valid linked worktree is found, scan reads that repository's
   `.git/worktrees/*/gitdir` files and inventories sibling checkouts under the
-  scan roots. The primary checkout, missing/prunable paths, paths outside
-  roots, and members of an already-visited owner are skipped. Sibling rows
-  may carry reason `linked sibling of a discovered worktree`.
+  scan roots. The checkout `.git` pointer must resolve back to that admin
+  entry. The primary checkout, missing/prunable paths, stale reused
+  checkouts, paths outside roots, and members of an already-visited owner
+  are skipped. Sibling rows may carry reason
+  `linked sibling of a discovered worktree`.
 - `clean --protect-path` is a repeatable clean-only pin. A nested checkout
   under a worktree outer owner protects that owner from delete and strip;
   the owner stays in the plan as protected (`live nested path protected` /
