@@ -44,7 +44,8 @@ registry를 함께 사용하고 `.git` metadata로 검증한다.
 
 **1-1. Worktree discovery 변경시 꼭 지킬 것**
 - known deep container는 finite exact registry로만 추가한다. 현재 registry는 `~/.codex/worktrees`(codex 컨테이너는 `$CODEX_HOME`, `$AIBRIS_CODEX_HOMES` home 기준), `~/.relay/worktrees`, `~/.gstack/worktrees`, `~/.config/superpowers/worktrees`
-- generic fallback은 `$HOME` 아래 `worktrees`, `worktree`, `worktree-*`, `worktrees-*` 디렉토리를 찾고 `maxWorktreeContainerDepth=4`를 유지한다
+- generic fallback은 `$HOME` 아래 `worktrees`, `worktree`, `worktree-*`, `worktrees-*`, `*-worktree`, `*-worktrees` 디렉토리를 찾고 `maxWorktreeContainerDepth=4`를 유지한다
+- 이미 발견한 valid linked member가 있으면 그 repo의 `.git/worktrees/*/gitdir`으로 scan root 안 sibling checkout을 추가한다. checkout `.git` pointer가 그 admin entry로 되돌아가고, primary checkout(`.git` 디렉터리), 없는/prunable 경로, root 밖, 이미 visit한 owner 소속은 건너뛴다. `$HOME` 전체 git 저장소 재귀는 하지 않는다
 - hidden owner 디렉토리(`.codex`, `.somename` 등)는 worktree source일 수 있으므로 일반적으로 숨김이라는 이유만으로 prune하지 않는다
 - 전체 `$HOME`이나 hidden owner를 무제한 재귀 탐색하지 않는다. hidden owner는 immediate convention child까지만 확인한다
 - 후보는 direct `<entry>/.git` 또는 nested `<entry>/<project>/.git` 파일이 있어야 한다. registered container owner는 `<owner>/<leaf>/<checkout>/.git` 두 단계까지 허용한다
@@ -96,7 +97,7 @@ skills/
 
 | Tool | Category | clean 기본 | 기본 경로 |
 |------|----------|-----------|---------|
-| worktree (registry + convention) | worktree | orphaned만 ✅ | finite exact registry + depth-4 `{worktrees,worktree,worktree-*,worktrees-*}/<entry>/` fallback; direct/one-level `.git`, plus two-level `<owner>/<leaf>/<checkout>/.git` inside registered containers only |
+| worktree (registry + convention) | worktree | orphaned만 ✅ | finite exact registry + depth-4 `{worktrees,worktree,worktree-*,worktrees-*,*-worktree,*-worktrees}/<entry>/` fallback; linked sibling checkouts under scan roots via `.git/worktrees/*/gitdir`; direct/one-level `.git`, plus two-level `<owner>/<leaf>/<checkout>/.git` inside registered containers only |
 | claude | agent-state | orphaned만 ✅ (분류는 증명 기반; `--age` 미적용; `--agent-state-grace`가 기본 선택을 지연; live/undetermined 보호) | `~/.claude/projects/<name>/` |
 | cursor | agent-state | orphaned만 ✅ (분류는 증명 기반; `--age` 미적용; `--agent-state-grace`가 기본 선택을 지연; live/undetermined 보호) | `~/.cursor/projects/<name>/` |
 | windsurf | ai-logs | 🚫 `--risky` | `~/.codeium/windsurf/` |

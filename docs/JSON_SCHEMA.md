@@ -226,7 +226,9 @@ decisions.
 
 Worktree units support a direct `.git` marker or markers in immediate
 project children. Registered containers also inspect
-`<owner>/<leaf>/<checkout>/.git`. A readable unit without valid metadata is emitted once as
+`<owner>/<leaf>/<checkout>/.git`. A checkout found only as a linked sibling of
+an already-inventoried member may carry reason
+`linked sibling of a discovered worktree`. A readable unit without valid metadata is emitted once as
 `plain-dir` with an explicit `reason`. If valid and invalid immediate members
 are mixed, that same one-row owner representation prevents the valid sibling
 from becoming executable. Empty leftover members are not mixed markers.

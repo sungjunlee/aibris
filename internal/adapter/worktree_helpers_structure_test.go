@@ -140,6 +140,13 @@ func TestWorktreeHelpersReexportIdentity(t *testing.T) {
 	if !strings.Contains(worktreeSource, "a.scanExplicitRootUnits(") {
 		t.Error("worktree.go no longer delegates to scanExplicitRootUnits")
 	}
+	if !strings.Contains(worktreeSource, "a.scanLinkedSiblings(") {
+		t.Error("worktree.go no longer delegates to scanLinkedSiblings")
+	}
+	siblingSource := readAdapterSource(t, "worktree_siblings.go")
+	if !strings.Contains(siblingSource, "func (a *WorktreeAdapter) scanLinkedSiblings(") {
+		t.Error("scanLinkedSiblings is not defined in worktree_siblings.go")
+	}
 	for _, name := range []string{
 		"scanExplicitRootUnits",
 		"scanRootAsWorktreeUnit",
