@@ -6,7 +6,9 @@ description: Scan and clean AI coding tool debris — worktrees, node_modules, b
 # aibris — AI Development Debris Cleaner
 
 AI 코딩 도구가 남긴 작업 잔해(worktree, node_modules, build cache)를 탐지하고 정리하는 CLI.
-Worktree는 특정 도구 목록보다 `$HOME` 아래 worktree convention을 발견하고 `.git` metadata로 검증한다.
+Worktree는 특정 도구 목록보다 `$HOME` 아래 worktree convention과 이미 찾은
+멤버의 linked sibling을 발견하고 `.git` metadata로 검증한다. CLI는 인벤토리와
+안전한 삭제만 한다. PR 머지·본진 여부·prunable prune 판단은 이 스킬이 한다.
 
 ## 사전 설치
 
@@ -57,6 +59,10 @@ curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/i
 
 ### Step 1: 전체 현황 스캔
 
+aibris는 에이전트용 **병렬 인벤토리**다. `$HOME`을 `find`/`du`로 다시 걷지
+않는다. 크기·경로·status는 scan JSON을 앵커로 쓰고, 그다음 로컬 Git/`gh`/
+cwd로만 보강한다.
+
 ```bash
 # aibris 스캔 (CLI 빌트인)
 aibris scan --json
@@ -70,6 +76,31 @@ docker system df 2>/dev/null
 **실패 처리**: aibris 명령어 실패 시 사용자에게 에러를 보여주고 설치 안내 후 중단한다.
 Docker는 없으면 (command not found) 무시한다.
 **빈 결과 처리**: aibris `total_count`가 0이고 Docker도 없으면 "정리할 항목이 없습니다" 알리고 `/clear` 안내 후 중단한다.
+
+#### 인벤토리 다음의 확인 (에이전트, CLI에 넣지 말 것)
+
+scan JSON을 받은 뒤 필요한 행만 보강한다. 이 확인은 스킬 책임이다. CLI에
+GitHub API, `lsof` hard lock, 또는 "머지됨 → recommended" 승격을 넣지 않는다.
+
+1. **worktree를 프로젝트로 묶는다.** `source`/`project`/`path`/`reason`을
+   본다. `linked sibling of a discovered worktree`는 convention 밖에서 온
+   linked checkout이다. `plain-dir`은 메타데이터만 보고 삭제·strip하지 않는다.
+2. **primary vs leftover.** 발견된 active member의 repo에서
+   `git worktree list --porcelain`을 한다. 첫 줄(보통 `.git` 디렉터리인
+   본진)은 leftover가 아니다. 본진이 `feat/...`에 있어도 잔해가 아니다.
+   `prunable`은 디렉터리가 없는 스텁이다. `aibris clean`이 아니라 사용자
+   승인 후 그 repo에서 `git worktree prune`만 한다.
+3. **사용자가 머지된 leftover를 물으면 `gh`를 쓴다.**
+   `gh pr list --state all --head <branch>` / `gh issue view`. 스쿼시 후
+   메인이 더 쌓이면 로컬 uniqueness는 `not_merged`일 수 있다. GitHub가
+   MERGED여도 guided `recommended`로 올리지 않는다. 근거를 사용자에게
+   보여주고 승인을 받는다. CLI uniqueness/`git cherry`/네트워크 머지
+   판정으로 대체하지 않는다.
+4. **live cwd는 advisory다.** 아래 `lsof` 절을 따른다. cwd만으로 캐시가
+   사용 중이라고 보지 않는다.
+5. **사용자가 특정 프로젝트만 지목하면** 그 메인 체크아웃에서
+   `git worktree list`를 한 번 더 본다. aibris는 `$HOME` 전체 git 저장소를
+   걷지 않으므로, 시드 멤버가 없으면 sibling도 없다.
 
 #### live cwd 확인 (advisory)
 
@@ -244,8 +275,10 @@ min-size=256MB`다. 판정 순서는 다음과 같다:
 4. 등록된 session-activity reader가 없는 도구는 `reviewable`.
 5. local `refs/remotes/origin/HEAD` 대비 unique 콘텐츠가 있거나 uniqueness가
    `unknown`이면 `reviewable` (`unique_commits_not_in_default` /
-   `merge_evidence_unknown`). GitHub API는 쓰지 않는다. 스쿼시 머지는
-   merge-tree 트리 동등으로 판정하며 `git cherry`는 쓰지 않는다.
+   `merge_evidence_unknown`). CLI는 GitHub API를 쓰지 않는다. 스쿼시 머지는
+   merge-tree 트리 동등으로 판정하며 `git cherry`는 쓰지 않는다. 에이전트가
+   `gh`로 PR/이슈 상태를 보는 것은 허용한다. 그 결과로 uniqueness를
+   `recommended`로 올리지 않는다.
 6. 나머지는 `recommended`. merged라는 이유만으로 승격하지 않는다.
 
 scan의 `active`는 상위 gitdir 생존이지 최근 사용이나 머지 여부가 아니다.
@@ -388,7 +421,7 @@ aibris clean --category node_modules
 - `clean --json`의 `target-N` (`physical_target_id`)은 그 문서 안의 번호일 뿐 다음 실행과 같은 신원이 아니다
 - node_modules는 7d floor. 더 젊은 `--age`는 사용자가 `--root <project> --category node_modules --age <n>`을 승인한 뒤에만
 - `snapshot_thinning_recommended`는 후속 `aibris clean --apfs-snapshots` 힌트다. 방금 끝난 clean이 snapshot을 줄였다는 뜻이 아니다
-- worktree는 `$HOME` 아래 `worktrees`, `worktree`, `worktree-*`, `worktrees-*` convention을 찾고 direct/nested `.git` 파일로 검증함
+- worktree는 `$HOME` 아래 `worktrees`, `worktree`, `worktree-*`, `worktrees-*`, `*-worktree`, `*-worktrees` convention을 찾고 direct/nested `.git` 파일로 검증함. 이미 발견한 linked member의 `.git/worktrees/*/gitdir`으로 scan root 안 sibling을 추가함. primary checkout과 prunable 경로는 인벤토리에 올리지 않음
 - hidden owner 디렉토리(`.codex`, `.somename` 등)는 worktree source일 수 있으므로 일반적으로 스캔 대상임
 - 전체 `$HOME`을 무제한 재귀 탐색하지 않고, scan root에서 얕은 컨테이너 depth 안의 convention을 찾음
 - `$HOME` 스캔 중 `.Trash`, `Library`, `Applications`, `Pictures`, `Movies`, `Music`, `.git`, `vendor`, 중첩 `node_modules` 등은 가지치기함

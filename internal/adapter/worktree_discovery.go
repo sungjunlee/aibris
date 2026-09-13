@@ -10,10 +10,11 @@ import (
 )
 
 // This file is the container-discovery policy cluster for worktree Scan:
-// finite exact registered lookup, bounded convention fallback, and
-// symlink-blocked aliases that convention must not reintroduce. Scan
-// orchestration stays in worktree.go; unit classification stays in
-// scanEntry.
+// finite exact registered lookup, bounded convention fallback
+// (`worktree`, `worktrees`, `worktree-*`, `worktrees-*`, `*-worktree`,
+// `*-worktrees`), and symlink-blocked aliases that convention must not
+// reintroduce. Scan orchestration stays in worktree.go; unit classification
+// stays in scanEntry; linked siblings stay in worktree_siblings.go.
 
 const maxWorktreeContainerDepth = 4
 
@@ -193,5 +194,7 @@ func isWorktreeRootDir(name string) bool {
 	return name == "worktree" ||
 		name == "worktrees" ||
 		strings.HasPrefix(name, "worktree-") ||
-		strings.HasPrefix(name, "worktrees-")
+		strings.HasPrefix(name, "worktrees-") ||
+		strings.HasSuffix(name, "-worktree") ||
+		strings.HasSuffix(name, "-worktrees")
 }

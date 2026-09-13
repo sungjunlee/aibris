@@ -1477,3 +1477,178 @@ func TestWorktreeAdapter_ScanWorktreeRootPropagatesCancellation(t *testing.T) {
 		t.Errorf("expected Canceled, got %v", err)
 	}
 }
+
+func TestIsWorktreeRootDir(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		want bool
+	}{
+		{"worktree", true},
+		{"worktrees", true},
+		{"worktree-foo", true},
+		{"worktrees-abc", true},
+		{"proj-manager-worktrees", true},
+		{"foo-worktree", true},
+		{"myworktrees", false},
+		{"work-trees", false},
+		{"node_modules", false},
+	}
+	for _, tc := range cases {
+		if got := isWorktreeRootDir(tc.name); got != tc.want {
+			t.Errorf("isWorktreeRootDir(%q) = %v; want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestWorktreeAdapter_SuffixWorktreesContainer(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	worktreeDir := filepath.Join(home, "workspace", "active", "tools-stack", "proj-manager-worktrees", "issue-177")
+	createWorktreeGit(t, worktreeDir, filepath.Join(home, "main-repo"), "issue-177")
+
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1, got %d: %+v", len(results), results)
+	}
+	if results[0].ID != "issue-177" {
+		t.Errorf("ID = %q; want issue-177", results[0].ID)
+	}
+	if results[0].Source != projectLocalSource {
+		t.Errorf("Source = %q; want %s", results[0].Source, projectLocalSource)
+	}
+	if results[0].Status != types.WorktreeActive {
+		t.Errorf("Status = %q; want active", results[0].Status)
+	}
+}
+
+func TestWorktreeAdapter_SuffixWorktreeSingularContainer(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	worktreeDir := filepath.Join(home, "workspace", "issue-181-worktree", "checkout")
+	createWorktreeGit(t, worktreeDir, filepath.Join(home, "main-repo"), "checkout")
+
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1, got %d: %+v", len(results), results)
+	}
+	if results[0].ID != "checkout" {
+		t.Errorf("ID = %q; want checkout", results[0].ID)
+	}
+}
+
+func TestWorktreeAdapter_LinkedSiblingOutsideConvention(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	parent := filepath.Join(home, "main-repo")
+	os.MkdirAll(filepath.Join(parent, ".git"), 0755)
+
+	found := filepath.Join(home, "workspace", "repo-worktrees", "found")
+	sibling := filepath.Join(home, "workspace", "extra-checkout")
+	createWorktreeGit(t, found, parent, "found")
+	createWorktreeGit(t, sibling, parent, "extra")
+	writeWorktreeAdminGitdir(t, found, parent, "found")
+	writeWorktreeAdminGitdir(t, sibling, parent, "extra")
+	writeWorktreeAdminGitdir(t, filepath.Join(home, "missing-checkout"), parent, "gone")
+
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2, got %d: %+v", len(results), results)
+	}
+	byID := map[string]types.DebrisInfo{}
+	for _, item := range results {
+		byID[item.ID] = item
+	}
+	if byID["found"].Reason != "" {
+		t.Errorf("convention row Reason = %q; want empty", byID["found"].Reason)
+	}
+	extra, ok := byID["extra-checkout"]
+	if !ok {
+		t.Fatalf("missing sibling extra-checkout in %+v", results)
+	}
+	if extra.Reason != linkedSiblingReason {
+		t.Errorf("sibling Reason = %q; want %q", extra.Reason, linkedSiblingReason)
+	}
+	if extra.Status != types.WorktreeActive {
+		t.Errorf("sibling Status = %q; want active", extra.Status)
+	}
+	if extra.Path != canonicalExistingPath(sibling) {
+		t.Errorf("sibling Path = %q; want %q", extra.Path, canonicalExistingPath(sibling))
+	}
+}
+
+func TestWorktreeAdapter_LinkedSiblingRespectsRootBoundary(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	parent := filepath.Join(home, "main-repo")
+	root := filepath.Join(home, "workspace")
+	found := filepath.Join(root, "repo-worktrees", "found")
+	outside := filepath.Join(home, "outside", "extra-checkout")
+	createWorktreeGit(t, found, parent, "found")
+	createWorktreeGit(t, outside, parent, "extra")
+	writeWorktreeAdminGitdir(t, found, parent, "found")
+	writeWorktreeAdminGitdir(t, outside, parent, "extra")
+
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{Roots: []string{root}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 in-root row, got %d: %+v", len(results), results)
+	}
+	if results[0].ID != "found" {
+		t.Errorf("ID = %q; want found", results[0].ID)
+	}
+}
+
+func TestWorktreeAdapter_LinkedSiblingSkipsPrimaryAndVisitedOwner(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	parent := filepath.Join(home, "main-repo")
+	os.MkdirAll(filepath.Join(parent, ".git"), 0755)
+	owner := filepath.Join(home, "workspace", "repo-worktrees", "mixed")
+	valid := filepath.Join(owner, "valid")
+	createWorktreeGit(t, valid, parent, "valid")
+	writeWorktreeAdminGitdir(t, valid, parent, "valid")
+	writeWorktreeAdminGitdir(t, parent, parent, "primary")
+	if err := os.MkdirAll(filepath.Join(owner, "broken"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(owner, "broken", ".git"), []byte("not-a-gitdir\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected mixed owner only, got %d: %+v", len(results), results)
+	}
+	if results[0].Status != types.WorktreePlain {
+		t.Errorf("Status = %q; want plain-dir", results[0].Status)
+	}
+	if results[0].Path != canonicalExistingPath(owner) {
+		t.Errorf("Path = %q; want mixed owner %q", results[0].Path, canonicalExistingPath(owner))
+	}
+}
+
+func writeWorktreeAdminGitdir(t *testing.T, worktreeDir, parentRepoDir, worktreeName string) {
+	t.Helper()
+	admin := filepath.Join(parentRepoDir, ".git", "worktrees", worktreeName)
+	if err := os.MkdirAll(admin, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(admin, "gitdir"), []byte(filepath.Join(worktreeDir, ".git")+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+}

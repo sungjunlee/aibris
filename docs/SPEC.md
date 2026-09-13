@@ -380,7 +380,7 @@ Cross-category containment uses the same physical-component contract:
 
 | Category | Default clean | Tools | Default locations |
 | ---------- | --------------- | ------- | ------------------- |
-| `worktree` | orphaned only | `codex`, `claude`, `unknown` | Finite exact registry plus depth-4 convention fallback for directories named `worktrees`, `worktree`, `worktree-*`, or `worktrees-*`; units are validated at direct or one-level nested `.git` markers, and at two-level `<owner>/<leaf>/<checkout>/.git` only inside a registered container |
+| `worktree` | orphaned only | `codex`, `claude`, `unknown` | Finite exact registry plus depth-4 convention fallback for directories named `worktrees`, `worktree`, `worktree-*`, `worktrees-*`, `*-worktree`, or `*-worktrees`; after a valid linked member is found, sibling checkouts under scan roots are added from that repo's `.git/worktrees/*/gitdir` files; units are validated at direct or one-level nested `.git` markers, and at two-level `<owner>/<leaf>/<checkout>/.git` only inside a registered container |
 | `node_modules` | yes | `node_modules` | `$HOME/**/node_modules`, with noisy system/media/cache directories pruned |
 | `build-cache` | yes | `build-cache` | process `$GOCACHE`, else `go env -w` file, else `UserCacheDir/go-build` (Linux `~/.cache/go-build`, Darwin `~/Library/Caches/go-build`, Windows `%LocalAppData%\go-build`); a configured GOCACHE is reported only when it exists and is under requested roots; `~/.gradle/caches`, `~/.npm/_cacache`, `~/.cargo/registry`, `~/Library/Caches/Xcode` |
 | `other-cache` | yes | `pip-cache` | `~/.cache/pip`, `~/.cache/uv` |
@@ -431,9 +431,20 @@ produce cleanable rows. Superpowers rows are attributed as
 
 The convention fallback still allows hidden owners containing worktree roots,
 for example `$HOME/.some-tool/worktrees` or
-`$HOME/project/.some-tool/worktrees`. The path-derived `source` field records
-that owner as `.some-tool`, or `project-local` for plain project-local
-`worktrees` directories.
+`$HOME/project/.some-tool/worktrees`, and project-local suffix containers such
+as `$HOME/workspace/proj-manager-worktrees`. The path-derived `source` field
+records that owner as `.some-tool`, or `project-local` for plain project-local
+`worktrees` / `*-worktrees` directories.
+
+Linked-sibling expansion is not a second filesystem crawler. It starts only
+from already-inventoried `active`/`orphaned` members, reads that repository's
+`.git/worktrees/*/gitdir` files, and adds existing sibling checkouts that stay
+inside the requested scan roots. The primary checkout (a `.git` directory),
+missing or prunable paths, paths outside `--root` / `$HOME`, and members of an
+already-visited owner are skipped so mixed-marker `plain-dir` fail-close is
+preserved. Sibling rows may carry reason `linked sibling of a discovered
+worktree`. The CLI does not call GitHub and does not walk every git repository
+under `$HOME`.
 
 Full-home discovery is bounded: aibris checks immediate hidden owners and
 project-local containers to `maxWorktreeContainerDepth=4` from each scan root.

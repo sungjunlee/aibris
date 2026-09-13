@@ -134,7 +134,12 @@ func (a *WorktreeAdapter) scanWorktreeRoots(ctx context.Context, opts types.Scan
 	if err != nil {
 		return nil, err
 	}
-	return sortWorktreeResults(filterDebrisUnderRoots(append(results, explicit...), prep.roots)), nil
+	combined := append(results, explicit...)
+	siblings, err := a.scanLinkedSiblings(ctx, combined, visited, prep.roots)
+	if err != nil {
+		return nil, err
+	}
+	return sortWorktreeResults(filterDebrisUnderRoots(append(combined, siblings...), prep.roots)), nil
 }
 
 func collectWorktreeContainers(

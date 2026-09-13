@@ -45,7 +45,7 @@ snapshot rather than an age-based deletion path.
 
 | Category | Default clean | Risk | Description |
 | ---------- | --------------- | ------ | ------------- |
-| `worktree` | classic: orphaned only; guided: evidence-based | low | Temporary Git worktrees discovered under `$HOME` by worktree directory conventions and validated `.git` metadata. Classic filters exclude active worktrees unless `--include-active-worktrees` is set. Guided review admits every tool's **active** units and may recommend safe linked ones. `plain-dir` / review-only owners are never selected. `clean --strip` is a third disposition: it removes inventoried regenerable subtrees from protected units without deleting the unit. |
+| `worktree` | classic: orphaned only; guided: evidence-based | low | Temporary Git worktrees discovered under `$HOME` by worktree directory conventions (`worktrees`, `worktree-*`, `*-worktrees`, …), plus linked siblings under scan roots from an already-found member's `.git/worktrees/*/gitdir`. Validated `.git` metadata required. Classic filters exclude active worktrees unless `--include-active-worktrees` is set. Guided review admits every tool's **active** units and may recommend safe linked ones. `plain-dir` / review-only owners are never selected. `clean --strip` is a third disposition: it removes inventoried regenerable subtrees from protected units without deleting the unit. |
 | `node_modules` | yes | medium | Project dependency folders under `$HOME` scan roots. They can be recreated with package managers. |
 | `build-cache` | yes | medium | Go, Xcode, Gradle, npm, and Cargo caches. They are usually safe but may slow the next build. |
 | `other-cache` | yes | low | pip and uv package caches. |
