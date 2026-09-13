@@ -23,16 +23,18 @@
   reports observed `residual_bytes` / `no_bytes_reclaimed` without
   inventing a full-size free; `physical_owner_present` remains success.
 - Human `scan` names official-cache age relax when the default-clean estimate
-  already includes it (critical home volume). `age-blocked` then says those
-  official caches are already in default, not still held by `--age`.
+  already includes it. Critical auto-relax is named as home-volume only;
+  explicit `--pressure` keeps the all-volume wording. `age-blocked` then says
+  the relaxed official caches are already in default, not still held by `--age`.
   `clean --json` plans record the same fact as additive `policy.relax_cache_age`.
 
 ### Fixed
 
-- `clean --json --include-paths` now emits one uv argv per physical target.
-  An `exact` leftover row no longer keeps `uv cache clean` when the owner
-  was rewritten to `uv cache clean --force` under `--pressure` or critical
-  home-volume selection.
+- `clean --json --include-paths` now emits one argv per physical command
+  target. Owner and leftover `exact` rows share the owner's command, so a uv
+  leftover no longer keeps `uv cache clean` when the owner was rewritten to
+  `uv cache clean --force` under `--pressure` or critical home-volume
+  selection.
 - `clean --json` honors `--exclude` and last-scan cache skip the same way as
   human `clean`. Dry-run plans and execute receipts emit an additive
   `exclusions` object (`excluded_count` / `scopes` / `rejected`) when

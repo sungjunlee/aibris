@@ -119,7 +119,7 @@ func TestWriteHumanNamesOfficialCacheAgeRelax(t *testing.T) {
 	got := buf.String()
 	for _, want := range []string{
 		"default clean (estimate)",
-		"official cache age relaxed (same as --pressure)",
+		"official cache age relaxed (--pressure)",
 		"age-blocked 50 B younger than 7d (official caches already in default)",
 	} {
 		if !strings.Contains(got, want) {
@@ -129,8 +129,28 @@ func TestWriteHumanNamesOfficialCacheAgeRelax(t *testing.T) {
 	if strings.Contains(got, "aibris clean --pressure --dry-run") {
 		t.Errorf("folded pressure should stay on the default estimate, not a second next command:\n%s", got)
 	}
+	if strings.Contains(got, "on the home volume") || strings.Contains(got, "home-volume official caches") {
+		t.Errorf("explicit --pressure copy named the home-volume pin:\n%s", got)
+	}
+
+	policy.PressureDevice = "disk1s1"
+	buf.Reset()
+	WriteHuman(&buf, FromResult(r, policy))
+	auto := buf.String()
+	for _, want := range []string{
+		"official cache age relaxed on the home volume",
+		"home-volume official caches already in default",
+	} {
+		if !strings.Contains(auto, want) {
+			t.Errorf("auto-relax human output missing %q:\n%s", want, auto)
+		}
+	}
+	if strings.Contains(auto, "same as --pressure") || strings.Contains(auto, "official cache age relaxed (--pressure)") {
+		t.Errorf("home-volume auto-relax copy claimed full --pressure:\n%s", auto)
+	}
 
 	policy.RelaxCacheAge = false
+	policy.PressureDevice = ""
 	buf.Reset()
 	WriteHuman(&buf, FromResult(r, policy))
 	plain := buf.String()

@@ -47,7 +47,11 @@ func writeDefaultCacheRelaxNote(w io.Writer, policy types.PruneOptions) {
 	if !policy.RelaxCacheAge {
 		return
 	}
-	fmt.Fprintln(w, "  official cache age relaxed (same as --pressure)")
+	if policy.PressureDevice != "" {
+		fmt.Fprintln(w, "  official cache age relaxed on the home volume")
+		return
+	}
+	fmt.Fprintln(w, "  official cache age relaxed (--pressure)")
 }
 
 // WriteNext prints the reclaim ladder, review-only line, and scan --json hint.
@@ -241,10 +245,14 @@ func WriteCleanupDiagnostics(w io.Writer, summary CleanupProjection, opts types.
 			cleaner.FormatSize(summary.ActiveSize))
 	}
 	if summary.AgeCount > 0 {
-		if opts.RelaxCacheAge {
+		switch {
+		case opts.RelaxCacheAge && opts.PressureDevice != "":
+			fmt.Fprintf(w, "  age-blocked %s younger than %s (home-volume official caches already in default)\n",
+				cleaner.FormatSize(summary.AgeSize), CleanAgeDisplay(opts.Age))
+		case opts.RelaxCacheAge:
 			fmt.Fprintf(w, "  age-blocked %s younger than %s (official caches already in default)\n",
 				cleaner.FormatSize(summary.AgeSize), CleanAgeDisplay(opts.Age))
-		} else {
+		default:
 			fmt.Fprintf(w, "  age-blocked %s younger than %s\n",
 				cleaner.FormatSize(summary.AgeSize), CleanAgeDisplay(opts.Age))
 		}

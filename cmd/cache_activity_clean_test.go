@@ -14,18 +14,42 @@ import (
 	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/scanner"
+	"github.com/sungjunlee/aibris/internal/scanreport"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
-	"github.com/sungjunlee/aibris/internal/volume"
 )
 
-func skipAgeGateWhenHomeVolumeCritical(t *testing.T, home string) {
+func officialCacheAgeRelaxed() bool {
+	relax, _ := scanreport.AutoRelaxCacheAge()
+	return relax
+}
+
+func assertOfficialCacheAgeGateOrRelax(t *testing.T, document cleanJSONPlan, row cleanJSONRow) {
 	t.Helper()
-	report, err := volume.Inspect(home)
-	if err != nil || report.Band != volume.BandCritical {
+	if officialCacheAgeRelaxed() {
+		if !document.Policy.RelaxCacheAge {
+			t.Fatal("policy.relax_cache_age = false; want true on a critical home volume")
+		}
+		if document.Totals.Selected != 1 || document.Totals.Skipped != 0 {
+			t.Fatalf("critical-volume official cache totals=%+v; want selected", document.Totals)
+		}
+		if !slices.Contains(row.ReasonCodes, "volume_pressure") {
+			t.Fatalf("critical-volume official cache reasons = %v; want volume_pressure", row.ReasonCodes)
+		}
 		return
 	}
-	t.Skip("home volume is critical; default clean already auto-relaxes official cache age")
+	if document.Policy.RelaxCacheAge {
+		t.Fatal("policy.relax_cache_age = true; want omitted on a non-critical volume")
+	}
+	if document.Totals.Selected != 0 || document.Totals.Skipped != 1 {
+		t.Fatalf("live nested cache was selected for removal: totals=%+v", document.Totals)
+	}
+	if slices.Contains(row.ReasonCodes, "scan_evidence_unavailable") {
+		t.Fatalf("live nested cache refused by an integrity error instead of the age gate: %+v", row)
+	}
+	if !slices.Contains(row.ReasonCodes, "minimum_age") {
+		t.Fatalf("live nested cache reason codes = %v; want minimum_age", row.ReasonCodes)
+	}
 }
 
 // writeCacheActivityFixture builds a gradle cache whose container is
@@ -72,7 +96,6 @@ func cacheActivityBuildCacheRow(t *testing.T, document cleanJSONPlan) cleanJSONR
 func TestCleanJSONCLIContractLiveNestedCacheRefusedByAgeGate(t *testing.T) {
 	binary := buildCLIContractBinary(t)
 	home := t.TempDir()
-	skipAgeGateWhenHomeVolumeCritical(t, home)
 	cache, _ := writeCacheActivityFixture(t, home, 30*24*time.Hour, 5*time.Minute)
 
 	stdout, stderr, err := runCleanJSONProcess(t, binary, home,
@@ -87,20 +110,14 @@ func TestCleanJSONCLIContractLiveNestedCacheRefusedByAgeGate(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &document); err != nil {
 		t.Fatalf("live nested cache JSON is invalid: %v\n%s", err, stdout)
 	}
-	if document.Totals.Selected != 0 || document.Totals.Skipped != 1 {
-		t.Fatalf("live nested cache was selected for removal: totals=%+v", document.Totals)
-	}
-	for _, target := range document.PhysicalTargets {
-		if target.Decision == cleanJSONDecisionSelected {
-			t.Fatalf("live nested cache physical target = %+v; want no selected target", target)
-		}
-	}
 	row := cacheActivityBuildCacheRow(t, document)
-	if slices.Contains(row.ReasonCodes, "scan_evidence_unavailable") {
-		t.Fatalf("live nested cache refused by an integrity error instead of the age gate: %+v", row)
-	}
-	if !slices.Contains(row.ReasonCodes, "minimum_age") {
-		t.Fatalf("live nested cache reason codes = %v; want minimum_age", row.ReasonCodes)
+	assertOfficialCacheAgeGateOrRelax(t, document, row)
+	if !officialCacheAgeRelaxed() {
+		for _, target := range document.PhysicalTargets {
+			if target.Decision == cleanJSONDecisionSelected {
+				t.Fatalf("live nested cache physical target = %+v; want no selected target", target)
+			}
+		}
 	}
 	if _, statErr := os.Lstat(cache); statErr != nil {
 		t.Fatalf("dry-run mutated the live cache: %v", statErr)
@@ -281,7 +298,6 @@ func TestValidateRechecksNestedActivityAtMutationBarrier(t *testing.T) {
 func TestCleanJSONCLIContractCachedScanLiveNestedCacheRefusedByAgeGate(t *testing.T) {
 	binary := buildCLIContractBinary(t)
 	home := t.TempDir()
-	skipAgeGateWhenHomeVolumeCritical(t, home)
 	cache, _ := writeCacheActivityFixture(t, home, 30*24*time.Hour, 5*time.Minute)
 
 	scanStdout, scanStderr, scanErr := runCleanJSONProcess(t, binary, home,
@@ -322,16 +338,8 @@ func TestCleanJSONCLIContractCachedScanLiveNestedCacheRefusedByAgeGate(t *testin
 	if document.Evidence.Source != string(scanSourceCached) {
 		t.Fatalf("clean evidence source = %q; want cached", document.Evidence.Source)
 	}
-	if document.Totals.Selected != 0 || document.Totals.Skipped != 1 {
-		t.Fatalf("cached live nested cache was selected for removal: totals=%+v", document.Totals)
-	}
 	row := cacheActivityBuildCacheRow(t, document)
-	if slices.Contains(row.ReasonCodes, "scan_evidence_unavailable") {
-		t.Fatalf("cached live nested cache refused by an integrity error: %+v", row)
-	}
-	if !slices.Contains(row.ReasonCodes, "minimum_age") {
-		t.Fatalf("cached live nested cache reason codes = %v; want minimum_age", row.ReasonCodes)
-	}
+	assertOfficialCacheAgeGateOrRelax(t, document, row)
 	if _, err := os.Lstat(cache); err != nil {
 		t.Fatalf("cached clean dry-run changed the live cache: %v", err)
 	}
@@ -344,7 +352,6 @@ func TestCleanJSONCLIContractCachedScanLiveNestedCacheRefusedByAgeGate(t *testin
 func TestCleanJSONCLIContractPostScanInTreeWriteIsRefusedAsMinimumAge(t *testing.T) {
 	binary := buildCLIContractBinary(t)
 	home := t.TempDir()
-	skipAgeGateWhenHomeVolumeCritical(t, home)
 	cache, nested := writeCacheActivityFixture(t, home, 30*24*time.Hour, 30*24*time.Hour)
 
 	scanStdout, scanStderr, scanErr := runCleanJSONProcess(t, binary, home, "scan", "--json", "--root", home)
@@ -373,12 +380,24 @@ func TestCleanJSONCLIContractPostScanInTreeWriteIsRefusedAsMinimumAge(t *testing
 
 	stdout, _, err := runCleanJSONProcess(t, binary, home,
 		"clean", "--no-guide", "--json", "--force", "--category=build-cache", "--age=7d", "--root", home)
+	var receipt cleanJSONReceipt
+	if unmarshalErr := json.Unmarshal([]byte(stdout), &receipt); unmarshalErr != nil {
+		t.Fatalf("receipt is invalid JSON: %v\n%s", unmarshalErr, stdout)
+	}
+	if officialCacheAgeRelaxed() {
+		if err != nil {
+			t.Fatalf("critical-volume official cache should pass the post-scan age gate: %v\n%s", err, stdout)
+		}
+		if receipt.Status != cleanJSONReceiptSucceeded {
+			t.Fatalf("receipt status = %q; want succeeded under cache-age relax\n%s", receipt.Status, stdout)
+		}
+		if _, statErr := os.Lstat(cache); !os.IsNotExist(statErr) {
+			t.Fatalf("critical-volume official cache was left in place: %v", statErr)
+		}
+		return
+	}
 	if err == nil {
 		t.Fatalf("clean succeeded on a cache that went live: %s", stdout)
-	}
-	var receipt cleanJSONReceipt
-	if err := json.Unmarshal([]byte(stdout), &receipt); err != nil {
-		t.Fatalf("receipt is invalid JSON: %v\n%s", err, stdout)
 	}
 	if receipt.Status != cleanJSONReceiptFailed {
 		t.Fatalf("receipt status = %q; want failed\n%s", receipt.Status, stdout)
@@ -428,6 +447,55 @@ func TestCleanJSONCLIContractIdleNestedCacheIsStillCleaned(t *testing.T) {
 	}
 	if _, statErr := os.Lstat(cache); !os.IsNotExist(statErr) {
 		t.Fatalf("idle nested cache survived cleanup: %v", statErr)
+	}
+}
+
+func TestCleanJSONCLIContractPressureUvArgvSharedOnIncludePaths(t *testing.T) {
+	binary := buildCLIContractBinary(t)
+	home := t.TempDir()
+	uv := filepath.Join(home, ".cache", "uv")
+	if err := os.MkdirAll(filepath.Join(uv, "archive-v0"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(uv, "archive-v0", "blob"), []byte("leftover"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runCleanJSONProcess(t, binary, home,
+		"clean", "--no-guide", "--dry-run", "--json", "--include-paths",
+		"--pressure", "--category=other-cache", "--age=7d", "--root", home)
+	if err != nil {
+		t.Fatalf("pressure uv clean JSON failed: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
+	}
+	var document cleanJSONPlan
+	if err := json.Unmarshal([]byte(stdout), &document); err != nil {
+		t.Fatalf("pressure uv JSON is invalid: %v\n%s", err, stdout)
+	}
+	if !document.Policy.RelaxCacheAge {
+		t.Fatal("policy.relax_cache_age = false; want true under --pressure")
+	}
+	force := []string{"uv", "cache", "clean", "--force"}
+	var uvRows []cleanJSONRow
+	for _, row := range document.Rows {
+		if row.Path == nil || *row.Path != uv {
+			continue
+		}
+		uvRows = append(uvRows, row)
+		if row.CleanupCommand == nil || !slices.Equal(*row.CleanupCommand, force) {
+			t.Fatalf("%s argv = %v; want %v", row.Relation, row.CleanupCommand, force)
+		}
+	}
+	if len(uvRows) == 0 {
+		t.Fatalf("uv rows = %+v; want at least the physical uv target", document.Rows)
+	}
+	physical := uvRows[0].PhysicalTargetID
+	if physical == "" {
+		t.Fatal("uv row missing physical_target_id")
+	}
+	for _, row := range uvRows {
+		if row.PhysicalTargetID != physical {
+			t.Fatalf("uv physical ids = %q and %q; want one target", physical, row.PhysicalTargetID)
+		}
 	}
 }
 

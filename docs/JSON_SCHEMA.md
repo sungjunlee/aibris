@@ -381,7 +381,9 @@ exactly one JSON document and successful stderr is empty; it contains no home
 directory, project label, raw path, cleanup argv, blocker/member/obligation
 path, or internal canonical key. `--include-paths` opts in to explicit
 `path`, `project`, and `cleanup_command` fields on logical rows and `path` on
-physical targets. It never includes external command output.
+physical targets. It never includes external command output. Owner and exact
+rows that share one physical command target emit the owner's `cleanup_command`;
+a leftover exact row cannot keep a different pre-pressure argv on that target.
 
 `--include-paths` without `--json` fails. Non-dry-run `clean --json` requires
 either `--force` or `--interactive`; execution always takes the classic route,
@@ -517,6 +519,9 @@ route with its omitted age uses `3d` for both guided and classic values.
 `--age` because of `--pressure` or automatic critical home-volume selection.
 It is omitted when cache age was not relaxed, so `schema_version` stays `1`.
 Row `volume_pressure` reasons still name which caches were selected that way.
+Under that rewrite, `--include-paths` owner/exact rows on the same physical
+command target share the rewritten owner argv (for example `uv cache clean
+--force`).
 
 `policy_decision: "reviewable"` is no longer guided-only. A classic
 (`--no-guide`) plan now emits it for a proof-classified orphaned `agent-state`
