@@ -245,7 +245,7 @@ func Render(in Input, components []SnapshotComponent) Plan {
 		Policy:          PolicyFor(in.Opts, in.Guided),
 		Totals:          totalsFor(components),
 		PhysicalTargets: physicalTargetsFor(components, in.IncludePaths),
-		Rows:            rowsFor(components, in.IncludePaths),
+		Rows:            rowsFor(components, in.IncludePaths, in.Opts),
 		Exclusions:      scanreport.JSONExclusionsFromResult(in.Result),
 	}
 }

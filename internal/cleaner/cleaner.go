@@ -12,7 +12,7 @@ func Filter(worktrees []types.DebrisInfo, opts types.PruneOptions) []types.Debri
 	var filtered []types.DebrisInfo
 	for _, w := range worktrees {
 		if eligible, _ := EvaluateEligibility(w, opts, observedAt); eligible {
-			filtered = append(filtered, applyPressureCleanupCommand(w, opts))
+			filtered = append(filtered, ApplyPressureCleanupCommand(w, opts))
 		}
 	}
 	return filtered

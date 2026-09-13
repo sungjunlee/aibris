@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/types"
 )
 
 // AssignAccountingBytes gives each action component a disjoint share of its
@@ -128,7 +129,7 @@ func physicalTargetsFor(components []SnapshotComponent, includePaths bool) []Phy
 	return targets
 }
 
-func rowsFor(components []SnapshotComponent, includePaths bool) []Row {
+func rowsFor(components []SnapshotComponent, includePaths bool, opts types.PruneOptions) []Row {
 	rows := make([]Row, 0)
 	for componentIndex, component := range components {
 		physicalTargetID := fmt.Sprintf("target-%d", componentIndex+1)
@@ -149,10 +150,7 @@ func rowsFor(components []SnapshotComponent, includePaths bool) []Row {
 			if includePaths {
 				path := snapshotRow.Item.Path
 				project := snapshotRow.Item.Project
-				command := append([]string{}, snapshotRow.Item.CleanupCommand...)
-				if command == nil {
-					command = []string{}
-				}
+				command := cleaner.PhysicalCleanupCommand(snapshotRow.Item, component.Owner, opts)
 				row.Path = &path
 				row.Project = &project
 				row.CleanupCommand = &command

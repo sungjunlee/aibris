@@ -811,6 +811,34 @@ func TestFilter_PinnedPressureDeviceDoesNotForceOffVolumeUv(t *testing.T) {
 	}
 }
 
+func TestPhysicalCleanupCommand_PressureFollowsOwnerOnExactRow(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".cache", "uv")
+	scanItem := types.DebrisInfo{
+		ID:             "uv",
+		Tool:           types.ToolPipCache,
+		Category:       types.CategoryOtherCache,
+		Path:           path,
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{"uv", "cache", "clean"},
+	}
+	pressure := types.PruneOptions{Age: 168 * time.Hour, RelaxCacheAge: true}
+	owner := ApplyPressureCleanupCommand(scanItem, pressure)
+	got := PhysicalCleanupCommand(scanItem, owner, pressure)
+	want := []string{"uv", "cache", "clean", "--force"}
+	if !equalStringSlice(got, want) {
+		t.Errorf("pressure exact argv = %v; want %v", got, want)
+	}
+	if !equalStringSlice(scanItem.CleanupCommand, []string{"uv", "cache", "clean"}) {
+		t.Errorf("PhysicalCleanupCommand mutated the scan item argv: %v", scanItem.CleanupCommand)
+	}
+
+	defaultOpts := types.PruneOptions{Age: 168 * time.Hour}
+	gotDefault := PhysicalCleanupCommand(scanItem, scanItem, defaultOpts)
+	if !equalStringSlice(gotDefault, []string{"uv", "cache", "clean"}) {
+		t.Errorf("default exact argv = %v; want [uv cache clean]", gotDefault)
+	}
+}
+
 func captureStdout(fn func()) string {
 	r, w, _ := os.Pipe()
 	old := os.Stdout

@@ -105,10 +105,10 @@ func itemOnPressureVolume(path, device string) bool {
 	return err == nil && got == device
 }
 
-// applyPressureCleanupCommand rewrites official cache argv that only reclaim
+// ApplyPressureCleanupCommand rewrites official cache argv that only reclaim
 // under volume pressure. Default uv cleanup stays `uv cache clean`; --pressure
 // and critical home-volume selection pass --force so archive-v0 is emptied.
-func applyPressureCleanupCommand(item types.DebrisInfo, opts types.PruneOptions) types.DebrisInfo {
+func ApplyPressureCleanupCommand(item types.DebrisInfo, opts types.PruneOptions) types.DebrisInfo {
 	if !ShouldRelaxCacheAge(item, opts) || !isDefaultUvCacheClean(item.CleanupCommand) {
 		return item
 	}
@@ -116,8 +116,32 @@ func applyPressureCleanupCommand(item types.DebrisInfo, opts types.PruneOptions)
 	return item
 }
 
+// PhysicalCleanupCommand returns the argv an include-paths row should emit
+// for this item on a shared physical command target. Pressure uv rewrite
+// follows the owner so one physical_target_id never carries two selected
+// argv values.
+func PhysicalCleanupCommand(item, owner types.DebrisInfo, opts types.PruneOptions) []string {
+	item = ApplyPressureCleanupCommand(item, opts)
+	owner = ApplyPressureCleanupCommand(owner, opts)
+	if isUvCacheClean(item.CleanupCommand) && isUvCacheClean(owner.CleanupCommand) {
+		return append([]string(nil), owner.CleanupCommand...)
+	}
+	if item.CleanupCommand == nil {
+		return []string{}
+	}
+	return append([]string(nil), item.CleanupCommand...)
+}
+
 func isDefaultUvCacheClean(argv []string) bool {
 	return len(argv) == 3 && argv[0] == "uv" && argv[1] == "cache" && argv[2] == "clean"
+}
+
+func isForceUvCacheClean(argv []string) bool {
+	return len(argv) == 4 && argv[0] == "uv" && argv[1] == "cache" && argv[2] == "clean" && argv[3] == "--force"
+}
+
+func isUvCacheClean(argv []string) bool {
+	return isDefaultUvCacheClean(argv) || isForceUvCacheClean(argv)
 }
 
 func uvCacheCleanCommand(force bool) []string {

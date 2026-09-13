@@ -83,6 +83,83 @@ func TestBuildCountsExactAndNestedRowsOnce(t *testing.T) {
 	}
 }
 
+func TestBuildPressureUvArgvOnEveryIncludePathsRow(t *testing.T) {
+	home := t.TempDir()
+	path := filepath.Join(home, ".cache", "uv")
+	if err := os.MkdirAll(path, 0755); err != nil {
+		t.Fatal(err)
+	}
+	scanItem := types.DebrisInfo{
+		Tool:           types.ToolPipCache,
+		Category:       types.CategoryOtherCache,
+		ID:             "uv",
+		Path:           path,
+		Size:           1500,
+		ModTime:        time.Now().Add(-time.Hour),
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{"uv", "cache", "clean"},
+	}
+	opts := types.PruneOptions{Age: 7 * 24 * time.Hour, RelaxCacheAge: true}
+	owner := cleaner.ApplyPressureCleanupCommand(scanItem, opts)
+	canonical := mustPathKey(t, path)
+
+	document := mustBuild(t, Input{
+		Result:       &types.ScanResult{Worktrees: []types.DebrisInfo{scanItem}},
+		Source:       Source{Kind: SourceLive, ObservedAt: time.Now()},
+		Opts:         opts,
+		IncludePaths: true,
+		Plan:         selectedPlan(owner, "volume_pressure"),
+		Audit: []AuditComponent{{
+			CanonicalPath: canonical,
+			Owner:         owner,
+			LogicalRows: []AuditRow{
+				{Item: owner, CanonicalPath: canonical, Relation: overlapOwner, PolicyDecision: PolicyEligible, ReasonCodes: []string{"volume_pressure"}},
+				{Item: scanItem, CanonicalPath: canonical, Relation: overlapExact, PolicyDecision: PolicyEligible, ReasonCodes: []string{"volume_pressure"}},
+			},
+		}},
+		Inventory: []types.DebrisInfo{scanItem},
+	})
+
+	assertSharedUvCleanupCommand(t, document, path, 1500, []string{"uv", "cache", "clean", "--force"})
+}
+
+func TestBuildDefaultUvArgvOmitsForceOnIncludePathsRows(t *testing.T) {
+	home := t.TempDir()
+	path := filepath.Join(home, ".cache", "uv")
+	if err := os.MkdirAll(path, 0755); err != nil {
+		t.Fatal(err)
+	}
+	item := types.DebrisInfo{
+		Tool:           types.ToolPipCache,
+		Category:       types.CategoryOtherCache,
+		ID:             "uv",
+		Path:           path,
+		Size:           1500,
+		ModTime:        time.Now().Add(-200 * time.Hour),
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{"uv", "cache", "clean"},
+	}
+	canonical := mustPathKey(t, path)
+	document := mustBuild(t, Input{
+		Result:       &types.ScanResult{Worktrees: []types.DebrisInfo{item}},
+		Source:       Source{Kind: SourceLive, ObservedAt: time.Now()},
+		Opts:         types.PruneOptions{Age: time.Hour},
+		IncludePaths: true,
+		Plan:         selectedPlan(item, "classic_eligible"),
+		Audit: []AuditComponent{{
+			CanonicalPath: canonical,
+			Owner:         item,
+			LogicalRows: []AuditRow{
+				{Item: item, CanonicalPath: canonical, Relation: overlapOwner, PolicyDecision: PolicyEligible, ReasonCodes: []string{"classic_eligible"}},
+				{Item: item, CanonicalPath: canonical, Relation: overlapExact, PolicyDecision: PolicyEligible, ReasonCodes: []string{"classic_eligible"}},
+			},
+		}},
+		Inventory: []types.DebrisInfo{item},
+	})
+
+	assertSharedUvCleanupCommand(t, document, path, 1500, []string{"uv", "cache", "clean"})
+}
+
 func TestBuildProjectsScanExclusionsWithoutBumpingSchema(t *testing.T) {
 	root := t.TempDir()
 	item := types.DebrisInfo{
@@ -747,4 +824,39 @@ func jsonRowWithReason(t *testing.T, document Plan, reason string) Row {
 	}
 	t.Fatalf("row with %s missing: %+v", reason, document.Rows)
 	return Row{}
+}
+
+func assertSharedUvCleanupCommand(t *testing.T, document Plan, path string, wantBytes int64, wantArgv []string) {
+	t.Helper()
+	if len(document.PhysicalTargets) != 1 {
+		t.Fatalf("physical targets = %d; want one uv target", len(document.PhysicalTargets))
+	}
+	if document.Totals.PhysicalBytes != wantBytes || document.PhysicalTargets[0].Bytes != wantBytes {
+		t.Fatalf("physical bytes = %d/%d; want %d once",
+			document.Totals.PhysicalBytes, document.PhysicalTargets[0].Bytes, wantBytes)
+	}
+	if len(document.Rows) == 0 {
+		t.Fatal("include-paths rows missing")
+	}
+	argvByTarget := make(map[string]string)
+	for _, row := range document.Rows {
+		if row.PhysicalTargetID != document.PhysicalTargets[0].ID {
+			t.Fatalf("row target = %q; want %s", row.PhysicalTargetID, document.PhysicalTargets[0].ID)
+		}
+		if row.Path == nil || *row.Path != path {
+			t.Fatalf("row path = %v; want %q", row.Path, path)
+		}
+		if row.CleanupCommand == nil {
+			t.Fatalf("row %s omitted cleanup_command; want %v", row.Relation, wantArgv)
+		}
+		if !slices.Equal(*row.CleanupCommand, wantArgv) {
+			t.Fatalf("row %s cleanup_command = %v; want %v", row.Relation, *row.CleanupCommand, wantArgv)
+		}
+		key := strings.Join(*row.CleanupCommand, "\x00")
+		if previous, ok := argvByTarget[row.PhysicalTargetID]; ok && previous != key {
+			t.Fatalf("physical target %s has two selected argv: %q and %q",
+				row.PhysicalTargetID, previous, key)
+		}
+		argvByTarget[row.PhysicalTargetID] = key
+	}
 }

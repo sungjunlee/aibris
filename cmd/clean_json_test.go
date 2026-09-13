@@ -526,6 +526,103 @@ func TestCleanJSONCLIContractExecutionUsesClassicRouteUnderGuidedPressure(t *tes
 	}
 }
 
+func TestCleanJSONPressureUvArgvAppliesToExactIncludePathsRow(t *testing.T) {
+	t.Cleanup(resetCleanFlags)
+	resetCleanFlags()
+	cleanIncludePaths = true
+
+	home := t.TempDir()
+	uvPath := filepath.Join(home, ".cache", "uv")
+	if err := os.MkdirAll(uvPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	item := types.DebrisInfo{
+		ID:             "uv",
+		Tool:           types.ToolPipCache,
+		Category:       types.CategoryOtherCache,
+		Path:           uvPath,
+		Size:           1500,
+		ModTime:        time.Now().Add(-time.Hour),
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: []string{"uv", "cache", "clean"},
+	}
+	items := []types.DebrisInfo{item}
+	opts := types.PruneOptions{Age: 7 * 24 * time.Hour, RelaxCacheAge: true}
+	targets := cleaner.Filter(items, opts)
+	if len(targets) != 1 {
+		t.Fatalf("pressure Filter = %d; want 1", len(targets))
+	}
+	source := scanSource{Kind: scanSourceLive, ObservedAt: time.Now()}
+	audit := buildCleanAudit(items, targets, opts, 1, source, nil)
+	document, err := buildCleanJSONPlan(
+		context.Background(),
+		&types.ScanResult{Worktrees: items},
+		source,
+		opts,
+		nil,
+		targets,
+		nil,
+		audit,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(document.PhysicalTargets) != 1 || document.Totals.PhysicalBytes != item.Size {
+		t.Fatalf("uv physical accounting = targets=%d bytes=%d; want 1/%d",
+			len(document.PhysicalTargets), document.Totals.PhysicalBytes, item.Size)
+	}
+	want := []string{"uv", "cache", "clean", "--force"}
+	argvByTarget := map[string]string{}
+	var sawExact bool
+	for _, row := range document.Rows {
+		if row.CleanupCommand == nil {
+			t.Fatalf("row %s omitted cleanup_command; want %v", row.Relation, want)
+		}
+		if !slices.Equal(*row.CleanupCommand, want) {
+			t.Fatalf("row %s cleanup_command = %v; want %v", row.Relation, *row.CleanupCommand, want)
+		}
+		key := strings.Join(*row.CleanupCommand, "\x00")
+		if previous, ok := argvByTarget[row.PhysicalTargetID]; ok && previous != key {
+			t.Fatalf("physical target %s has two selected argv: %q and %q",
+				row.PhysicalTargetID, previous, key)
+		}
+		argvByTarget[row.PhysicalTargetID] = key
+		if row.Relation == "exact" {
+			sawExact = true
+		}
+	}
+	if !sawExact {
+		t.Fatal("pressure uv plan lost the exact include-paths row")
+	}
+
+	resetCleanFlags()
+	cleanIncludePaths = true
+	aged := item
+	aged.ModTime = time.Now().Add(-200 * time.Hour)
+	defaultOpts := types.PruneOptions{Age: 7 * 24 * time.Hour}
+	defaultTargets := cleaner.Filter([]types.DebrisInfo{aged}, defaultOpts)
+	defaultAudit := buildCleanAudit([]types.DebrisInfo{aged}, defaultTargets, defaultOpts, 1, source, nil)
+	defaultDoc, err := buildCleanJSONPlan(
+		context.Background(),
+		&types.ScanResult{Worktrees: []types.DebrisInfo{aged}},
+		source,
+		defaultOpts,
+		nil,
+		defaultTargets,
+		nil,
+		defaultAudit,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantDefault := []string{"uv", "cache", "clean"}
+	for _, row := range defaultDoc.Rows {
+		if row.CleanupCommand == nil || !slices.Equal(*row.CleanupCommand, wantDefault) {
+			t.Fatalf("default row %s cleanup_command = %v; want %v", row.Relation, row.CleanupCommand, wantDefault)
+		}
+	}
+}
+
 func TestCleanJSONFlagFailuresArePathFree(t *testing.T) {
 	binary := buildCLIContractBinary(t)
 	home := t.TempDir()
