@@ -28,6 +28,17 @@ func TestPolicySeparatesClassicAndGuidedAge(t *testing.T) {
 	}
 }
 
+func TestPolicyEmitsRelaxCacheAgeOnlyWhenSet(t *testing.T) {
+	omitted := PolicyFor(types.PruneOptions{Age: 7 * 24 * time.Hour}, nil)
+	if omitted.RelaxCacheAge {
+		t.Fatal("relax_cache_age must be omitted/false on a normal 7d plan")
+	}
+	relaxed := PolicyFor(types.PruneOptions{Age: 7 * 24 * time.Hour, RelaxCacheAge: true}, nil)
+	if !relaxed.RelaxCacheAge {
+		t.Fatal("relax_cache_age must be true when cache age was relaxed")
+	}
+}
+
 func TestPolicyEmitsAgentStateGrace(t *testing.T) {
 	policy := PolicyFor(
 		types.PruneOptions{

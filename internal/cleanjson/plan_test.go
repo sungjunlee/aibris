@@ -685,6 +685,92 @@ func TestPlanRedactsPathsByDefaultAndOptsInExplicitFields(t *testing.T) {
 	}
 }
 
+func TestPlanExactUvRowUsesOwnerPressureArgv(t *testing.T) {
+	home := t.TempDir()
+	path := filepath.Join(home, ".cache", "uv")
+	if err := os.MkdirAll(path, 0755); err != nil {
+		t.Fatal(err)
+	}
+	force := []string{"uv", "cache", "clean", "--force"}
+	plain := []string{"uv", "cache", "clean"}
+	owner := types.DebrisInfo{
+		Tool:           types.ToolPipCache,
+		Category:       types.CategoryOtherCache,
+		ID:             "uv",
+		Path:           path,
+		Size:           1500,
+		CleanupKind:    types.CleanupCommand,
+		CleanupCommand: append([]string(nil), force...),
+	}
+	leftover := owner
+	leftover.ID = "uv-scan"
+	leftover.CleanupCommand = append([]string(nil), plain...)
+	canonical := mustPathKey(t, path)
+
+	document := mustBuild(t, Input{
+		Result:       &types.ScanResult{Worktrees: []types.DebrisInfo{owner, leftover}},
+		Source:       Source{Kind: SourceLive, ObservedAt: time.Now()},
+		Opts:         types.PruneOptions{Age: time.Hour, RelaxCacheAge: true},
+		IncludePaths: true,
+		Plan:         selectedPlan(owner, "volume_pressure"),
+		Audit: []AuditComponent{{
+			CanonicalPath: canonical, Owner: owner,
+			LogicalRows: []AuditRow{
+				{Item: owner, CanonicalPath: canonical, Relation: overlapOwner, PolicyDecision: PolicyEligible, ReasonCodes: []string{"volume_pressure"}},
+				{Item: leftover, CanonicalPath: canonical, Relation: overlapExact, PolicyDecision: PolicyEligible, ReasonCodes: []string{"volume_pressure"}},
+			},
+		}},
+		Inventory: []types.DebrisInfo{owner, leftover},
+	})
+	if document.Totals.Selected != 1 || document.Totals.PhysicalTargets != 1 {
+		t.Fatalf("physical = %+v; want one selected uv target", document.Totals)
+	}
+	var ownerRow, exactRow *Row
+	for i := range document.Rows {
+		switch document.Rows[i].Relation {
+		case RelationOwner:
+			ownerRow = &document.Rows[i]
+		case RelationExact:
+			exactRow = &document.Rows[i]
+		}
+	}
+	if ownerRow == nil || exactRow == nil {
+		t.Fatalf("rows = %+v; want owner and exact", document.Rows)
+	}
+	if ownerRow.CleanupCommand == nil || !slices.Equal(*ownerRow.CleanupCommand, force) {
+		t.Fatalf("owner argv = %v; want %v", ownerRow.CleanupCommand, force)
+	}
+	if exactRow.CleanupCommand == nil || !slices.Equal(*exactRow.CleanupCommand, force) {
+		t.Fatalf("exact argv = %v; want owner pressure argv %v", exactRow.CleanupCommand, force)
+	}
+
+	owner.CleanupCommand = append([]string(nil), plain...)
+	leftover.CleanupCommand = append([]string(nil), force...)
+	plainDoc := mustBuild(t, Input{
+		Result:       &types.ScanResult{Worktrees: []types.DebrisInfo{owner, leftover}},
+		Source:       Source{Kind: SourceLive, ObservedAt: time.Now()},
+		Opts:         types.PruneOptions{Age: time.Hour},
+		IncludePaths: true,
+		Plan:         selectedPlan(owner, "classic_eligible"),
+		Audit: []AuditComponent{{
+			CanonicalPath: canonical, Owner: owner,
+			LogicalRows: []AuditRow{
+				{Item: owner, CanonicalPath: canonical, Relation: overlapOwner},
+				{Item: leftover, CanonicalPath: canonical, Relation: overlapExact},
+			},
+		}},
+		Inventory: []types.DebrisInfo{owner, leftover},
+	})
+	for _, row := range plainDoc.Rows {
+		if row.Relation != RelationOwner && row.Relation != RelationExact {
+			continue
+		}
+		if row.CleanupCommand == nil || !slices.Equal(*row.CleanupCommand, plain) {
+			t.Fatalf("%s argv = %v; want default %v", row.Relation, row.CleanupCommand, plain)
+		}
+	}
+}
+
 func TestPlanEmitsEmptyArraysAndOnlyTargetBytes(t *testing.T) {
 	document := mustBuild(t, Input{
 		Result: &types.ScanResult{},

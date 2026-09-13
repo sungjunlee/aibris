@@ -83,6 +83,7 @@ type Policy struct {
 	Tools                  []string `json:"tools"`
 	Risky                  bool     `json:"risky"`
 	IncludeActiveWorktrees bool     `json:"include_active_worktrees"`
+	RelaxCacheAge          bool     `json:"relax_cache_age,omitempty"`
 }
 
 type Totals struct {
