@@ -12,8 +12,8 @@ import (
 )
 
 // Cache persist, aggregate, and index conversion for the Codex activity
-// index. Load/recommend entrypoints stay in codex_activity.go. Session-file
-// walkers stay in codex_activity_helpers.go.
+// index. Load/recommend entrypoints and session-file walkers stay in
+// codex_activity.go.
 
 type codexActivityCache struct {
 	SchemaVersion int                                `json:"schema_version"`

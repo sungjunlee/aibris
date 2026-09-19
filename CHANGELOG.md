@@ -29,6 +29,8 @@
 - Repository layout: `ROADMAP.md` and `SECURITY_AUDIT.md` live under `docs/`,
   black-box CLI/install/docs/Homebrew tests live in `test/`, and the empty
   `TODOS.md` file is gone.
+- Same-package `cmd` helper extracts were folded back into their parent files,
+  dropping the filename-pinning structure tests.
 - The aibris skill treats `scan --json` as the agent inventory and keeps
   `gh` / `git worktree list` / live cwd as follow-up checks. GitHub merge
   status must not promote local uniqueness to `recommended`.
