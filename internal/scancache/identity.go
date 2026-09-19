@@ -1,4 +1,4 @@
-package cmd
+package scancache
 
 import (
 	"errors"
@@ -9,9 +9,19 @@ import (
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
-type lastScanTargetEvidence struct {
+type TargetEvidence struct {
 	Identity string      `json:"identity"`
 	Type     os.FileMode `json:"type"`
+}
+
+type lastScanTargetEvidence = TargetEvidence
+
+func PathIdentity(path string) (os.FileInfo, string, error) {
+	return cleanupPathIdentity(path)
+}
+
+func CaptureEvidence(items []types.DebrisInfo) (map[string]TargetEvidence, error) {
+	return captureLastScanTargetEvidence(items)
 }
 
 func captureLastScanTargetEvidence(items []types.DebrisInfo) (map[string]lastScanTargetEvidence, error) {

@@ -83,10 +83,11 @@ registry를 함께 사용하고 `.git` metadata로 검증한다.
 ## 구조
 
 ```
-cmd/         → cobra commands (root, scan, clean)
+cmd/         → cobra commands (root, scan, clean) and CLI I/O
 internal/
   adapter/   → DebrisProvider 인터페이스 + codex, claude 등 구현
   scanner/   → Scan(): 전체 adapter 순회하며 수집
+  scancache/ → last-scan snapshot persistence and path identity
   cleaner/   → Filter(): 조건에 따라 필터, Execute() 삭제
   types/     → DebrisInfo, ScanResult, PruneOptions
 test/        → black-box CLI, install, docs, Homebrew script tests

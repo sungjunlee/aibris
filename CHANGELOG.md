@@ -31,6 +31,8 @@
   `TODOS.md` file is gone.
 - Same-package `cmd` helper extracts were folded back into their parent files,
   dropping the filename-pinning structure tests.
+- Last-scan snapshot persistence and path identity live in `internal/scancache`.
+  `cmd` keeps the CLI session (progress, reuse messages, live rescan).
 - The aibris skill treats `scan --json` as the agent inventory and keeps
   `gh` / `git worktree list` / live cwd as follow-up checks. GitHub merge
   status must not promote local uniqueness to `recommended`.

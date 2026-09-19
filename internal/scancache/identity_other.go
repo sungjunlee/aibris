@@ -1,6 +1,6 @@
 //go:build !unix && !windows
 
-package cmd
+package scancache
 
 import "fmt"
 

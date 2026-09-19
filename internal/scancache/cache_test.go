@@ -1,4 +1,4 @@
-package cmd
+package scancache
 
 import (
 	"bytes"
@@ -17,6 +17,19 @@ import (
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
+
+func chtimesTree(t *testing.T, root string, modTime time.Time) {
+	t.Helper()
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		return os.Chtimes(path, modTime, modTime)
+	})
+	if err != nil {
+		t.Fatalf("chtimesTree(%q): %v", root, err)
+	}
+}
 
 func TestSaveLastScanCacheAtomicReplacement(t *testing.T) {
 	home := t.TempDir()
@@ -409,55 +422,6 @@ func TestLastScanCacheIdentityMismatchReasons(t *testing.T) {
 	if reason := id.mismatchReason(cache); reason != "provider set changed" {
 		t.Fatalf("retention mismatch = %q", reason)
 	}
-}
-
-func TestLastScanSessionReusesMatchingIdentity(t *testing.T) {
-	_, workspace := seededReuseWorkspace(t)
-	roots := mustNormalizeRoots(t, workspace)
-	result, source, err := loadLastScanSession(context.Background(), roots, nil, "delete", true, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if source.Kind != scanSourceCached {
-		t.Fatalf("source = %q; want cached", source.Kind)
-	}
-	if result == nil {
-		t.Fatal("cached session returned nil result")
-	}
-}
-
-func TestLastScanSessionMismatchForcesLiveScan(t *testing.T) {
-	_, workspace := reuseScanFixture(t)
-	roots := mustNormalizeRoots(t, workspace)
-	foreign := adapter.Identity([]adapter.DebrisProvider{adapter.NewWorktreeAdapter()})
-	cache := validReuseCache(roots, "delete")
-	cache.ProviderIdentity = foreign
-	if err := saveLastScanCache(cache); err != nil {
-		t.Fatal(err)
-	}
-
-	result, source, err := loadLastScanSession(context.Background(), roots, nil, "delete", true, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if source.Kind != scanSourceLive {
-		t.Fatalf("source = %q; want live", source.Kind)
-	}
-	if result == nil {
-		t.Fatal("live session returned nil result")
-	}
-
-	stored, ok := readLastScanCache()
-	if !ok {
-		t.Fatal("live scan did not write last-scan.json")
-	}
-	if stored.SchemaVersion != lastScanCacheSchemaVersion {
-		t.Fatalf("schema_version = %d; want %d", stored.SchemaVersion, lastScanCacheSchemaVersion)
-	}
-	if reason := currentLastScanCacheIdentity(roots, true).mismatchReason(stored); reason != "" {
-		t.Fatalf("live scan wrote an identity the helper refuses: %s", reason)
-	}
-	assertOnlyLastScanCacheFile(t)
 }
 
 func TestReadLastScanCacheRejectsMalformedPayload(t *testing.T) {
