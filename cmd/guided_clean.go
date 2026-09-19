@@ -50,7 +50,7 @@ func buildGuidedCleanState(ctx context.Context, result *types.ScanResult, source
 		return guidedCleanState{}, err
 	}
 	activity := loadCodexActivityIndex(ctx)
-	if err := enrichWorktreeCleanupActivity(ctx, units, items, worktreeActivityOptions{index: &activity}); err != nil {
+	if err := enrichWorktreeCleanupActivity(ctx, units, items, worktreeActivityOptions{Index: &activity}); err != nil {
 		return guidedCleanState{}, err
 	}
 	return planGuidedCleanState(ctx, result, source, reason, activity, units, items, minIdleAge)

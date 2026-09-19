@@ -1,8 +1,10 @@
-package cmd
+package worktree
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -10,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/codexactivity"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -74,9 +77,9 @@ func TestEnrichWorktreeCleanupActivitySelectsMaximumTrustedSource(t *testing.T) 
 				ModTime:  tt.fallback,
 			}}
 
-			err := enrichWorktreeCleanupActivity(context.Background(), units, items, worktreeActivityOptions{
-				index:  &index,
-				runner: reflogRunner(map[string]time.Time{memberPath: tt.reflog}),
+			err := EnrichActivity(context.Background(), units, items, ActivityOptions{
+				Index:  &index,
+				Runner: reflogRunner(map[string]time.Time{memberPath: tt.reflog}),
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -111,11 +114,11 @@ func TestEnrichWorktreeCleanupActivityMakesCodexOutageExplicit(t *testing.T) {
 	units := []WorktreeCleanupUnit{{TargetPath: target, Source: ".codex", Members: []GitWorktreeMember{{WorktreePath: memberPath}}}}
 	items := []types.DebrisInfo{{Category: types.CategoryWorktree, Path: target, ModTime: now}}
 	indexErr := errors.New("fixture Codex index outage")
-	index := unavailableCodexActivityIndex(indexErr)
+	index := codexactivity.Unavailable(indexErr)
 
-	err := enrichWorktreeCleanupActivity(context.Background(), units, items, worktreeActivityOptions{
-		index:  &index,
-		runner: reflogRunner(map[string]time.Time{}),
+	err := EnrichActivity(context.Background(), units, items, ActivityOptions{
+		Index:  &index,
+		Runner: reflogRunner(map[string]time.Time{}),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -123,7 +126,7 @@ func TestEnrichWorktreeCleanupActivityMakesCodexOutageExplicit(t *testing.T) {
 
 	unit := units[0]
 	member := unit.Members[0]
-	if unit.RegisteredActivityAvailable || unit.RegisteredActivitySource != codexActivitySourceUnavailable || unit.RegisteredActivityError != indexErr.Error() {
+	if unit.RegisteredActivityAvailable || unit.RegisteredActivitySource != codexactivity.SourceUnavailable || unit.RegisteredActivityError != indexErr.Error() {
 		t.Errorf("unit Codex availability = (%t, %q, %q); want explicit outage", unit.RegisteredActivityAvailable, unit.RegisteredActivitySource, unit.RegisteredActivityError)
 	}
 	if member.RegisteredActivityAvailable || member.RegisteredActivityError != indexErr.Error() {
@@ -155,9 +158,9 @@ func TestEnrichWorktreeCleanupActivityReviewsToolWithoutRegisteredSource(t *test
 	items := []types.DebrisInfo{{Category: types.CategoryWorktree, Source: ".claude", Path: target, ModTime: now.Add(-2 * time.Hour)}}
 	index := availableActivityIndex("session", "project-a", now.Add(time.Hour))
 
-	err := enrichWorktreeCleanupActivity(context.Background(), units, items, worktreeActivityOptions{
-		index:  &index,
-		runner: reflogRunner(map[string]time.Time{memberPath: now.Add(-time.Hour)}),
+	err := EnrichActivity(context.Background(), units, items, ActivityOptions{
+		Index:  &index,
+		Runner: reflogRunner(map[string]time.Time{memberPath: now.Add(-time.Hour)}),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -222,9 +225,9 @@ func TestRecentActivityWindowAppliesWithoutRegisteredSource(t *testing.T) {
 	index := availableActivityIndex("session", "project-a", now)
 
 	// Reflog says the checkout was touched one minute ago.
-	err := enrichWorktreeCleanupActivity(context.Background(), units, items, worktreeActivityOptions{
-		index:  &index,
-		runner: reflogRunner(map[string]time.Time{memberPath: now.Add(-time.Minute)}),
+	err := EnrichActivity(context.Background(), units, items, ActivityOptions{
+		Index:  &index,
+		Runner: reflogRunner(map[string]time.Time{memberPath: now.Add(-time.Minute)}),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -263,9 +266,9 @@ func TestEnrichWorktreeCleanupActivityFallsBackToWorktreeSession(t *testing.T) {
 		ModTime:  base,
 	}}
 
-	err := enrichWorktreeCleanupActivity(context.Background(), units, items, worktreeActivityOptions{
-		index:  &index,
-		runner: reflogRunner(map[string]time.Time{}),
+	err := EnrichActivity(context.Background(), units, items, ActivityOptions{
+		Index:  &index,
+		Runner: reflogRunner(map[string]time.Time{}),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -295,12 +298,12 @@ func TestEnrichWorktreeCleanupActivityUsesNewestMemberDeterministically(t *testi
 			{WorktreePath: alpha},
 		},
 	}}
-	index := codexActivityIndex{Available: true, Source: codexActivitySourceCache}
+	index := codexactivity.Index{Available: true, Source: codexactivity.SourceCache}
 	items := []types.DebrisInfo{{Category: types.CategoryWorktree, Path: target, ModTime: base}}
 
-	err := enrichWorktreeCleanupActivity(context.Background(), units, items, worktreeActivityOptions{
-		index: &index,
-		runner: reflogRunner(map[string]time.Time{
+	err := EnrichActivity(context.Background(), units, items, ActivityOptions{
+		Index: &index,
+		Runner: reflogRunner(map[string]time.Time{
 			alpha: base.Add(4 * time.Hour),
 			zeta:  base.Add(4 * time.Hour),
 		}),
@@ -332,11 +335,11 @@ func TestEnrichWorktreeCleanupActivityUsesPerMemberScannerFallback(t *testing.T)
 		{Category: types.CategoryWorktree, Path: target, Project: "alpha", ModTime: base.Add(time.Hour)},
 		{Category: types.CategoryWorktree, Path: target, Project: "zeta", ModTime: base.Add(2 * time.Hour)},
 	}
-	index := codexActivityIndex{Available: true, Source: codexActivitySourceCache}
+	index := codexactivity.Index{Available: true, Source: codexactivity.SourceCache}
 
-	err := enrichWorktreeCleanupActivity(context.Background(), units, items, worktreeActivityOptions{
-		index:  &index,
-		runner: reflogRunner(map[string]time.Time{}),
+	err := EnrichActivity(context.Background(), units, items, ActivityOptions{
+		Index:  &index,
+		Runner: reflogRunner(map[string]time.Time{}),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -366,25 +369,25 @@ func TestEnrichWorktreeCleanupActivityReusesFreshCodexCache(t *testing.T) {
 	writeCodexSession(t, sessionPath, cachedTimestamp, memberPath, "cached-session", "DO-NOT-READ-old-body")
 	writeCodexSession(t, filepath.Join(sessionsDir, "other-project.jsonl"), now.Add(2*time.Hour), otherProjectPath, "other-session", "DO-NOT-READ-other-body")
 	items := []types.DebrisInfo{{Category: types.CategoryWorktree, Path: target, ModTime: now.Add(-3 * time.Hour)}}
-	options := worktreeActivityOptions{
-		indexOptions: codexActivityIndexOptions{now: now, cachePath: cachePath, sessionRoots: []string{sessionsDir}},
-		runner:       reflogRunner(map[string]time.Time{memberPath: now.Add(-2 * time.Hour)}),
+	options := ActivityOptions{
+		IndexOptions: codexactivity.IndexOptions{Now: now, CachePath: cachePath, SessionRoots: []string{sessionsDir}},
+		Runner:       reflogRunner(map[string]time.Time{memberPath: now.Add(-2 * time.Hour)}),
 	}
 	first := []WorktreeCleanupUnit{{TargetPath: target, Source: ".codex", Members: []GitWorktreeMember{{WorktreePath: memberPath}}}}
-	if err := enrichWorktreeCleanupActivity(context.Background(), first, items, options); err != nil {
+	if err := EnrichActivity(context.Background(), first, items, options); err != nil {
 		t.Fatal(err)
 	}
-	if first[0].RegisteredActivitySource != codexActivitySourceRefresh {
+	if first[0].RegisteredActivitySource != codexactivity.SourceRefresh {
 		t.Fatalf("first Codex source = %q; want refresh", first[0].RegisteredActivitySource)
 	}
 
 	writeCodexSession(t, sessionPath, now.Add(time.Hour), memberPath, "cached-session", "DO-NOT-READ-new-body")
-	options.indexOptions.now = now.Add(5 * time.Minute)
+	options.IndexOptions.Now = now.Add(5 * time.Minute)
 	second := []WorktreeCleanupUnit{{TargetPath: target, Source: ".codex", Members: []GitWorktreeMember{{WorktreePath: memberPath}}}}
-	if err := enrichWorktreeCleanupActivity(context.Background(), second, items, options); err != nil {
+	if err := EnrichActivity(context.Background(), second, items, options); err != nil {
 		t.Fatal(err)
 	}
-	if second[0].RegisteredActivitySource != codexActivitySourceCache {
+	if second[0].RegisteredActivitySource != codexactivity.SourceCache {
 		t.Errorf("second Codex source = %q; want cache", second[0].RegisteredActivitySource)
 	}
 	if got := second[0].Members[0].LastActivity; !got.Equal(cachedTimestamp) {
@@ -395,19 +398,19 @@ func TestEnrichWorktreeCleanupActivityReusesFreshCodexCache(t *testing.T) {
 func TestEnrichWorktreeCleanupActivityRespectsContextCancellation(t *testing.T) {
 	target := filepath.Join(t.TempDir(), "worktrees", "cancel")
 	units := []WorktreeCleanupUnit{{TargetPath: target, Source: ".codex", Members: []GitWorktreeMember{{WorktreePath: target}}}}
-	index := codexActivityIndex{Available: true, Source: codexActivitySourceCache}
+	index := codexactivity.Index{Available: true, Source: codexactivity.SourceCache}
 	ctx, cancel := context.WithCancel(context.Background())
 
-	err := enrichWorktreeCleanupActivity(ctx, units, nil, worktreeActivityOptions{
-		index: &index,
-		runner: func(commandCtx context.Context, _ string, _ ...string) ([]byte, error) {
+	err := EnrichActivity(ctx, units, nil, ActivityOptions{
+		Index: &index,
+		Runner: func(commandCtx context.Context, _ string, _ ...string) ([]byte, error) {
 			cancel()
 			<-commandCtx.Done()
 			return nil, commandCtx.Err()
 		},
 	})
 	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("enrichWorktreeCleanupActivity() error = %v; want context canceled", err)
+		t.Fatalf("EnrichActivity() error = %v; want context canceled", err)
 	}
 }
 
@@ -450,22 +453,22 @@ func TestBuildWorktreeCleanupUnitsWithActivityRejectsCanceledContext(t *testing.
 	}
 }
 
-func availableActivityIndex(worktreeID, project string, timestamp time.Time) codexActivityIndex {
-	activity := codexWorktreeActivity{
+func availableActivityIndex(worktreeID, project string, timestamp time.Time) codexactivity.Index {
+	activity := codexactivity.Worktree{
 		WorktreeID:    worktreeID,
 		Project:       project,
 		SessionCount:  1,
 		LatestSession: timestamp,
 	}
-	return codexActivityIndex{
+	return codexactivity.Index{
 		Available: true,
-		Source:    codexActivitySourceCache,
-		Worktrees: map[string]codexWorktreeActivity{worktreeID: activity},
-		Members:   map[string]codexWorktreeActivity{codexActivityMemberKey(worktreeID, project): activity},
+		Source:    codexactivity.SourceCache,
+		Worktrees: map[string]codexactivity.Worktree{worktreeID: activity},
+		Members:   map[string]codexactivity.Worktree{codexactivity.MemberKey(worktreeID, project): activity},
 	}
 }
 
-func reflogRunner(timestamps map[string]time.Time) worktreeGitCommandRunner {
+func reflogRunner(timestamps map[string]time.Time) GitCommandRunner {
 	return func(_ context.Context, dir string, _ ...string) ([]byte, error) {
 		timestamp, ok := timestamps[dir]
 		if !ok {
@@ -482,4 +485,27 @@ func activityEvidenceForSource(member GitWorktreeMember, source WorktreeActivity
 		}
 	}
 	return WorktreeActivityEvidence{Source: source}
+}
+
+func writeCodexSession(t *testing.T, path string, timestamp time.Time, cwd, sessionID, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	meta := map[string]any{
+		"timestamp": timestamp.Format(time.RFC3339Nano),
+		"type":      "session_meta",
+		"payload": map[string]any{
+			"cwd":        cwd,
+			"session_id": sessionID,
+		},
+	}
+	raw, err := json.Marshal(meta)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(raw) + "\n" + `{"type":"message","payload":{"text":"` + body + `"}}` + "\n"
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
 }

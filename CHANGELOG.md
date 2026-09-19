@@ -33,6 +33,10 @@
   dropping the filename-pinning structure tests.
 - Last-scan snapshot persistence and path identity live in `internal/scancache`.
   `cmd` keeps the CLI session (progress, reuse messages, live rescan).
+- Codex session-activity index and cache live in `internal/codexactivity`.
+  `cmd` keeps scan/guided recommendation display.
+- Worktree activity enrichment (Codex sessions + HEAD reflog + scanner
+  fallback) lives in `internal/worktree`.
 - Local APFS snapshot listing and `tmutil` thinning live in `internal/apfs`.
   `cmd` keeps flag conflicts, confirmation, and human reporting.
 - The aibris skill treats `scan --json` as the agent inventory and keeps

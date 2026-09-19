@@ -1,4 +1,4 @@
-package cmd
+package codexactivity
 
 import (
 	"context"
@@ -28,7 +28,7 @@ func TestCodexActivityRecommendationsProtectActiveWorktreesWhenIndexUnavailable(
 		Status:   types.WorktreeActive,
 	}
 
-	plan := recommendCodexActivityWorktrees([]types.DebrisInfo{item}, unavailableCodexActivityIndex(errCodexActivityUnavailable))
+	plan := Recommend([]types.DebrisInfo{item}, Unavailable(ErrUnavailable))
 
 	if len(plan.Recommendations) != 1 {
 		t.Fatalf("Recommendations = %d; want 1", len(plan.Recommendations))
@@ -37,51 +37,11 @@ func TestCodexActivityRecommendationsProtectActiveWorktreesWhenIndexUnavailable(
 	if !recommendation.Protected {
 		t.Fatal("active Codex worktree should be protected when activity is unavailable")
 	}
-	if recommendation.Reason != codexActivityProtectionUnavailable {
-		t.Fatalf("Reason = %q; want %q", recommendation.Reason, codexActivityProtectionUnavailable)
+	if recommendation.Reason != ProtectionUnavailable {
+		t.Fatalf("Reason = %q; want %q", recommendation.Reason, ProtectionUnavailable)
 	}
 	if plan.ProtectedCount != 1 || plan.ProtectedSize != item.Size {
 		t.Fatalf("protected summary = %d/%d; want 1/%d", plan.ProtectedCount, plan.ProtectedSize, item.Size)
-	}
-}
-
-func TestPrintHumanScanResultReportsActivityUnavailableProtection(t *testing.T) {
-	home := t.TempDir()
-	testutil.SetHome(t, home)
-	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
-	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
-	result := &types.ScanResult{
-		Worktrees: []types.DebrisInfo{
-			{
-				Tool:     types.ToolCodex,
-				Category: types.CategoryWorktree,
-				ID:       "wt-1",
-				Project:  "project-a",
-				Source:   ".codex",
-				Path:     filepath.Join(home, ".codex", "worktrees", "wt-1"),
-				Size:     512 * 1024 * 1024,
-				ModTime:  now.Add(-48 * time.Hour),
-				Status:   types.WorktreeActive,
-			},
-		},
-		TotalCount: 1,
-		TotalSize:  512 * 1024 * 1024,
-		ByCategory: map[types.Category]types.CategorySummary{
-			types.CategoryWorktree: {Count: 1, Size: 512 * 1024 * 1024},
-		},
-		ByTool: map[types.Tool]types.ToolSummary{
-			types.ToolCodex: {Count: 1, Size: 512 * 1024 * 1024},
-		},
-	}
-
-	output := captureOutput(func() {
-		printHumanScanResult(context.Background(), result)
-	})
-
-	for _, want := range []string{"codex activity", "unavailable", "1 active Codex worktree protected"} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("output missing %q; got: %s", want, output)
-		}
 	}
 }
 
@@ -99,10 +59,10 @@ func TestLoadCodexActivityIndexBuildsMetadataOnlyAggregates(t *testing.T) {
 	writeCodexSession(t, filepath.Join(sessionsDir, "two.jsonl"), latest, filepath.Join(home, ".codex", "worktrees", "wt-1", "project-a", "subdir"), "session-2", "DO-NOT-STORE-body-two")
 	writeCodexSession(t, filepath.Join(sessionsDir, "three.jsonl"), latest.Add(-time.Hour), filepath.Join(home, ".codex", "worktrees", "wt-2", "project-a"), "session-3", "DO-NOT-STORE-body-three")
 
-	index := loadCodexActivityIndexWithOptions(context.Background(), codexActivityIndexOptions{
-		now:          latest.Add(time.Minute),
-		cachePath:    cachePath,
-		sessionRoots: []string{filepath.Join(home, ".codex", "sessions")},
+	index := LoadWithOptions(context.Background(), IndexOptions{
+		Now:          latest.Add(time.Minute),
+		CachePath:    cachePath,
+		SessionRoots: []string{filepath.Join(home, ".codex", "sessions")},
 	})
 
 	if !index.Available {
@@ -152,10 +112,10 @@ func TestLoadCodexActivityIndexReusesFreshCache(t *testing.T) {
 	sessionPath := filepath.Join(sessionsDir, "session.jsonl")
 	writeCodexSession(t, sessionPath, now.Add(-time.Hour), filepath.Join(home, ".codex", "worktrees", "wt-1", "project-a"), "session-1", "old-body")
 
-	first := loadCodexActivityIndexWithOptions(context.Background(), codexActivityIndexOptions{
-		now:          now,
-		cachePath:    cachePath,
-		sessionRoots: []string{sessionsDir},
+	first := LoadWithOptions(context.Background(), IndexOptions{
+		Now:          now,
+		CachePath:    cachePath,
+		SessionRoots: []string{sessionsDir},
 	})
 	if !first.Available {
 		t.Fatalf("first index unavailable: %v", first.Err)
@@ -163,10 +123,10 @@ func TestLoadCodexActivityIndexReusesFreshCache(t *testing.T) {
 
 	newTimestamp := now.Add(time.Hour)
 	writeCodexSession(t, sessionPath, newTimestamp, filepath.Join(home, ".codex", "worktrees", "wt-1", "project-a"), "session-1", "new-body")
-	fresh := loadCodexActivityIndexWithOptions(context.Background(), codexActivityIndexOptions{
-		now:          now.Add(5 * time.Minute),
-		cachePath:    cachePath,
-		sessionRoots: []string{sessionsDir},
+	fresh := LoadWithOptions(context.Background(), IndexOptions{
+		Now:          now.Add(5 * time.Minute),
+		CachePath:    cachePath,
+		SessionRoots: []string{sessionsDir},
 	})
 
 	if !fresh.Available {
@@ -177,8 +137,8 @@ func TestLoadCodexActivityIndexReusesFreshCache(t *testing.T) {
 	if !got.Equal(want) {
 		t.Errorf("fresh cache LatestSession = %s; want cached %s", got, want)
 	}
-	if fresh.Source != codexActivitySourceCache {
-		t.Errorf("fresh Source = %q; want %q", fresh.Source, codexActivitySourceCache)
+	if fresh.Source != SourceCache {
+		t.Errorf("fresh Source = %q; want %q", fresh.Source, SourceCache)
 	}
 }
 
@@ -198,10 +158,10 @@ func TestLoadCodexActivityIndexStaleRefreshesIncrementally(t *testing.T) {
 	writeCodexSession(t, changedPath, now.Add(-3*time.Hour), filepath.Join(home, ".codex", "worktrees", "wt-changed", "project-a"), "changed", "changed-body")
 	writeCodexSession(t, removedPath, now.Add(-2*time.Hour), filepath.Join(home, ".codex", "worktrees", "wt-removed", "project-a"), "removed", "removed-body")
 
-	first := loadCodexActivityIndexWithOptions(context.Background(), codexActivityIndexOptions{
-		now:          now,
-		cachePath:    cachePath,
-		sessionRoots: []string{sessionsDir},
+	first := LoadWithOptions(context.Background(), IndexOptions{
+		Now:          now,
+		CachePath:    cachePath,
+		SessionRoots: []string{sessionsDir},
 	})
 	if !first.Available {
 		t.Fatalf("first index unavailable: %v", first.Err)
@@ -230,10 +190,10 @@ func TestLoadCodexActivityIndexStaleRefreshesIncrementally(t *testing.T) {
 	}
 	writeCodexSession(t, filepath.Join(sessionsDir, "new.jsonl"), now.Add(2*time.Hour), filepath.Join(home, ".codex", "worktrees", "wt-new", "project-b"), "new", "new-body")
 
-	refreshed := loadCodexActivityIndexWithOptions(context.Background(), codexActivityIndexOptions{
-		now:          now.Add(codexActivityFreshness + time.Minute),
-		cachePath:    cachePath,
-		sessionRoots: []string{sessionsDir},
+	refreshed := LoadWithOptions(context.Background(), IndexOptions{
+		Now:          now.Add(Freshness + time.Minute),
+		CachePath:    cachePath,
+		SessionRoots: []string{sessionsDir},
 	})
 	if !refreshed.Available {
 		t.Fatalf("refreshed index unavailable: %v", refreshed.Err)
@@ -250,8 +210,8 @@ func TestLoadCodexActivityIndexStaleRefreshesIncrementally(t *testing.T) {
 	if _, ok := refreshed.Worktrees["wt-new"]; !ok {
 		t.Error("new session file activity should be added")
 	}
-	if refreshed.Source != codexActivitySourceRefresh {
-		t.Errorf("refreshed Source = %q; want %q", refreshed.Source, codexActivitySourceRefresh)
+	if refreshed.Source != SourceRefresh {
+		t.Errorf("refreshed Source = %q; want %q", refreshed.Source, SourceRefresh)
 	}
 }
 
@@ -259,10 +219,10 @@ func TestLoadCodexActivityIndexUnavailableForMissingOrInvalidCache(t *testing.T)
 	home := t.TempDir()
 	cachePath := filepath.Join(home, "cache", "codex-activity.json")
 
-	missing := loadCodexActivityIndexWithOptions(context.Background(), codexActivityIndexOptions{
-		now:          time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC),
-		cachePath:    cachePath,
-		sessionRoots: []string{filepath.Join(home, ".codex", "sessions")},
+	missing := LoadWithOptions(context.Background(), IndexOptions{
+		Now:          time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC),
+		CachePath:    cachePath,
+		SessionRoots: []string{filepath.Join(home, ".codex", "sessions")},
 	})
 	if missing.Available {
 		t.Fatal("missing session metadata should produce unavailable activity index")
@@ -277,10 +237,10 @@ func TestLoadCodexActivityIndexUnavailableForMissingOrInvalidCache(t *testing.T)
 	if err := os.WriteFile(cachePath, []byte("{invalid"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	invalid := loadCodexActivityIndexWithOptions(context.Background(), codexActivityIndexOptions{
-		now:          time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC),
-		cachePath:    cachePath,
-		sessionRoots: []string{filepath.Join(home, ".codex", "sessions")},
+	invalid := LoadWithOptions(context.Background(), IndexOptions{
+		Now:          time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC),
+		CachePath:    cachePath,
+		SessionRoots: []string{filepath.Join(home, ".codex", "sessions")},
 	})
 	if invalid.Available {
 		t.Fatal("invalid cache without rebuildable sessions should produce unavailable activity index")
@@ -294,7 +254,7 @@ func TestDefaultCodexSessionRootsDefaultToHomeCodex(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 
-	roots, err := defaultCodexSessionRoots()
+	roots, err := DefaultSessionRoots()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -312,7 +272,7 @@ func TestDefaultCodexSessionRootsHonorCodexHomeEnv(t *testing.T) {
 	codexHome := filepath.Join(t.TempDir(), "codex-runtime-home")
 	t.Setenv("CODEX_HOME", codexHome)
 
-	roots, err := defaultCodexSessionRoots()
+	roots, err := DefaultSessionRoots()
 	if err != nil {
 		t.Fatal(err)
 	}

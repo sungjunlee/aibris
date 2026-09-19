@@ -1,4 +1,4 @@
-package cmd
+package codexactivity
 
 import (
 	"context"
@@ -12,18 +12,17 @@ import (
 )
 
 // Cache persist, aggregate, and index conversion for the Codex activity
-// index. Load/recommend entrypoints and session-file walkers stay in
-// codex_activity.go.
+// index. Load/recommend entrypoints and session-file walkers stay in index.go.
 
-type codexActivityCache struct {
-	SchemaVersion int                                `json:"schema_version"`
-	CreatedAt     time.Time                          `json:"created_at"`
-	Files         map[string]codexActivityFileRecord `json:"files"`
-	Worktrees     map[string]codexWorktreeActivity   `json:"worktrees"`
-	Projects      map[string]codexProjectActivity    `json:"projects"`
+type Cache struct {
+	SchemaVersion int                   `json:"schema_version"`
+	CreatedAt     time.Time             `json:"created_at"`
+	Files         map[string]FileRecord `json:"files"`
+	Worktrees     map[string]Worktree   `json:"worktrees"`
+	Projects      map[string]Project    `json:"projects"`
 }
 
-type codexActivityFileRecord struct {
+type FileRecord struct {
 	Path       string    `json:"path"`
 	ModTime    time.Time `json:"mod_time"`
 	Size       int64     `json:"size"`
@@ -33,7 +32,7 @@ type codexActivityFileRecord struct {
 	Timestamp  time.Time `json:"timestamp"`
 }
 
-func codexActivityCachePath() (string, error) {
+func CachePath() (string, error) {
 	dir, err := os.UserCacheDir()
 	if err != nil {
 		return "", err
@@ -41,31 +40,31 @@ func codexActivityCachePath() (string, error) {
 	return filepath.Join(dir, "aibris", "codex-activity.json"), nil
 }
 
-func readCodexActivityCache(path string) (codexActivityCache, bool, error) {
+func Read(path string) (Cache, bool, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return codexActivityCache{}, false, nil
+			return Cache{}, false, nil
 		}
-		return codexActivityCache{}, false, err
+		return Cache{}, false, err
 	}
-	var cache codexActivityCache
+	var cache Cache
 	if err := json.Unmarshal(data, &cache); err != nil {
-		return codexActivityCache{}, false, err
+		return Cache{}, false, err
 	}
-	if cache.SchemaVersion != codexActivityCacheSchemaVersion {
-		return codexActivityCache{}, false, fmt.Errorf("unsupported codex activity schema version %d", cache.SchemaVersion)
+	if cache.SchemaVersion != CacheSchemaVersion {
+		return Cache{}, false, fmt.Errorf("unsupported codex activity schema version %d", cache.SchemaVersion)
 	}
 	if cache.CreatedAt.IsZero() {
-		return codexActivityCache{}, false, errors.New("codex activity cache missing created_at")
+		return Cache{}, false, errors.New("codex activity cache missing created_at")
 	}
 	if cache.Files == nil {
-		cache.Files = make(map[string]codexActivityFileRecord)
+		cache.Files = make(map[string]FileRecord)
 	}
 	return cache, true, nil
 }
 
-func saveCodexActivityCache(path string, cache codexActivityCache) error {
+func Save(path string, cache Cache) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}
@@ -76,16 +75,16 @@ func saveCodexActivityCache(path string, cache codexActivityCache) error {
 	return os.WriteFile(path, data, 0644)
 }
 
-func refreshCodexActivityCache(ctx context.Context, opts codexActivityIndexOptions, previous codexActivityCache, previousOK bool) (codexActivityCache, error) {
-	files, err := findCodexSessionFiles(ctx, opts.sessionRoots)
+func Refresh(ctx context.Context, opts IndexOptions, previous Cache, previousOK bool) (Cache, error) {
+	files, err := findSessionFiles(ctx, opts.SessionRoots)
 	if err != nil {
-		return codexActivityCache{}, fmt.Errorf("%w: %v", errCodexActivityUnavailable, err)
+		return Cache{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}
 
-	records := make(map[string]codexActivityFileRecord, len(files))
+	records := make(map[string]FileRecord, len(files))
 	for _, file := range files {
 		if err := ctx.Err(); err != nil {
-			return codexActivityCache{}, err
+			return Cache{}, err
 		}
 		if previousOK {
 			if cached, ok := previous.Files[file.path]; ok && cached.ModTime.Equal(file.modTime) && cached.Size == file.size {
@@ -94,32 +93,32 @@ func refreshCodexActivityCache(ctx context.Context, opts codexActivityIndexOptio
 				continue
 			}
 		}
-		record, err := readCodexSessionFileRecord(file)
+		record, err := readSessionFileRecord(file)
 		if err != nil {
-			return codexActivityCache{}, fmt.Errorf("%w: %v", errCodexActivityUnavailable, err)
+			return Cache{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
 		}
 		records[file.path] = record
 	}
 
-	cache := codexActivityCache{
-		SchemaVersion: codexActivityCacheSchemaVersion,
-		CreatedAt:     opts.now,
+	cache := Cache{
+		SchemaVersion: CacheSchemaVersion,
+		CreatedAt:     opts.Now,
 		Files:         records,
 	}
 	cache.rebuildAggregates()
 	return cache, nil
 }
 
-func (c *codexActivityCache) rebuildAggregates() {
+func (c *Cache) rebuildAggregates() {
 	if c.Files == nil {
-		c.Files = make(map[string]codexActivityFileRecord)
+		c.Files = make(map[string]FileRecord)
 	}
-	c.Worktrees, c.Projects = aggregateCodexActivity(c.Files)
+	c.Worktrees, c.Projects = aggregate(c.Files)
 }
 
-func aggregateCodexActivity(files map[string]codexActivityFileRecord) (map[string]codexWorktreeActivity, map[string]codexProjectActivity) {
-	worktrees := make(map[string]codexWorktreeActivity)
-	projects := make(map[string]codexProjectActivity)
+func aggregate(files map[string]FileRecord) (map[string]Worktree, map[string]Project) {
+	worktrees := make(map[string]Worktree)
+	projects := make(map[string]Project)
 	paths := make([]string, 0, len(files))
 	for path := range files {
 		paths = append(paths, path)
@@ -154,42 +153,42 @@ func aggregateCodexActivity(files map[string]codexActivityFileRecord) (map[strin
 	return worktrees, projects
 }
 
-func indexFromCodexActivityCache(cache codexActivityCache, age time.Duration, source string, err error) codexActivityIndex {
+func indexFromCache(cache Cache, age time.Duration, source string, err error) Index {
 	cache.rebuildAggregates()
-	index := codexActivityIndex{
+	index := Index{
 		Available: len(cache.Worktrees) > 0,
 		Source:    source,
 		Age:       age,
 		Worktrees: cache.Worktrees,
-		Members:   aggregateCodexMemberActivity(cache.Files),
+		Members:   aggregateMembers(cache.Files),
 		Projects:  cache.Projects,
 		Err:       err,
 	}
 	if !index.Available && index.Err == nil {
-		index.Err = fmt.Errorf("%w: no indexed session metadata", errCodexActivityUnavailable)
+		index.Err = fmt.Errorf("%w: no indexed session metadata", ErrUnavailable)
 	}
 	if !index.Available {
-		index.Source = codexActivitySourceUnavailable
+		index.Source = SourceUnavailable
 	}
 	return index
 }
 
-func unavailableCodexActivityIndex(err error) codexActivityIndex {
+func Unavailable(err error) Index {
 	if err == nil {
-		err = errCodexActivityUnavailable
+		err = ErrUnavailable
 	}
-	return codexActivityIndex{
+	return Index{
 		Available: false,
-		Source:    codexActivitySourceUnavailable,
-		Worktrees: make(map[string]codexWorktreeActivity),
-		Members:   make(map[string]codexWorktreeActivity),
-		Projects:  make(map[string]codexProjectActivity),
+		Source:    SourceUnavailable,
+		Worktrees: make(map[string]Worktree),
+		Members:   make(map[string]Worktree),
+		Projects:  make(map[string]Project),
 		Err:       err,
 	}
 }
 
-func aggregateCodexMemberActivity(files map[string]codexActivityFileRecord) map[string]codexWorktreeActivity {
-	members := make(map[string]codexWorktreeActivity)
+func aggregateMembers(files map[string]FileRecord) map[string]Worktree {
+	members := make(map[string]Worktree)
 	paths := make([]string, 0, len(files))
 	for path := range files {
 		paths = append(paths, path)
@@ -201,7 +200,7 @@ func aggregateCodexMemberActivity(files map[string]codexActivityFileRecord) map[
 		if !record.Valid || record.WorktreeID == "" || record.Project == "" || record.Timestamp.IsZero() {
 			continue
 		}
-		key := codexActivityMemberKey(record.WorktreeID, record.Project)
+		key := MemberKey(record.WorktreeID, record.Project)
 		activity := members[key]
 		activity.WorktreeID = record.WorktreeID
 		activity.Project = record.Project
@@ -214,6 +213,6 @@ func aggregateCodexMemberActivity(files map[string]codexActivityFileRecord) map[
 	return members
 }
 
-func codexActivityMemberKey(worktreeID, project string) string {
+func MemberKey(worktreeID, project string) string {
 	return worktreeID + "\x00" + project
 }
