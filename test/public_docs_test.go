@@ -1,4 +1,4 @@
-package main
+package test
 
 import (
 	"net/url"
@@ -18,10 +18,10 @@ func TestPublicDocumentationLocalLinks(t *testing.T) {
 		"README.md",
 		filepath.Join("docs", "WINDOWS.md"),
 		"SECURITY.md",
-		"SECURITY_AUDIT.md",
+		filepath.Join("docs", "SECURITY_AUDIT.md"),
 		"CONTRIBUTING.md",
 		"CODE_OF_CONDUCT.md",
-		"ROADMAP.md",
+		filepath.Join("docs", "ROADMAP.md"),
 	}
 	templates, err := filepath.Glob(filepath.Join(".github", "ISSUE_TEMPLATE", "*.md"))
 	if err != nil {
@@ -292,7 +292,7 @@ func TestHomebrewReleaseContract(t *testing.T) {
 }
 
 func TestHomebrewSecurityAuditContract(t *testing.T) {
-	audit := readRepoFile(t, "SECURITY_AUDIT.md")
+	audit := readRepoFile(t, filepath.Join("docs", "SECURITY_AUDIT.md"))
 	for _, required := range []string{
 		"sungjunlee/tap",
 		"https://github.com/sungjunlee/homebrew-tap",
@@ -301,14 +301,14 @@ func TestHomebrewSecurityAuditContract(t *testing.T) {
 		"checksums.txt",
 	} {
 		if !strings.Contains(audit, required) {
-			t.Errorf("SECURITY_AUDIT.md Homebrew contract is missing %q", required)
+			t.Errorf("docs/SECURITY_AUDIT.md Homebrew contract is missing %q", required)
 		}
 	}
 	if strings.Contains(audit, "Homebrew installation is documented as pending") {
-		t.Error("SECURITY_AUDIT.md must not still describe Homebrew as pending")
+		t.Error("docs/SECURITY_AUDIT.md must not still describe Homebrew as pending")
 	}
 	if strings.Contains(audit, "Homebrew verifies") {
-		t.Error("SECURITY_AUDIT.md must not claim Homebrew verifies the binary")
+		t.Error("docs/SECURITY_AUDIT.md must not claim Homebrew verifies the binary")
 	}
 }
 
@@ -507,7 +507,7 @@ func TestPublicDocumentationCommunityAndRoadmapContracts(t *testing.T) {
 		t.Error("issue template config links to disabled GitHub Discussions")
 	}
 
-	roadmap, err := os.ReadFile("ROADMAP.md")
+	roadmap, err := os.ReadFile(filepath.Join("docs", "ROADMAP.md"))
 	if err != nil {
 		t.Fatal(err)
 	}

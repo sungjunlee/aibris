@@ -391,7 +391,7 @@ implementing the `DebrisProvider` interface.
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md). The project intentionally remains in the 0.x
+See [ROADMAP.md](docs/ROADMAP.md). The project intentionally remains in the 0.x
 series until the maintainer is satisfied; milestones are capability gates, not
 promised release dates or an implied v1.0.0 schedule.
 

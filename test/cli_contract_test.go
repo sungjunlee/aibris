@@ -1,4 +1,4 @@
-package main
+package test
 
 import (
 	"bufio"
@@ -10,38 +10,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/testutil"
 )
-
-var cliContractBinary string
-
-func TestMain(m *testing.M) {
-	buildDir, err := os.MkdirTemp("", "aibris-cli-contract-")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "create CLI contract build directory: %v\n", err)
-		os.Exit(1)
-	}
-	binaryName := "aibris"
-	if runtime.GOOS == "windows" {
-		binaryName += ".exe"
-	}
-	cliContractBinary = filepath.Join(buildDir, binaryName)
-	build := exec.Command("go", "build", "-o", cliContractBinary, ".")
-	if output, err := build.CombinedOutput(); err != nil {
-		fmt.Fprintf(os.Stderr, "build CLI contract binary: %v\n%s", err, output)
-		_ = os.RemoveAll(buildDir)
-		os.Exit(1)
-	}
-
-	code := m.Run()
-	_ = os.RemoveAll(buildDir)
-	os.Exit(code)
-}
 
 type cliContractResult struct {
 	Stdout   string

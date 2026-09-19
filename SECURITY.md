@@ -23,7 +23,7 @@ aibris is a local disk cleanup tool. Its primary security concerns are:
 2. **Path boundaries** — Cleanup targets come from known locations under `$HOME`; arbitrary user-provided paths are not accepted.
 3. **Symlink handling** — Safety checks resolve symlinks when possible before deletion.
 
-See [SECURITY_AUDIT.md](SECURITY_AUDIT.md) for the current safety model,
+See [SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md) for the current safety model,
 destructive-operation boundaries, known limitations, and release integrity
 signals.
 

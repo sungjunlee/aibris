@@ -522,6 +522,7 @@ internal/
   scanner/    -> bounded-parallel provider orchestration and aggregation
   cleaner/    -> filtering, dry-run output, safe deletion
   types/      -> shared data model
+test/         -> black-box CLI, install, docs, and Homebrew script tests
 skills/
   aibris/     -> AI-guided cleanup workflow
 ```

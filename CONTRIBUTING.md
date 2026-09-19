@@ -30,6 +30,7 @@ internal/
   scanner/   → Scan(): iterates all adapters, collects results
   cleaner/   → Filter(): applies category-specific eligibility and selectors, Execute()
   types/     → DebrisInfo, ScanResult, PruneOptions
+test/        → black-box CLI, install, docs, and Homebrew script tests
 ```
 
 ## Adding a New Adapter
