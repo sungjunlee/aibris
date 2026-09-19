@@ -1,13 +1,13 @@
 //go:build !darwin
 
-package cmd
+package apfs
 
 import "fmt"
 
-func apfsListLocalSnapshots() (int, error) {
+func List() (int, error) {
 	return 0, fmt.Errorf("APFS snapshot thinning is only available on macOS")
 }
 
-func apfsThinLocalSnapshots() error {
+func Thin() error {
 	return fmt.Errorf("APFS snapshot thinning is only available on macOS")
 }

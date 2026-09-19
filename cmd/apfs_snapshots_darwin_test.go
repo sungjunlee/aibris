@@ -8,18 +8,19 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sungjunlee/aibris/internal/apfs"
 	"github.com/sungjunlee/aibris/internal/volume"
 )
 
 func TestRunAPFSSnapshotActionDryRunDoesNotThin(t *testing.T) {
 	thinned := false
 	lists := 0
-	origLook, origRun := lookPath, runTMUtil
+	origLook, origRun := apfs.LookPath, apfs.RunTMUtil
 	t.Cleanup(func() {
-		lookPath, runTMUtil = origLook, origRun
+		apfs.LookPath, apfs.RunTMUtil = origLook, origRun
 	})
-	lookPath = func(string) (string, error) { return "/usr/bin/tmutil", nil }
-	runTMUtil = func(args ...string) ([]byte, error) {
+	apfs.LookPath = func(string) (string, error) { return "/usr/bin/tmutil", nil }
+	apfs.RunTMUtil = func(args ...string) ([]byte, error) {
 		if len(args) > 0 && args[0] == "thinlocalsnapshots" {
 			thinned = true
 		}
@@ -55,12 +56,12 @@ func TestRunAPFSSnapshotActionDryRunDoesNotThin(t *testing.T) {
 
 func TestRunAPFSSnapshotActionSuccessOmitsTimestamps(t *testing.T) {
 	thinned := 0
-	origLook, origRun, origInspect := lookPath, runTMUtil, inspectHomeCapacityFn
+	origLook, origRun, origInspect := apfs.LookPath, apfs.RunTMUtil, inspectHomeCapacityFn
 	t.Cleanup(func() {
-		lookPath, runTMUtil, inspectHomeCapacityFn = origLook, origRun, origInspect
+		apfs.LookPath, apfs.RunTMUtil, inspectHomeCapacityFn = origLook, origRun, origInspect
 	})
-	lookPath = func(string) (string, error) { return "/usr/bin/tmutil", nil }
-	runTMUtil = func(args ...string) ([]byte, error) {
+	apfs.LookPath = func(string) (string, error) { return "/usr/bin/tmutil", nil }
+	apfs.RunTMUtil = func(args ...string) ([]byte, error) {
 		if len(args) > 0 && args[0] == "thinlocalsnapshots" {
 			thinned++
 			return nil, nil
@@ -100,12 +101,12 @@ func TestRunAPFSSnapshotActionSuccessOmitsTimestamps(t *testing.T) {
 }
 
 func TestRunAPFSSnapshotActionVolumeReadFailureKeepsRemaining(t *testing.T) {
-	origLook, origRun, origInspect := lookPath, runTMUtil, inspectHomeCapacityFn
+	origLook, origRun, origInspect := apfs.LookPath, apfs.RunTMUtil, inspectHomeCapacityFn
 	t.Cleanup(func() {
-		lookPath, runTMUtil, inspectHomeCapacityFn = origLook, origRun, origInspect
+		apfs.LookPath, apfs.RunTMUtil, inspectHomeCapacityFn = origLook, origRun, origInspect
 	})
-	lookPath = func(string) (string, error) { return "/usr/bin/tmutil", nil }
-	runTMUtil = func(args ...string) ([]byte, error) {
+	apfs.LookPath = func(string) (string, error) { return "/usr/bin/tmutil", nil }
+	apfs.RunTMUtil = func(args ...string) ([]byte, error) {
 		if len(args) > 0 && args[0] == "thinlocalsnapshots" {
 			return nil, nil
 		}
@@ -134,13 +135,13 @@ func TestRunAPFSSnapshotActionVolumeReadFailureKeepsRemaining(t *testing.T) {
 }
 
 func TestRunAPFSSnapshotActionRemainingListFailureRedactsSnapshots(t *testing.T) {
-	origLook, origRun, origInspect := lookPath, runTMUtil, inspectHomeCapacityFn
+	origLook, origRun, origInspect := apfs.LookPath, apfs.RunTMUtil, inspectHomeCapacityFn
 	t.Cleanup(func() {
-		lookPath, runTMUtil, inspectHomeCapacityFn = origLook, origRun, origInspect
+		apfs.LookPath, apfs.RunTMUtil, inspectHomeCapacityFn = origLook, origRun, origInspect
 	})
-	lookPath = func(string) (string, error) { return "/usr/bin/tmutil", nil }
+	apfs.LookPath = func(string) (string, error) { return "/usr/bin/tmutil", nil }
 	lists := 0
-	runTMUtil = func(args ...string) ([]byte, error) {
+	apfs.RunTMUtil = func(args ...string) ([]byte, error) {
 		if len(args) > 0 && args[0] == "thinlocalsnapshots" {
 			return nil, nil
 		}
@@ -179,12 +180,12 @@ func TestRunAPFSSnapshotActionRemainingListFailureRedactsSnapshots(t *testing.T)
 }
 
 func TestRunAPFSSnapshotActionReportsTMUtilFailure(t *testing.T) {
-	origLook, origRun := lookPath, runTMUtil
+	origLook, origRun := apfs.LookPath, apfs.RunTMUtil
 	t.Cleanup(func() {
-		lookPath, runTMUtil = origLook, origRun
+		apfs.LookPath, apfs.RunTMUtil = origLook, origRun
 	})
-	lookPath = func(string) (string, error) { return "/usr/bin/tmutil", nil }
-	runTMUtil = func(args ...string) ([]byte, error) {
+	apfs.LookPath = func(string) (string, error) { return "/usr/bin/tmutil", nil }
+	apfs.RunTMUtil = func(args ...string) ([]byte, error) {
 		if len(args) > 0 && args[0] == "thinlocalsnapshots" {
 			return []byte("failed"), errors.New("tmutil failed")
 		}
@@ -196,18 +197,18 @@ func TestRunAPFSSnapshotActionReportsTMUtilFailure(t *testing.T) {
 }
 
 func TestRunAPFSSnapshotActionForceRepeatsUntilRemainingZeroViaTMUtil(t *testing.T) {
-	if apfsSnapshotPurgeBytes != 20*1024*1024*1024 || apfsSnapshotUrgency != "4" {
-		t.Fatalf("bounded request changed: bytes=%d urgency=%q", apfsSnapshotPurgeBytes, apfsSnapshotUrgency)
+	if apfs.PurgeBytes != 20*1024*1024*1024 || apfs.Urgency != "4" {
+		t.Fatalf("bounded request changed: bytes=%d urgency=%q", apfs.PurgeBytes, apfs.Urgency)
 	}
 	thinned := 0
-	origLook, origRun, origInspect := lookPath, runTMUtil, inspectHomeCapacityFn
+	origLook, origRun, origInspect := apfs.LookPath, apfs.RunTMUtil, inspectHomeCapacityFn
 	t.Cleanup(func() {
-		lookPath, runTMUtil, inspectHomeCapacityFn = origLook, origRun, origInspect
+		apfs.LookPath, apfs.RunTMUtil, inspectHomeCapacityFn = origLook, origRun, origInspect
 	})
-	lookPath = func(string) (string, error) { return "/usr/bin/tmutil", nil }
-	runTMUtil = func(args ...string) ([]byte, error) {
+	apfs.LookPath = func(string) (string, error) { return "/usr/bin/tmutil", nil }
+	apfs.RunTMUtil = func(args ...string) ([]byte, error) {
 		if len(args) > 0 && args[0] == "thinlocalsnapshots" {
-			want := []string{"thinlocalsnapshots", "/", fmt.Sprintf("%d", apfsSnapshotPurgeBytes), apfsSnapshotUrgency}
+			want := []string{"thinlocalsnapshots", "/", fmt.Sprintf("%d", apfs.PurgeBytes), apfs.Urgency}
 			if len(args) != len(want) {
 				t.Fatalf("thin args = %v; want %v", args, want)
 			}

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sungjunlee/aibris/internal/apfs"
 	"github.com/sungjunlee/aibris/internal/volume"
 )
 
@@ -96,8 +97,8 @@ func TestRunAPFSSnapshotActionDryRunListsOnceWithoutThinning(t *testing.T) {
 }
 
 func TestRunAPFSSnapshotActionForceRepeatsUntilRemainingZero(t *testing.T) {
-	if apfsSnapshotPurgeBytes != 20*1024*1024*1024 || apfsSnapshotUrgency != "4" {
-		t.Fatalf("bounded request changed: bytes=%d urgency=%q", apfsSnapshotPurgeBytes, apfsSnapshotUrgency)
+	if apfs.PurgeBytes != 20*1024*1024*1024 || apfs.Urgency != "4" {
+		t.Fatalf("bounded request changed: bytes=%d urgency=%q", apfs.PurgeBytes, apfs.Urgency)
 	}
 	thinned := 0
 	remaining := 2
@@ -290,10 +291,10 @@ func TestRunAPFSSnapshotActionStopsWhenRemainingListFails(t *testing.T) {
 
 func TestParseLocalSnapshotCount(t *testing.T) {
 	out := []byte("Snapshots for disk /:\ncom.apple.os.update-AAA\n2026-08-17-101530\n\n")
-	if got := parseLocalSnapshotCount(out); got != 2 {
+	if got := apfs.ParseCount(out); got != 2 {
 		t.Fatalf("count = %d; want 2", got)
 	}
-	if got := parseLocalSnapshotCount(nil); got != 0 {
+	if got := apfs.ParseCount(nil); got != 0 {
 		t.Fatalf("empty count = %d; want 0", got)
 	}
 }
@@ -337,7 +338,7 @@ func TestRunAPFSSnapshotActionUnavailableOffDarwin(t *testing.T) {
 }
 
 func TestFormatTMUtilErrorOmitsUrgencyAndMount(t *testing.T) {
-	err := formatTMUtilError(
+	err := apfs.FormatError(
 		[]string{"thinlocalsnapshots", "/", "21474836480", "4"},
 		errors.New("exit status 1"),
 		[]byte("failed"),
@@ -424,7 +425,7 @@ func TestPrintAPFSThinResultRemainingListFailureIsNonFatal(t *testing.T) {
 
 func TestPrintAPFSThinResultRedactsHomePathAndSnapshotIDs(t *testing.T) {
 	pathErr := &os.PathError{Op: "stat", Path: "/Users/alice", Err: errors.New("no such file")}
-	tmErr := formatTMUtilError(
+	tmErr := apfs.FormatError(
 		[]string{"listlocalsnapshots", "/"},
 		errors.New("exit status 1"),
 		[]byte("Snapshots for disk /:\ncom.apple.TimeMachine.2026-08-17-101530.local\ncom.apple.os.update-AAA\n2026-08-17-101530\nfailed\n"),
@@ -446,7 +447,7 @@ func TestPrintAPFSThinResultRedactsHomePathAndSnapshotIDs(t *testing.T) {
 }
 
 func TestFormatTMUtilErrorDropsSnapshotListing(t *testing.T) {
-	err := formatTMUtilError(
+	err := apfs.FormatError(
 		[]string{"listlocalsnapshots", "/"},
 		errors.New("exit status 1"),
 		[]byte("Snapshots for disk /:\ncom.apple.TimeMachine.2026-08-17-101530.local\ncom.apple.os.update-AAA\n2026-08-17-101530\nfailed\n"),

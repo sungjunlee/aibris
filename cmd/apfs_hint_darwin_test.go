@@ -5,16 +5,18 @@ package cmd
 import (
 	"strings"
 	"testing"
+
+	"github.com/sungjunlee/aibris/internal/apfs"
 )
 
 func TestMaybeHintAPFSSnapshotsListsWithoutThinning(t *testing.T) {
-	origLook, origRun := lookPath, runTMUtil
+	origLook, origRun := apfs.LookPath, apfs.RunTMUtil
 	t.Cleanup(func() {
-		lookPath, runTMUtil = origLook, origRun
+		apfs.LookPath, apfs.RunTMUtil = origLook, origRun
 	})
 	thinned := false
-	lookPath = func(string) (string, error) { return "/usr/bin/tmutil", nil }
-	runTMUtil = func(args ...string) ([]byte, error) {
+	apfs.LookPath = func(string) (string, error) { return "/usr/bin/tmutil", nil }
+	apfs.RunTMUtil = func(args ...string) ([]byte, error) {
 		if len(args) > 0 && args[0] == "thinlocalsnapshots" {
 			thinned = true
 		}
@@ -34,12 +36,12 @@ func TestMaybeHintAPFSSnapshotsListsWithoutThinning(t *testing.T) {
 }
 
 func TestMaybeHintAPFSSnapshotsSilentWhenNoLocalSnapshots(t *testing.T) {
-	origLook, origRun := lookPath, runTMUtil
+	origLook, origRun := apfs.LookPath, apfs.RunTMUtil
 	t.Cleanup(func() {
-		lookPath, runTMUtil = origLook, origRun
+		apfs.LookPath, apfs.RunTMUtil = origLook, origRun
 	})
-	lookPath = func(string) (string, error) { return "/usr/bin/tmutil", nil }
-	runTMUtil = func(args ...string) ([]byte, error) {
+	apfs.LookPath = func(string) (string, error) { return "/usr/bin/tmutil", nil }
+	apfs.RunTMUtil = func(args ...string) ([]byte, error) {
 		return []byte("Snapshots for disk /:\n"), nil
 	}
 	if output := captureOutput(maybeHintAPFSSnapshots); output != "" {

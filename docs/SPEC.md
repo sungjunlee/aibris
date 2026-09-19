@@ -521,6 +521,7 @@ internal/
   adapter/    -> DebrisProvider implementations
   scanner/    -> bounded-parallel provider orchestration and aggregation
   scancache/  -> last-scan snapshot persistence and path identity
+  apfs/       -> local APFS snapshot list/thin via tmutil
   cleaner/    -> filtering, dry-run output, safe deletion
   types/      -> shared data model
 test/         -> black-box CLI, install, docs, and Homebrew script tests

@@ -33,6 +33,8 @@
   dropping the filename-pinning structure tests.
 - Last-scan snapshot persistence and path identity live in `internal/scancache`.
   `cmd` keeps the CLI session (progress, reuse messages, live rescan).
+- Local APFS snapshot listing and `tmutil` thinning live in `internal/apfs`.
+  `cmd` keeps flag conflicts, confirmation, and human reporting.
 - The aibris skill treats `scan --json` as the agent inventory and keeps
   `gh` / `git worktree list` / live cwd as follow-up checks. GitHub merge
   status must not promote local uniqueness to `recommended`.

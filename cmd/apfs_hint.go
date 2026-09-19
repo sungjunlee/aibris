@@ -1,8 +1,12 @@
 package cmd
 
-import "fmt"
+import (
+	"fmt"
 
-var listLocalAPFSSnapshots = apfsListLocalSnapshots
+	"github.com/sungjunlee/aibris/internal/apfs"
+)
+
+var listLocalAPFSSnapshots = apfs.List
 
 func hintAPFSSnapshotsAfterReclaim(freed int64) {
 	if freed <= 0 {
