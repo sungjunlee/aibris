@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"io"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
@@ -20,6 +21,7 @@ type (
 	CleanupPhysicalComponent  = cleaner.CleanupPhysicalComponent
 	CleanupPlanTotals         = cleaner.CleanupPlanTotals
 	UnifiedCleanupPlan        = cleaner.UnifiedCleanupPlan
+	cleanupReviewMode         = cleaner.CleanupReviewMode
 )
 
 const (
@@ -44,6 +46,11 @@ const (
 	CleanupPlanRelationExact    = cleaner.CleanupPlanRelationExact
 	CleanupPlanRelationNested   = cleaner.CleanupPlanRelationNested
 	CleanupPlanRelationAncestor = cleaner.CleanupPlanRelationAncestor
+
+	cleanupReviewText        = cleaner.CleanupReviewText
+	cleanupReviewTTY         = cleaner.CleanupReviewTTY
+	cleanupReviewNarrowWidth = cleaner.CleanupReviewNarrowWidth
+	cleanupReviewWideWidth   = cleaner.CleanupReviewWideWidth
 )
 
 var (
@@ -114,4 +121,16 @@ func cleanupPlanPolicyDecisionForClass(class DecisionClass) CleanupPlanPolicyDec
 	default:
 		return CleanupPlanPolicySkipped
 	}
+}
+
+func promptUnifiedCleanupReview(input io.Reader, output io.Writer, plan UnifiedCleanupPlan, mode cleanupReviewMode, width int) (UnifiedCleanupPlan, bool, error) {
+	return cleaner.PromptUnifiedCleanupReview(input, output, plan, mode, width)
+}
+
+func renderUnifiedCleanupReview(output io.Writer, plan UnifiedCleanupPlan, status string, mode cleanupReviewMode, width int) {
+	cleaner.RenderUnifiedCleanupReview(output, plan, status, mode, width)
+}
+
+func toggleUnifiedCleanupPlanRow(plan UnifiedCleanupPlan, number int) (UnifiedCleanupPlan, bool) {
+	return cleaner.ToggleUnifiedCleanupPlanRow(plan, number)
 }

@@ -1,4 +1,4 @@
-package cmd
+package cleaner
 
 import (
 	"bufio"
@@ -8,20 +8,19 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
-type cleanupReviewMode string
+type CleanupReviewMode string
 
 const (
-	cleanupReviewText cleanupReviewMode = "text"
-	cleanupReviewTTY  cleanupReviewMode = "tty checklist"
+	CleanupReviewText CleanupReviewMode = "text"
+	CleanupReviewTTY  CleanupReviewMode = "tty checklist"
 )
 
 const (
-	cleanupReviewNarrowWidth = 72
-	cleanupReviewWideWidth   = 120
+	CleanupReviewNarrowWidth = 72
+	CleanupReviewWideWidth   = 120
 )
 
 type numberedCleanupPlanRow struct {
@@ -29,14 +28,14 @@ type numberedCleanupPlanRow struct {
 	Row    CleanupPlanRow
 }
 
-// promptUnifiedCleanupReview lets text and TTY frontends mutate the same plan
+// PromptUnifiedCleanupReview lets text and TTY frontends mutate the same plan
 // state. Rendering is deliberately separate from execution; #115 wires the
 // accepted selection through preflight, confirmation, and receipts.
-func promptUnifiedCleanupReview(input io.Reader, output io.Writer, plan UnifiedCleanupPlan, mode cleanupReviewMode, width int) (UnifiedCleanupPlan, bool, error) {
+func PromptUnifiedCleanupReview(input io.Reader, output io.Writer, plan UnifiedCleanupPlan, mode CleanupReviewMode, width int) (UnifiedCleanupPlan, bool, error) {
 	scanner := bufio.NewScanner(input)
 	status := ""
 	for {
-		renderUnifiedCleanupReview(output, plan, status, mode, width)
+		RenderUnifiedCleanupReview(output, plan, status, mode, width)
 		fmt.Fprint(output, "\nEnter numbers to toggle, Enter to preview, q to abort: ")
 		status = ""
 		if !scanner.Scan() {
@@ -67,7 +66,7 @@ func promptUnifiedCleanupReview(input io.Reader, output io.Writer, plan UnifiedC
 			}
 			seen[number] = true
 			var changed bool
-			next, changed = toggleUnifiedCleanupPlanRow(next, number)
+			next, changed = ToggleUnifiedCleanupPlanRow(next, number)
 			if changed {
 				toggled++
 			}
@@ -79,6 +78,23 @@ func promptUnifiedCleanupReview(input io.Reader, output io.Writer, plan UnifiedC
 		plan = next
 		status = fmt.Sprintf("updated %d %s", toggled, itemNoun(toggled))
 	}
+}
+
+func itemNoun(count int) string {
+	if count == 1 {
+		return "item"
+	}
+	return "items"
+}
+
+func itemName(w types.DebrisInfo) string {
+	if w.Category == types.CategoryWorktree && w.Tool == types.ToolUnknown && w.Source != "" {
+		return w.Source + "/" + w.ID
+	}
+	if w.ID != "" {
+		return w.ID
+	}
+	return string(w.Tool)
 }
 
 func numberedCleanupPlanRows(plan UnifiedCleanupPlan) []numberedCleanupPlanRow {
@@ -101,7 +117,7 @@ func numberedCleanupPlanRows(plan UnifiedCleanupPlan) []numberedCleanupPlanRow {
 	return rows
 }
 
-func toggleUnifiedCleanupPlanRow(plan UnifiedCleanupPlan, number int) (UnifiedCleanupPlan, bool) {
+func ToggleUnifiedCleanupPlanRow(plan UnifiedCleanupPlan, number int) (UnifiedCleanupPlan, bool) {
 	if number <= 0 {
 		return plan, false
 	}
@@ -181,13 +197,13 @@ func parseCleanupReviewNumbers(line string) ([]int, bool) {
 	}
 	return numbers, true
 }
-func renderUnifiedCleanupReview(output io.Writer, plan UnifiedCleanupPlan, status string, mode cleanupReviewMode, width int) {
+func RenderUnifiedCleanupReview(output io.Writer, plan UnifiedCleanupPlan, status string, mode CleanupReviewMode, width int) {
 	if width <= 0 {
-		width = cleanupReviewWideWidth
+		width = CleanupReviewWideWidth
 	}
 	totals := plan.Totals()
 	fmt.Fprintln(output, "cleanup review")
-	if mode == cleanupReviewTTY {
+	if mode == CleanupReviewTTY {
 		fmt.Fprintf(output, "  mode       %s\n", mode)
 	}
 	if status != "" {
@@ -195,11 +211,11 @@ func renderUnifiedCleanupReview(output io.Writer, plan UnifiedCleanupPlan, statu
 	}
 	fmt.Fprintln(output)
 	fmt.Fprintln(output, "summary")
-	fmt.Fprintf(output, "  found      %d %s   %s\n", totals.PhysicalTargets, itemNoun(totals.PhysicalTargets), cleaner.FormatSize(totals.PhysicalBytes))
-	fmt.Fprintf(output, "  eligible   %d %s   %s\n", totals.EligibleTargets, itemNoun(totals.EligibleTargets), cleaner.FormatSize(totals.EligibleBytes))
-	fmt.Fprintf(output, "  selected   %d %s   %s\n", totals.SelectedTargets, itemNoun(totals.SelectedTargets), cleaner.FormatSize(totals.SelectedBytes))
-	fmt.Fprintf(output, "  reviewable %d %s   %s\n", totals.ReviewableTargets, itemNoun(totals.ReviewableTargets), cleaner.FormatSize(totals.ReviewableBytes))
-	fmt.Fprintf(output, "  protected  %d %s   %s\n", totals.HardLockedTargets, itemNoun(totals.HardLockedTargets), cleaner.FormatSize(totals.HardLockedBytes))
+	fmt.Fprintf(output, "  found      %d %s   %s\n", totals.PhysicalTargets, itemNoun(totals.PhysicalTargets), FormatSize(totals.PhysicalBytes))
+	fmt.Fprintf(output, "  eligible   %d %s   %s\n", totals.EligibleTargets, itemNoun(totals.EligibleTargets), FormatSize(totals.EligibleBytes))
+	fmt.Fprintf(output, "  selected   %d %s   %s\n", totals.SelectedTargets, itemNoun(totals.SelectedTargets), FormatSize(totals.SelectedBytes))
+	fmt.Fprintf(output, "  reviewable %d %s   %s\n", totals.ReviewableTargets, itemNoun(totals.ReviewableTargets), FormatSize(totals.ReviewableBytes))
+	fmt.Fprintf(output, "  protected  %d %s   %s\n", totals.HardLockedTargets, itemNoun(totals.HardLockedTargets), FormatSize(totals.HardLockedBytes))
 
 	rows := numberedCleanupPlanRows(plan)
 	renderCleanupReviewSection(output, "selected for cleanup", rows, CleanupPlanSelected, width)
@@ -243,7 +259,7 @@ func renderCleanupReviewSection(output io.Writer, title string, rows []numberedC
 		line := fmt.Sprintf("  %s %2s  %8s  %-12s  %s",
 			checkbox,
 			number,
-			cleaner.FormatSize(numbered.Row.PhysicalBytes),
+			FormatSize(numbered.Row.PhysicalBytes),
 			numbered.Row.Item.Category,
 			itemName(numbered.Row.Item))
 		if reason != "" {
