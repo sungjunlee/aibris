@@ -13,6 +13,7 @@ import (
 	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
+	worktreepkg "github.com/sungjunlee/aibris/internal/worktree"
 )
 
 func TestMatchingCleanReusesLastScanAndSaysSo(t *testing.T) {
@@ -99,7 +100,7 @@ func TestCachedStripStillRefusesWorkingDirectory(t *testing.T) {
 	cleanStrip = true
 	defer resetCleanFlags()
 	assertCachedCleanScan(t, home)
-	targets, refused := selectStripTargets([]types.DebrisInfo{unit}, types.PruneOptions{Age: 7 * 24 * time.Hour}, worktree)
+	targets, refused := worktreepkg.SelectStripTargets([]types.DebrisInfo{unit}, types.PruneOptions{Age: 7 * 24 * time.Hour}, worktree)
 	if len(targets) != 0 || len(refused) != 1 {
 		t.Fatalf("cached strip cwd barrier = %d targets / %d refused; want 0/1", len(targets), len(refused))
 	}

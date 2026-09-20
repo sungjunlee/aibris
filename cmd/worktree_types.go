@@ -29,6 +29,8 @@ type (
 	guidedCleanRow           = worktree.GuidedCleanRow
 	guidedCleanState         = worktree.GuidedCleanState
 	guidedCodexWorktreeRow   = worktree.GuidedCodexWorktreeRow
+	stripSubtreeOutcome      = worktree.StripSubtreeOutcome
+	stripUnitOutcome         = worktree.StripUnitOutcome
 )
 
 const (
