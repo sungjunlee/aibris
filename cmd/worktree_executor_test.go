@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/cleanjson"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -205,10 +206,14 @@ func TestExecutePreparedCommandRemovingOwnerThenFailingIsPartial(t *testing.T) {
 	jsonReceipt := cleanJSONReceipt{PhysicalTargets: []cleanJSONReceiptPhysicalTarget{{
 		ID: "target-1", State: cleanJSONReceiptPending, Bytes: target.Size,
 	}}}
-	if err := applyCleanJSONExecutionReceipt(&jsonReceipt, map[string]string{targetIDKey: "target-1"}, execution); err != nil {
+	if err := cleanjson.ApplyCleanJSONExecutionReceipt(&jsonReceipt, map[string]string{targetIDKey: "target-1"}, toCleanJSONExecutionReceipt(execution), func(err error) bool {
+		return errors.Is(err, cleaner.ErrCleanupTargetYoungerThanMinimumAge)
+	}); err != nil {
 		t.Fatal(err)
 	}
-	finalized, finalizeErr := finishCleanJSONReceipt(jsonReceipt, err)
+	finalized, finalizeErr := cleanjson.FinishCleanJSONReceipt(jsonReceipt, err, listLocalAPFSSnapshots, func(err error) bool {
+		return errors.Is(err, cleaner.ErrCleanupTargetYoungerThanMinimumAge)
+	})
 	if finalizeErr == nil || finalized.Status != cleanJSONReceiptPartialFailure || finalized.Totals.Requested != 1 ||
 		finalized.Totals.Partial != 1 || finalized.Totals.FreedBytes != target.Size {
 		t.Fatalf("owner-removed JSON receipt = %+v error=%v", finalized, finalizeErr)

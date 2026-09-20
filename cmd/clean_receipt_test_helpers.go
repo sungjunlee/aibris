@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -98,7 +99,9 @@ func orderCleanJSONReceiptPreparedTargets(
 }
 
 func finalizeCleanJSONReceipt(receipt cleanJSONReceipt) (cleanJSONReceipt, error) {
-	return finishCleanJSONReceipt(receipt, nil)
+	return cleanjson.FinishCleanJSONReceipt(receipt, nil, listLocalAPFSSnapshots, func(err error) bool {
+		return errors.Is(err, cleaner.ErrCleanupTargetYoungerThanMinimumAge)
+	})
 }
 
 func quietActiveWorktreeExecutionOptions() activeWorktreeExecutionOptions {
