@@ -13,6 +13,7 @@ import (
 func TestWorktreeExecutorReceiptLivesApartFromExecutorEntry(t *testing.T) {
 	receiptNames := []string{
 		"applyActiveUnitExecutionReceipt",
+		"applyPreparedActiveWorktreeExecutionResult",
 		"setActiveReceiptPhysicalState",
 		"failedCleanUnitReceipt",
 		"failedPreparedCleanUnitReceipt",
@@ -94,6 +95,9 @@ func TestWorktreeExecutorReceiptReexportIdentity(t *testing.T) {
 	if reflect.ValueOf(applyActiveUnitExecutionReceipt).Pointer() == 0 {
 		t.Fatal("applyActiveUnitExecutionReceipt has no implementation")
 	}
+	if reflect.ValueOf(applyPreparedActiveWorktreeExecutionResult).Pointer() == 0 {
+		t.Fatal("applyPreparedActiveWorktreeExecutionResult has no implementation")
+	}
 	if reflect.ValueOf(setActiveReceiptPhysicalState).Pointer() == 0 {
 		t.Fatal("setActiveReceiptPhysicalState has no implementation")
 	}
@@ -120,6 +124,7 @@ func TestWorktreeExecutorReceiptReexportIdentity(t *testing.T) {
 	receiptSource := readCmdSource(t, "worktree_executor_receipt.go")
 	for _, name := range []string{
 		"applyActiveUnitExecutionReceipt",
+		"applyPreparedActiveWorktreeExecutionResult",
 		"setActiveReceiptPhysicalState",
 		"failedCleanUnitReceipt",
 		"failedPreparedCleanUnitReceipt",
