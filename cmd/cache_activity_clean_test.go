@@ -162,7 +162,7 @@ func TestRefreshCleanupInventoryMetadataOnlyRaisesDerivedActivity(t *testing.T) 
 			ModTime:  recent,
 		},
 	}
-	refreshCleanupInventoryMetadata(items)
+	cleaner.RefreshCleanupInventoryMetadata(items)
 
 	if !items[0].ModTime.Equal(recent) {
 		t.Errorf("derived activity was lowered to %v; want the scan's %v", items[0].ModTime, recent)
@@ -207,10 +207,10 @@ func TestCaptureCleanupTargetSnapshotRefusesLiveActivityDerivedTarget(t *testing
 		PathModTime: info.ModTime(),
 	}
 
-	if _, err := captureCleanupTargetSnapshot(item, types.PruneOptions{Age: 7 * 24 * time.Hour}); err == nil {
-		t.Fatal("captureCleanupTargetSnapshot() error = nil; want a minimum-age refusal for live in-tree activity")
+	if _, err := cleaner.CaptureCleanupTargetSnapshot(item, types.PruneOptions{Age: 7 * 24 * time.Hour}); err == nil {
+		t.Fatal("CaptureCleanupTargetSnapshot() error = nil; want a minimum-age refusal for live in-tree activity")
 	}
-	if _, err := captureCleanupTargetSnapshot(item, types.PruneOptions{Age: 7 * 24 * time.Hour, RelaxCacheAge: true}); err != nil {
+	if _, err := cleaner.CaptureCleanupTargetSnapshot(item, types.PruneOptions{Age: 7 * 24 * time.Hour, RelaxCacheAge: true}); err != nil {
 		t.Fatalf("pressure-selected young cache must pass preflight: %v", err)
 	}
 	pinned := types.PruneOptions{
@@ -218,13 +218,13 @@ func TestCaptureCleanupTargetSnapshotRefusesLiveActivityDerivedTarget(t *testing
 		RelaxCacheAge:  true,
 		PressureDevice: "other-volume",
 	}
-	if _, err := captureCleanupTargetSnapshot(item, pinned); err == nil {
+	if _, err := cleaner.CaptureCleanupTargetSnapshot(item, pinned); err == nil {
 		t.Fatal("off-volume cache must keep the age preflight when automatic pressure is pinned")
 	}
 
 	item.ModTime = time.Now().Add(-8 * 24 * time.Hour)
-	if _, err := captureCleanupTargetSnapshot(item, types.PruneOptions{Age: 7 * 24 * time.Hour}); err != nil {
-		t.Fatalf("captureCleanupTargetSnapshot() on an idle derived target = %v; want acceptance", err)
+	if _, err := cleaner.CaptureCleanupTargetSnapshot(item, types.PruneOptions{Age: 7 * 24 * time.Hour}); err != nil {
+		t.Fatalf("CaptureCleanupTargetSnapshot() on an idle derived target = %v; want acceptance", err)
 	}
 }
 
@@ -262,11 +262,11 @@ func TestValidateRechecksNestedActivityAtMutationBarrier(t *testing.T) {
 	}
 
 	// The whole tree is idle at preparation time, so the snapshot is captured.
-	snapshot, err := captureCleanupTargetSnapshot(item, types.PruneOptions{Age: minimumAge})
+	snapshot, err := cleaner.CaptureCleanupTargetSnapshot(item, types.PruneOptions{Age: minimumAge})
 	if err != nil {
-		t.Fatalf("captureCleanupTargetSnapshot() on an idle cache = %v; want acceptance", err)
+		t.Fatalf("CaptureCleanupTargetSnapshot() on an idle cache = %v; want acceptance", err)
 	}
-	if err := snapshot.validate(ctx); err != nil {
+	if err := snapshot.Validate(ctx); err != nil {
 		t.Fatalf("validate() on an idle cache = %v; want acceptance", err)
 	}
 
@@ -286,11 +286,11 @@ func TestValidateRechecksNestedActivityAtMutationBarrier(t *testing.T) {
 		t.Fatalf("nested touch changed container mtime from %v to %v", containerBefore.ModTime(), containerAfter.ModTime())
 	}
 
-	err = snapshot.validate(ctx)
+	err = snapshot.Validate(ctx)
 	if err == nil || !strings.Contains(err.Error(), "younger than the configured minimum age") {
 		t.Fatalf("validate() error = %v; want a minimum-age refusal from fresh nested activity", err)
 	}
-	if !errors.Is(err, errCleanupTargetYoungerThanMinimumAge) {
+	if !errors.Is(err, cleaner.ErrCleanupTargetYoungerThanMinimumAge) {
 		t.Fatalf("validate() error %v does not match the minimum-age sentinel", err)
 	}
 }
@@ -522,7 +522,7 @@ func TestAgentStateGraceSurvivesInventoryRefresh(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	refreshCleanupInventoryMetadata(result.Worktrees)
+	cleaner.RefreshCleanupInventoryMetadata(result.Worktrees)
 
 	opts := types.PruneOptions{
 		Age:                  7 * 24 * time.Hour,
@@ -587,7 +587,7 @@ func TestAgentStateGraceSeesPostScanSessionAppend(t *testing.T) {
 		t.Fatalf("fixture invalid: the append moved the store directory mtime to %v", dirInfo.ModTime())
 	}
 
-	refreshCleanupInventoryMetadataWithContext(context.Background(), result.Worktrees)
+	cleaner.RefreshCleanupInventoryMetadataWithContext(context.Background(), result.Worktrees)
 
 	opts := types.PruneOptions{
 		Age:                  7 * 24 * time.Hour,

@@ -7,6 +7,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/cleanjson"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -127,7 +128,7 @@ func executeCleanJSONReceipt(
 		},
 		listLocalAPFSSnapshots,
 		func(err error) bool {
-			return errors.Is(err, errCleanupTargetYoungerThanMinimumAge)
+			return errors.Is(err, cleaner.ErrCleanupTargetYoungerThanMinimumAge)
 		},
 	)
 }
@@ -203,7 +204,7 @@ func cleanJSONReceiptStateReasons(unit cleanUnitExecutionReceipt) []string {
 	case cleanExecutionPartial:
 		return append(codes, "partial_failure")
 	case cleanExecutionFailed:
-		if errors.Is(unit.FailureCause, errCleanupTargetYoungerThanMinimumAge) {
+		if errors.Is(unit.FailureCause, cleaner.ErrCleanupTargetYoungerThanMinimumAge) {
 			// The pre-mutation barrier refused a target that went live again.
 			// That is retry-later, not a removal failure.
 			return append(codes, "minimum_age")

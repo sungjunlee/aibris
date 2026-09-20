@@ -53,7 +53,7 @@ type preparedCleanTarget struct {
 	Component        *cleanupOverlapComponent
 	ActiveUnit       *worktree.WorktreeCleanupUnit
 	MutationSafety   *cleanupMutationSafety
-	TargetSnapshot   *cleanupTargetSnapshot
+	TargetSnapshot   *cleaner.CleanupTargetSnapshot
 	PreparationError error
 }
 
@@ -83,7 +83,7 @@ func prepareCleanExecutionWithOptions(
 	prepared := make([]preparedCleanTarget, 0, len(targets))
 	for _, target := range targets {
 		entry := preparedCleanTarget{Item: target}
-		snapshot, snapshotErr := captureCleanupTargetSnapshot(target, opts)
+		snapshot, snapshotErr := cleaner.CaptureCleanupTargetSnapshot(target, opts)
 		if snapshotErr != nil {
 			entry.PreparationError = errors.Join(entry.PreparationError, snapshotErr)
 		} else {
@@ -241,7 +241,7 @@ func executePathCleanupTarget(
 	target types.DebrisInfo,
 	component *cleanupOverlapComponent,
 	safety *cleanupMutationSafety,
-	snapshot *cleanupTargetSnapshot,
+	snapshot *cleaner.CleanupTargetSnapshot,
 	output io.Writer,
 	errorOutput io.Writer,
 ) (cleanUnitExecutionReceipt, error) {
@@ -257,11 +257,11 @@ func executePathCleanupTarget(
 			}
 			var validationErr error
 			validation, validationErr = safety.validate(ctx)
-			validated = true
-			if validationErr != nil {
-				return validationErr
-			}
-			return snapshot.validate(ctx)
+		validated = true
+		if validationErr != nil {
+			return validationErr
+		}
+		return snapshot.Validate(ctx)
 		},
 		output,
 		errorOutput,
@@ -326,7 +326,7 @@ func executeActiveWorktreeUnit(
 	component *cleanupOverlapComponent,
 	selected worktree.WorktreeCleanupUnit,
 	safety *cleanupMutationSafety,
-	snapshot *cleanupTargetSnapshot,
+	snapshot *cleaner.CleanupTargetSnapshot,
 	opts activeWorktreeExecutionOptions,
 ) (cleanUnitExecutionReceipt, error) {
 	receipt := newCleanUnitExecutionReceipt(target, component, safety)
@@ -348,9 +348,9 @@ func executeActiveWorktreeUnit(
 			if snapshot == nil {
 				return errors.New("pre-mutation safety barrier: cleanup target snapshot unavailable")
 			}
-			// snapshot is an active worktree unit here, so it is never
-			// activity-derived and validate cannot walk the tree per member.
-			if snapshotErr := snapshot.validate(ctx); snapshotErr != nil {
+		// snapshot is an active worktree unit here, so it is never
+		// activity-derived and validate cannot walk the tree per member.
+		if snapshotErr := snapshot.Validate(ctx); snapshotErr != nil {
 				receipt.BlockingPath = target.Path
 				receipt.BlockingReason = snapshotErr.Error()
 				receipt.FailureCause = snapshotErr
@@ -358,8 +358,8 @@ func executeActiveWorktreeUnit(
 			}
 			return nil
 		},
-		AfterMember: func(_ context.Context, remaining int) error {
-			ownerRemoved, snapshotErr := snapshot.refreshAfterMutation()
+	AfterMember: func(_ context.Context, remaining int) error {
+		ownerRemoved, snapshotErr := snapshot.RefreshAfterMutation()
 			if snapshotErr != nil {
 				receipt.BlockingPath = target.Path
 				receipt.BlockingReason = snapshotErr.Error()

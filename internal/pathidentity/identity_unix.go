@@ -1,6 +1,6 @@
 //go:build unix
 
-package scancache
+package pathidentity
 
 import (
 	"fmt"
@@ -13,9 +13,13 @@ func platformCleanupPathIdentity(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
+	sys := info.Sys()
+	if sys == nil {
+		return "", fmt.Errorf("file identity unavailable (Sys returned nil)")
+	}
+	stat, ok := sys.(*syscall.Stat_t)
 	if !ok {
-		return "", fmt.Errorf("unsupported file identity metadata")
+		return "", fmt.Errorf("file identity unavailable (Sys not *syscall.Stat_t)")
 	}
 	return fmt.Sprintf("%d:%d", stat.Dev, stat.Ino), nil
 }

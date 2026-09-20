@@ -64,7 +64,7 @@ func runCleanJSON(cmd *cobra.Command) {
 	}
 	protectMatcher := newProtectPathMatcher(roots)
 	printProtectPathDiagnostics(protectMatcher)
-	refreshCleanupInventoryMetadataWithContext(ctx, result.Worktrees)
+	cleaner.RefreshCleanupInventoryMetadataWithContext(ctx, result.Worktrees)
 	overlapSafety, err := newDefaultCleanupOverlapSafetyRuntime(ctx)
 	if err != nil {
 		failCleanJSON("cleanup safety preparation failed")

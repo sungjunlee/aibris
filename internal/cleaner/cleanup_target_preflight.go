@@ -1,4 +1,4 @@
-package cmd
+package cleaner
 
 import (
 	"context"
@@ -8,14 +8,14 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
-	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/pathidentity"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
-// errCleanupTargetYoungerThanMinimumAge marks an age refusal so JSON consumers
+// ErrCleanupTargetYoungerThanMinimumAge marks an age refusal so JSON consumers
 // can tell "the target went live again, retry later" apart from "removal
 // failed". It never reaches the human message.
-var errCleanupTargetYoungerThanMinimumAge = errors.New("cleanup target is younger than the configured minimum age")
+var ErrCleanupTargetYoungerThanMinimumAge = errors.New("cleanup target is younger than the configured minimum age")
 
 type cleanupTargetMinimumAgeError struct {
 	path       string
@@ -27,10 +27,10 @@ func (e cleanupTargetMinimumAgeError) Error() string {
 }
 
 func (e cleanupTargetMinimumAgeError) Unwrap() error {
-	return errCleanupTargetYoungerThanMinimumAge
+	return ErrCleanupTargetYoungerThanMinimumAge
 }
 
-type cleanupTargetSnapshot struct {
+type CleanupTargetSnapshot struct {
 	path       string
 	info       os.FileInfo
 	minimumAge time.Duration
@@ -45,11 +45,11 @@ type cleanupTargetSnapshot struct {
 	scanActivityModTime time.Time
 }
 
-func refreshCleanupInventoryMetadata(items []types.DebrisInfo) {
-	refreshCleanupInventoryMetadataWithContext(context.Background(), items)
+func RefreshCleanupInventoryMetadata(items []types.DebrisInfo) {
+	RefreshCleanupInventoryMetadataWithContext(context.Background(), items)
 }
 
-func refreshCleanupInventoryMetadataWithContext(ctx context.Context, items []types.DebrisInfo) {
+func RefreshCleanupInventoryMetadataWithContext(ctx context.Context, items []types.DebrisInfo) {
 	for i := range items {
 		if isActiveWorktreeTarget(items[i]) {
 			// Active worktrees use session activity plus Git-aware preflight.
@@ -89,16 +89,16 @@ func refreshCleanupInventoryMetadataWithContext(ctx context.Context, items []typ
 	}
 }
 
-func captureCleanupTargetSnapshot(
+func CaptureCleanupTargetSnapshot(
 	item types.DebrisInfo,
 	opts types.PruneOptions,
-) (*cleanupTargetSnapshot, error) {
+) (*CleanupTargetSnapshot, error) {
 	var info os.FileInfo
 	if item.ScanPathEvidenceRequired && item.ScanPathIdentity == "" {
 		return nil, fmt.Errorf("cleanup target %q: scan identity evidence unavailable", item.Path)
 	}
 	if item.ScanPathIdentity != "" {
-		current, identity, err := cleanupPathIdentity(item.Path)
+		current, identity, err := pathidentity.PathIdentity(item.Path)
 		if err != nil {
 			return nil, fmt.Errorf("capturing cleanup target %q: %w", item.Path, err)
 		}
@@ -124,10 +124,10 @@ func captureCleanupTargetSnapshot(
 	}
 	minimumAge := time.Duration(0)
 	if item.Category != types.CategoryAgentState && !isActiveWorktreeTarget(item) &&
-		!cleaner.ShouldRelaxCacheAge(item, opts) {
+		!ShouldRelaxCacheAge(item, opts) {
 		minimumAge = opts.Age
 	}
-	snapshot := &cleanupTargetSnapshot{
+	snapshot := &CleanupTargetSnapshot{
 		path:       item.Path,
 		info:       info,
 		minimumAge: minimumAge,
@@ -150,7 +150,7 @@ func captureCleanupTargetSnapshot(
 // command. The age recheck therefore belongs here rather than in preparation,
 // which in interactive mode happens before the first y/N prompt — an unbounded
 // window during which a cache can go live again.
-func (s cleanupTargetSnapshot) validate(ctx context.Context) error {
+func (s CleanupTargetSnapshot) Validate(ctx context.Context) error {
 	current, err := os.Lstat(s.path)
 	if err != nil {
 		return fmt.Errorf("cleanup target changed since cleanup selection: %q: %w", s.path, err)
@@ -181,7 +181,7 @@ func (s cleanupTargetSnapshot) validate(ctx context.Context) error {
 // before the next mutation. A removed owner is a valid terminal state after
 // the final member mutation, which the caller distinguishes from an earlier
 // disappearance with members still pending.
-func (s *cleanupTargetSnapshot) refreshAfterMutation() (ownerRemoved bool, err error) {
+func (s *CleanupTargetSnapshot) RefreshAfterMutation() (ownerRemoved bool, err error) {
 	if s == nil {
 		return false, fmt.Errorf("cleanup target snapshot unavailable")
 	}
@@ -201,7 +201,7 @@ func (s *cleanupTargetSnapshot) refreshAfterMutation() (ownerRemoved bool, err e
 
 // recordedActivity is the newest activity known without touching the
 // filesystem beyond the stat the caller already holds.
-func (s cleanupTargetSnapshot) recordedActivity(info os.FileInfo) time.Time {
+func (s CleanupTargetSnapshot) recordedActivity(info os.FileInfo) time.Time {
 	modTime := info.ModTime()
 	if s.scanActivityModTime.After(modTime) {
 		modTime = s.scanActivityModTime
@@ -215,7 +215,7 @@ func (s cleanupTargetSnapshot) recordedActivity(info os.FileInfo) time.Time {
 // three signals keeps this fail-closed — a walk that is cut short, hits an
 // unreadable subtree, or returns the zero time can only fall back to what is
 // already known, never below it.
-func (s cleanupTargetSnapshot) liveActivity(ctx context.Context, info os.FileInfo) time.Time {
+func (s CleanupTargetSnapshot) liveActivity(ctx context.Context, info os.FileInfo) time.Time {
 	activity := s.recordedActivity(info)
 	if !s.activityDerived || s.minimumAge <= 0 {
 		return activity
@@ -226,7 +226,7 @@ func (s cleanupTargetSnapshot) liveActivity(ctx context.Context, info os.FileInf
 	return activity
 }
 
-func (s cleanupTargetSnapshot) validateAge(activity, observedAt time.Time) error {
+func (s CleanupTargetSnapshot) validateAge(activity, observedAt time.Time) error {
 	if s.minimumAge <= 0 || activity.Before(observedAt.Add(-s.minimumAge)) {
 		return nil
 	}

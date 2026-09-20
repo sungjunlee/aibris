@@ -102,7 +102,7 @@ func runCleanCommand(cmd *cobra.Command) {
 	printExclusionDiagnostics(result)
 	protectMatcher := newProtectPathMatcher(roots)
 	printProtectPathDiagnostics(protectMatcher)
-	refreshCleanupInventoryMetadataWithContext(ctx, result.Worktrees)
+	cleaner.RefreshCleanupInventoryMetadataWithContext(ctx, result.Worktrees)
 	overlapSafety, err := newDefaultCleanupOverlapSafetyRuntime(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: preparing overlap safety: %v\n", err)
