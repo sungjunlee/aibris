@@ -44,3 +44,16 @@ func cleanupKind(item types.DebrisInfo) types.CleanupKind {
 	}
 	return types.CleanupRemovePath
 }
+
+func uniqueReasonCodes(codes []string) []string {
+	seen := make(map[string]bool, len(codes))
+	unique := make([]string, 0, len(codes))
+	for _, code := range codes {
+		if seen[code] {
+			continue
+		}
+		seen[code] = true
+		unique = append(unique, code)
+	}
+	return unique
+}
