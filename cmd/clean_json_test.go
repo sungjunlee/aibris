@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/cleanjson"
 	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
@@ -72,7 +73,7 @@ func TestCleanJSONRouteProjectsRealOverlapRefusalAsProtected(t *testing.T) {
 		protections,
 		inputs,
 	)
-	document, err := buildCleanJSONPlan(
+	document, err := cleanjson.BuildPlanFromCmd(
 		context.Background(),
 		&types.ScanResult{Worktrees: []types.DebrisInfo{target, entry}},
 		source,
@@ -81,6 +82,7 @@ func TestCleanJSONRouteProjectsRealOverlapRefusalAsProtected(t *testing.T) {
 		nil,
 		protections,
 		audit,
+		false,
 	)
 	if err != nil {
 		t.Fatal(err)

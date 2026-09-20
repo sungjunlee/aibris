@@ -31,8 +31,15 @@ func newGuidedCleanExecutionReceipt(
 	protections map[string]cleanAuditReason,
 	prepared []preparedCleanTarget,
 ) (guidedCleanExecutionReceipt, error) {
-	components := buildCleanJSONSnapshotComponents(plan, audit.Components, inventory, protections)
-	document := renderCleanJSONPlanDocument(source, opts, guidedState, plan.Evidence, components)
+	components := cleanjson.SnapshotComponentsFromCmd(plan, audit.Components, inventory, protections)
+	document := cleanjson.Render(cleanjson.Input{
+		Result:       nil, // Receipt doesn't need full result
+		Source:       cleanjson.SourceFromCleaner(source),
+		Opts:         opts,
+		Guided:       cleanjson.GuidedPolicyFromWorktree(guidedState),
+		IncludePaths: cleanIncludePaths,
+		Evidence:     cleanjson.PlanEvidenceFromCleaner(plan.Evidence),
+	}, components)
 	receipt := newCleanJSONReceipt(document)
 	
 	// Build targetIDs map
