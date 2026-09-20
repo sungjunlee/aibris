@@ -43,7 +43,7 @@ func BenchmarkExecutePreparedCleanTargets(b *testing.B) {
 		if err != nil {
 			b.Fatalf("executePreparedCleanTargets() error = %v", err)
 		}
-		removed, partial, failed := receipt.counts()
+		removed, partial, failed := receipt.Counts()
 		if removed != targetCount || partial != 0 || failed != 0 {
 			b.Fatalf("receipt counts = removed %d partial %d failed %d; want %d removed",
 				removed, partial, failed, targetCount)

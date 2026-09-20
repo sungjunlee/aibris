@@ -437,8 +437,8 @@ func TestExecuteActiveWorktreeReportsPartialMultiMemberResultWithoutFreedBytes(t
 	item := executorWorktreeItem(target, 1024)
 	selected := buildExecutorUnit(t, item)
 	opts := defaultActiveWorktreeExecutionOptions()
-	realRemove := opts.removeWorktree
-	opts.removeWorktree = func(ctx context.Context, repositoryID, worktreePath string) error {
+	realRemove := opts.RemoveWorktree
+	opts.RemoveWorktree = func(ctx context.Context, repositoryID, worktreePath string) error {
 		if worktreePath == second {
 			return errors.New("injected second-member failure")
 		}
@@ -480,8 +480,8 @@ func TestExecuteActiveWorktreePreservesPartialReceiptWhenBarrierFailsBetweenMemb
 	item := executorWorktreeItem(target, 1024)
 	selected := buildExecutorUnit(t, item)
 	opts := defaultActiveWorktreeExecutionOptions()
-	realRemove := opts.removeWorktree
-	opts.removeWorktree = realRemove
+	realRemove := opts.RemoveWorktree
+	opts.RemoveWorktree = realRemove
 	prepared := preparedExecutorTarget(t, item, selected)
 	refreshCalls := 0
 		prepared.MutationSafety.Runtime.Refresh = func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
@@ -529,7 +529,7 @@ func TestExecuteActiveWorktreeOwnerRemovedBeforeFirstMemberMutationDoesNotCredit
 	}
 	removeCalls := 0
 	opts := defaultActiveWorktreeExecutionOptions()
-	opts.removeWorktree = func(context.Context, string, string) error {
+	opts.RemoveWorktree = func(context.Context, string, string) error {
 		removeCalls++
 		return errors.New("unexpected worktree mutation")
 	}
@@ -555,8 +555,8 @@ func TestExecuteActiveWorktreeCreditsVerifiedOwnerAbsenceAfterMemberMutation(t *
 	item := executorWorktreeItem(target, 1024)
 	selected := buildExecutorUnit(t, item)
 	opts := defaultActiveWorktreeExecutionOptions()
-	realRemove := opts.removeWorktree
-	opts.removeWorktree = func(ctx context.Context, repositoryID, worktreePath string) error {
+	realRemove := opts.RemoveWorktree
+	opts.RemoveWorktree = func(ctx context.Context, repositoryID, worktreePath string) error {
 		if err := realRemove(ctx, repositoryID, worktreePath); err != nil {
 			return err
 		}
