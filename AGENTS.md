@@ -15,7 +15,7 @@
 4. aibris clean --flag  → 적절한 옵션으로 실행
 ```
 
-CLI 자체는 dumb executor. Q&A와 판단은 AI 스킬이负责.
+CLI 자체는 dumb executor. Q&A와 판단은 AI 스킬이 담당한다.
 
 ## 동작 원리
 
