@@ -1,4 +1,4 @@
-package cmd
+package cleaner
 
 import (
 	"context"
@@ -6,14 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
 func TestRenderUnifiedCleanupReviewWideGolden(t *testing.T) {
 	plan := cleanupReviewTestPlan(t)
 	var output strings.Builder
-	renderUnifiedCleanupReview(&output, plan, "", cleanupReviewText, cleanupReviewWideWidth)
+	RenderUnifiedCleanupReview(&output, plan, "", CleanupReviewText, CleanupReviewWideWidth)
 
 	const want = `cleanup review
 
@@ -41,7 +40,7 @@ protected
 func TestRenderUnifiedCleanupReviewNarrowGolden(t *testing.T) {
 	plan := cleanupReviewTestPlan(t)
 	var output strings.Builder
-	renderUnifiedCleanupReview(&output, plan, "", cleanupReviewText, cleanupReviewNarrowWidth)
+	RenderUnifiedCleanupReview(&output, plan, "", CleanupReviewText, CleanupReviewNarrowWidth)
 
 	const want = `cleanup review
 
@@ -69,12 +68,12 @@ protected
 func TestPromptUnifiedCleanupReviewTTYAndTextShareSelectionState(t *testing.T) {
 	plan := cleanupReviewTestPlan(t)
 	var textOutput strings.Builder
-	textPlan, aborted, err := promptUnifiedCleanupReview(strings.NewReader("1 2\n\n"), &textOutput, plan, cleanupReviewText, cleanupReviewWideWidth)
+	textPlan, aborted, err := PromptUnifiedCleanupReview(strings.NewReader("1 2\n\n"), &textOutput, plan, CleanupReviewText, CleanupReviewWideWidth)
 	if err != nil || aborted {
 		t.Fatalf("text prompt = aborted %t, error %v", aborted, err)
 	}
 	var ttyOutput strings.Builder
-	ttyPlan, aborted, err := promptUnifiedCleanupReview(strings.NewReader("1 2\n\n"), &ttyOutput, plan, cleanupReviewTTY, cleanupReviewWideWidth)
+	ttyPlan, aborted, err := PromptUnifiedCleanupReview(strings.NewReader("1 2\n\n"), &ttyOutput, plan, CleanupReviewTTY, CleanupReviewWideWidth)
 	if err != nil || aborted {
 		t.Fatalf("TTY prompt = aborted %t, error %v", aborted, err)
 	}
@@ -97,7 +96,7 @@ func TestPromptUnifiedCleanupReviewTTYAndTextShareSelectionState(t *testing.T) {
 func TestPromptUnifiedCleanupReviewAbortAndLockedRows(t *testing.T) {
 	plan := cleanupReviewTestPlan(t)
 	var output strings.Builder
-	got, aborted, err := promptUnifiedCleanupReview(strings.NewReader("3\nq\n"), &output, plan, cleanupReviewText, cleanupReviewWideWidth)
+	got, aborted, err := PromptUnifiedCleanupReview(strings.NewReader("3\nq\n"), &output, plan, CleanupReviewText, CleanupReviewWideWidth)
 	if err != nil || !aborted {
 		t.Fatalf("prompt = aborted %t, error %v", aborted, err)
 	}
@@ -122,7 +121,7 @@ func TestRenderUnifiedCleanupReviewOmitsEmptySections(t *testing.T) {
 		}
 	}
 	var output strings.Builder
-	renderUnifiedCleanupReview(&output, plan, "", cleanupReviewText, cleanupReviewWideWidth)
+	RenderUnifiedCleanupReview(&output, plan, "", CleanupReviewText, CleanupReviewWideWidth)
 	if strings.Contains(output.String(), "review before cleanup") {
 		t.Fatalf("empty review section rendered:\n%s", output.String())
 	}
@@ -134,22 +133,33 @@ func TestRenderUnifiedCleanupReviewOmitsEmptySections(t *testing.T) {
 func TestRenderUnifiedCleanupReviewRendersAggregatedGuidedReasonOnce(t *testing.T) {
 	item := cleanupReviewTestItem("/home/user/.codex/worktrees/recommended", "recommended", types.CategoryWorktree, 1024)
 	aggregated := "eligible for cleanup recommendation; local branch retained; no upstream configured"
-	state := guidedCleanState{Rows: []guidedCleanRow{{
-		Key:         "recommended",
-		Policy:      guidedCleanPolicyRecommended,
-		Selected:    true,
-		ReasonCodes: []DecisionReasonCode{DecisionReasonEligible, DecisionReasonCode(GitReasonAttachedBranch), DecisionReasonCode(GitReasonDetachedHeadReachable)},
-		Row: guidedCodexWorktreeRow{
-			Item:   item,
-			Reason: aggregated,
+	candidates := []CleanupPlanCandidate{
+		{
+			RowKey:    "worktree:recommended",
+			Item:      item,
+			Selection: CleanupPlanSelected,
+			Reasons: []CleanupPlanReason{
+				{
+					Code:        CleanupPlanReasonCode("cleanup_recommended"),
+					Description: aggregated,
+				},
+				{
+					Code:        CleanupPlanReasonCode("git_attached_local_branch"),
+					Description: "",
+				},
+				{
+					Code:        CleanupPlanReasonCode("git_detached_head_reachable"),
+					Description: "",
+				},
+			},
 		},
-	}}}
-	plan, err := BuildUnifiedCleanupPlan(context.Background(), guidedCleanupPlanCandidates(state), CleanupPlanEvidence{})
+	}
+	plan, err := BuildUnifiedCleanupPlan(context.Background(), candidates, CleanupPlanEvidence{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var output strings.Builder
-	renderUnifiedCleanupReview(&output, plan, "", cleanupReviewText, 400)
+	RenderUnifiedCleanupReview(&output, plan, "", CleanupReviewText, 400)
 	if got := strings.Count(output.String(), aggregated); got != 1 {
 		t.Fatalf("aggregated guided reason count = %d; want once; output:\n%s", got, output.String())
 	}
@@ -181,7 +191,7 @@ func cleanupReviewTestPlan(t *testing.T) UnifiedCleanupPlan {
 			Item:      cleanupReviewTestItem(filepath.Join(root, ".codex", "worktrees", "retained"), "retained", types.CategoryWorktree, 2*1024),
 			Selection: CleanupPlanUnselected,
 			Reasons: []CleanupPlanReason{{
-				Code:        CleanupPlanReasonCode(DecisionReasonRepositoryRetention),
+				Code:        CleanupPlanReasonCode("repo_retention"),
 				Description: "most recent units",
 			}},
 		},
@@ -190,7 +200,7 @@ func cleanupReviewTestPlan(t *testing.T) UnifiedCleanupPlan {
 			Item:      cleanupReviewTestItem(filepath.Join(root, ".codex", "worktrees", "current"), "current", types.CategoryWorktree, 3*1024),
 			Selection: CleanupPlanLocked,
 			Reasons: []CleanupPlanReason{{
-				Code:        CleanupPlanReasonCode(DecisionReasonCurrentWorkingDirectory),
+				Code:        CleanupPlanReasonCode("cwd"),
 				Description: "current working directory",
 			}},
 		},
@@ -217,7 +227,7 @@ func cleanupPlanItemsEqual(left, right []types.DebrisInfo) bool {
 		return false
 	}
 	for i := range left {
-		if cleaner.TargetStableKey(left[i]) != cleaner.TargetStableKey(right[i]) || left[i].Size != right[i].Size {
+		if TargetStableKey(left[i]) != TargetStableKey(right[i]) || left[i].Size != right[i].Size {
 			return false
 		}
 	}
