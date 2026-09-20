@@ -76,6 +76,26 @@ func applyActiveUnitExecutionReceipt(receipt *cleanUnitExecutionReceipt, result 
 	}
 }
 
+func applyPreparedActiveWorktreeExecutionResult(receipt *cleanUnitExecutionReceipt, result worktree.ActiveWorktreeExecutionResult) {
+	receipt.MutationAttempted = receipt.MutationAttempted || result.MutationAttempted
+	receipt.PhysicalRemoved = result.PhysicalRemoved
+	if result.BlockingPath != "" {
+		receipt.BlockingPath = result.BlockingPath
+		receipt.BlockingReason = result.BlockingReason
+	}
+	if len(result.Members) == 0 {
+		return
+	}
+	receipt.Members = make([]cleanMemberExecutionReceipt, len(result.Members))
+	for i, member := range result.Members {
+		receipt.Members[i] = cleanMemberExecutionReceipt{
+			WorktreePath: member.WorktreePath,
+			Removed:      member.Removed,
+			Error:        member.Error,
+		}
+	}
+}
+
 func setActiveReceiptPhysicalState(receipt *cleanUnitExecutionReceipt, selected worktree.WorktreeCleanupUnit) {
 	receipt.PhysicalRemoved = pathDoesNotExist(selected.TargetPath)
 	if receipt.PhysicalRemoved && receipt.MutationAttempted {

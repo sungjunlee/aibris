@@ -52,9 +52,9 @@ type preparedCleanTarget struct {
 	Item             types.DebrisInfo
 	Component        *cleanupOverlapComponent
 	ActiveUnit       *worktree.WorktreeCleanupUnit
-	MutationSafety   *cleanupMutationSafety
 	TargetSnapshot   *cleaner.CleanupTargetSnapshot
 	PreparationError error
+	MutationSafety   *cleanupMutationSafety
 }
 
 // prepareCleanExecutionWithSafety captures both the selected active worktree
@@ -79,23 +79,23 @@ func prepareCleanExecutionWithOptions(
 	runtime cleanupOverlapSafetyRuntime,
 	opts types.PruneOptions,
 ) []preparedCleanTarget {
-	targets := selection.Targets
-	prepared := make([]preparedCleanTarget, 0, len(targets))
-	for _, target := range targets {
-		entry := preparedCleanTarget{Item: target}
-		snapshot, snapshotErr := cleaner.CaptureCleanupTargetSnapshot(target, opts)
-		if snapshotErr != nil {
-			entry.PreparationError = errors.Join(entry.PreparationError, snapshotErr)
-		} else {
-			entry.TargetSnapshot = snapshot
+	domainPrepared := cleaner.PrepareCleanupTargets(ctx, selection.Targets, opts)
+
+	cmdPrepared := make([]preparedCleanTarget, 0, len(domainPrepared))
+	for _, domainTarget := range domainPrepared {
+		entry := preparedCleanTarget{
+			Item:             domainTarget.Item,
+			TargetSnapshot:   domainTarget.Snapshot,
+			PreparationError: domainTarget.PreparationError,
 		}
-		if component, ok := cleanupOverlapComponentForTarget(selection, target); ok {
+		if component, ok := cleanupOverlapComponentForTarget(selection, domainTarget.Item); ok {
 			componentCopy := component
 			entry.Component = &componentCopy
 		} else {
-			entry.PreparationError = fmt.Errorf("physical cleanup component unavailable for %q", target.Path)
+			entry.PreparationError = errors.Join(entry.PreparationError,
+				fmt.Errorf("physical cleanup component unavailable for %q", domainTarget.Item.Path))
 		}
-		safety, safetyErr := mutationSafetyForTarget(selection, runtime, target)
+		safety, safetyErr := mutationSafetyForTarget(selection, runtime, domainTarget.Item)
 		if safetyErr != nil {
 			entry.PreparationError = errors.Join(entry.PreparationError, safetyErr)
 		} else {
@@ -103,8 +103,8 @@ func prepareCleanExecutionWithOptions(
 		}
 		// Git-aware execution follows Scan DebrisInfo.Status; gitdir is not
 		// re-parsed here to decide active/orphaned/plain-dir.
-		if isActiveWorktreeTarget(target) {
-			units, err := worktree.BuildWorktreeCleanupUnits(ctx, []types.DebrisInfo{target})
+		if isActiveWorktreeTarget(domainTarget.Item) {
+			units, err := worktree.BuildWorktreeCleanupUnits(ctx, []types.DebrisInfo{domainTarget.Item})
 			switch {
 			case err != nil:
 				entry.PreparationError = errors.Join(entry.PreparationError, err)
@@ -112,12 +112,13 @@ func prepareCleanExecutionWithOptions(
 				entry.PreparationError = errors.Join(entry.PreparationError,
 					fmt.Errorf("expected one active cleanup unit, found %d", len(units)))
 			default:
-				entry.ActiveUnit = &units[0]
+				unitCopy := units[0]
+				entry.ActiveUnit = &unitCopy
 			}
 		}
-		prepared = append(prepared, entry)
+		cmdPrepared = append(cmdPrepared, entry)
 	}
-	return prepared
+	return cmdPrepared
 }
 func executePreparedCleanTargets(ctx context.Context, targets []preparedCleanTarget, opts activeWorktreeExecutionOptions) (cleanExecutionReceipt, error) {
 	if len(targets) > 0 {
@@ -334,45 +335,25 @@ func executeActiveWorktreeUnit(
 		receipt.Members = append(receipt.Members, cleanMemberExecutionReceipt{WorktreePath: member.WorktreePath})
 	}
 
-	result, err := worktree.ExecuteActiveWorktreeUnit(ctx, target, selected, worktree.ExecutionOptions{
-		RemoveWorktree: opts.removeWorktree,
-		RemoveAll:      opts.removeAll,
-		Getwd:          opts.getwd,
-		UserHomeDir:    opts.userHomeDir,
+	prepared := worktree.PreparedActiveWorktreeTarget{
+		Item:     target,
+		Unit:     selected,
+		Snapshot: snapshot,
 		BeforeMutation: func(ctx context.Context) error {
 			validation, validationErr := safety.validate(ctx)
 			applyOverlapValidationReceipt(&receipt, validation)
 			if validationErr != nil {
-				return fmt.Errorf("pre-mutation safety barrier: %w", validationErr)
-			}
-			if snapshot == nil {
-				return errors.New("pre-mutation safety barrier: cleanup target snapshot unavailable")
-			}
-		// snapshot is an active worktree unit here, so it is never
-		// activity-derived and validate cannot walk the tree per member.
-		if snapshotErr := snapshot.Validate(ctx); snapshotErr != nil {
-				receipt.BlockingPath = target.Path
-				receipt.BlockingReason = snapshotErr.Error()
-				receipt.FailureCause = snapshotErr
-				return fmt.Errorf("pre-mutation safety barrier: %v", snapshotErr)
+				return validationErr
 			}
 			return nil
 		},
-	AfterMember: func(_ context.Context, remaining int) error {
-		ownerRemoved, snapshotErr := snapshot.RefreshAfterMutation()
-			if snapshotErr != nil {
-				receipt.BlockingPath = target.Path
-				receipt.BlockingReason = snapshotErr.Error()
-				return snapshotErr
-			}
-			if ownerRemoved && remaining > 0 {
-				err := fmt.Errorf("cleanup target disappeared before removing remaining worktree members: %q", target.Path)
-				receipt.BlockingPath = target.Path
-				receipt.BlockingReason = err.Error()
-				return err
-			}
-			return nil
-		},
+	}
+
+	result, err := worktree.ExecutePreparedActiveWorktreeTarget(ctx, prepared, worktree.ExecutionOptions{
+		RemoveWorktree: opts.removeWorktree,
+		RemoveAll:      opts.removeAll,
+		Getwd:          opts.getwd,
+		UserHomeDir:    opts.userHomeDir,
 		RemovingMember: func(index, total int, path string) {
 			fmt.Fprintf(opts.output, "removing worktree member %d/%d: %s ...\n", index+1, total, path)
 		},
@@ -380,7 +361,8 @@ func executeActiveWorktreeUnit(
 			fmt.Fprintf(opts.output, "removed worktree member: %s\n", path)
 		},
 	})
-	applyActiveUnitExecutionReceipt(&receipt, result)
+
+	applyPreparedActiveWorktreeExecutionResult(&receipt, result)
 	if err != nil {
 		if result.StartedMembers {
 			setActiveReceiptPhysicalState(&receipt, selected)
@@ -397,7 +379,7 @@ func executeActiveWorktreeUnit(
 	receipt.State = cleanExecutionRemoved
 	receipt.PhysicalRemoved = true
 	receipt.FreedBytes = selected.Size
-	fmt.Fprintf(opts.output, "removed: %s (%s) — %s\n", debrisExecutionName(target), target.Tool, cleaner.FormatSize(receipt.FreedBytes))
+	worktree.WritePreparedActiveWorktreeSuccess(opts.output, debrisExecutionName(target), target.Tool, receipt.FreedBytes)
 	return receipt, nil
 }
 
