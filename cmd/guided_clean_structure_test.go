@@ -18,14 +18,8 @@ func TestGuidedCleanRenderLivesApartFromPolicyState(t *testing.T) {
 		"renderGuidedClean",
 		"renderGuidedRows",
 	}
-	policyNames := []string{
-		"buildGuidedCleanState",
-		"planGuidedCleanState",
-		"toggleGuidedCleanRow",
-		"applyGuidedCleanCommand",
-		"adjustGuidedCleanAge",
-		"replanGuidedCleanAge",
-	}
+	// Policy functions moved to internal/worktree/guided.go
+	policyNames := []string{}
 
 	wanted := make(map[string]string, len(renderNames)+len(policyNames))
 	for _, name := range renderNames {

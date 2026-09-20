@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"os"
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/types"
@@ -25,6 +26,9 @@ type (
 	WorktreeActivityEvidence = worktree.WorktreeActivityEvidence
 	DefaultBranchUniqueness  = worktree.DefaultBranchUniqueness
 	worktreeGitCommandRunner = worktree.GitCommandRunner
+	guidedCleanRow           = worktree.GuidedCleanRow
+	guidedCleanState         = worktree.GuidedCleanState
+	guidedCodexWorktreeRow   = worktree.GuidedCodexWorktreeRow
 )
 
 const (
@@ -75,6 +79,14 @@ const (
 	worktreeActivityNotRegisteredReason = worktree.ActivityNotRegisteredReason
 
 	gitEvidenceCommandTimeout = worktree.GitEvidenceCommandTimeout
+)
+
+type guidedCleanPolicy = DecisionClass
+
+const (
+	guidedCleanPolicyRecommended guidedCleanPolicy = DecisionRecommended
+	guidedCleanPolicyReviewable  guidedCleanPolicy = DecisionReviewable
+	guidedCleanPolicyLocked      guidedCleanPolicy = DecisionLocked
 )
 
 func DefaultCleanupPolicy(now time.Time) CleanupPolicy {
@@ -128,3 +140,58 @@ func gitWorktreeRemoveArgs(repositoryID, worktreePath string) []string {
 func decisionReasonDescription(code DecisionReasonCode) string {
 	return worktree.DecisionReasonDescription(code)
 }
+
+func buildGuidedCleanState(ctx context.Context, result *types.ScanResult, source scanSource, minIdleAge time.Duration, reason string) (guidedCleanState, error) {
+	cwd, _ := os.Getwd()
+	activity := loadCodexActivityIndex(ctx)
+	opts := worktree.BuildGuidedCleanStateOptions{
+		CurrentWorkingDirectory: cwd,
+		Activity:                &activity,
+		ProtectMatcher:          newProtectPathMatcher(currentProtectScanRoots()),
+	}
+	return worktree.BuildGuidedCleanState(ctx, result, source, minIdleAge, reason, opts)
+}
+
+func toggleGuidedCleanRow(state *guidedCleanState, number int) bool {
+	return worktree.ToggleGuidedCleanRow(state, number)
+}
+
+func applyGuidedCleanCommand(state guidedCleanState, line string) (guidedCleanState, string, bool) {
+	return worktree.ApplyGuidedCleanCommand(context.Background(), state, line, parseAge)
+}
+
+func selectedGuidedCleanTargets(state guidedCleanState) []types.DebrisInfo {
+	return worktree.SelectedGuidedCleanTargets(state)
+}
+
+func applyGuidedPolicyReasons(
+	inputs []cleanupOverlapLogicalInput,
+	state guidedCleanState,
+) []cleanupOverlapLogicalInput {
+	return worktree.ApplyGuidedPolicyReasons(inputs, state)
+}
+
+func guidedAgeString(age time.Duration) string {
+	return worktree.GuidedAgeString(age)
+}
+
+func guidedCodexWorktreeContainsCWD(worktreePath, cwd string) bool {
+	return worktree.GuidedCodexWorktreeContainsCWD(worktreePath, cwd)
+}
+
+func guidedCleanupUnitItem(unit WorktreeCleanupUnit, items []types.DebrisInfo) types.DebrisInfo {
+	return worktree.GuidedCleanupUnitItem(unit, items)
+}
+
+func newGuidedCleanStateFromCleanupPlan(
+	source scanSource,
+	reason string,
+	activity codexActivityIndex,
+	policy CleanupPolicy,
+	units []WorktreeCleanupUnit,
+	items []types.DebrisInfo,
+	plan CleanupPlan,
+) guidedCleanState {
+	return worktree.NewGuidedCleanStateFromCleanupPlan(source, reason, activity, policy, units, items, plan)
+}
+
