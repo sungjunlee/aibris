@@ -247,16 +247,17 @@ func ExecuteReceipt(
 	validatePlan func(context.Context, time.Time) error,
 	executePrepared func(context.Context, []PreparedTarget) (ExecutionReceipt, error),
 	listSnapshots func() (int, error),
+	isMinimumAgeError func(error) bool,
 ) (Receipt, error) {
 	receipt := NewReceipt(document, pathsIncluded)
 	receipt.inventory = receiptInventory(components)
 	targetIDs, err := receiptTargetIDsForPrepared(components, prepared)
 	if err != nil {
-		return finishReceipt(receipt, err, listSnapshots)
+		return finishReceipt(receipt, err, listSnapshots, isMinimumAgeError)
 	}
 	prepared, err = orderReceiptPreparedTargets(prepared, targetIDs)
 	if err != nil {
-		return finishReceipt(receipt, err, listSnapshots)
+		return finishReceipt(receipt, err, listSnapshots, isMinimumAgeError)
 	}
 
 	selectedIDs := make([]string, 0)
@@ -264,10 +265,11 @@ func ExecuteReceipt(
 	for _, target := range selectedPhysicalTargets() {
 		id := receiptTargetIDForItem(components, target)
 		if id == "" {
-			return finishReceipt(receipt,
-				fmt.Errorf("execution receipt invariant: no physical target ID for selected target %q", receiptItemKey(target)),
-				listSnapshots,
-			)
+		return finishReceipt(receipt,
+			fmt.Errorf("execution receipt invariant: no physical target ID for selected target %q", receiptItemKey(target)),
+			listSnapshots,
+			isMinimumAgeError,
+		)
 		}
 		if selectedSet[id] {
 			continue
@@ -285,16 +287,16 @@ func ExecuteReceipt(
 		}
 	}
 	if err := rejectReceiptTargetSetMismatch(&receipt, selectedSet, targetIDs); err != nil {
-		return finishReceipt(receipt, err, listSnapshots)
+		return finishReceipt(receipt, err, listSnapshots, isMinimumAgeError)
 	}
 
 	if len(prepared) == 0 {
-		return finishReceipt(receipt, nil, listSnapshots)
+		return finishReceipt(receipt, nil, listSnapshots, isMinimumAgeError)
 	}
 
 	if interactive {
 		return executeInteractiveReceipt(
-			ctx, receipt, validatePlan, executePrepared, listSnapshots,
+			ctx, receipt, validatePlan, executePrepared, listSnapshots, isMinimumAgeError,
 			prepared, targetIDs, selectedIDs,
 		)
 	}
@@ -310,9 +312,9 @@ func ExecuteReceipt(
 				markReceiptTarget(&receipt, id, ReceiptStatusCancelled, true, code)
 			}
 			if cancelled {
-				return finishReceipt(receipt, context.Canceled, listSnapshots)
+				return finishReceipt(receipt, context.Canceled, listSnapshots, isMinimumAgeError)
 			}
-			return finishReceipt(receipt, errors.New("cleanup confirmation declined"), listSnapshots)
+			return finishReceipt(receipt, errors.New("cleanup confirmation declined"), listSnapshots, isMinimumAgeError)
 		}
 	}
 
@@ -326,12 +328,12 @@ func ExecuteReceipt(
 		for _, id := range selectedIDs {
 			markReceiptTarget(&receipt, id, state, true, code)
 		}
-		return finishReceipt(receipt, err, listSnapshots)
+		return finishReceipt(receipt, err, listSnapshots, isMinimumAgeError)
 	}
-
+	
 	execution, executionErr := executePrepared(ctx, prepared)
-	applyErr := applyExecutionReceipt(&receipt, targetIDs, execution)
-	return finishReceipt(receipt, errors.Join(executionErr, applyErr), listSnapshots)
+	applyErr := applyExecutionReceipt(&receipt, targetIDs, execution, isMinimumAgeError)
+	return finishReceipt(receipt, errors.Join(executionErr, applyErr), listSnapshots, isMinimumAgeError)
 }
 
 func executeInteractiveReceipt(
@@ -340,6 +342,7 @@ func executeInteractiveReceipt(
 	validatePlan func(context.Context, time.Time) error,
 	executePrepared func(context.Context, []PreparedTarget) (ExecutionReceipt, error),
 	listSnapshots func() (int, error),
+	isMinimumAgeError func(error) bool,
 	prepared []PreparedTarget,
 	targetIDs map[string]string,
 	selectedIDs []string,
@@ -351,18 +354,18 @@ func executeInteractiveReceipt(
 		if err := ctx.Err(); err != nil {
 			markReceiptTarget(&receipt, id, ReceiptStatusCancelled, true, "cancelled_during_confirmation")
 			markPreparedReceiptTargets(&receipt, prepared[i+1:], targetIDs, ReceiptStatusCancelled, true, "cancelled_during_confirmation")
-			return finishReceipt(receipt, err, listSnapshots)
+			return finishReceipt(receipt, err, listSnapshots, isMinimumAgeError)
 		}
 		line, ok, cancelled := scanInput(ctx, scanner)
 		if cancelled {
 			markReceiptTarget(&receipt, id, ReceiptStatusCancelled, true, "cancelled_during_confirmation")
 			markPreparedReceiptTargets(&receipt, prepared[i+1:], targetIDs, ReceiptStatusCancelled, true, "cancelled_during_confirmation")
-			return finishReceipt(receipt, ctx.Err(), listSnapshots)
+			return finishReceipt(receipt, ctx.Err(), listSnapshots, isMinimumAgeError)
 		}
 		if !ok {
 			markReceiptTarget(&receipt, id, ReceiptStatusCancelled, true, "confirmation_cancelled")
 			markPreparedReceiptTargets(&receipt, prepared[i+1:], targetIDs, ReceiptStatusCancelled, true, "confirmation_cancelled")
-			return finishReceipt(receipt, context.Canceled, listSnapshots)
+			return finishReceipt(receipt, context.Canceled, listSnapshots, isMinimumAgeError)
 		}
 		response := strings.ToLower(strings.TrimSpace(line))
 		switch response {
@@ -376,10 +379,10 @@ func executeInteractiveReceipt(
 				}
 				markReceiptTarget(&receipt, id, state, true, code)
 				markPreparedReceiptTargets(&receipt, prepared[i+1:], targetIDs, ReceiptStatusCancelled, true, "cancelled_after_confirmation")
-				return finishReceipt(receipt, err, listSnapshots)
-			}
-			execution, err := executePrepared(ctx, []PreparedTarget{target})
-			applyErr := applyExecutionReceipt(&receipt, targetIDs, execution)
+			return finishReceipt(receipt, err, listSnapshots, isMinimumAgeError)
+		}
+		execution, err := executePrepared(ctx, []PreparedTarget{target})
+		applyErr := applyExecutionReceipt(&receipt, targetIDs, execution, isMinimumAgeError)
 			if executionErr == nil && err != nil {
 				executionErr = err
 			}
@@ -387,18 +390,18 @@ func executeInteractiveReceipt(
 				executionErr = applyErr
 			}
 			if err != nil && errors.Is(err, context.Canceled) {
-				markPreparedReceiptTargets(&receipt, prepared[i+1:], targetIDs, ReceiptStatusCancelled, true, "cancelled_after_execution")
-				return finishReceipt(receipt, errors.Join(err, applyErr), listSnapshots)
+			markPreparedReceiptTargets(&receipt, prepared[i+1:], targetIDs, ReceiptStatusCancelled, true, "cancelled_after_execution")
+			return finishReceipt(receipt, errors.Join(err, applyErr), listSnapshots, isMinimumAgeError)
 			}
 		case "n", "no":
 			markReceiptTarget(&receipt, id, ReceiptStatusSkipped, false, "not_confirmed")
 		default:
-			markReceiptTarget(&receipt, id, ReceiptStatusCancelled, true, "invalid_confirmation")
-			markPreparedReceiptTargets(&receipt, prepared[i+1:], targetIDs, ReceiptStatusCancelled, true, "invalid_confirmation")
-			return finishReceipt(receipt, errors.New("cleanup confirmation cancelled"), listSnapshots)
-		}
+		markReceiptTarget(&receipt, id, ReceiptStatusCancelled, true, "invalid_confirmation")
+		markPreparedReceiptTargets(&receipt, prepared[i+1:], targetIDs, ReceiptStatusCancelled, true, "invalid_confirmation")
+		return finishReceipt(receipt, errors.New("cleanup confirmation cancelled"), listSnapshots, isMinimumAgeError)
 	}
-	return finishReceipt(receipt, executionErr, listSnapshots)
+}
+return finishReceipt(receipt, executionErr, listSnapshots, isMinimumAgeError)
 }
 
 func readConfirmation(ctx context.Context, scanner *bufio.Scanner) (approved, cancelled bool) {
@@ -580,6 +583,7 @@ func applyExecutionReceipt(
 	receipt *Receipt,
 	targetIDs map[string]string,
 	execution ExecutionReceipt,
+	isMinimumAgeError func(error) bool,
 ) error {
 	var errs []error
 	for _, unit := range execution.Units {
@@ -612,7 +616,7 @@ func applyExecutionReceipt(
 			}
 			target.ResidualBytes = residualBytesJSON(unit)
 			target.ReasonCodes = uniqueReasonCodes(
-				append(target.ReasonCodes, receiptStateReasons(unit)...),
+				append(target.ReasonCodes, receiptStateReasons(unit, isMinimumAgeError)...),
 			)
 			break
 		}
@@ -631,9 +635,7 @@ func residualBytesJSON(unit ExecutionUnit) *int64 {
 	return &residual
 }
 
-var errCleanupTargetYoungerThanMinimumAge = errors.New("cleanup target is younger than minimum age")
-
-func receiptStateReasons(unit ExecutionUnit) []string {
+func receiptStateReasons(unit ExecutionUnit, isMinimumAgeError func(error) bool) []string {
 	codes := make([]string, 0, 2)
 	if unit.CommandFallbackPathRemoval {
 		codes = append(codes, "command_fallback_path_removal")
@@ -650,7 +652,7 @@ func receiptStateReasons(unit ExecutionUnit) []string {
 	case "partial":
 		return append(codes, "partial_failure")
 	case "failed":
-		if errors.Is(unit.FailureCause, errCleanupTargetYoungerThanMinimumAge) {
+		if unit.FailureCause != nil && isMinimumAgeError(unit.FailureCause) {
 			// The pre-mutation barrier refused a target that went live again.
 			// That is retry-later, not a removal failure.
 			return append(codes, "minimum_age")
@@ -663,7 +665,7 @@ func receiptStateReasons(unit ExecutionUnit) []string {
 	}
 }
 
-func finishReceipt(receipt Receipt, executionErr error, listSnapshots func() (int, error)) (Receipt, error) {
+func finishReceipt(receipt Receipt, executionErr error, listSnapshots func() (int, error), isMinimumAgeError func(error) bool) (Receipt, error) {
 	finalized, finalizeErr := finalizeReceipt(receipt, listSnapshots)
 	return finalized, errors.Join(executionErr, finalizeErr)
 }
