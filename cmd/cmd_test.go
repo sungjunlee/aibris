@@ -23,6 +23,16 @@ import (
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
+// readCmdSource reads a source file in the cmd package for test verification.
+func readCmdSource(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	return string(data)
+}
+
 // chtimesTree backdates every entry under root. Cache staleness comes from the
 // newest mtime anywhere in the tree, so backdating only the container leaves a
 // fixture that correctly reads as an actively used cache.
