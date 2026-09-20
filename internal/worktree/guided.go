@@ -1,79 +1,115 @@
-package cmd
+package worktree
 
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/codexactivity"
+	"github.com/sungjunlee/aibris/internal/exclude"
 	"github.com/sungjunlee/aibris/internal/types"
-	"github.com/sungjunlee/aibris/internal/worktree"
 )
 
-type guidedCleanPolicy = DecisionClass
-
-const (
-	guidedCleanPolicyRecommended guidedCleanPolicy = DecisionRecommended
-	guidedCleanPolicyReviewable  guidedCleanPolicy = DecisionReviewable
-	guidedCleanPolicyLocked      guidedCleanPolicy = DecisionLocked
-)
-
-type guidedCleanRow struct {
+// GuidedCleanRow represents a single worktree in the guided cleanup UI.
+type GuidedCleanRow struct {
 	Number            int
 	Key               string
-	Row               guidedCodexWorktreeRow
-	Policy            guidedCleanPolicy
+	Row               GuidedCodexWorktreeRow
+	Policy            DecisionClass
 	ReasonCodes       []DecisionReasonCode
 	Selected          bool
 	SelectionOverride *bool
 }
 
-type guidedCleanState struct {
-	ScanSource scanSource
+// GuidedCleanState holds the complete state for guided cleanup interaction.
+type GuidedCleanState struct {
+	ScanSource cleaner.ScanSource
 	Reason     string
 	Inventory  []types.DebrisInfo
-	Activity   codexActivityIndex
+	Activity   codexactivity.Index
 	Policy     CleanupPolicy
-	Rows       []guidedCleanRow
+	Rows       []GuidedCleanRow
 	Units      []WorktreeCleanupUnit
 	CanReplan  bool
 }
 
-func buildGuidedCleanState(ctx context.Context, result *types.ScanResult, source scanSource, minIdleAge time.Duration, reason string) (guidedCleanState, error) {
-	items := activeWorktrees(result.Worktrees)
-	units, err := worktree.BuildWorktreeCleanupUnits(ctx, items)
-	if err != nil {
-		return guidedCleanState{}, err
-	}
-	activity := loadCodexActivityIndex(ctx)
-	if err := enrichWorktreeCleanupActivity(ctx, units, items, worktreeActivityOptions{Index: &activity}); err != nil {
-		return guidedCleanState{}, err
-	}
-	return planGuidedCleanState(ctx, result, source, reason, activity, units, items, minIdleAge)
+// GuidedCodexWorktreeRow holds display data for a guided cleanup row.
+type GuidedCodexWorktreeRow struct {
+	Item   types.DebrisInfo
+	Reason string
 }
 
-func planGuidedCleanState(ctx context.Context, result *types.ScanResult, source scanSource, reason string, activity codexActivityIndex, units []WorktreeCleanupUnit, items []types.DebrisInfo, minIdleAge time.Duration) (guidedCleanState, error) {
-	cwd, _ := os.Getwd()
+// BuildGuidedCleanStateOptions holds optional dependencies for building guided state.
+type BuildGuidedCleanStateOptions struct {
+	CurrentWorkingDirectory string
+	Activity                *codexactivity.Index
+	ProtectMatcher          *exclude.Matcher
+}
+
+// BuildGuidedCleanState constructs guided cleanup state from scan results.
+func BuildGuidedCleanState(
+	ctx context.Context,
+	result *types.ScanResult,
+	source cleaner.ScanSource,
+	minIdleAge time.Duration,
+	reason string,
+	opts BuildGuidedCleanStateOptions,
+) (GuidedCleanState, error) {
+	items := filterActiveWorktrees(result.Worktrees)
+	units, err := BuildWorktreeCleanupUnits(ctx, items)
+	if err != nil {
+		return GuidedCleanState{}, err
+	}
+
+	activity := codexactivity.Index{}
+	if opts.Activity != nil {
+		activity = *opts.Activity
+	} else {
+		activity = codexactivity.Load(ctx)
+	}
+
+	activityOpts := ActivityOptions{Index: &activity}
+	if err := EnrichActivity(ctx, units, items, activityOpts); err != nil {
+		return GuidedCleanState{}, err
+	}
+
+	return planGuidedCleanState(ctx, result, source, reason, activity, units, items, minIdleAge, opts)
+}
+
+func planGuidedCleanState(
+	ctx context.Context,
+	result *types.ScanResult,
+	source cleaner.ScanSource,
+	reason string,
+	activity codexactivity.Index,
+	units []WorktreeCleanupUnit,
+	items []types.DebrisInfo,
+	minIdleAge time.Duration,
+	opts BuildGuidedCleanStateOptions,
+) (GuidedCleanState, error) {
 	policy := DefaultCleanupPolicy(time.Now())
-	policy.CurrentWorkingDirectory = cwd
+	policy.CurrentWorkingDirectory = opts.CurrentWorkingDirectory
 	policy.MinIdleAge = minIdleAge
-	policy = fillCleanupPolicy(policy)
-	worktree.InspectRecommendedCandidateUniqueness(ctx, units, policy)
-	plan := worktree.PlanWorktreeCleanup(units, policy)
+	policy = FillCleanupPolicy(policy)
+
+	InspectRecommendedCandidateUniqueness(ctx, units, policy)
+	plan := PlanWorktreeCleanup(units, policy)
 	state := newGuidedCleanStateFromCleanupPlan(source, reason, activity, policy, units, items, plan)
 	state.Inventory = append([]types.DebrisInfo(nil), result.Worktrees...)
-	applyProtectPathToGuidedState(&state, newProtectPathMatcher(currentProtectScanRoots()))
+	applyProtectPathToGuidedState(&state, opts.ProtectMatcher)
 	return state, nil
 }
 
-func toggleGuidedCleanRow(state *guidedCleanState, number int) bool {
+// ToggleGuidedCleanRow toggles the selection state of a row by number.
+// Returns false if the row is locked or not found.
+func ToggleGuidedCleanRow(state *GuidedCleanState, number int) bool {
 	for i := range state.Rows {
 		if state.Rows[i].Number == number {
-			if state.Rows[i].Policy == guidedCleanPolicyLocked {
+			if state.Rows[i].Policy == DecisionLocked {
 				return false
 			}
 			state.Rows[i].Selected = !state.Rows[i].Selected
@@ -85,27 +121,35 @@ func toggleGuidedCleanRow(state *guidedCleanState, number int) bool {
 	return true
 }
 
-func applyGuidedCleanCommand(state guidedCleanState, line string) (guidedCleanState, string, bool) {
+// ApplyGuidedCleanCommand processes user commands that modify guided state.
+// Supports age adjustment commands: "+", "]" (increase), "-", "[" (decrease), "age <duration>".
+// Returns (newState, message, handled).
+func ApplyGuidedCleanCommand(
+	ctx context.Context,
+	state GuidedCleanState,
+	line string,
+	parseAgeFn func(string) (time.Duration, error),
+) (GuidedCleanState, string, bool) {
 	switch strings.ToLower(line) {
 	case "+", "]":
-		return adjustGuidedCleanAge(state, 1)
+		return adjustGuidedCleanAge(ctx, state, 1)
 	case "-", "[":
-		return adjustGuidedCleanAge(state, -1)
+		return adjustGuidedCleanAge(ctx, state, -1)
 	}
 	if strings.HasPrefix(strings.ToLower(line), "age ") {
 		value := strings.TrimSpace(line[4:])
-		age, err := parseAge(value)
+		age, err := parseAgeFn(value)
 		if err != nil || age <= 0 {
 			return state, "invalid age duration", true
 		}
-		next, message := replanGuidedCleanAge(state, age)
+		next, message := replanGuidedCleanAge(ctx, state, age)
 		return next, message, true
 	}
 	return state, "", false
 }
 
-func adjustGuidedCleanAge(state guidedCleanState, direction int) (guidedCleanState, string, bool) {
-	current := fillCleanupPolicy(state.Policy).MinIdleAge
+func adjustGuidedCleanAge(ctx context.Context, state GuidedCleanState, direction int) (GuidedCleanState, string, bool) {
+	current := FillCleanupPolicy(state.Policy).MinIdleAge
 	if current <= 0 {
 		current = DefaultMinIdleAge
 	}
@@ -128,42 +172,65 @@ func adjustGuidedCleanAge(state guidedCleanState, direction int) (guidedCleanSta
 		index = len(presets) - 1
 	}
 	nextAge := presets[index]
-	next, message := replanGuidedCleanAge(state, nextAge)
+	next, message := replanGuidedCleanAge(ctx, state, nextAge)
 	return next, message, true
 }
 
-func replanGuidedCleanAge(state guidedCleanState, age time.Duration) (guidedCleanState, string) {
+func replanGuidedCleanAge(ctx context.Context, state GuidedCleanState, age time.Duration) (GuidedCleanState, string) {
 	if !state.CanReplan {
 		return state, "age threshold cannot be changed in this context"
 	}
 	overrides := guidedCleanSelectionOverrides(state)
 	next := cloneGuidedCleanStateForReplan(state)
-	next.Policy = fillCleanupPolicy(state.Policy)
+	next.Policy = FillCleanupPolicy(state.Policy)
 	next.Policy.MinIdleAge = age
-	applyReplannedGuidedCleanup(&next)
+	applyReplannedGuidedCleanup(ctx, &next)
 	applyGuidedCleanSelectionOverrides(&next, overrides)
-	return next, fmt.Sprintf("minimum idle age set to %s", guidedAgeString(age))
+	return next, fmt.Sprintf("minimum idle age set to %s", GuidedAgeString(age))
 }
-func newGuidedCleanStateFromCleanupPlan(source scanSource, reason string, activity codexActivityIndex, policy CleanupPolicy, units []WorktreeCleanupUnit, items []types.DebrisInfo, plan CleanupPlan) guidedCleanState {
-	rows := make([]guidedCleanRow, 0, len(plan.Decisions))
+
+// NewGuidedCleanStateFromCleanupPlan constructs guided state from a cleanup plan.
+// Exposed for testing.
+func NewGuidedCleanStateFromCleanupPlan(
+	source cleaner.ScanSource,
+	reason string,
+	activity codexactivity.Index,
+	policy CleanupPolicy,
+	units []WorktreeCleanupUnit,
+	items []types.DebrisInfo,
+	plan CleanupPlan,
+) GuidedCleanState {
+	return newGuidedCleanStateFromCleanupPlan(source, reason, activity, policy, units, items, plan)
+}
+
+func newGuidedCleanStateFromCleanupPlan(
+	source cleaner.ScanSource,
+	reason string,
+	activity codexactivity.Index,
+	policy CleanupPolicy,
+	units []WorktreeCleanupUnit,
+	items []types.DebrisInfo,
+	plan CleanupPlan,
+) GuidedCleanState {
+	rows := make([]GuidedCleanRow, 0, len(plan.Decisions))
 	for _, decision := range plan.Decisions {
-		row := guidedCleanRow{
-			Key: cleanupUnitStableKey(decision.Unit),
-			Row: guidedCodexWorktreeRow{
+		row := GuidedCleanRow{
+			Key: CleanupUnitStableKey(decision.Unit),
+			Row: GuidedCodexWorktreeRow{
 				Item:   guidedCleanupUnitItem(decision.Unit, items),
-				Reason: guidedCleanupDecisionReason(decision),
+				Reason: GuidedCleanupDecisionReason(decision),
 			},
 			Policy: decision.Class,
 		}
 		for _, reason := range decision.Reasons {
 			row.ReasonCodes = append(row.ReasonCodes, reason.Code)
 		}
-		row.Selected = row.Policy == guidedCleanPolicyRecommended
+		row.Selected = row.Policy == DecisionRecommended
 		rows = append(rows, row)
 	}
 	sort.SliceStable(rows, func(i, j int) bool {
-		leftRecommended := rows[i].Policy == guidedCleanPolicyRecommended
-		rightRecommended := rows[j].Policy == guidedCleanPolicyRecommended
+		leftRecommended := rows[i].Policy == DecisionRecommended
+		rightRecommended := rows[j].Policy == DecisionRecommended
 		if leftRecommended != rightRecommended {
 			return leftRecommended
 		}
@@ -175,15 +242,20 @@ func newGuidedCleanStateFromCleanupPlan(source scanSource, reason string, activi
 	for i := range rows {
 		rows[i].Number = i + 1
 	}
-	return guidedCleanState{
+	return GuidedCleanState{
 		ScanSource: source,
 		Reason:     reason,
 		Activity:   activity,
-		Policy:     fillCleanupPolicy(policy),
+		Policy:     FillCleanupPolicy(policy),
 		Rows:       rows,
 		Units:      units,
 		CanReplan:  true,
 	}
+}
+
+// GuidedCleanupUnitItem finds the debris item that matches a cleanup unit.
+func GuidedCleanupUnitItem(unit WorktreeCleanupUnit, items []types.DebrisInfo) types.DebrisInfo {
+	return guidedCleanupUnitItem(unit, items)
 }
 
 func guidedCleanupUnitItem(unit WorktreeCleanupUnit, items []types.DebrisInfo) types.DebrisInfo {
@@ -222,7 +294,8 @@ func guidedCleanupUnitItem(unit WorktreeCleanupUnit, items []types.DebrisInfo) t
 	return item
 }
 
-func guidedCleanupDecisionReason(decision WorktreeCleanupDecision) string {
+// GuidedCleanupDecisionReason formats a human-readable reason for a cleanup decision.
+func GuidedCleanupDecisionReason(decision WorktreeCleanupDecision) string {
 	parts := make([]string, 0, len(decision.Reasons)+len(decision.Unit.Members))
 	for _, reason := range decision.Reasons {
 		value := reason.Description
@@ -259,10 +332,11 @@ func guidedMemberReason(unit WorktreeCleanupUnit, member GitWorktreeMember, reas
 	return reason
 }
 
-func applyGuidedPolicyReasons(
-	inputs []cleanupOverlapLogicalInput,
-	state guidedCleanState,
-) []cleanupOverlapLogicalInput {
+// ApplyGuidedPolicyReasons enriches overlap inputs with guided policy reasons.
+func ApplyGuidedPolicyReasons(
+	inputs []cleaner.CleanupOverlapLogicalInput,
+	state GuidedCleanState,
+) []cleaner.CleanupOverlapLogicalInput {
 	reasonsByPath := make(map[string]string, len(state.Rows))
 	for _, row := range state.Rows {
 		path, ok := cleaner.TargetPathKey(row.Row.Item.Path)
@@ -271,7 +345,7 @@ func applyGuidedPolicyReasons(
 		}
 	}
 	for i := range inputs {
-		if !isActiveCodexWorktree(inputs[i].Item) {
+		if inputs[i].Item.Category != types.CategoryWorktree || inputs[i].Item.Status != types.WorktreeActive {
 			continue
 		}
 		path, ok := cleaner.TargetPathKey(inputs[i].Item.Path)
@@ -285,7 +359,8 @@ func applyGuidedPolicyReasons(
 	return inputs
 }
 
-func selectedGuidedCleanTargets(state guidedCleanState) []types.DebrisInfo {
+// SelectedGuidedCleanTargets returns the debris items selected for cleanup.
+func SelectedGuidedCleanTargets(state GuidedCleanState) []types.DebrisInfo {
 	var targets []types.DebrisInfo
 	for _, row := range state.Rows {
 		if row.Selected {
@@ -318,9 +393,9 @@ func guidedCleanAgePresets(current time.Duration) []time.Duration {
 	return presets
 }
 
-func cloneGuidedCleanStateForReplan(state guidedCleanState) guidedCleanState {
+func cloneGuidedCleanStateForReplan(state GuidedCleanState) GuidedCleanState {
 	next := state
-	next.Rows = append([]guidedCleanRow(nil), state.Rows...)
+	next.Rows = append([]GuidedCleanRow(nil), state.Rows...)
 	for i := range next.Rows {
 		next.Rows[i].ReasonCodes = append([]DecisionReasonCode(nil), state.Rows[i].ReasonCodes...)
 	}
@@ -331,40 +406,39 @@ func cloneGuidedCleanStateForReplan(state guidedCleanState) guidedCleanState {
 	return next
 }
 
-func applyReplannedGuidedCleanup(state *guidedCleanState) {
-	worktree.InspectRecommendedCandidateUniqueness(context.Background(), state.Units, state.Policy)
+func applyReplannedGuidedCleanup(ctx context.Context, state *GuidedCleanState) {
+	InspectRecommendedCandidateUniqueness(ctx, state.Units, state.Policy)
 	decisions := make(map[string]WorktreeCleanupDecision, len(state.Units))
-	for _, decision := range worktree.PlanWorktreeCleanup(state.Units, state.Policy).Decisions {
-		decisions[cleanupUnitStableKey(decision.Unit)] = decision
+	for _, decision := range PlanWorktreeCleanup(state.Units, state.Policy).Decisions {
+		decisions[CleanupUnitStableKey(decision.Unit)] = decision
 	}
 	for i := range state.Rows {
 		applyReplannedGuidedRow(&state.Rows[i], decisions)
 	}
-	applyProtectPathToGuidedState(state, newProtectPathMatcher(currentProtectScanRoots()))
 }
 
-func applyReplannedGuidedRow(row *guidedCleanRow, decisions map[string]WorktreeCleanupDecision) {
+func applyReplannedGuidedRow(row *GuidedCleanRow, decisions map[string]WorktreeCleanupDecision) {
 	decision, ok := decisions[row.Key]
 	if !ok {
 		return
 	}
 	row.Policy = decision.Class
-	row.Row.Reason = guidedCleanupDecisionReason(decision)
+	row.Row.Reason = GuidedCleanupDecisionReason(decision)
 	row.ReasonCodes = row.ReasonCodes[:0]
 	for _, reason := range decision.Reasons {
 		row.ReasonCodes = append(row.ReasonCodes, reason.Code)
 	}
-	row.Selected = row.Policy == guidedCleanPolicyRecommended
+	row.Selected = row.Policy == DecisionRecommended
 }
 
-func guidedCleanSelectionOverrides(state guidedCleanState) map[string]bool {
+func guidedCleanSelectionOverrides(state GuidedCleanState) map[string]bool {
 	overrides := make(map[string]bool)
 	for _, row := range state.Rows {
 		if row.SelectionOverride != nil {
 			overrides[row.Key] = *row.SelectionOverride
 			continue
 		}
-		defaultSelected := row.Policy == guidedCleanPolicyRecommended
+		defaultSelected := row.Policy == DecisionRecommended
 		if row.Selected != defaultSelected {
 			overrides[row.Key] = row.Selected
 		}
@@ -372,10 +446,10 @@ func guidedCleanSelectionOverrides(state guidedCleanState) map[string]bool {
 	return overrides
 }
 
-func applyGuidedCleanSelectionOverrides(state *guidedCleanState, overrides map[string]bool) {
+func applyGuidedCleanSelectionOverrides(state *GuidedCleanState, overrides map[string]bool) {
 	for i := range state.Rows {
 		selected, ok := overrides[state.Rows[i].Key]
-		if state.Rows[i].Policy == guidedCleanPolicyLocked {
+		if state.Rows[i].Policy == DecisionLocked {
 			state.Rows[i].Selected = false
 			state.Rows[i].SelectionOverride = nil
 			continue
@@ -388,7 +462,8 @@ func applyGuidedCleanSelectionOverrides(state *guidedCleanState, overrides map[s
 	}
 }
 
-func guidedAgeString(age time.Duration) string {
+// GuidedAgeString formats a duration for display in guided UI.
+func GuidedAgeString(age time.Duration) string {
 	if age%(24*time.Hour) == 0 {
 		return fmt.Sprintf("%dd", int(age/(24*time.Hour)))
 	}
@@ -398,12 +473,8 @@ func guidedAgeString(age time.Duration) string {
 	return age.String()
 }
 
-type guidedCodexWorktreeRow struct {
-	Item   types.DebrisInfo
-	Reason string
-}
-
-func guidedCodexWorktreeContainsCWD(worktreePath, cwd string) bool {
+// GuidedCodexWorktreeContainsCWD checks if a worktree path contains the current working directory.
+func GuidedCodexWorktreeContainsCWD(worktreePath, cwd string) bool {
 	if cwd == "" {
 		return false
 	}
@@ -416,4 +487,30 @@ func guidedCodexWorktreeContainsCWD(worktreePath, cwd string) bool {
 		return false
 	}
 	return worktree == current || cleaner.PathContains(worktree, current)
+}
+
+func applyProtectPathToGuidedState(state *GuidedCleanState, matcher *exclude.Matcher) {
+	if state == nil || matcher == nil {
+		return
+	}
+	for i := range state.Rows {
+		if !matcher.ProtectMatch(state.Rows[i].Row.Item.Path) {
+			continue
+		}
+		state.Rows[i].Policy = DecisionLocked
+		state.Rows[i].Selected = false
+		state.Rows[i].SelectionOverride = nil
+		state.Rows[i].Row.Reason = "protected by --protect-path"
+		state.Rows[i].ReasonCodes = []DecisionReasonCode{"protect_path"}
+	}
+}
+
+func filterActiveWorktrees(items []types.DebrisInfo) []types.DebrisInfo {
+	var active []types.DebrisInfo
+	for _, item := range items {
+		if item.Category == types.CategoryWorktree && item.Status == types.WorktreeActive {
+			active = append(active, item)
+		}
+	}
+	return active
 }
