@@ -45,7 +45,7 @@ Security fixes are provided for the latest released 0.x minor line. Because the
 project is pre-1.0, older minor lines do not receive backports. Upgrade to the
 latest release before reporting or validating a fix.
 
-| Version | Supported |
-|---------|-----------|
-| 0.8.x   | Yes       |
-| <=0.7.x | No        |
+| Version  | Supported |
+|----------|-----------|
+| 0.12.x   | Yes       |
+| <=0.11.x | No        |

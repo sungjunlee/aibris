@@ -1,11 +1,22 @@
 # Scan and Cleanup Improvement Plan
 
-Historical scope note: this plan defines the classic scan/filter safety
-baseline. Evidence-based guided Codex cleanup now adds cleanup units, canonical
-repository retention, ref reachability, independent activity/idle age policy,
-and Git-aware active removal as specified in `docs/SPEC.md`. Statements below
-that active worktrees require `--include-active-worktrees` apply to the classic
-selector path.
+**🚨 HISTORICAL DOCUMENT — NOT CURRENT PRODUCT TRUTH 🚨**
+
+This plan documents the classic scan/filter safety baseline that shipped in
+earlier versions. The product has evolved significantly since this was written:
+
+- Evidence-based guided cleanup with cleanup units, canonical repository
+  retention, ref reachability, independent activity/idle age policy, and
+  Git-aware active removal is now specified in `docs/SPEC.md`.
+- Current status and open work are tracked in `docs/ROADMAP.md`.
+- Statements below about active worktrees requiring `--include-active-worktrees`
+  apply only to the classic selector path.
+
+**Do not read this file as a list of current gaps or planned work.** It is
+preserved for historical context. For current product capabilities and future
+work, see `docs/SPEC.md` and `docs/ROADMAP.md`.
+
+---
 
 ## Problem
 

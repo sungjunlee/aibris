@@ -1,5 +1,10 @@
 # Project Context
 
+**Historical sprint context**: This file captures architectural decisions and
+milestone history through v0.12.0. For current status and open work, see
+`docs/ROADMAP.md`. Version-specific statements below reflect the state at the
+time of writing.
+
 ## Architecture Decisions
 
 - `aibris` remains a conservative scanner/executor, while plain no-filter
@@ -76,5 +81,6 @@
   release is cut only after its behavior is dogfooded and explicitly approved.
 - Open release-gate issues may outlive their implementation sprint. Never mark
   one complete merely to close a sprint; carry it as explicitly deferred work.
-- v0.11.0 is the next published tag after the 2026-08-17 dogfood pass.
-  Do not cut v0.10.1 from this main.
+- (Historical note as of 2026-08-17): v0.11.0 was planned as the next published
+  tag after the 2026-08-17 dogfood pass. v0.10.1 was not cut from that main.
+  See `docs/ROADMAP.md` for current published versions.
