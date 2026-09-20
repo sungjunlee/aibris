@@ -11,6 +11,7 @@ import (
 	"github.com/sungjunlee/aibris/internal/exclude"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
+	"github.com/sungjunlee/aibris/internal/worktree"
 )
 
 func TestCleanJSONProtectPathNestedCheckoutProtectsOuterOwner(t *testing.T) {
@@ -185,7 +186,7 @@ func TestStripProtectPathRemovesOtherwiseEligibleUnit(t *testing.T) {
 		StrippablePaths: []string{filepath.Join(canonicalTestPath(nested), "node_modules")},
 	}
 	opts := types.PruneOptions{Age: time.Hour}
-	targets, refusedForCWD := selectStripTargets([]types.DebrisInfo{item}, opts, filepath.Join(resolvedHome, "elsewhere"))
+	targets, refusedForCWD := worktree.SelectStripTargets([]types.DebrisInfo{item}, opts, filepath.Join(resolvedHome, "elsewhere"))
 	if len(targets) != 1 || len(refusedForCWD) != 0 {
 		t.Fatalf("strip targets = %d refused=%d; want 1 eligible unit", len(targets), len(refusedForCWD))
 	}
