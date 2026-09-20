@@ -1,6 +1,8 @@
 package cleaner
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -265,4 +267,33 @@ func isActiveWorktreeTarget(target types.DebrisInfo) bool {
 // Path is the raw item.Path; it is not canonicalized.
 func PhysicalOwnerItemKey(item types.DebrisInfo) string {
 	return string(item.Category) + "\x00" + string(item.Tool) + "\x00" + item.ID + "\x00" + item.Path
+}
+
+// ErrIncompleteCleanupScan marks a scan that failed to complete.
+var ErrIncompleteCleanupScan = errors.New("cleanup requires a complete scan")
+
+// RequireCompleteScan checks if the scan result is complete.
+func RequireCompleteScan(result *types.ScanResult) error {
+	if result == nil || !result.Partial() {
+		return nil
+	}
+	providers := make([]string, 0, len(result.ProviderErrors))
+	for _, providerErr := range result.ProviderErrors {
+		providers = append(providers, string(providerErr.Tool))
+	}
+	return fmt.Errorf("%w; failed providers: %s", ErrIncompleteCleanupScan, strings.Join(providers, ", "))
+}
+
+// FilterTargetsWithoutScanEvidence removes targets that require scan evidence but don't have it.
+func FilterTargetsWithoutScanEvidence(targets []types.DebrisInfo) ([]types.DebrisInfo, map[string]CleanAuditReason) {
+	filtered := targets[:0]
+	protections := make(map[string]CleanAuditReason)
+	for _, target := range targets {
+		if target.ScanPathEvidenceRequired && target.ScanPathIdentity == "" {
+			protections[AuditItemKey(target)] = CleanReasonScanEvidenceUnavailable
+			continue
+		}
+		filtered = append(filtered, target)
+	}
+	return filtered, protections
 }

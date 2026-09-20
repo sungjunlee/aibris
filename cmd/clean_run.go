@@ -2,11 +2,9 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -340,28 +338,12 @@ func cleanScanSelector() string {
 	return "delete"
 }
 
-var errIncompleteCleanupScan = errors.New("cleanup requires a complete scan")
+var errIncompleteCleanupScan = cleaner.ErrIncompleteCleanupScan
 
 func requireCompleteScan(result *types.ScanResult) error {
-	if result == nil || !result.Partial() {
-		return nil
-	}
-	providers := make([]string, 0, len(result.ProviderErrors))
-	for _, providerErr := range result.ProviderErrors {
-		providers = append(providers, string(providerErr.Tool))
-	}
-	return fmt.Errorf("%w; failed providers: %s", errIncompleteCleanupScan, strings.Join(providers, ", "))
+	return cleaner.RequireCompleteScan(result)
 }
 
 func filterTargetsWithoutScanEvidence(targets []types.DebrisInfo) ([]types.DebrisInfo, map[string]cleanAuditReason) {
-	filtered := targets[:0]
-	protections := make(map[string]cleanAuditReason)
-	for _, target := range targets {
-		if target.ScanPathEvidenceRequired && target.ScanPathIdentity == "" {
-			protections[cleanAuditItemKey(target)] = cleanReasonScanEvidenceUnavailable
-			continue
-		}
-		filtered = append(filtered, target)
-	}
-	return filtered, protections
+	return cleaner.FilterTargetsWithoutScanEvidence(targets)
 }
