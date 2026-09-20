@@ -1,6 +1,13 @@
 package cmd
 
-import "time"
+import (
+	"time"
+
+	"github.com/sungjunlee/aibris/internal/worktree"
+)
+
+// Test helpers for worktree policy tests in cmd package.
+// These wrap internal/worktree test helpers to support cmd tests.
 
 const cleanupPolicyMiB int64 = 1024 * 1024
 
@@ -19,9 +26,9 @@ func cleanupPolicyUnit(name string, activity time.Time, size int64, repositoryID
 			LastActivity:                activity,
 			ActivityAvailable:           true,
 			RegisteredActivityAvailable: true,
-			DefaultBranchUniqueness:     UniquenessMerged,
+			DefaultBranchUniqueness:     worktree.UniquenessMerged,
 			Reason: GitEvidenceReason{
-				Code: GitReasonAttachedBranch,
+				Code: worktree.GitReasonAttachedBranch,
 			},
 		})
 	}

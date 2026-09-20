@@ -10,6 +10,11 @@ import (
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
+// MergeGuidedPreviewWithClassicTargets is exported for tests.
+func MergeGuidedPreviewWithClassicTargets(guided, classic []types.DebrisInfo) ([]types.DebrisInfo, []types.DebrisInfo) {
+	return mergeGuidedPreviewWithClassicTargets(guided, classic)
+}
+
 func mergeGuidedPreviewWithClassicTargets(guided, classic []types.DebrisInfo) ([]types.DebrisInfo, []types.DebrisInfo) {
 	guidedTargets := cleaner.NormalizeTargets(guided)
 	guidedPaths := make([]string, 0, len(guidedTargets))
