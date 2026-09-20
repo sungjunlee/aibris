@@ -71,7 +71,7 @@ func runStripClean() {
 	printExclusionDiagnostics(result)
 	protectMatcher := newProtectPathMatcher(roots)
 	printProtectPathDiagnostics(protectMatcher)
-	refreshCleanupInventoryMetadataWithContext(ctx, result.Worktrees)
+	cleaner.RefreshCleanupInventoryMetadataWithContext(ctx, result.Worktrees)
 
 	opts := types.PruneOptions{
 		Age:                    age,

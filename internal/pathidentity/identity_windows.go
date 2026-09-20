@@ -1,6 +1,6 @@
 //go:build windows
 
-package scancache
+package pathidentity
 
 import (
 	"fmt"

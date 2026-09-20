@@ -31,7 +31,7 @@ func preparedExecutorTarget(
 	if err != nil {
 		t.Fatal(err)
 	}
-	snapshot, err := captureCleanupTargetSnapshot(item, types.PruneOptions{})
+	snapshot, err := cleaner.CaptureCleanupTargetSnapshot(item, types.PruneOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,9 +57,9 @@ func TestCaptureCleanupTargetSnapshotReportsAgeChangeSinceScan(t *testing.T) {
 		CleanupKind: types.CleanupRemovePath,
 	}
 
-	_, err := captureCleanupTargetSnapshot(item, types.PruneOptions{Age: 24 * time.Hour})
+	_, err := cleaner.CaptureCleanupTargetSnapshot(item, types.PruneOptions{Age: 24 * time.Hour})
 	if err == nil {
-		t.Fatal("captureCleanupTargetSnapshot() error = nil; want minimum-age refusal")
+		t.Fatal("CaptureCleanupTargetSnapshot() error = nil; want minimum-age refusal")
 	}
 	if !strings.Contains(err.Error(), "changed since scan") ||
 		strings.Contains(err.Error(), "changed since cleanup selection") {

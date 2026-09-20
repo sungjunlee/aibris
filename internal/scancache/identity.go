@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/sungjunlee/aibris/internal/pathidentity"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -17,7 +18,7 @@ type TargetEvidence struct {
 type lastScanTargetEvidence = TargetEvidence
 
 func PathIdentity(path string) (os.FileInfo, string, error) {
-	return cleanupPathIdentity(path)
+	return pathidentity.PathIdentity(path)
 }
 
 func CaptureEvidence(items []types.DebrisInfo) (map[string]TargetEvidence, error) {
@@ -31,7 +32,7 @@ func captureLastScanTargetEvidence(items []types.DebrisInfo) (map[string]lastSca
 		items[i].ScanPathEvidenceRequired = true
 		items[i].ScanPathIdentity = ""
 		items[i].ScanPathType = 0
-		info, identity, err := cleanupPathIdentity(item.Path)
+		info, identity, err := pathidentity.PathIdentity(item.Path)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("capturing scan target evidence for %q: %w", item.Path, err))
 			continue
@@ -79,7 +80,7 @@ func validateLastScanTargetEvidence(items []types.DebrisInfo, evidence map[strin
 		if treeActivityCategory(item.Category) && item.PathModTime.IsZero() {
 			return false
 		}
-		info, identity, err := cleanupPathIdentity(item.Path)
+		info, identity, err := pathidentity.PathIdentity(item.Path)
 		if err != nil || identity != expected.Identity || info.Mode().Type() != expected.Type {
 			return false
 		}
@@ -100,24 +101,3 @@ func treeActivityCategory(category types.Category) bool {
 		category == types.CategoryAgentState
 }
 
-func cleanupPathIdentity(path string) (os.FileInfo, string, error) {
-	before, err := os.Lstat(path)
-	if err != nil {
-		return nil, "", err
-	}
-	if before.Mode()&os.ModeSymlink != 0 {
-		return nil, "", fmt.Errorf("symbolic-link cleanup targets are not cacheable")
-	}
-	identity, err := platformCleanupPathIdentity(path)
-	if err != nil {
-		return nil, "", err
-	}
-	after, err := os.Lstat(path)
-	if err != nil {
-		return nil, "", err
-	}
-	if !os.SameFile(before, after) || before.Mode().Type() != after.Mode().Type() {
-		return nil, "", fmt.Errorf("path changed while capturing identity")
-	}
-	return after, identity, nil
-}
