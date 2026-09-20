@@ -21,7 +21,7 @@ func repoRoot() (string, error) {
 	for {
 		mod := filepath.Join(dir, "go.mod")
 		data, err := os.ReadFile(mod)
-		if err == nil && strings.HasPrefix(string(data), "module github.com/sungjunlee/aibris\n") {
+		if err == nil && isAibrisGoMod(data) {
 			return dir, nil
 		}
 		parent := filepath.Dir(dir)
@@ -30,6 +30,12 @@ func repoRoot() (string, error) {
 		}
 		dir = parent
 	}
+}
+
+func isAibrisGoMod(data []byte) bool {
+	text := strings.TrimPrefix(string(data), "\ufeff")
+	line, _, _ := strings.Cut(text, "\n")
+	return strings.TrimSpace(line) == "module github.com/sungjunlee/aibris"
 }
 
 func TestMain(m *testing.M) {
@@ -64,4 +70,26 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 	_ = os.RemoveAll(buildDir)
 	os.Exit(code)
+}
+
+func TestIsAibrisGoModAcceptsWindowsLineEndings(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		data string
+		want bool
+	}{
+		{name: "lf", data: "module github.com/sungjunlee/aibris\n\ngo 1.26.3\n", want: true},
+		{name: "crlf", data: "module github.com/sungjunlee/aibris\r\n\r\ngo 1.26.3\r\n", want: true},
+		{name: "bom crlf", data: "\ufeffmodule github.com/sungjunlee/aibris\r\n", want: true},
+		{name: "other module", data: "module example.com/other\n", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := isAibrisGoMod([]byte(tt.data)); got != tt.want {
+				t.Fatalf("isAibrisGoMod(%q) = %t; want %t", tt.data, got, tt.want)
+			}
+		})
+	}
 }
