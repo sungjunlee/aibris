@@ -83,7 +83,7 @@ func TestExecuteActiveWorktreeUnitRemovesMultiMemberUnit(t *testing.T) {
 		}
 	}
 	for _, tree := range []string{first, second} {
-		if !pathDoesNotExist(tree) {
+		if !PathDoesNotExist(tree) {
 			t.Errorf("worktree %q still exists", tree)
 		}
 		assertRepositoryDoesNotListWorktree(t, repository, tree)
@@ -216,7 +216,7 @@ func TestExecuteActiveWorktreeUnitBeforeMutationFailureBeforeLaterRemoveKeepsPri
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("mutation order = %q; want %q", calls, want)
 	}
-	if !pathDoesNotExist(first) {
+	if !PathDoesNotExist(first) {
 		t.Errorf("first member %q still exists", first)
 	}
 	assertPathExists(t, target)
@@ -340,7 +340,7 @@ func TestExecuteActiveWorktreeUnitReportsPartialMultiMemberWithoutOwnerRemoval(t
 	if len(result.Members) != 2 || !result.Members[0].Removed || result.Members[1].Removed || result.Members[1].Error == "" {
 		t.Errorf("member results = %+v; want first removed and second failed", result.Members)
 	}
-	if !pathDoesNotExist(first) {
+	if !PathDoesNotExist(first) {
 		t.Errorf("first member %q still exists", first)
 	}
 	assertPathExists(t, target)
@@ -576,7 +576,7 @@ func assertRemovedExecution(t *testing.T, result UnitExecution, tree string) {
 	if len(result.Members) != 1 || !result.Members[0].Removed || result.Members[0].WorktreePath != tree || result.Members[0].Error != "" {
 		t.Errorf("member results = %+v; want removed %q", result.Members, tree)
 	}
-	if !pathDoesNotExist(tree) {
+	if !PathDoesNotExist(tree) {
 		t.Errorf("worktree %q still exists", tree)
 	}
 }

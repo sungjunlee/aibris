@@ -35,7 +35,7 @@ func GitWorktreeRemoveArgs(repositoryID, worktreePath string) []string {
 // repository no longer lists it, and captured recoverability evidence still
 // holds for the preserved commit.
 func VerifyRemovedWorktreeMember(ctx context.Context, member GitWorktreeMember) (bool, error) {
-	pathRemoved := pathDoesNotExist(member.WorktreePath)
+	pathRemoved := PathDoesNotExist(member.WorktreePath)
 	listed, err := repositoryListsWorktree(ctx, member.RepositoryID, member.WorktreePath)
 	if err != nil {
 		return pathRemoved, err

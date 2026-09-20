@@ -523,7 +523,7 @@ internal/
   scancache/     -> last-scan snapshot persistence and path identity
   codexactivity/ -> Codex session-activity index and cache
   apfs/          -> local APFS snapshot list/thin via tmutil
-  worktree/      -> worktree units, policy, git evidence, activity enrichment
+  worktree/      -> worktree units, policy, git evidence, activity enrichment, cleanup-safety inspection
   cleaner/    -> filtering, dry-run output, safe deletion
   types/      -> shared data model
 test/         -> black-box CLI, install, docs, and Homebrew script tests

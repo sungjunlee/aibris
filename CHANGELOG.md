@@ -36,7 +36,8 @@
 - Codex session-activity index and cache live in `internal/codexactivity`.
   `cmd` keeps scan/guided recommendation display.
 - Worktree activity enrichment (Codex sessions + HEAD reflog + scanner
-  fallback) lives in `internal/worktree`.
+  fallback) and Git cleanup-safety inspection live in `internal/worktree`.
+  `cmd` keeps overlap filtering, receipts, and mutation orchestration.
 - Local APFS snapshot listing and `tmutil` thinning live in `internal/apfs`.
   `cmd` keeps flag conflicts, confirmation, and human reporting.
 - The aibris skill treats `scan --json` as the agent inventory and keeps

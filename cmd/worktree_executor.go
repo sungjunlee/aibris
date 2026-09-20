@@ -25,11 +25,12 @@ type activeWorktreeExecutionOptions struct {
 }
 
 func defaultActiveWorktreeExecutionOptions() activeWorktreeExecutionOptions {
+	defaults := worktree.DefaultExecutionOptions()
 	return activeWorktreeExecutionOptions{
-		removeWorktree: worktree.RemoveGitWorktree,
-		removeAll:      os.RemoveAll,
-		getwd:          os.Getwd,
-		userHomeDir:    os.UserHomeDir,
+		removeWorktree: defaults.RemoveWorktree,
+		removeAll:      defaults.RemoveAll,
+		getwd:          defaults.Getwd,
+		userHomeDir:    defaults.UserHomeDir,
 		output:         os.Stdout,
 		errorOutput:    os.Stderr,
 	}
@@ -405,8 +406,7 @@ func isActiveWorktreeTarget(target types.DebrisInfo) bool {
 }
 
 func pathDoesNotExist(path string) bool {
-	_, err := os.Lstat(path)
-	return os.IsNotExist(err)
+	return worktree.PathDoesNotExist(path)
 }
 
 func debrisExecutionName(target types.DebrisInfo) string {

@@ -148,7 +148,7 @@ func ExecuteActiveWorktreeUnit(
 		}
 	}
 
-	if !pathDoesNotExist(selected.TargetPath) {
+	if !PathDoesNotExist(selected.TargetPath) {
 		result.StartedMembers = true
 		if err := callBeforeMutation(ctx, opts); err != nil {
 			setUnitPhysicalState(&result, selected)
@@ -164,7 +164,7 @@ func ExecuteActiveWorktreeUnit(
 			return result, fmt.Errorf("removing cleanup unit container %q: %v", selected.TargetPath, err)
 		}
 	}
-	if !pathDoesNotExist(selected.TargetPath) {
+	if !PathDoesNotExist(selected.TargetPath) {
 		setUnitPhysicalState(&result, selected)
 		return result, fmt.Errorf("cleanup unit target still exists after removal: %q", selected.TargetPath)
 	}
@@ -318,10 +318,10 @@ func callBeforeMutation(ctx context.Context, opts ExecutionOptions) error {
 }
 
 func setUnitPhysicalState(result *UnitExecution, selected WorktreeCleanupUnit) {
-	result.PhysicalRemoved = pathDoesNotExist(selected.TargetPath)
+	result.PhysicalRemoved = PathDoesNotExist(selected.TargetPath)
 }
 
-func pathDoesNotExist(path string) bool {
+func PathDoesNotExist(path string) bool {
 	_, err := os.Lstat(path)
 	return os.IsNotExist(err)
 }

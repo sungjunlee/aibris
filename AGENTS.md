@@ -90,7 +90,7 @@ internal/
   scancache/     → last-scan snapshot persistence and path identity
   codexactivity/ → Codex session-activity index and cache
   apfs/          → local APFS snapshot list/thin via tmutil
-  worktree/      → worktree units, policy, git evidence, activity enrichment
+  worktree/      → worktree units, policy, git evidence, activity enrichment, cleanup-safety inspection
   cleaner/   → Filter(): 조건에 따라 필터, Execute() 삭제
   types/     → DebrisInfo, ScanResult, PruneOptions
 test/        → black-box CLI, install, docs, Homebrew script tests
