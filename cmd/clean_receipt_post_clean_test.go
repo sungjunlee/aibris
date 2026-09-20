@@ -150,10 +150,10 @@ func TestFinalizeCleanJSONReceiptPostCleanExcludesPhysicallyRemovedOwner(t *test
 			{ID: "target-2", Decision: cleanJSONDecisionSelected, Bytes: 300},
 		},
 	})
-	receipt.inventory = cleanJSONReceiptInventory(components)
+	inventory := cleanJSONReceiptInventory(components)
 	// An owner whose identity cannot be mapped to a physical target must be
 	// omitted from the post-clean debris split rather than counted.
-	receipt.inventory = append(receipt.inventory, cleanJSONReceiptInventoryOwner{Owner: unmappable})
+	inventory = append(inventory, cleanJSONReceiptInventoryOwner{Owner: unmappable})
 
 	markCleanJSONReceiptTarget(&receipt, "target-1", string(cleanExecutionRemoved), true, "removed")
 	markCleanJSONReceiptTarget(&receipt, "target-2", string(cleanExecutionRemoved), true, "physical_owner_present")
@@ -167,7 +167,7 @@ func TestFinalizeCleanJSONReceiptPostCleanExcludesPhysicallyRemovedOwner(t *test
 		}
 	}
 
-	finalized, err := finishCleanJSONReceipt(receipt, nil)
+	finalized, err := finishCleanJSONReceiptWithInventory(receipt, nil, inventory)
 	if err != nil || finalized.Status != cleanJSONReceiptSucceeded {
 		t.Fatalf("receipt finalize status=%q error=%v", finalized.Status, err)
 	}
