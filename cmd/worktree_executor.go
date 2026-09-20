@@ -130,7 +130,7 @@ func executePreparedCleanTargets(ctx context.Context, targets []preparedCleanTar
 		// re-scans within the batch whenever the agent-state entry set changes,
 		// so newly created overlapping state is discovered before each mutation.
 		if safety := targets[0].MutationSafety; safety != nil {
-			safety.runtime.ResetRefreshMemo()
+			safety.Runtime.ResetRefreshMemo()
 		}
 	}
 	if opts.removeWorktree == nil {
@@ -257,8 +257,8 @@ func executePathCleanupTarget(
 				return errors.New("cleanup target snapshot unavailable")
 			}
 			var validationErr error
-			validation, validationErr = safety.validate(ctx)
-		validated = true
+			validation, validationErr = safety.Validate(ctx)
+			validated = true
 		if validationErr != nil {
 			return validationErr
 		}
@@ -340,7 +340,7 @@ func executeActiveWorktreeUnit(
 		Unit:     selected,
 		Snapshot: snapshot,
 		BeforeMutation: func(ctx context.Context) error {
-			validation, validationErr := safety.validate(ctx)
+			validation, validationErr := safety.Validate(ctx)
 			applyOverlapValidationReceipt(&receipt, validation)
 			if validationErr != nil {
 				return validationErr

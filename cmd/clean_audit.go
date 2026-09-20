@@ -10,6 +10,11 @@ import (
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
+// This file contains CLI presentation and thin wrappers for audit functionality.
+// Core audit business logic lives in internal/cleaner/clean_audit*.go.
+// The print functions format audit output for terminal display.
+// The wrapper functions adapt internal types for cmd-layer orchestration.
+
 type (
 	scanSourceKind             = cleaner.ScanSourceKind
 	scanSource                 = cleaner.ScanSource
@@ -141,8 +146,12 @@ func printExecutionReceiptSummary(targetCount int, receipt cleanExecutionReceipt
 }
 
 func receiptRemainingBytes(receipt cleanExecutionReceipt) int64 {
+	return receipt.RemainingBytes()
+}
+
+func (r cleanExecutionReceipt) RemainingBytes() int64 {
 	var remaining int64
-	for _, unit := range receipt.Units {
+	for _, unit := range r.Units {
 		remaining += unit.ResidualBytes
 	}
 	return remaining

@@ -186,7 +186,7 @@ func newCleanUnitExecutionReceipt(
 		return receipt
 	}
 	if safety != nil {
-		validation := initialOverlapSafetyValidation(safety.component)
+		validation := cleaner.InitialOverlapSafetyValidation(safety.Component)
 		receipt.Obligations = validation.Obligations
 	}
 	return receipt

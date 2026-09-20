@@ -484,7 +484,7 @@ func TestExecuteActiveWorktreePreservesPartialReceiptWhenBarrierFailsBetweenMemb
 	opts.removeWorktree = realRemove
 	prepared := preparedExecutorTarget(t, item, selected)
 	refreshCalls := 0
-	prepared.MutationSafety.runtime.Refresh = func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
+		prepared.MutationSafety.Runtime.Refresh = func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
 		refreshCalls++
 		if refreshCalls >= 3 {
 			return cleaner.OverlapSafetyEvidence{}, errors.New("injected second-member safety refresh failure")
@@ -518,7 +518,7 @@ func TestExecuteActiveWorktreeOwnerRemovedBeforeFirstMemberMutationDoesNotCredit
 	selected := buildExecutorUnit(t, item)
 	prepared := preparedExecutorTarget(t, item, selected)
 	refreshCalls := 0
-	prepared.MutationSafety.runtime.Refresh = func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
+		prepared.MutationSafety.Runtime.Refresh = func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
 		refreshCalls++
 		if refreshCalls == 2 {
 			if err := os.RemoveAll(target); err != nil {

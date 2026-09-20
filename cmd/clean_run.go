@@ -14,6 +14,11 @@ import (
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
+// This file contains the main clean command orchestration (cobra entry point).
+// It sequences calls to internal packages (cleaner, scanner, worktree) and handles
+// CLI concerns (flag parsing, terminal I/O, os.Exit). Core business logic for
+// filtering, overlap safety, and execution lives in internal packages.
+
 // errClassicRouteReceiptFile is shared by the pre-scan flag check and the
 // post-scan route check so both refusals read identically.
 const errClassicRouteReceiptFile = "error: --receipt-file is not available on the classic route; use --json for a classic receipt"
