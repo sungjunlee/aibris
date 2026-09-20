@@ -103,7 +103,7 @@ func finalizeCleanJSONReceipt(receipt cleanJSONReceipt) (cleanJSONReceipt, error
 
 func quietActiveWorktreeExecutionOptions() activeWorktreeExecutionOptions {
 	opts := defaultActiveWorktreeExecutionOptions()
-	opts.output = io.Discard
-	opts.errorOutput = io.Discard
+	opts.Output = io.Discard
+	opts.ErrorOutput = io.Discard
 	return opts
 }

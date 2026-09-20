@@ -103,8 +103,8 @@ func executeCleanJSONReceipt(
 				}
 			}
 			opts := activeWorktreeExecutionOptions{
-				output:      io.Discard,
-				errorOutput: io.Discard,
+				Output:      io.Discard,
+				ErrorOutput: io.Discard,
 			}
 			execution, err := executePreparedCleanTargets(
 				ctx,

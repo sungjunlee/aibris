@@ -1921,7 +1921,7 @@ func TestInteractiveCleanReturnsRejectedTargetError(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "unsafe path") {
 		t.Fatalf("interactiveClean() error = %v, want unsafe path rejection", err)
 	}
-	removed, partial, failed := receipt.counts()
+	removed, partial, failed := receipt.Counts()
 	if len(receipt.Units) != 2 || receipt.FreedBytes != 42 || removed != 1 || partial != 0 || failed != 1 {
 		t.Fatalf("receipt = %+v, want one successful and one failed target", receipt)
 	}

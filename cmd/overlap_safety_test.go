@@ -1038,7 +1038,7 @@ func TestExecuteActiveWorktreeOverlapBarrierRunsBeforeGitMutation(t *testing.T) 
 	prepared := prepareCleanExecutionWithSafety(context.Background(), selection, runtime)
 	opts := defaultActiveWorktreeExecutionOptions()
 	removeCalls := 0
-	opts.removeWorktree = func(context.Context, string, string) error {
+	opts.RemoveWorktree = func(context.Context, string, string) error {
 		removeCalls++
 		return nil
 	}

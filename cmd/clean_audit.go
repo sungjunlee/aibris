@@ -132,7 +132,7 @@ func printGuidedCleanupReceipt(targetCount int, receipt cleanExecutionReceipt) {
 }
 
 func printExecutionReceiptSummary(targetCount int, receipt cleanExecutionReceipt) {
-	removed, partial, failed := receipt.counts()
+	removed, partial, failed := receipt.Counts()
 	fmt.Println()
 	fmt.Println("cleanup receipt")
 	fmt.Printf("  targets    %d %s\n", targetCount, itemNoun(targetCount))

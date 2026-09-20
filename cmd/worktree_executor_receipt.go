@@ -1,166 +1,63 @@
 package cmd
 
 import (
+	"context"
+
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/executor"
 	"github.com/sungjunlee/aibris/internal/types"
 	"github.com/sungjunlee/aibris/internal/worktree"
 )
 
-type cleanExecutionState string
-
-const (
-	cleanExecutionRemoved   cleanExecutionState = "removed"
-	cleanExecutionPartial   cleanExecutionState = "partial"
-	cleanExecutionFailed    cleanExecutionState = "failed"
-	cleanExecutionCancelled cleanExecutionState = "cancelled"
+// Type aliases for internal execution receipt types
+type (
+	cleanExecutionState         = executor.ExecutionState
+	cleanMemberExecutionReceipt = executor.MemberExecutionReceipt
+	cleanUnitExecutionReceipt   = executor.UnitExecutionReceipt
+	cleanExecutionReceipt       = executor.ExecutionReceipt
+	activeWorktreeExecutionOptions = executor.ExecutionOptions
 )
 
-type cleanMemberExecutionReceipt struct {
-	WorktreePath string
-	Removed      bool
-	Error        string
-}
+// Constants for execution states
+const (
+	cleanExecutionRemoved   = executor.ExecutionRemoved
+	cleanExecutionPartial   = executor.ExecutionPartial
+	cleanExecutionFailed    = executor.ExecutionFailed
+	cleanExecutionCancelled = executor.ExecutionCancelled
+)
 
-type cleanUnitExecutionReceipt struct {
-	Target                     types.DebrisInfo
-	ReceiptTargetKey           string
-	Component                  *cleanupOverlapComponent
-	State                      cleanExecutionState
-	PhysicalRemoved            bool
-	FreedBytes                 int64
-	ResidualBytes              int64
-	Members                    []cleanMemberExecutionReceipt
-	Obligations                []cleaner.AgentStateRevalidationOutcome
-	BlockingPath               string
-	BlockingReason             string
-	MutationAttempted          bool
-	CommandFallbackPathRemoval bool
-	Error                      string
-	// FailureCause keeps the failure's error chain alongside its rendered
-	// message so the JSON projection can classify it with errors.Is.
-	FailureCause error
-}
-
-type cleanExecutionReceipt struct {
-	Units      []cleanUnitExecutionReceipt
-	FreedBytes int64
-}
-
-func (r cleanExecutionReceipt) counts() (removed, partial, failed int) {
-	for _, unit := range r.Units {
-		switch unit.State {
-		case cleanExecutionRemoved:
-			removed++
-		case cleanExecutionPartial:
-			partial++
-		case cleanExecutionFailed, cleanExecutionCancelled:
-			failed++
-		}
-	}
-	return removed, partial, failed
+func defaultActiveWorktreeExecutionOptions() activeWorktreeExecutionOptions {
+	return executor.DefaultExecutionOptions()
 }
 
 func applyActiveUnitExecutionReceipt(receipt *cleanUnitExecutionReceipt, result worktree.UnitExecution) {
-	receipt.MutationAttempted = receipt.MutationAttempted || result.MutationAttempted
-	receipt.PhysicalRemoved = result.PhysicalRemoved
-	if len(result.Members) == 0 {
-		return
-	}
-	receipt.Members = make([]cleanMemberExecutionReceipt, len(result.Members))
-	for i, member := range result.Members {
-		receipt.Members[i] = cleanMemberExecutionReceipt{
-			WorktreePath: member.WorktreePath,
-			Removed:      member.Removed,
-			Error:        member.Error,
-		}
-	}
+	executor.ApplyActiveUnitExecutionReceipt(receipt, result)
 }
 
 func applyPreparedActiveWorktreeExecutionResult(receipt *cleanUnitExecutionReceipt, result worktree.ActiveWorktreeExecutionResult) {
-	receipt.MutationAttempted = receipt.MutationAttempted || result.MutationAttempted
-	receipt.PhysicalRemoved = result.PhysicalRemoved
-	if result.BlockingPath != "" {
-		receipt.BlockingPath = result.BlockingPath
-		receipt.BlockingReason = result.BlockingReason
-	}
-	if len(result.Members) == 0 {
-		return
-	}
-	receipt.Members = make([]cleanMemberExecutionReceipt, len(result.Members))
-	for i, member := range result.Members {
-		receipt.Members[i] = cleanMemberExecutionReceipt{
-			WorktreePath: member.WorktreePath,
-			Removed:      member.Removed,
-			Error:        member.Error,
-		}
-	}
+	executor.ApplyPreparedActiveWorktreeExecutionResult(receipt, result)
 }
 
 func setActiveReceiptPhysicalState(receipt *cleanUnitExecutionReceipt, selected worktree.WorktreeCleanupUnit) {
-	receipt.PhysicalRemoved = pathDoesNotExist(selected.TargetPath)
-	if receipt.PhysicalRemoved && receipt.MutationAttempted {
-		receipt.FreedBytes = selected.Size
-	}
-	removedMembers := 0
-	for _, member := range receipt.Members {
-		if member.Removed {
-			removedMembers++
-		}
-	}
-	if removedMembers > 0 || (receipt.PhysicalRemoved && receipt.MutationAttempted) {
-		receipt.State = cleanExecutionPartial
-	} else {
-		receipt.State = cleanExecutionFailed
-	}
+	executor.SetActiveReceiptPhysicalState(receipt, selected)
 }
 
 func failedCleanUnitReceipt(target types.DebrisInfo, members []worktree.GitWorktreeMember, err error) cleanUnitExecutionReceipt {
-	receipt := cleanUnitExecutionReceipt{
-		Target:           target,
-		ReceiptTargetKey: cleanJSONReceiptItemKey(target),
-		State:            cleanExecutionFailed,
-		Error:            err.Error(),
-	}
-	for _, member := range members {
-		receipt.Members = append(receipt.Members, cleanMemberExecutionReceipt{WorktreePath: member.WorktreePath})
-	}
-	return receipt
+	return executor.FailedCleanUnitReceipt(target, members, err, cleanJSONReceiptItemKey)
 }
 
 func failedPreparedCleanUnitReceipt(
 	target preparedCleanTarget,
 	err error,
 ) cleanUnitExecutionReceipt {
-	receipt := cleanUnitExecutionReceipt{
-		Target:           target.Item,
-		ReceiptTargetKey: cleanJSONReceiptItemKey(target.Item),
-		Component:        target.Component,
-		State:            cleanExecutionFailed,
-		BlockingPath:     target.Item.Path,
-		BlockingReason:   err.Error(),
-		Error:            err.Error(),
-		FailureCause:     err,
-	}
-	if target.Component != nil {
-		for _, obligation := range target.Component.Obligations {
-			receipt.Obligations = append(receipt.Obligations, cleaner.AgentStateRevalidationOutcome{
-				Tool:       obligation.Tool,
-				EntryPath:  obligation.EntryPath,
-				ProviderID: obligation.ProviderID,
-				State:      cleaner.AgentStateRevalidationNotAttempted,
-			})
-		}
-	}
-	return receipt
+	return executor.FailedPreparedCleanUnitReceipt(target.Item, target.Component, err, cleanJSONReceiptItemKey)
 }
 
 func cancelledPreparedCleanUnitReceipt(
 	target preparedCleanTarget,
 	err error,
 ) cleanUnitExecutionReceipt {
-	receipt := failedPreparedCleanUnitReceipt(target, err)
-	receipt.State = cleanExecutionCancelled
-	return receipt
+	return executor.CancelledPreparedCleanUnitReceipt(target.Item, target.Component, err, cleanJSONReceiptItemKey)
 }
 
 func newCleanUnitExecutionReceipt(
@@ -168,50 +65,38 @@ func newCleanUnitExecutionReceipt(
 	component *cleanupOverlapComponent,
 	safety *cleanupMutationSafety,
 ) cleanUnitExecutionReceipt {
-	receipt := cleanUnitExecutionReceipt{
-		Target:           target,
-		ReceiptTargetKey: cleanJSONReceiptItemKey(target),
-		Component:        component,
-		State:            cleanExecutionFailed,
-	}
-	if component != nil {
-		for _, obligation := range component.Obligations {
-			receipt.Obligations = append(receipt.Obligations, cleaner.AgentStateRevalidationOutcome{
-				Tool:       obligation.Tool,
-				EntryPath:  obligation.EntryPath,
-				ProviderID: obligation.ProviderID,
-				State:      cleaner.AgentStateRevalidationNotAttempted,
-			})
-		}
-		return receipt
-	}
-	if safety != nil {
-		validation := cleaner.InitialOverlapSafetyValidation(safety.Component)
-		receipt.Obligations = validation.Obligations
-	}
-	return receipt
+	return executor.NewCleanUnitExecutionReceipt(target, component, safety, cleanJSONReceiptItemKey)
 }
 
 func applyOverlapValidationReceipt(
 	receipt *cleanUnitExecutionReceipt,
 	validation cleaner.OverlapSafetyValidation,
 ) {
-	receipt.Obligations = append(
-		receipt.Obligations[:0],
-		validation.Obligations...,
-	)
-	receipt.BlockingPath = validation.BlockingPath
-	receipt.BlockingReason = validation.BlockingReason
+	executor.ApplyOverlapValidationReceipt(receipt, validation)
 }
 
 func cleanUnitHasMutation(receipt cleanUnitExecutionReceipt) bool {
-	if receipt.PhysicalRemoved {
-		return true
-	}
-	for _, member := range receipt.Members {
-		if member.Removed {
-			return true
-		}
-	}
-	return false
+	return executor.CleanUnitHasMutation(receipt)
 }
+
+func isActiveWorktreeTarget(target types.DebrisInfo) bool {
+	return worktree.IsActiveWorktreeTarget(target)
+}
+
+func pathDoesNotExist(path string) bool {
+	return worktree.PathDoesNotExist(path)
+}
+
+func executeActiveWorktreeUnit(
+	ctx context.Context,
+	target types.DebrisInfo,
+	component *cleanupOverlapComponent,
+	selected worktree.WorktreeCleanupUnit,
+	safety *cleanupMutationSafety,
+	snapshot *cleaner.CleanupTargetSnapshot,
+	opts activeWorktreeExecutionOptions,
+) (cleanUnitExecutionReceipt, error) {
+	opts.ReceiptKeyFn = cleanJSONReceiptItemKey
+	return executor.ExecuteActiveWorktreeUnit(ctx, target, component, selected, safety, snapshot, opts)
+}
+
