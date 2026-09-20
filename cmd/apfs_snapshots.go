@@ -1,20 +1,15 @@
 package cmd
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/sungjunlee/aibris/internal/apfs"
 	"github.com/sungjunlee/aibris/internal/volume"
 )
 
-// apfsSnapshotPurgeBytes is the bounded thin request. It is not a delete of
-// Time Machine backups on an external disk.
-const apfsSnapshotPurgeBytes = 20 * 1024 * 1024 * 1024
-const apfsSnapshotUrgency = "4"
 const apfsSnapshotMaxThinPasses = 8
 
 func apfsSnapshotFlagConflict(cmd *cobra.Command) string {
@@ -134,7 +129,7 @@ func printAPFSVolumeAfterThin(report *volume.Report, err error) {
 }
 
 var inspectHomeCapacityFn = readHomeVolumeCapacity
-var thinLocalAPFSSnapshots = apfsThinLocalSnapshots
+var thinLocalAPFSSnapshots = apfs.Thin
 
 func readHomeVolumeCapacity() (*volume.Report, error) {
 	home, err := os.UserHomeDir()
@@ -147,67 +142,4 @@ func readHomeVolumeCapacity() (*volume.Report, error) {
 	}
 	report.Role = "home"
 	return &report, nil
-}
-
-func formatTMUtilError(args []string, err error, out []byte) error {
-	name := tmutilCommandName(args)
-	if msg := sanitizeTMUtilOutput(out); msg != "" {
-		return fmt.Errorf("%s: %w\n%s", name, err, msg)
-	}
-	return fmt.Errorf("%s: %w", name, err)
-}
-
-func tmutilCommandName(args []string) string {
-	if len(args) == 0 {
-		return "tmutil"
-	}
-	return "tmutil " + args[0]
-}
-
-func sanitizeTMUtilOutput(out []byte) string {
-	var kept []string
-	for _, line := range bytes.Split(out, []byte("\n")) {
-		s := strings.TrimSpace(string(line))
-		if keepTMUtilOutputLine(s) {
-			kept = append(kept, s)
-		}
-	}
-	return strings.Join(kept, "\n")
-}
-
-func keepTMUtilOutputLine(s string) bool {
-	return s != "" && !strings.HasPrefix(s, "Snapshots for") && !isTMUtilSnapshotID(s)
-}
-
-func isTMUtilSnapshotID(s string) bool {
-	if strings.HasPrefix(s, "com.apple.TimeMachine.") || strings.HasPrefix(s, "com.apple.os.update-") {
-		return true
-	}
-	return containsLocalSnapshotStamp(s)
-}
-
-func containsLocalSnapshotStamp(s string) bool {
-	for i := 0; i+17 <= len(s); i++ {
-		if isLocalSnapshotStamp(s[i : i+17]) {
-			return true
-		}
-	}
-	return false
-}
-
-func isLocalSnapshotStamp(s string) bool {
-	_, err := time.Parse("2006-01-02-150405", s)
-	return err == nil && len(s) == 17
-}
-
-func parseLocalSnapshotCount(output []byte) int {
-	n := 0
-	for _, line := range bytes.Split(output, []byte("\n")) {
-		s := strings.TrimSpace(string(line))
-		if s == "" || strings.HasPrefix(s, "Snapshots for") {
-			continue
-		}
-		n++
-	}
-	return n
 }

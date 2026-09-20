@@ -30,12 +30,10 @@ func TestWorktreeExecutorReceiptLivesApartFromExecutorEntry(t *testing.T) {
 	executorNames := []string{
 		"executeCleanTargets",
 		"defaultActiveWorktreeExecutionOptions",
-	}
-	preparedNames := []string{
 		"executePreparedCleanTargets",
 	}
 
-	wanted := make(map[string]string, len(receiptNames)+len(receiptTypes)+len(executorNames)+len(preparedNames))
+	wanted := make(map[string]string, len(receiptNames)+len(receiptTypes)+len(executorNames))
 	for _, name := range receiptNames {
 		wanted[name] = "worktree_executor_receipt.go"
 	}
@@ -44,9 +42,6 @@ func TestWorktreeExecutorReceiptLivesApartFromExecutorEntry(t *testing.T) {
 	}
 	for _, name := range executorNames {
 		wanted[name] = "worktree_executor.go"
-	}
-	for _, name := range preparedNames {
-		wanted[name] = "worktree_executor_prepared.go"
 	}
 
 	fset := token.NewFileSet()
@@ -122,7 +117,6 @@ func TestWorktreeExecutorReceiptReexportIdentity(t *testing.T) {
 	}
 
 	executorSource := readCmdSource(t, "worktree_executor.go")
-	preparedSource := readCmdSource(t, "worktree_executor_prepared.go")
 	receiptSource := readCmdSource(t, "worktree_executor_receipt.go")
 	for _, name := range []string{
 		"applyActiveUnitExecutionReceipt",
@@ -137,9 +131,6 @@ func TestWorktreeExecutorReceiptReexportIdentity(t *testing.T) {
 		if strings.Contains(executorSource, "func "+name+"(") {
 			t.Errorf("%s is still defined in worktree_executor.go", name)
 		}
-		if strings.Contains(preparedSource, "func "+name+"(") {
-			t.Errorf("%s is still defined in worktree_executor_prepared.go", name)
-		}
 		if !strings.Contains(receiptSource, "func "+name+"(") {
 			t.Errorf("%s is not defined in worktree_executor_receipt.go", name)
 		}
@@ -153,9 +144,6 @@ func TestWorktreeExecutorReceiptReexportIdentity(t *testing.T) {
 		if strings.Contains(executorSource, "type "+name+" ") || strings.Contains(executorSource, "type "+name+" struct") {
 			t.Errorf("%s is still defined in worktree_executor.go", name)
 		}
-		if strings.Contains(preparedSource, "type "+name+" ") || strings.Contains(preparedSource, "type "+name+" struct") {
-			t.Errorf("%s is still defined in worktree_executor_prepared.go", name)
-		}
 		if !strings.Contains(receiptSource, "type "+name+" ") && !strings.Contains(receiptSource, "type "+name+" struct") {
 			t.Errorf("%s is not defined in worktree_executor_receipt.go", name)
 		}
@@ -166,16 +154,13 @@ func TestWorktreeExecutorReceiptReexportIdentity(t *testing.T) {
 	if strings.Contains(executorSource, "func (r cleanExecutionReceipt) counts(") {
 		t.Error("counts is still defined in worktree_executor.go")
 	}
-	if strings.Contains(preparedSource, "func (r cleanExecutionReceipt) counts(") {
-		t.Error("counts is still defined in worktree_executor_prepared.go")
-	}
 	for _, name := range []string{
 		"cancelledPreparedCleanUnitReceipt(",
 		"failedPreparedCleanUnitReceipt(",
 		"cleanUnitHasMutation(",
 	} {
-		if !strings.Contains(preparedSource, name) {
-			t.Errorf("worktree_executor_prepared.go no longer calls %s", strings.TrimSuffix(name, "("))
+		if !strings.Contains(executorSource, name) {
+			t.Errorf("worktree_executor.go no longer calls %s", strings.TrimSuffix(name, "("))
 		}
 	}
 }

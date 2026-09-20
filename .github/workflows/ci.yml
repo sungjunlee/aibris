@@ -70,13 +70,15 @@ jobs:
             ConvertFrom-Json |
             Out-Null
       - name: Test Windows binary and home-containment contracts
-        run: go test -race -count=1 -cover . -run '^(TestWindowsCLIContractBinaryCommands|TestWindowsCLIContractRootContainmentAndHomeIsolation|TestCLIContractDestructiveCommandIsolatesWindowsUserCache)$'
+        run: go test -race -count=1 -cover ./test -run '^(TestWindowsCLIContractBinaryCommands|TestWindowsCLIContractRootContainmentAndHomeIsolation|TestCLIContractDestructiveCommandIsolatesWindowsUserCache)$'
       - name: Test recorded-cwd volume safety
         run: go test -race -count=1 -cover ./internal/adapter -run '^(TestRecordedCWDVolumeIDUsesWindowsVolumePath|TestAgentStateStoreClassifiersRecordedCWDAncestorAvailability|TestBuildCacheAdapter_GoBuild$|TestBuildCacheAdapter_GOCACHEEnv|TestBuildCacheAdapter_GOCACHEOutsideRoots|TestBuildCacheAdapter_GOENVFile)$'
       - name: Test cross-platform CLI contracts
-        run: go test -race -count=1 -cover . -run '^(TestCLIContractInvalidFlag|TestCLIContractCleanHelpMatchesPolicyVocabulary)$'
+        run: go test -race -count=1 -cover ./test -run '^(TestCLIContractInvalidFlag|TestCLIContractCleanHelpMatchesPolicyVocabulary)$'
       - name: Test platform-safe command and cleanup identity behavior
-        run: go test -race -count=1 -cover ./cmd -run '^(TestWindowsCleanupPathIdentityRejectsReparsePoint|TestCleanCmd_NegativeAge|TestCleanCmd_GuideNoGuideErrors|TestParseAge|TestCleanCmd_InvalidSelector|TestParseCleanSelectorsTrimAndDeduplicate)$'
+        run: |
+          go test -race -count=1 -cover ./internal/scancache -run '^TestWindowsCleanupPathIdentityRejectsReparsePoint$'
+          go test -race -count=1 -cover ./cmd -run '^(TestCleanCmd_NegativeAge|TestCleanCmd_GuideNoGuideErrors|TestParseAge|TestCleanCmd_InvalidSelector|TestParseCleanSelectorsTrimAndDeduplicate)$'
       - name: Test effective GOCACHE cleanup safety
         run: go test -race -count=1 -cover ./internal/cleaner -run '^TestIsSafeTarget_GoBuildCacheUnderHome$'
       - name: Test HOME hermeticity under isolated profile
