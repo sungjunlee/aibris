@@ -8,6 +8,7 @@ import (
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/cleanjson"
+	"github.com/sungjunlee/aibris/internal/executor"
 	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -32,14 +33,18 @@ func executeUnifiedPreparedCleanTargets(
 	plan UnifiedCleanupPlan,
 	targets []preparedCleanTarget,
 ) (cleanExecutionReceipt, error) {
-	if err := validateUnifiedCleanupPlanForMutation(ctx, plan, time.Now()); err != nil {
-		result := cleanExecutionReceipt{Units: make([]cleanUnitExecutionReceipt, 0, len(targets))}
-		for _, target := range targets {
-			result.Units = append(result.Units, failedPreparedCleanUnitReceipt(target, err))
-		}
-		return result, err
-	}
-	return executePreparedCleanTargets(ctx, targets, defaultActiveWorktreeExecutionOptions())
+	return executor.ExecuteUnifiedPreparedCleanTargets(
+		ctx,
+		plan,
+		targets,
+		func(ctx context.Context, p cleaner.UnifiedCleanupPlan) error {
+			return validateUnifiedCleanupPlanForMutation(ctx, p, time.Now())
+		},
+		func(ctx context.Context, t []executor.PreparedExecutionTarget) (executor.ExecutionReceipt, error) {
+			return executePreparedCleanTargets(ctx, t, defaultActiveWorktreeExecutionOptions())
+		},
+		failedPreparedCleanUnitReceipt,
+	)
 }
 
 // runUnifiedGuidedClean executes the guided experience through the unified
@@ -213,54 +218,10 @@ func cleanupPlanEvidence(result *types.ScanResult, source scanSource, observedAt
 	return cleaner.BuildCleanupPlanEvidence(result, source, observedAt, lastScanCacheMaxAge)
 }
 
-// guidedCleanupPlanCandidates adapts the accepted guided selection into
-// policy-neutral plan candidates. Locked guided rows stay locked; toggled and
-// recommended rows become selectable; reviewable rows start unselected.
 func guidedCleanupPlanCandidates(state guidedCleanState) []CleanupPlanCandidate {
-	candidates := make([]CleanupPlanCandidate, 0, len(state.Rows))
-	for _, row := range state.Rows {
-		selection := CleanupPlanUnselected
-		if row.Policy == guidedCleanPolicyLocked {
-			selection = CleanupPlanLocked
-		} else if row.Selected {
-			selection = CleanupPlanSelected
-		}
-		reasons := make([]CleanupPlanReason, 0, len(row.ReasonCodes)+1)
-		for reasonIndex, code := range row.ReasonCodes {
-			description := ""
-			if reasonIndex == 0 {
-				// Row.Reason is already the aggregated human explanation for
-				// this guided decision. Attach it once while retaining every
-				// stable machine-readable reason code.
-				description = row.Row.Reason
-			}
-			reasons = append(reasons, CleanupPlanReason{
-				Code:        CleanupPlanReasonCode(code),
-				Description: description,
-			})
-		}
-		if len(reasons) == 0 {
-			reasons = append(reasons, CleanupPlanReason{
-				Code:        CleanupPlanReasonWorktreePolicyDecision,
-				Description: row.Row.Reason,
-			})
-		}
-		candidates = append(candidates, CleanupPlanCandidate{
-			RowKey:         "guided:" + row.Key,
-			Item:           row.Row.Item,
-			PolicyDecision: cleanupPlanPolicyDecisionForClass(DecisionClass(row.Policy)),
-			Selection:      selection,
-			Reasons:        reasons,
-		})
-	}
-	return candidates
+	return executor.GuidedCleanupPlanCandidates(state)
 }
 
-// unifiedCleanupPlanForClean builds one policy-neutral plan from the accepted
-// guided selection (when present) and the classic-filtered targets. The plan
-// normalizes every category into exact physical components with hard-lock
-// dominance, so preview, toggling, validation, and execution all share one
-// selection state.
 func unifiedCleanupPlanForClean(
 	ctx context.Context,
 	guidedState *guidedCleanState,
@@ -268,17 +229,5 @@ func unifiedCleanupPlanForClean(
 	evidence CleanupPlanEvidence,
 	opts types.PruneOptions,
 ) (UnifiedCleanupPlan, error) {
-	candidates := make([]CleanupPlanCandidate, 0, len(classicTargets)+guidedCandidateCount(guidedState))
-	if guidedState != nil {
-		candidates = append(candidates, guidedCleanupPlanCandidates(*guidedState)...)
-	}
-	candidates = append(candidates, ClassicCleanupPlanCandidates(classicTargets, opts)...)
-	return BuildUnifiedCleanupPlan(ctx, candidates, evidence)
-}
-
-func guidedCandidateCount(state *guidedCleanState) int {
-	if state == nil {
-		return 0
-	}
-	return len(state.Rows)
+	return executor.UnifiedCleanupPlanForClean(ctx, guidedState, classicTargets, evidence, opts)
 }
