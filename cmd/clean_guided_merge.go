@@ -52,7 +52,7 @@ func mergeCleanupOverlapComponents(
 	for _, component := range remaining {
 		overlapsPreferred := false
 		for _, existing := range preferred {
-			if _, overlaps := cleanupLogicalRelation(
+			if _, overlaps := cleaner.CleanupLogicalRelation(
 				existing.CanonicalPath,
 				component.CanonicalPath,
 			); overlaps {

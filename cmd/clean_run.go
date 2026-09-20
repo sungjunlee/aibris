@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/sungjunlee/aibris/internal/cleancommand"
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/cleanjson"
 	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -19,36 +21,35 @@ import (
 // CLI concerns (flag parsing, terminal I/O, os.Exit). Core business logic for
 // filtering, overlap safety, and execution lives in internal packages.
 
-// errClassicRouteReceiptFile is shared by the pre-scan flag check and the
-// post-scan route check so both refusals read identically.
-const errClassicRouteReceiptFile = "error: --receipt-file is not available on the classic route; use --json for a classic receipt"
-
-type cleanCommandRoute string
-
-const (
-	cleanCommandRouteAPFS  cleanCommandRoute = "apfs-snapshots"
-	cleanCommandRouteStrip cleanCommandRoute = "strip"
-	cleanCommandRouteJSON  cleanCommandRoute = "json"
-	cleanCommandRouteScan  cleanCommandRoute = "scan"
-)
-
 func runCleanCommand(cmd *cobra.Command) {
-	route, errMsg := selectCleanCommandRoute(cmd)
+	routeInput := cleancommand.RouteInput{
+		IncludePaths:  cleanIncludePaths,
+		ReceiptFile:   cleanReceiptFile,
+		DryRun:        cleanDryRun,
+		Guide:         cleanGuide,
+		NoGuide:       cleanNoGuide,
+		Strip:         cleanStrip,
+		APFSSnapshots: cleanAPFSSnapshots,
+		JSON:          cleanJSON,
+		Interactive:   cleanInteractive,
+		Force:         cleanForce,
+	}
+	route, errMsg := cleancommand.SelectRoute(routeInput, apfsSnapshotFlagConflict, cmd)
 	if errMsg != "" {
 		fmt.Fprintln(os.Stderr, errMsg)
 		os.Exit(1)
 	}
 	switch route {
-	case cleanCommandRouteAPFS:
+	case cleancommand.RouteAPFS:
 		runAPFSSnapshotClean()
 		return
-	case cleanCommandRouteStrip:
+	case cleancommand.RouteStrip:
 		runStripClean()
 		return
-	case cleanCommandRouteJSON:
+	case cleancommand.RouteJSON:
 		runCleanJSON(cmd)
 		return
-	case cleanCommandRouteScan:
+	case cleancommand.RouteScan:
 		// classic scan-and-delete continues below
 	default:
 		panic("unknown clean command route: " + string(route))
@@ -155,7 +156,7 @@ func runCleanCommand(cmd *cobra.Command) {
 	// The route is only settled after the scan. A receipt file requested on
 	// a run that resolved to classic fails here, before any mutation.
 	if cleanReceiptFile != "" && experience != cleanExperienceGuided {
-		fmt.Fprintln(os.Stderr, errClassicRouteReceiptFile)
+		fmt.Fprintln(os.Stderr, cleancommand.ErrClassicRouteReceiptFile)
 		os.Exit(1)
 	}
 
@@ -193,7 +194,7 @@ func runCleanCommand(cmd *cobra.Command) {
 		scanEvidenceProtections,
 		gitSafetyProtections,
 	)
-	logicalInputs := cleanupOverlapLogicalInputsForAudit(
+	logicalInputs := cleanjson.LogicalInputsForAuditWithPolicy(
 		result.Worktrees,
 		opts,
 		classicProtections,
@@ -286,61 +287,12 @@ func runCleanCommand(cmd *cobra.Command) {
 	hintAPFSSnapshotsAfterReclaim(receipt.FreedBytes)
 }
 
-func selectCleanCommandRoute(cmd *cobra.Command) (cleanCommandRoute, string) {
-	if cleanIncludePaths && !cleanJSON && cleanReceiptFile == "" {
-		return "", "error: --include-paths requires --json"
-	}
-	if cleanReceiptFile != "" && cleanDryRun {
-		return "", "error: --receipt-file requires an execution run (remove --dry-run)"
-	}
-	if cleanGuide && cleanNoGuide {
-		return "", "error: cannot use --guide with --no-guide"
-	}
-	if cleanStrip && cleanAPFSSnapshots {
-		return "", "error: --strip cannot be combined with --apfs-snapshots"
-	}
-	if cleanAPFSSnapshots {
-		if err := apfsSnapshotFlagConflict(cmd); err != "" {
-			return "", err
-		}
-		return cleanCommandRouteAPFS, ""
-	}
-	if cleanStrip {
-		if cleanJSON || cleanInteractive || cleanGuide || cleanReceiptFile != "" {
-			return "", "error: --strip cannot be combined with --json, --interactive, --guide, or --receipt-file"
-		}
-		return cleanCommandRouteStrip, ""
-	}
-	if cleanReceiptFile != "" && cleanNoGuide && !cleanJSON {
-		return "", errClassicRouteReceiptFile
-	}
-	if cleanJSON {
-		if !cleanDryRun && cleanGuide {
-			return "", "error: non-dry-run --json cannot use --guide"
-		}
-		if !cleanDryRun && !cleanForce && !cleanInteractive {
-			return "", "error: non-dry-run --json requires --force or --interactive"
-		}
-		return cleanCommandRouteJSON, ""
-	}
-	return cleanCommandRouteScan, ""
-}
 func scanForClean(ctx context.Context, roots, excludes []string, explicit bool) (*types.ScanResult, scanSource, error) {
-	return loadLastScanSession(ctx, roots, excludes, cleanScanSelector(), explicit, true)
+	return loadLastScanSession(ctx, roots, excludes, cleancommand.ScanSelector(cleanStrip, cleanPressure), explicit, true)
 }
 
 func scanForCleanQuiet(ctx context.Context, roots, excludes []string, explicit bool) (*types.ScanResult, scanSource, error) {
-	return loadLastScanSession(ctx, roots, excludes, cleanScanSelector(), explicit, false)
-}
-
-func cleanScanSelector() string {
-	if cleanStrip {
-		return "strip"
-	}
-	if cleanPressure {
-		return "pressure"
-	}
-	return "delete"
+	return loadLastScanSession(ctx, roots, excludes, cleancommand.ScanSelector(cleanStrip, cleanPressure), explicit, false)
 }
 
 var errIncompleteCleanupScan = cleaner.ErrIncompleteCleanupScan

@@ -265,3 +265,22 @@ func PolicyForAuditItemFromCleaner(
 ) (string, []string) {
 	return PolicyForAuditItem(item, opts, ProtectionsFromCleaner(protectedTargets), observedAt)
 }
+
+// LogicalInputsForAuditWithPolicy creates logical inputs with policy decisions for audit.
+func LogicalInputsForAuditWithPolicy(
+	items []types.DebrisInfo,
+	opts types.PruneOptions,
+	protectedTargets map[string]cleaner.CleanAuditReason,
+) []cleaner.CleanupOverlapLogicalInput {
+	observedAt := time.Now()
+	inputs := cleaner.LogicalInputsForAudit(items, opts, protectedTargets, observedAt)
+	for i := range inputs {
+		inputs[i].PolicyDecision, inputs[i].ReasonCodes = PolicyForAuditItemFromCleaner(
+			inputs[i].Item,
+			opts,
+			protectedTargets,
+			observedAt,
+		)
+	}
+	return inputs
+}

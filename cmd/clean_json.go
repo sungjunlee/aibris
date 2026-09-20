@@ -128,7 +128,7 @@ func runCleanJSON(cmd *cobra.Command) {
 		scanEvidenceProtections,
 		gitSafetyProtections,
 	)
-	logicalInputs := cleanupOverlapLogicalInputsForAudit(
+	logicalInputs := cleanjson.LogicalInputsForAuditWithPolicy(
 		result.Worktrees,
 		opts,
 		classicProtections,
