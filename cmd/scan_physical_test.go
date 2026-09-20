@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
+	"github.com/sungjunlee/aibris/internal/cleanjson"
 	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
@@ -113,7 +114,7 @@ func cleanPlanForScanInventory(t *testing.T, result *types.ScanResult) cleanJSON
 	t.Cleanup(resetCleanFlags)
 	resetCleanFlags()
 	physical, _ := cleanAuditPhysicalComponents(result.Worktrees, nil)
-	document, err := buildCleanJSONPlan(
+	document, err := cleanjson.BuildPlanFromCmd(
 		context.Background(),
 		result,
 		scanSource{Kind: scanSourceLive, ObservedAt: time.Now()},
@@ -122,6 +123,7 @@ func cleanPlanForScanInventory(t *testing.T, result *types.ScanResult) cleanJSON
 		result.Worktrees,
 		nil,
 		cleanAudit{Components: physical},
+		false,
 	)
 	if err != nil {
 		t.Fatal(err)

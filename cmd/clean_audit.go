@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/cleanjson"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -252,7 +253,7 @@ func cleanupOverlapLogicalInputsForAudit(
 	observedAt := time.Now()
 	inputs := cleaner.LogicalInputsForAudit(items, opts, protectedTargets, observedAt)
 	for i := range inputs {
-		inputs[i].PolicyDecision, inputs[i].ReasonCodes = cleanJSONPolicyForAuditItem(
+		inputs[i].PolicyDecision, inputs[i].ReasonCodes = cleanjson.PolicyForAuditItemFromCleaner(
 			inputs[i].Item,
 			opts,
 			protectedTargets,

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/cleanjson"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -61,7 +62,7 @@ func markCleanJSONReceiptTarget(
 		target.PhysicalRemoved = false
 		target.FreedBytes = 0
 		if code != "" {
-			target.ReasonCodes = uniqueCleanJSONReasonCodes(append(target.ReasonCodes, code))
+			target.ReasonCodes = cleanjson.UniqueReasonCodes(append(target.ReasonCodes, code))
 		}
 		return
 	}

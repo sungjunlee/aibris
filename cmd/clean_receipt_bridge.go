@@ -174,7 +174,7 @@ func applyCleanJSONExecutionReceipt(
 				target.ResidualBytes = &residual
 			}
 			// Add state-specific reason codes
-			target.ReasonCodes = uniqueCleanJSONReasonCodes(
+			target.ReasonCodes = cleanjson.UniqueReasonCodes(
 				append(target.ReasonCodes, cleanJSONReceiptStateReasons(unit)...),
 			)
 			break
