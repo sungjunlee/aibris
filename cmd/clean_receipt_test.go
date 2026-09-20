@@ -16,9 +16,27 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/cleanjson"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
+
+// Helper to convert cmd execution receipt to cleanjson format for tests
+func toCleanJSONExecutionReceipt(receipt cleanExecutionReceipt) cleanjson.ExecutionReceipt {
+	units := make([]cleanjson.ExecutionUnit, len(receipt.Units))
+	for i, u := range receipt.Units {
+		units[i] = cleanjson.ExecutionUnit{
+			ReceiptTargetKey:           u.ReceiptTargetKey,
+			State:                      string(u.State),
+			PhysicalRemoved:            u.PhysicalRemoved,
+			FreedBytes:                 u.FreedBytes,
+			ResidualBytes:              u.ResidualBytes,
+			CommandFallbackPathRemoval: u.CommandFallbackPathRemoval,
+			FailureCause:               u.FailureCause,
+		}
+	}
+	return cleanjson.ExecutionReceipt{Units: units}
+}
 
 func TestCleanJSONReceiptSuccessIsVersionedRedactedAndPhysicallyAccounted(t *testing.T) {
 	binary := buildCLIContractBinary(t)
@@ -412,8 +430,10 @@ func TestCleanJSONReceiptCommandCreditsObservedShrink(t *testing.T) {
 func TestApplyCleanJSONExecutionReceiptUsesCapturedTargetIDsAfterDeletion(t *testing.T) {
 	item := types.DebrisInfo{ID: "deleted", Path: filepath.Join(t.TempDir(), "gone")}
 	receipt := cleanJSONReceipt{PhysicalTargets: []cleanJSONReceiptPhysicalTarget{{ID: "target-1", State: cleanJSONReceiptPending}}}
-	err := applyCleanJSONExecutionReceipt(&receipt, map[string]string{cleanJSONReceiptItemKey(item): "target-1"}, cleanExecutionReceipt{
-		Units: []cleanUnitExecutionReceipt{{Target: item, ReceiptTargetKey: cleanJSONReceiptItemKey(item), State: cleanExecutionRemoved, PhysicalRemoved: true, FreedBytes: 10}},
+	err := cleanjson.ApplyCleanJSONExecutionReceipt(&receipt, map[string]string{cleanJSONReceiptItemKey(item): "target-1"}, cleanjson.ExecutionReceipt{
+		Units: []cleanjson.ExecutionUnit{{ReceiptTargetKey: cleanJSONReceiptItemKey(item), State: string(cleanExecutionRemoved), PhysicalRemoved: true, FreedBytes: 10}},
+	}, func(err error) bool {
+		return errors.Is(err, cleaner.ErrCleanupTargetYoungerThanMinimumAge)
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -463,10 +483,14 @@ func TestApplyCleanJSONExecutionReceiptUsesPreMutationIdentityAfterSymlinkedAnce
 	receipt := cleanJSONReceipt{PhysicalTargets: []cleanJSONReceiptPhysicalTarget{{
 		ID: "target-1", State: cleanJSONReceiptPending, Bytes: target.Size,
 	}}}
-	if err := applyCleanJSONExecutionReceipt(&receipt, map[string]string{targetIDKey: "target-1"}, execution); err != nil {
+	if err := cleanjson.ApplyCleanJSONExecutionReceipt(&receipt, map[string]string{targetIDKey: "target-1"}, toCleanJSONExecutionReceipt(execution), func(err error) bool {
+		return errors.Is(err, cleaner.ErrCleanupTargetYoungerThanMinimumAge)
+	}); err != nil {
 		t.Fatal(err)
 	}
-	finalized, err := finishCleanJSONReceipt(receipt, nil)
+	finalized, err := cleanjson.FinishCleanJSONReceipt(receipt, nil, listLocalAPFSSnapshots, func(err error) bool {
+		return errors.Is(err, cleaner.ErrCleanupTargetYoungerThanMinimumAge)
+	})
 	if err != nil || finalized.Status != cleanJSONReceiptSucceeded || finalized.Totals.FreedBytes != target.Size {
 		t.Fatalf("symlinked fallback receipt = %+v error=%v", finalized, err)
 	}
@@ -478,15 +502,16 @@ func TestApplyCleanJSONExecutionReceiptUsesPreMutationIdentityAfterSymlinkedAnce
 func TestApplyCleanJSONExecutionReceiptRecordsCommandFallbackPathRemoval(t *testing.T) {
 	item := types.DebrisInfo{ID: "fallback", Path: filepath.Join(t.TempDir(), "gone")}
 	receipt := cleanJSONReceipt{PhysicalTargets: []cleanJSONReceiptPhysicalTarget{{ID: "target-1", State: cleanJSONReceiptPending}}}
-	err := applyCleanJSONExecutionReceipt(&receipt, map[string]string{cleanJSONReceiptItemKey(item): "target-1"}, cleanExecutionReceipt{
-		Units: []cleanUnitExecutionReceipt{{
-			Target:                     item,
+	err := cleanjson.ApplyCleanJSONExecutionReceipt(&receipt, map[string]string{cleanJSONReceiptItemKey(item): "target-1"}, cleanjson.ExecutionReceipt{
+		Units: []cleanjson.ExecutionUnit{{
 			ReceiptTargetKey:           cleanJSONReceiptItemKey(item),
-			State:                      cleanExecutionRemoved,
+			State:                      string(cleanExecutionRemoved),
 			PhysicalRemoved:            true,
 			FreedBytes:                 10,
 			CommandFallbackPathRemoval: true,
 		}},
+	}, func(err error) bool {
+		return errors.Is(err, cleaner.ErrCleanupTargetYoungerThanMinimumAge)
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -519,13 +544,17 @@ func TestOrderCleanJSONReceiptPreparedTargetsUsesPlanTargetOrderWithoutMutatingI
 func TestApplyCleanJSONExecutionReceiptIDMissFailsReceiptInvariant(t *testing.T) {
 	item := types.DebrisInfo{ID: "unknown", Path: filepath.Join(t.TempDir(), "unknown")}
 	receipt := cleanJSONReceipt{PhysicalTargets: []cleanJSONReceiptPhysicalTarget{{ID: "target-1", State: cleanJSONReceiptPending}}}
-	applyErr := applyCleanJSONExecutionReceipt(&receipt, nil, cleanExecutionReceipt{
-		Units: []cleanUnitExecutionReceipt{{Target: item, ReceiptTargetKey: cleanJSONReceiptItemKey(item), State: cleanExecutionRemoved, PhysicalRemoved: true, FreedBytes: 10}},
+	applyErr := cleanjson.ApplyCleanJSONExecutionReceipt(&receipt, nil, cleanjson.ExecutionReceipt{
+		Units: []cleanjson.ExecutionUnit{{ReceiptTargetKey: cleanJSONReceiptItemKey(item), State: string(cleanExecutionRemoved), PhysicalRemoved: true, FreedBytes: 10}},
+	}, func(err error) bool {
+		return errors.Is(err, cleaner.ErrCleanupTargetYoungerThanMinimumAge)
 	})
 	if applyErr == nil || !strings.Contains(applyErr.Error(), "execution receipt invariant") {
 		t.Fatalf("ID miss error = %v", applyErr)
 	}
-	finalized, finalizeErr := finishCleanJSONReceipt(receipt, applyErr)
+	finalized, finalizeErr := cleanjson.FinishCleanJSONReceipt(receipt, applyErr, listLocalAPFSSnapshots, func(err error) bool {
+		return errors.Is(err, cleaner.ErrCleanupTargetYoungerThanMinimumAge)
+	})
 	if finalizeErr == nil || finalized.Status == cleanJSONReceiptSucceeded || finalized.Totals.Failed != 1 {
 		t.Fatalf("ID miss final receipt = %+v error=%v", finalized, finalizeErr)
 	}

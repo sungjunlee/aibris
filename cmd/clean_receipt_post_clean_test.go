@@ -1,12 +1,14 @@
 package cmd
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/cleanjson"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -70,7 +72,9 @@ func TestFinalizeCleanJSONReceiptPostCleanRecommendsThinningWhenSnapshotsExist(t
 	receipt := cleanJSONReceipt{PhysicalTargets: []cleanJSONReceiptPhysicalTarget{{
 		ID: "target-1", State: cleanJSONReceiptSkipped,
 	}}}
-	finalized, err := finishCleanJSONReceipt(receipt, nil)
+	finalized, err := cleanjson.FinishCleanJSONReceipt(receipt, nil, listLocalAPFSSnapshots, func(err error) bool {
+		return errors.Is(err, cleaner.ErrCleanupTargetYoungerThanMinimumAge)
+	})
 	if err != nil || finalized.Status != cleanJSONReceiptSucceeded {
 		t.Fatalf("receipt finalize = %+v error=%v", finalized, err)
 	}
@@ -94,7 +98,9 @@ func TestFinalizeCleanJSONReceiptPostCleanOmitsRecommendationWithoutSnapshots(t 
 	receipt := cleanJSONReceipt{PhysicalTargets: []cleanJSONReceiptPhysicalTarget{{
 		ID: "target-1", State: cleanJSONReceiptSkipped,
 	}}}
-	finalized, err := finishCleanJSONReceipt(receipt, nil)
+	finalized, err := cleanjson.FinishCleanJSONReceipt(receipt, nil, listLocalAPFSSnapshots, func(err error) bool {
+		return errors.Is(err, cleaner.ErrCleanupTargetYoungerThanMinimumAge)
+	})
 	if err != nil || finalized.Status != cleanJSONReceiptSucceeded {
 		t.Fatalf("receipt finalize = %+v error=%v", finalized, err)
 	}
