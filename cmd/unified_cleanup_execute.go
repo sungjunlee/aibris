@@ -101,7 +101,7 @@ func runUnifiedGuidedClean(
 		return
 	}
 
-	logicalInputs := cleanupOverlapLogicalInputsForAudit(result.Worktrees, opts, classicProtections)
+	logicalInputs := cleanjson.LogicalInputsForAuditWithPolicy(result.Worktrees, opts, classicProtections)
 	if guidedState != nil {
 		logicalInputs = applyGuidedPolicyReasons(logicalInputs, *guidedState)
 	}

@@ -146,12 +146,8 @@ func printExecutionReceiptSummary(targetCount int, receipt cleanExecutionReceipt
 }
 
 func receiptRemainingBytes(receipt cleanExecutionReceipt) int64 {
-	return receipt.RemainingBytes()
-}
-
-func (r cleanExecutionReceipt) RemainingBytes() int64 {
 	var remaining int64
-	for _, unit := range r.Units {
+	for _, unit := range receipt.Units {
 		remaining += unit.ResidualBytes
 	}
 	return remaining
@@ -241,8 +237,6 @@ func printCleanupComponentReceipts(receipt cleanExecutionReceipt) {
 	}
 }
 
-// Cancellation is a receipt-only execution state. Keep the established human
-// cleanup output vocabulary stable by rendering it as a failed unit.
 func cleanExecutionDisplayState(state cleanExecutionState) cleanExecutionState {
 	if state == cleanExecutionCancelled {
 		return cleanExecutionFailed
@@ -254,23 +248,6 @@ func cleanTargetReason(w types.DebrisInfo) string {
 	reason := itemReason(w)
 	return strings.TrimSuffix(reason, "; protected from cleanup by default")
 }
-func cleanupOverlapLogicalInputsForAudit(
-	items []types.DebrisInfo,
-	opts types.PruneOptions,
-	protectedTargets map[string]cleanAuditReason,
-) []cleanupOverlapLogicalInput {
-	observedAt := time.Now()
-	inputs := cleaner.LogicalInputsForAudit(items, opts, protectedTargets, observedAt)
-	for i := range inputs {
-		inputs[i].PolicyDecision, inputs[i].ReasonCodes = cleanjson.PolicyForAuditItemFromCleaner(
-			inputs[i].Item,
-			opts,
-			protectedTargets,
-			observedAt,
-		)
-	}
-	return inputs
-}
 
 func buildCleanAudit(items, targets []types.DebrisInfo, opts types.PruneOptions, scannedSources int, source scanSource, protectedTargets map[string]cleanAuditReason) cleanAudit {
 	return cleaner.BuildCleanAudit(
@@ -280,7 +257,7 @@ func buildCleanAudit(items, targets []types.DebrisInfo, opts types.PruneOptions,
 		scannedSources,
 		source,
 		protectedTargets,
-		cleanupOverlapLogicalInputsForAudit(items, opts, protectedTargets),
+		cleanjson.LogicalInputsForAuditWithPolicy(items, opts, protectedTargets),
 	)
 }
 
@@ -301,7 +278,7 @@ func buildPhysicalCleanAudit(
 		scannedSources,
 		source,
 		protectedTargets,
-		cleanupOverlapLogicalInputsForAudit(items, opts, protectedTargets),
+		cleanjson.LogicalInputsForAuditWithPolicy(items, opts, protectedTargets),
 	)
 }
 
@@ -362,27 +339,4 @@ func mergeCleanAuditProtections(
 	protectionSets ...map[string]cleanAuditReason,
 ) map[string]cleanAuditReason {
 	return cleaner.MergeAuditProtections(protectionSets...)
-}
-
-func cleanupLogicalRelation(ownerPath, rowPath string) (cleanupOverlapRelation, bool) {
-	return cleaner.CleanupLogicalRelation(ownerPath, rowPath)
-}
-
-func cleanupLogicalPolicyReason(input cleanupOverlapLogicalInput) string {
-	return cleaner.CleanupLogicalPolicyReason(input)
-}
-
-func ensureCleanupOwnerLogicalRow(
-	rows []cleanupOverlapLogicalRow,
-	owner types.DebrisInfo,
-	canonicalPath string,
-) []cleanupOverlapLogicalRow {
-	return cleaner.EnsureCleanupOwnerLogicalRow(rows, owner, canonicalPath)
-}
-
-func sortCleanupOverlapLogicalRows(
-	rows []cleanupOverlapLogicalRow,
-	owner types.DebrisInfo,
-) {
-	cleaner.SortCleanupOverlapLogicalRows(rows, owner)
 }

@@ -2,13 +2,15 @@ package cmd
 
 import (
 	"testing"
+
+	"github.com/sungjunlee/aibris/internal/cleancommand"
 )
 
 func TestSelectCleanCommandRouteFlagConflicts(t *testing.T) {
 	tests := []struct {
 		name    string
 		setup   func()
-		want    cleanCommandRoute
+		want    cleancommand.Route
 		wantErr string
 	}{
 		{
@@ -33,7 +35,7 @@ func TestSelectCleanCommandRouteFlagConflicts(t *testing.T) {
 				cleanReceiptFile = "receipt.json"
 				cleanNoGuide = true
 			},
-			wantErr: errClassicRouteReceiptFile,
+			wantErr: cleancommand.ErrClassicRouteReceiptFile,
 		},
 		{
 			name: "include-paths requires json",
@@ -79,7 +81,7 @@ func TestSelectCleanCommandRouteFlagConflicts(t *testing.T) {
 				cleanJSON = true
 				cleanDryRun = true
 			},
-			want: cleanCommandRouteJSON,
+			want: cleancommand.RouteJSON,
 		},
 		{
 			name: "json force selects json route",
@@ -87,7 +89,7 @@ func TestSelectCleanCommandRouteFlagConflicts(t *testing.T) {
 				cleanJSON = true
 				cleanForce = true
 			},
-			want: cleanCommandRouteJSON,
+			want: cleancommand.RouteJSON,
 		},
 		{
 			name: "json interactive selects json route",
@@ -95,7 +97,7 @@ func TestSelectCleanCommandRouteFlagConflicts(t *testing.T) {
 				cleanJSON = true
 				cleanInteractive = true
 			},
-			want: cleanCommandRouteJSON,
+			want: cleancommand.RouteJSON,
 		},
 		{
 			name: "receipt-file with json stays on json route",
@@ -105,26 +107,26 @@ func TestSelectCleanCommandRouteFlagConflicts(t *testing.T) {
 				cleanJSON = true
 				cleanForce = true
 			},
-			want: cleanCommandRouteJSON,
+			want: cleancommand.RouteJSON,
 		},
 		{
 			name: "strip selects strip route",
 			setup: func() {
 				cleanStrip = true
 			},
-			want: cleanCommandRouteStrip,
+			want: cleancommand.RouteStrip,
 		},
 		{
 			name: "apfs-snapshots selects apfs route",
 			setup: func() {
 				cleanAPFSSnapshots = true
 			},
-			want: cleanCommandRouteAPFS,
+			want: cleancommand.RouteAPFS,
 		},
 		{
 			name:  "default selects scan then dispatch",
 			setup: func() {},
-			want:  cleanCommandRouteScan,
+			want:  cleancommand.RouteScan,
 		},
 	}
 
@@ -134,7 +136,19 @@ func TestSelectCleanCommandRouteFlagConflicts(t *testing.T) {
 			t.Cleanup(resetCleanFlags)
 			tt.setup()
 
-			got, errMsg := selectCleanCommandRoute(cleanCmd)
+			routeInput := cleancommand.RouteInput{
+				IncludePaths:  cleanIncludePaths,
+				ReceiptFile:   cleanReceiptFile,
+				DryRun:        cleanDryRun,
+				Guide:         cleanGuide,
+				NoGuide:       cleanNoGuide,
+				Strip:         cleanStrip,
+				APFSSnapshots: cleanAPFSSnapshots,
+				JSON:          cleanJSON,
+				Interactive:   cleanInteractive,
+				Force:         cleanForce,
+			}
+			got, errMsg := cleancommand.SelectRoute(routeInput, apfsSnapshotFlagConflict, cleanCmd)
 			if tt.wantErr != "" {
 				if errMsg != tt.wantErr {
 					t.Fatalf("err = %q; want %q", errMsg, tt.wantErr)

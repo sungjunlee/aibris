@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/cleanjson"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -567,7 +568,7 @@ func TestPhysicalCleanAuditUsesOwnerBytesAndLogicalEvidence(t *testing.T) {
 		context.Background(),
 		runtime,
 		[]types.DebrisInfo{owner},
-		cleanupOverlapLogicalInputsForAudit([]types.DebrisInfo{orphan, owner}, opts, nil),
+		cleanjson.LogicalInputsForAuditWithPolicy([]types.DebrisInfo{orphan, owner}, opts, nil),
 	)
 	if err != nil {
 		t.Fatal(err)

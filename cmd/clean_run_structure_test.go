@@ -15,13 +15,11 @@ import (
 // in package cmd after the same-package extract.
 var (
 	_ = runCleanCommand
-	_ = selectCleanCommandRoute
 )
 
 func TestCleanRunLivesApartFromCleanCommandEntry(t *testing.T) {
 	runNames := []string{
 		"runCleanCommand",
-		"selectCleanCommandRoute",
 	}
 	entryNames := []string{
 		"cleanCmd",
@@ -83,8 +81,7 @@ func TestCleanRunLivesApartFromCleanCommandEntry(t *testing.T) {
 
 func TestCleanRunReexportIdentity(t *testing.T) {
 	var (
-		_ func(*cobra.Command)                             = runCleanCommand
-		_ func(*cobra.Command) (cleanCommandRoute, string) = selectCleanCommandRoute
+		_ func(*cobra.Command) = runCleanCommand
 	)
 
 	cleanSource := readCmdSource(t, "clean.go")
