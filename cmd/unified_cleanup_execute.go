@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/cleanjson"
 	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/types"
@@ -19,17 +20,11 @@ func validateAndSelectForExecution(
 	plan UnifiedCleanupPlan,
 	now time.Time,
 ) ([]types.DebrisInfo, error) {
-	if err := validateUnifiedCleanupPlanForMutation(ctx, plan, now); err != nil {
-		return nil, err
-	}
-	return plan.SelectedPhysicalTargets(), nil
+	return cleaner.ValidateAndSelectForExecution(ctx, plan, now)
 }
 
 func validateUnifiedCleanupPlanForMutation(ctx context.Context, plan UnifiedCleanupPlan, now time.Time) error {
-	if err := plan.ValidateForExecution(ctx, now); err != nil {
-		return fmt.Errorf("cleanup plan not ready for execution: %w", err)
-	}
-	return nil
+	return cleaner.ValidateUnifiedCleanupPlanForMutation(ctx, plan, now)
 }
 
 func executeUnifiedPreparedCleanTargets(
@@ -215,15 +210,7 @@ func prepareGuidedCleanExecutionReceipt(
 // scan evidence is carried through so ValidateForExecution can reject it at
 // the execution boundary.
 func cleanupPlanEvidence(result *types.ScanResult, source scanSource, observedAt time.Time) CleanupPlanEvidence {
-	evidence := CleanupPlanEvidence{ObservedAt: observedAt}
-	if source.Kind == scanSourceCached {
-		evidence.ObservedAt = source.ObservedAt
-		evidence.MaxAge = lastScanCacheMaxAge
-	}
-	if result != nil && result.Partial() {
-		evidence.ProviderErrors = append([]types.ScanProviderError(nil), result.ProviderErrors...)
-	}
-	return evidence
+	return cleaner.BuildCleanupPlanEvidence(result, source, observedAt, lastScanCacheMaxAge)
 }
 
 // guidedCleanupPlanCandidates adapts the accepted guided selection into
