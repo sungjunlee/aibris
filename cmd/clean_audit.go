@@ -315,6 +315,15 @@ func newCleanAuditTargetSet(targets []types.DebrisInfo) *cleanAuditTargetSet {
 	return cleaner.NewAuditTargetSet(targets)
 }
 
+// Exported wrappers for external tests
+func CleanAuditItemKey(item types.DebrisInfo) string {
+	return cleaner.AuditItemKey(item)
+}
+
+func CleanAuditReasonsFromEligibility(reasons map[string]cleaner.EligibilityReason) map[string]cleanAuditReason {
+	return cleaner.AuditReasonsFromEligibility(reasons)
+}
+
 func cleanAuditItemKey(item types.DebrisInfo) string {
 	return cleaner.AuditItemKey(item)
 }

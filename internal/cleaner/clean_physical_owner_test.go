@@ -1,4 +1,4 @@
-package cmd
+package cleaner_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sungjunlee/aibris/cmd"
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -51,7 +52,7 @@ func TestApplyPhysicalWorktreeOwnerSafetyProtectsMixedOwnerFromClassicOverrides(
 				t.Fatalf("physical owner targets = %+v; want whole owner protected", targets)
 			}
 			for _, row := range inventory {
-				if got := protections[cleanAuditItemKey(row)]; got != cleaner.EligibilityReasonActiveWorktree {
+				if got := protections[cleaner.AuditItemKey(row)]; got != cleaner.EligibilityReasonActiveWorktree {
 					t.Errorf("protection for %s row = %q; want %q",
 						row.Status, got, cleaner.EligibilityReasonActiveWorktree)
 				}
@@ -168,13 +169,14 @@ func TestPhysicalWorktreeOwnerSafetyPreservesPhysicalAuditAccounting(t *testing.
 		classic,
 		false,
 	)
-	audit := buildCleanAudit(
+	audit := cleaner.BuildCleanAudit(
 		inventory,
 		targets,
 		opts,
 		1,
-		scanSource{Kind: scanSourceLive},
-		cleanAuditReasonsFromEligibility(protections),
+		cleaner.ScanSource{Kind: cleaner.ScanSourceLive},
+		cleaner.AuditReasonsFromEligibility(protections),
+		nil, // logicalInputs
 	)
 	if audit.TotalEvidenceCount != 2 ||
 		audit.TotalFoundCount != 1 ||
@@ -185,7 +187,7 @@ func TestPhysicalWorktreeOwnerSafetyPreservesPhysicalAuditAccounting(t *testing.
 			audit)
 	}
 	if len(audit.Categories) != 1 ||
-		audit.Categories[0].MainReason != string(cleanReasonActiveWorktree) {
+		audit.Categories[0].MainReason != string(cleaner.CleanReasonActiveWorktree) {
 		t.Fatalf("audit categories = %+v; want active-owner protection", audit.Categories)
 	}
 }
@@ -222,22 +224,23 @@ func TestPhysicalWorktreeOwnerSafetyAuditPrefersGuidedSelection(t *testing.T) {
 	// Guided cleanup deliberately selected the active owner. The classic
 	// protection remains useful for unselected inventory rows, but must not
 	// make the audit contradict the selected physical target.
-	audit := buildCleanAudit(
+	audit := cleaner.BuildCleanAudit(
 		[]types.DebrisInfo{active, child},
 		[]types.DebrisInfo{active},
 		opts,
 		1,
-		scanSource{Kind: scanSourceCached},
-		cleanAuditReasonsFromEligibility(protections),
+		cleaner.ScanSource{Kind: cleaner.ScanSourceCached},
+		cleaner.AuditReasonsFromEligibility(protections),
+		nil, // logicalInputs
 	)
 	if audit.TotalEligibleCount != 1 || audit.TotalBlockedCount != 0 {
 		t.Fatalf("guided physical audit = %+v; want selected owner eligible", audit)
 	}
 	for _, row := range audit.Categories {
 		if row.Category == types.CategoryNodeModules &&
-			row.MainReason != string(cleanReasonNestedTarget) {
+			row.MainReason != string(cleaner.CleanReasonNestedTarget) {
 			t.Fatalf("nested row main reason = %q; want %q",
-				row.MainReason, cleanReasonNestedTarget)
+				row.MainReason, cleaner.CleanReasonNestedTarget)
 		}
 	}
 }
@@ -248,7 +251,7 @@ func TestMergeGuidedAndClassicMixedOwnerKeepsActiveRepresentative(t *testing.T) 
 		t.Fatal(err)
 	}
 	rows := mixedPhysicalOwnerRows(owner, owner)
-	classic, audit := mergeGuidedPreviewWithClassicTargets(
+	classic, audit := cmd.MergeGuidedPreviewWithClassicTargets(
 		[]types.DebrisInfo{rows[0]},
 		[]types.DebrisInfo{rows[1]},
 	)
@@ -271,13 +274,13 @@ func TestUnifiedCleanupPlanMixedCanonicalOwnerSelectsActiveMutationTarget(t *tes
 		t.Skipf("symlink unavailable: %v", err)
 	}
 	rows := mixedPhysicalOwnerRows(alias, owner)
-	plan, err := BuildUnifiedCleanupPlan(
+	plan, err := cleaner.BuildUnifiedCleanupPlan(
 		context.Background(),
-		[]CleanupPlanCandidate{
-			{RowKey: "active", Item: rows[0], Selection: CleanupPlanSelected},
-			{RowKey: "orphaned", Item: rows[1], Selection: CleanupPlanSelected},
+		[]cleaner.CleanupPlanCandidate{
+			{RowKey: "active", Item: rows[0], Selection: cleaner.CleanupPlanSelected},
+			{RowKey: "orphaned", Item: rows[1], Selection: cleaner.CleanupPlanSelected},
 		},
-		CleanupPlanEvidence{},
+		cleaner.CleanupPlanEvidence{},
 	)
 	if err != nil {
 		t.Fatal(err)
