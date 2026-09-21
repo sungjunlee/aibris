@@ -69,6 +69,7 @@ func TestWindowsLinkedWorktreeFixture(t *testing.T) {
 			Status         string `json:"status"`
 			Classification string `json:"classification"`
 			Tool           string `json:"tool"`
+			Project        string `json:"project"`
 		} `json:"worktrees"`
 	}
 	if err := json.Unmarshal([]byte(result.Stdout), &scan); err != nil {
@@ -81,7 +82,7 @@ func TestWindowsLinkedWorktreeFixture(t *testing.T) {
 
 	found := false
 	for _, wt := range scan.Worktrees {
-		if !strings.Contains(wt.Path, "main-project") {
+		if wt.Project != "main-project" {
 			continue
 		}
 		found = true
@@ -128,6 +129,7 @@ func TestWindowsOrphanedWorktreeFixture(t *testing.T) {
 			Path           string `json:"path"`
 			Status         string `json:"status"`
 			Classification string `json:"classification"`
+			Project        string `json:"project"`
 		} `json:"worktrees"`
 	}
 	if err := json.Unmarshal([]byte(result.Stdout), &scan); err != nil {
@@ -136,7 +138,7 @@ func TestWindowsOrphanedWorktreeFixture(t *testing.T) {
 
 	found := false
 	for _, wt := range scan.Worktrees {
-		if !strings.Contains(wt.Path, "removed-project") {
+		if wt.Project != "removed-project" {
 			continue
 		}
 		found = true
