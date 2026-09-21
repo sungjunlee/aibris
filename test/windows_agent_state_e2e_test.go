@@ -28,9 +28,9 @@ func TestWindowsClaudeAgentStateFixture(t *testing.T) {
 	// Synthetic session.jsonl with Windows absolute path
 	liveSessionPath := filepath.Join(liveSessionDir, "session.jsonl")
 	liveSessionLine := map[string]interface{}{
-		"message": map[string]interface{}{
-			"cwd": liveCWD,
-		},
+		"type":    "session",
+		"message": "private transcript content must not be parsed",
+		"cwd":     liveCWD,
 	}
 	liveSessionBytes, err := json.Marshal(liveSessionLine)
 	if err != nil {
@@ -49,9 +49,9 @@ func TestWindowsClaudeAgentStateFixture(t *testing.T) {
 	}
 	orphanedSessionPath := filepath.Join(orphanedSessionDir, "session.jsonl")
 	orphanedSessionLine := map[string]interface{}{
-		"message": map[string]interface{}{
-			"cwd": orphanedCWD,
-		},
+		"type":    "session",
+		"message": "private transcript content must not be parsed",
+		"cwd":     orphanedCWD,
 	}
 	orphanedSessionBytes, err := json.Marshal(orphanedSessionLine)
 	if err != nil {
@@ -221,9 +221,9 @@ func TestWindowsAgentStateCleanupEndToEndUnaudited(t *testing.T) {
 	}
 	orphanedSessionPath := filepath.Join(orphanedSessionDir, "session.jsonl")
 	orphanedSessionLine := map[string]interface{}{
-		"message": map[string]interface{}{
-			"cwd": orphanedCWD,
-		},
+		"type":    "session",
+		"message": "private transcript content must not be parsed",
+		"cwd":     orphanedCWD,
 	}
 	orphanedSessionBytes, err := json.Marshal(orphanedSessionLine)
 	if err != nil {
@@ -296,9 +296,9 @@ func TestWindowsRecordedCWDVolumeAmbiguity(t *testing.T) {
 	}
 	ambiguousSessionPath := filepath.Join(ambiguousSessionDir, "session.jsonl")
 	ambiguousSessionLine := map[string]interface{}{
-		"message": map[string]interface{}{
-			"cwd": ambiguousCWD,
-		},
+		"type":    "session",
+		"message": "private transcript content must not be parsed",
+		"cwd":     ambiguousCWD,
 	}
 	ambiguousSessionBytes, err := json.Marshal(ambiguousSessionLine)
 	if err != nil {
