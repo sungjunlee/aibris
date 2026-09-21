@@ -145,6 +145,50 @@ candidate is found, it still needs valid direct or one-level nested Git
 worktree metadata; active worktrees stay protected, orphaned worktrees are
 reviewable cleanup candidates, and `plain-dir` entries are never cleaned.
 
+## Reproducing unaudited scenarios
+
+Issue [#550](https://github.com/sungjunlee/aibris/issues/550) provides isolated
+reproduction fixtures for Windows-specific scenarios that are not yet audited
+in native CI:
+
+1. **Synthetic Git linked worktrees:** `test/windows_worktree_fixtures_test.go`
+   creates `.git` pointer files and `gitdir` references using Windows absolute
+   paths, verifying that `active`, `orphaned`, and `plain-dir` classifications
+   work with Windows path separators. These fixtures do NOT require a Git
+   installation and do NOT claim to match real vendor worktree layouts.
+
+2. **Agent-state end-to-end cleanup:** `test/windows_agent_state_e2e_test.go`
+   creates synthetic Claude `session.jsonl` and Cursor `worker.log` files with
+   Windows recorded-cwd paths, verifying classification but NOT actual mutation.
+   The test documents that Windows CI exercises classification logic but does
+   not separately verify the cleanup mutation route.
+
+3. **Volume ambiguity:** The agent-state test includes a fixture with a
+   network-share path to confirm that unverifiable volume IDs result in
+   `undetermined` classification and never authorize cleanup.
+
+To reproduce these scenarios locally on Windows:
+
+```powershell
+# Run Windows-specific worktree fixture tests
+go test -v ./test -run '^TestWindowsLinkedWorktreeFixture$'
+go test -v ./test -run '^TestWindowsOrphanedWorktreeFixture$'
+go test -v ./test -run '^TestWindowsPlainDirWorktreeFixture$'
+
+# Run Windows-specific agent-state fixture tests
+go test -v ./test -run '^TestWindowsClaudeAgentStateFixture$'
+go test -v ./test -run '^TestWindowsCursorAgentStateFixture$'
+go test -v ./test -run '^TestWindowsAgentStateCleanupEndToEndUnaudited$'
+go test -v ./test -run '^TestWindowsRecordedCWDVolumeAmbiguity$'
+```
+
+These fixtures establish the shape expected by adapters and confirm that
+Windows path handling works with synthetic metadata. They do NOT verify that
+real vendor installations (Codex, Claude, Cursor worktree containers on Windows)
+match these layouts, and they do NOT exercise actual file deletion.
+
+## Unaudited areas
+
 These areas are unsupported or unaudited:
 
 - The native installation workflow is manual; `install.sh` does not install or
