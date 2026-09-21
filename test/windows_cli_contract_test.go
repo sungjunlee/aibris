@@ -4,8 +4,10 @@ package test
 
 import (
 	"encoding/json"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -362,139 +364,244 @@ func TestWindowsScanToDryRunContractPreservesClassification(t *testing.T) {
 func TestWindowsDryRunPlanJSONMatchesScanReasons(t *testing.T) {
 	home := filepath.Join(t.TempDir(), "profile")
 
-	// Create orphaned worktree
-	orphanedCheckoutPath := filepath.Join(home, ".codex", "worktrees", "orphan-hash", "orphan-project")
-	if err := os.MkdirAll(orphanedCheckoutPath, 0755); err != nil {
+	activeAdmin := filepath.Join(home, "repos", "active-repo", ".git", "worktrees", "active-branch")
+	if err := os.MkdirAll(activeAdmin, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	orphanedGitPointer := filepath.Join(orphanedCheckoutPath, ".git")
+	activeCheckout := filepath.Join(home, ".codex", "worktrees", "active-hash", "active-repo")
+	if err := os.MkdirAll(activeCheckout, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	activePointer := filepath.Join(activeCheckout, ".git")
+	if err := os.WriteFile(activePointer, []byte("gitdir: "+activeAdmin+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(activeAdmin, "gitdir"), []byte(activePointer), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(activeAdmin, "commondir"), []byte("../..\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	orphanedCheckout := filepath.Join(home, ".codex", "worktrees", "orphan-hash", "orphan-project")
+	if err := os.MkdirAll(orphanedCheckout, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	missingGitdir := filepath.Join(home, "nowhere", ".git", "worktrees", "orphan-branch")
-	if err := os.WriteFile(orphanedGitPointer, []byte("gitdir: "+missingGitdir+"\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(orphanedCheckout, ".git"), []byte("gitdir: "+missingGitdir+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	// Create orphaned agent-state
-	orphanedCWD := filepath.Join(home, "workspace", "removed")
-	orphanedSessionDir := filepath.Join(home, ".claude", "projects", "orphan-entry")
-	if err := os.MkdirAll(orphanedSessionDir, 0755); err != nil {
+	plainDir := filepath.Join(home, ".codex", "worktrees", "plain-hash", "plain-dir")
+	if err := os.MkdirAll(plainDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	orphanedSessionPath := filepath.Join(orphanedSessionDir, "session.jsonl")
-	orphanedSessionData := map[string]interface{}{"type": "session", "cwd": orphanedCWD}
-	orphanedSessionBytes, _ := json.Marshal(orphanedSessionData)
-	if err := os.WriteFile(orphanedSessionPath, append(orphanedSessionBytes, '\n'), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(plainDir, ".git"), []byte("invalid\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	// Run scan --json
-	scanResult := runCLIContract(t, home, nil, "scan", "--json")
+	liveCWD := filepath.Join(home, "workspace", "active-project")
+	if err := os.MkdirAll(liveCWD, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeWindowsSession(t, filepath.Join(home, ".claude", "projects", "live-session"), liveCWD)
+	orphanedSession := filepath.Join(home, ".claude", "projects", "orphaned-session")
+	writeWindowsSession(t, orphanedSession, filepath.Join(home, "workspace", "removed-project"))
+	undeterminedSession := filepath.Join(home, ".claude", "projects", "undetermined-session")
+	if err := os.MkdirAll(undeterminedSession, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(undeterminedSession, "session.jsonl"), []byte("{\"message\":\"no cwd\"}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	before := windowsFixtureSnapshot(t, home, ".codex", ".claude", "repos", "workspace")
+	scanResult := runCLIContract(t, home, nil, "scan", "--json", "--root", home)
 	if scanResult.ExitCode != 0 {
 		t.Fatalf("scan exit = %d\nstdout:\n%s\nstderr:\n%s",
 			scanResult.ExitCode, scanResult.Stdout, scanResult.Stderr)
 	}
-
 	var scanOutput struct {
 		Items []struct {
 			ID             string `json:"id"`
-			Classification string `json:"classification"`
-			Risk           string `json:"risk"`
-			Reason         string `json:"reason"`
-			CleanupKind    string `json:"cleanup_kind"`
-		} `json:"items"`
-		Worktrees []struct {
+			Category       string `json:"category"`
+			Path           string `json:"path"`
 			Status         string `json:"status"`
 			Classification string `json:"classification"`
 			Risk           string `json:"risk"`
 			Reason         string `json:"reason"`
-			CleanupKind    string `json:"cleanup_kind"`
-			Project        string `json:"project"`
-		} `json:"worktrees"`
+		} `json:"items"`
 	}
 	if err := json.Unmarshal([]byte(scanResult.Stdout), &scanOutput); err != nil {
 		t.Fatalf("decode scan JSON: %v\nstdout:\n%s", err, scanResult.Stdout)
 	}
 
-	scanReasonByID := make(map[string]struct {
+	type scanEvidence struct {
 		Classification string
 		Risk           string
 		Reason         string
-	})
+		Status         string
+		Category       string
+		Path           string
+	}
+	scanReasonByID := make(map[string]scanEvidence)
 	for _, item := range scanOutput.Items {
-		scanReasonByID[item.ID] = struct {
-			Classification string
-			Risk           string
-			Reason         string
-		}{item.Classification, item.Risk, item.Reason}
+		if item.Category != "worktree" && item.Category != "agent-state" {
+			continue
+		}
+		scanReasonByID[item.ID] = scanEvidence{
+			Classification: item.Classification,
+			Risk:           item.Risk,
+			Reason:         item.Reason,
+			Status:         item.Status,
+			Category:       item.Category,
+			Path:           item.Path,
+		}
 	}
-	for _, wt := range scanOutput.Worktrees {
-		scanReasonByID[wt.Project] = struct {
-			Classification string
-			Risk           string
-			Reason         string
-		}{wt.Classification, wt.Risk, wt.Reason}
+	if _, ok := scanReasonByID["orphan-hash"]; !ok {
+		t.Fatalf("scan missing orphan-hash: %+v", scanReasonByID)
+	}
+	if _, ok := scanReasonByID["orphaned-session"]; !ok {
+		t.Fatalf("scan missing orphaned-session: %+v", scanReasonByID)
 	}
 
-	// Run clean --dry-run --json
-	dryRunResult := runCLIContract(t, home, nil, "clean", "--dry-run", "--force", "--age=0s", "--include-paths")
+	// --age=0s is rejected by the positive-age contract. 1ns is the smallest
+	// positive duration this suite already uses; grace 0s makes an orphaned
+	// agent-state store eligible without widening the public flags.
+	dryRunResult := runCLIContract(t, home, nil,
+		"clean", "--no-guide", "--dry-run", "--json", "--include-paths",
+		"--age=1ns", "--agent-state-grace=0s",
+		"--root", home, "--category=worktree,agent-state",
+	)
 	if dryRunResult.ExitCode != 0 {
-		t.Logf("clean --dry-run exit = %d (acceptable if no eligible targets due to grace)", dryRunResult.ExitCode)
+		t.Fatalf("clean dry-run exit = %d\nstdout:\n%s\nstderr:\n%s",
+			dryRunResult.ExitCode, dryRunResult.Stdout, dryRunResult.Stderr)
+	}
+	var planOutput struct {
+		DocumentType  string `json:"document_type"`
+		Mode          string `json:"mode"`
+		PathsIncluded bool   `json:"paths_included"`
+		Rows          []struct {
+			Decision    string   `json:"decision"`
+			Path        *string  `json:"path"`
+			Category    string   `json:"category"`
+			ReasonCodes []string `json:"reason_codes"`
+		} `json:"rows"`
+	}
+	if err := json.Unmarshal([]byte(dryRunResult.Stdout), &planOutput); err != nil {
+		t.Fatalf("decode clean plan JSON: %v\nstdout:\n%s", err, dryRunResult.Stdout)
+	}
+	if planOutput.DocumentType != "clean_plan" || planOutput.Mode != "dry_run" || !planOutput.PathsIncluded {
+		t.Fatalf("plan = document %q mode %q paths %t; want clean_plan/dry_run/included",
+			planOutput.DocumentType, planOutput.Mode, planOutput.PathsIncluded)
 	}
 
-	// Parse clean plan JSON if present
-	if strings.Contains(dryRunResult.Stdout, `"document_type"`) {
-		var planOutput struct {
-			DocumentType string `json:"document_type"`
-			Mode         string `json:"mode"`
-			Totals       struct {
-				PhysicalTargets int `json:"physical_targets"`
-				Selected        int `json:"selected"`
-				Reviewable      int `json:"reviewable"`
-				Protected       int `json:"protected"`
-			} `json:"totals"`
-			Rows []struct {
-				ID             string   `json:"id"`
-				Decision       string   `json:"decision"`
-				PolicyDecision string   `json:"policy_decision"`
-				ReasonCodes    []string `json:"reason_codes"`
-			} `json:"rows"`
+	rowByPath := map[string]int{}
+	for i, row := range planOutput.Rows {
+		if row.Path == nil || *row.Path == "" {
+			t.Fatalf("plan row %d omitted path: %+v", i, row)
 		}
-		if err := json.Unmarshal([]byte(dryRunResult.Stdout), &planOutput); err != nil {
-			t.Logf("clean plan JSON decode (acceptable if not JSON output): %v", err)
-		} else {
-			if planOutput.DocumentType != "clean_plan" {
-				t.Errorf("document_type = %q; want 'clean_plan'", planOutput.DocumentType)
+		key := canonicalWindowsCLIContractPath(t, *row.Path)
+		rowByPath[key] = i
+	}
+	for _, id := range []string{"orphan-hash", "orphaned-session"} {
+		evidence := scanReasonByID[id]
+		if evidence.Reason == "" || evidence.Risk == "" {
+			t.Fatalf("scan %s evidence = %+v; want reason and risk", id, evidence)
+		}
+		index, ok := rowByPath[canonicalWindowsCLIContractPath(t, evidence.Path)]
+		if !ok {
+			t.Fatalf("plan missing orphan row for scan %s path %q\nrows=%+v", id, evidence.Path, planOutput.Rows)
+		}
+		row := planOutput.Rows[index]
+		switch {
+		case evidence.Category == "agent-state" && evidence.Classification == "orphaned":
+			if row.Decision != "selected" || !slices.Contains(row.ReasonCodes, "agent_state_orphaned") {
+				t.Fatalf("scan %s classification %q reason %q mapped to %+v; want selected agent_state_orphaned",
+					id, evidence.Classification, evidence.Reason, row)
 			}
-			if planOutput.Mode != "dry_run" {
-				t.Errorf("mode = %q; want 'dry_run'", planOutput.Mode)
+		case evidence.Category == "worktree" && evidence.Status == "orphaned":
+			if !strings.Contains(evidence.Reason, "orphaned") ||
+				row.Decision != "selected" ||
+				!slices.Contains(row.ReasonCodes, "classic_eligible") ||
+				slices.Contains(row.ReasonCodes, "active_worktree") {
+				t.Fatalf("scan %s status %q reason %q mapped to %+v; want selected classic_eligible",
+					id, evidence.Status, evidence.Reason, row)
 			}
-
-			// Verify orphaned items appear as reviewable or skipped
-			foundOrphanWorktree := false
-			foundOrphanAgentState := false
-			for _, row := range planOutput.Rows {
-				if strings.Contains(row.ID, "orphan") {
-					if strings.Contains(row.ID, "project") {
-						foundOrphanWorktree = true
-					}
-					if strings.Contains(row.ID, "entry") {
-						foundOrphanAgentState = true
-					}
-					if row.Decision != "reviewable" && row.Decision != "skipped" && row.Decision != "protected" {
-						t.Errorf("orphaned item %q decision = %q; want 'reviewable', 'skipped', or 'protected'",
-							row.ID, row.Decision)
-					}
-				}
-			}
-			t.Logf("clean plan found orphaned worktree: %t, orphaned agent-state: %t", foundOrphanWorktree, foundOrphanAgentState)
+		default:
+			t.Fatalf("scan %s = %+v; want orphaned worktree or agent-state", id, evidence)
+		}
+	}
+	for id, evidence := range scanReasonByID {
+		protected := evidence.Status == "active" || evidence.Status == "plain-dir" ||
+			evidence.Classification == "live" || evidence.Classification == "undetermined"
+		if !protected {
+			continue
+		}
+		index, ok := rowByPath[canonicalWindowsCLIContractPath(t, evidence.Path)]
+		if !ok {
+			continue
+		}
+		if planOutput.Rows[index].Decision == "selected" {
+			t.Fatalf("scan %s (%s/%s) was selected: %+v",
+				id, evidence.Status, evidence.Classification, planOutput.Rows[index])
 		}
 	}
 
-	// Verify all fixtures remain unchanged
-	for _, path := range []string{orphanedCheckoutPath, orphanedSessionDir} {
-		if _, err := os.Stat(path); err != nil {
-			t.Errorf("dry-run changed fixture %q: %v", path, err)
+	after := windowsFixtureSnapshot(t, home, ".codex", ".claude", "repos", "workspace")
+	if len(before) != len(after) {
+		t.Fatalf("fixture entries = %d after dry-run; want %d", len(after), len(before))
+	}
+	for path, body := range before {
+		if after[path] != body {
+			t.Fatalf("dry-run changed fixture %q", path)
 		}
 	}
+}
+
+func writeWindowsSession(t *testing.T, dir, cwd string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body, err := json.Marshal(map[string]string{"type": "session", "cwd": cwd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "session.jsonl"), append(body, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func windowsFixtureSnapshot(t *testing.T, root string, rels ...string) map[string]string {
+	t.Helper()
+	snap := map[string]string{}
+	for _, relRoot := range rels {
+		absRoot := filepath.Join(root, relRoot)
+		err := filepath.WalkDir(absRoot, func(path string, entry fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			rel, err := filepath.Rel(root, path)
+			if err != nil {
+				return err
+			}
+			if entry.IsDir() {
+				snap[rel] = "<dir>"
+				return nil
+			}
+			body, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			snap[rel] = string(body)
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	return snap
 }
 
 func canonicalWindowsCLIContractPath(t *testing.T, path string) string {
