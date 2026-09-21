@@ -2,6 +2,37 @@
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-09-22
+
+### Added
+
+- Native PowerShell installer (`install.ps1`) for Windows that downloads,
+  verifies SHA-256, and installs the Windows zip into a user prefix
+  (`$env:LOCALAPPDATA\Programs\aibris` by default) without requiring Bash or
+  administrator privileges. Supports version pinning, custom install paths,
+  and preserves existing binaries on error.
+- Windows path canonicalization: case-insensitive path comparison (lowercase
+  normalization) enables proper worktree discovery and recorded-cwd
+  classification on Windows filesystems while maintaining exact
+  case-sensitivity on Unix.
+- First-use reproduction fixtures for native Windows workflows, covering
+  isolated `USERPROFILE`, `HOME`, cache, and temporary-directory variables,
+  and Windows-specific path comparison behavior.
+- Scan-to-dry-run classification contract tests verify that scan
+  classifications (active/orphaned/live/undetermined) flow correctly to
+  dry-run plans with proper protected/reviewable/skipped decision mapping.
+- WINDOWS.md quick start section documenting the install→scan→preview workflow
+  with PowerShell examples.
+
+### Fixed
+
+- PowerShell test timeouts on `windows-safety` CI. Three install tests
+  (`TestNativeInstallPowerShellDefaultDir`,
+  `TestNativeInstallPowerShellChecksumMismatchPreservesExisting`,
+  `TestNativeInstallPowerShellLockedBinaryPreserved`) were timing out after
+  ~30s due to sourcing the entire install.ps1 script. Tests now inline logic
+  and add network timeouts to complete reliably.
+
 ## [0.12.1] - 2026-09-21
 
 ### Added
