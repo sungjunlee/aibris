@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
@@ -174,6 +175,11 @@ func BuildOverlapSafetyPlan(
 }
 
 func PathContains(parent, child string) bool {
+	// Normalize paths for comparison on Windows (case-insensitive)
+	if runtime.GOOS == "windows" {
+		parent = strings.ToLower(filepath.Clean(parent))
+		child = strings.ToLower(filepath.Clean(child))
+	}
 	rel, err := filepath.Rel(parent, child)
 	if err != nil || rel == "." || rel == ".." || filepath.IsAbs(rel) {
 		return false

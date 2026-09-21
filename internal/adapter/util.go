@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -70,8 +71,16 @@ func scanRootsOrHome(roots []string) ([]string, error) {
 
 // IsWithin reports whether child is parent or nested under parent.
 // Equality is within (filepath.Rel "." is true).
+// On Windows, comparison is case-insensitive.
 func IsWithin(parent, child string) bool {
-	rel, err := filepath.Rel(parent, child)
+	// Normalize paths for Windows case-insensitive comparison
+	parentCmp := parent
+	childCmp := child
+	if runtime.GOOS == "windows" {
+		parentCmp = strings.ToLower(filepath.Clean(parent))
+		childCmp = strings.ToLower(filepath.Clean(child))
+	}
+	rel, err := filepath.Rel(parentCmp, childCmp)
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }
 
@@ -79,15 +88,9 @@ func pathUnderRoots(path string, roots []string) bool {
 	if len(roots) == 0 {
 		return true
 	}
-	cleanPath := filepath.Clean(path)
-	if resolved, err := filepath.EvalSymlinks(cleanPath); err == nil {
-		cleanPath = filepath.Clean(resolved)
-	}
+	cleanPath := canonicalExistingPath(path)
 	for _, root := range roots {
-		cleanRoot := filepath.Clean(root)
-		if resolved, err := filepath.EvalSymlinks(cleanRoot); err == nil {
-			cleanRoot = filepath.Clean(resolved)
-		}
+		cleanRoot := canonicalExistingPath(root)
 		if cleanPath == cleanRoot || IsWithin(cleanRoot, cleanPath) {
 			return true
 		}

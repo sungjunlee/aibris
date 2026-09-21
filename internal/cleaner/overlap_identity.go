@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -41,13 +42,22 @@ func (identity canonicalPathIdentity) unchanged() error {
 }
 
 func (identity canonicalPathIdentity) matches(current canonicalPathIdentity) error {
-	if identity.canonical != current.canonical {
+	if !pathsEqualForIdentity(identity.canonical, current.canonical) {
 		return fmt.Errorf("canonical path changed from %q to %q", identity.canonical, current.canonical)
 	}
 	if identity.info == nil || current.info == nil || !os.SameFile(identity.info, current.info) {
 		return fmt.Errorf("filesystem identity changed at %q", identity.canonical)
 	}
 	return nil
+}
+
+// pathsEqualForIdentity compares two paths for identity purposes, using
+// case-insensitive comparison on Windows where the filesystem is case-insensitive.
+func pathsEqualForIdentity(a, b string) bool {
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
 }
 
 func canonicalOverlapRelation(target, agentState string) (OverlapSafetyRelation, bool) {
