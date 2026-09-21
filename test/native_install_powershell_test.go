@@ -17,7 +17,13 @@ func runPowerShellSnippet(t *testing.T, home, script string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script)
+	// Use pwsh if available (PowerShell 7+), fall back to powershell.exe
+	psCmd := "pwsh"
+	if _, err := exec.LookPath("pwsh"); err != nil {
+		psCmd = "powershell.exe"
+	}
+
+	cmd := exec.CommandContext(ctx, psCmd, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script)
 	cmd.Dir = "."
 	cmd.Env = []string{
 		"USERPROFILE=" + home,
@@ -44,7 +50,13 @@ func runPowerShellSnippetExpectError(t *testing.T, home, script string) (string,
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script)
+	// Use pwsh if available (PowerShell 7+), fall back to powershell.exe
+	psCmd := "pwsh"
+	if _, err := exec.LookPath("pwsh"); err != nil {
+		psCmd = "powershell.exe"
+	}
+
+	cmd := exec.CommandContext(ctx, psCmd, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script)
 	cmd.Dir = "."
 	cmd.Env = []string{
 		"USERPROFILE=" + home,
