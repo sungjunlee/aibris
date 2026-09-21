@@ -28,7 +28,16 @@ func TestWindowsClaudeAgentStateFixture(t *testing.T) {
 	}
 	// Synthetic session.jsonl with Windows absolute path
 	liveSessionPath := filepath.Join(liveSessionDir, "session.jsonl")
-	liveSessionContent := `{"message":{"cwd":"` + strings.ReplaceAll(liveCWD, `\`, `\\`) + `"}}` + "\n"
+	liveSessionLine := map[string]interface{}{
+		"message": map[string]interface{}{
+			"cwd": liveCWD,
+		},
+	}
+	liveSessionBytes, err := json.Marshal(liveSessionLine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	liveSessionContent := string(liveSessionBytes) + "\n"
 	if err := os.WriteFile(liveSessionPath, []byte(liveSessionContent), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +49,16 @@ func TestWindowsClaudeAgentStateFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	orphanedSessionPath := filepath.Join(orphanedSessionDir, "session.jsonl")
-	orphanedSessionContent := `{"message":{"cwd":"` + strings.ReplaceAll(orphanedCWD, `\`, `\\`) + `"}}` + "\n"
+	orphanedSessionLine := map[string]interface{}{
+		"message": map[string]interface{}{
+			"cwd": orphanedCWD,
+		},
+	}
+	orphanedSessionBytes, err := json.Marshal(orphanedSessionLine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	orphanedSessionContent := string(orphanedSessionBytes) + "\n"
 	if err := os.WriteFile(orphanedSessionPath, []byte(orphanedSessionContent), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +221,16 @@ func TestWindowsAgentStateCleanupEndToEndUnaudited(t *testing.T) {
 		t.Fatal(err)
 	}
 	orphanedSessionPath := filepath.Join(orphanedSessionDir, "session.jsonl")
-	orphanedSessionContent := `{"message":{"cwd":"` + strings.ReplaceAll(orphanedCWD, `\`, `\\`) + `"}}` + "\n"
+	orphanedSessionLine := map[string]interface{}{
+		"message": map[string]interface{}{
+			"cwd": orphanedCWD,
+		},
+	}
+	orphanedSessionBytes, err := json.Marshal(orphanedSessionLine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	orphanedSessionContent := string(orphanedSessionBytes) + "\n"
 	if err := os.WriteFile(orphanedSessionPath, []byte(orphanedSessionContent), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -269,8 +296,16 @@ func TestWindowsRecordedCWDVolumeAmbiguity(t *testing.T) {
 		t.Fatal(err)
 	}
 	ambiguousSessionPath := filepath.Join(ambiguousSessionDir, "session.jsonl")
-	// JSON escape backslashes
-	ambiguousSessionContent := `{"message":{"cwd":"` + strings.ReplaceAll(ambiguousCWD, `\`, `\\`) + `"}}` + "\n"
+	ambiguousSessionLine := map[string]interface{}{
+		"message": map[string]interface{}{
+			"cwd": ambiguousCWD,
+		},
+	}
+	ambiguousSessionBytes, err := json.Marshal(ambiguousSessionLine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ambiguousSessionContent := string(ambiguousSessionBytes) + "\n"
 	if err := os.WriteFile(ambiguousSessionPath, []byte(ambiguousSessionContent), 0644); err != nil {
 		t.Fatal(err)
 	}
