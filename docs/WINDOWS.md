@@ -125,6 +125,38 @@ Install a release manually if the PowerShell installer is not suitable:
    aibris.exe --version
    ```
 
+## Quick start on Windows
+
+After installation, use these PowerShell commands to scan, preview, and clean:
+
+```powershell
+# 1. Verify installation
+aibris.exe --version
+
+# 2. Scan your profile for AI debris
+aibris.exe scan
+
+# 3. Preview cleanup plan (dry-run, safe)
+aibris.exe clean --dry-run
+
+# 4. Execute cleanup after reviewing the plan
+aibris.exe clean
+```
+
+For machine-readable output, add `--json`:
+
+```powershell
+aibris.exe scan --json
+aibris.exe clean --dry-run --json
+```
+
+Scan a specific directory under your profile:
+
+```powershell
+aibris.exe scan --root "$env:USERPROFILE\workspace"
+aibris.exe clean --root "$env:USERPROFILE\.codex" --dry-run
+```
+
 ## Paths and shells
 
 Pass native absolute paths to `--root`. In PowerShell, write a profile-contained
