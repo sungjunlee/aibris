@@ -70,7 +70,7 @@ jobs:
             ConvertFrom-Json |
             Out-Null
       - name: Test Windows binary and home-containment contracts
-        run: go test -race -count=1 -cover ./test -run '^(TestWindowsCLIContractBinaryCommands|TestWindowsCLIContractRootContainmentAndHomeIsolation|TestCLIContractDestructiveCommandIsolatesWindowsUserCache)$'
+        run: go test -race -count=1 -cover ./test -run '^(TestWindowsCLIContractBinaryCommands|TestWindowsCLIContractRootContainmentAndHomeIsolation|TestCLIContractDestructiveCommandIsolatesWindowsUserCache|TestWindowsScanToDryRunContractPreservesClassification|TestWindowsDryRunPlanJSONMatchesScanReasons)$'
       - name: Test Windows worktree and agent-state reproduction fixtures
         run: |
           go test -race -count=1 -cover ./test -run '^(TestWindowsLinkedWorktreeFixture|TestWindowsOrphanedWorktreeFixture|TestWindowsPlainDirWorktreeFixture|TestWindowsWorktreeFixtureRequiresGit)$'
