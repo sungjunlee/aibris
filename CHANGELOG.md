@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-09-21
+
 ### Added
 
 - Worktree convention fallback also matches `*-worktree` and `*-worktrees`
