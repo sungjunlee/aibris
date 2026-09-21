@@ -33,8 +33,41 @@ native runtime contract.
 
 ## Install on native Windows
 
+### PowerShell installer
+
+`install.ps1` is a native PowerShell installer that downloads and verifies
+releases without requiring Bash or administrator privileges:
+
+```powershell
+# Download and run (latest version)
+irm https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.ps1 | iex
+
+# Or download the script and run locally
+Invoke-WebRequest `
+    -Uri "https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/install.ps1" `
+    -OutFile "install.ps1"
+.\install.ps1
+.\install.ps1 -Version 0.12.1
+.\install.ps1 -Prefix "$env:USERPROFILE\bin"
+.\install.ps1 -AddToPath
+```
+
+The installer:
+- Downloads the release archive and verifies its SHA-256 checksum against
+  `checksums.txt`
+- Stages the download in a temporary directory, then replaces the existing
+  binary atomically
+- Preserves an existing installation if checksum verification fails or if the
+  binary is locked (in use)
+- Defaults to `$env:LOCALAPPDATA\Programs\aibris` (no admin required)
+- Shows PATH setup guidance; add `-AddToPath` to update the user PATH automatically
+
+Run `.\install.ps1 -Help` for all options.
+
+### Manual installation
+
 `install.sh` is a Unix/Bash installer and is unsupported on native Windows.
-Install a release manually:
+Install a release manually if the PowerShell installer is not suitable:
 
 1. Open the release on
    [GitHub Releases](https://github.com/sungjunlee/aibris/releases).
