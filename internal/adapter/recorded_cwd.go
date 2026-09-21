@@ -212,14 +212,9 @@ func plausibleRecordedCWDContainer(path string) (bool, error) {
 }
 
 func pathWithinContainer(path, root string) bool {
-	path = filepath.Clean(path)
-	root = filepath.Clean(root)
-	if resolved, err := filepath.EvalSymlinks(path); err == nil {
-		path = filepath.Clean(resolved)
-	}
-	if resolved, err := filepath.EvalSymlinks(root); err == nil {
-		root = filepath.Clean(resolved)
-	}
+	// Use canonicalExistingPath for proper case handling on Windows
+	path = canonicalExistingPath(path)
+	root = canonicalExistingPath(root)
 	rel, err := filepath.Rel(root, path)
 	return err == nil &&
 		(rel == "." || (rel != ".." && !filepath.IsAbs(rel) &&

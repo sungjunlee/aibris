@@ -228,14 +228,6 @@ func normalizedWorktreeScanRoots(roots []string) []string {
 	return normalized
 }
 
-func canonicalExistingPath(path string) string {
-	path = filepath.Clean(path)
-	if resolved, err := filepath.EvalSymlinks(path); err == nil {
-		return filepath.Clean(resolved)
-	}
-	return path
-}
-
 func (a *WorktreeAdapter) scanWorktreeRoot(ctx context.Context, rootPath string, visited map[string]bool) ([]types.DebrisInfo, error) {
 	return a.scanWorktreeRootWithSource(ctx, worktreeRoot{path: rootPath}, visited)
 }
