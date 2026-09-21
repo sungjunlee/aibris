@@ -40,23 +40,24 @@ func (a *WorktreeAdapter) scanWorktreeRootWithSource(ctx context.Context, root w
 			continue
 		}
 		entryPath := filepath.Join(root.path, entry.Name())
-		canonicalEntry := canonicalExistingPath(entryPath)
-		if visited[canonicalEntry] {
+		resolvedEntry := resolvedExistingPath(entryPath)
+		identity := canonicalExistingPath(resolvedEntry)
+		if visited[identity] {
 			continue
 		}
 		source := root.source
 		if source == "" {
-			source = detectWorktreeSource(entryPath)
+			source = detectWorktreeSource(resolvedEntry)
 		}
-		items, err := a.scanEntry(ctx, canonicalEntry, source, root.memberDepth)
+		items, err := a.scanEntry(ctx, resolvedEntry, source, root.memberDepth)
 		if err != nil {
 			return nil, err
 		}
 		if len(items) == 0 {
 			continue
 		}
-		visited[canonicalEntry] = true
-		sizePaths = append(sizePaths, canonicalEntry)
+		visited[identity] = true
+		sizePaths = append(sizePaths, resolvedEntry)
 		results = append(results, items...)
 	}
 	sizes := estimateDirSizes(ctx, sizePaths)

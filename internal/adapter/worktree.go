@@ -153,7 +153,7 @@ func collectWorktreeContainers(
 		return nil, nil, err
 	}
 	for _, root := range registeredRoots {
-		rootByPath[root.path] = root
+		rootByPath[canonicalExistingPath(root.path)] = root
 	}
 	if err := addConventionWorktreeRoots(ctx, roots, blockedAliases, rootByPath); err != nil {
 		return nil, nil, err

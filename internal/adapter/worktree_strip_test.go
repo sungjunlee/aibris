@@ -44,7 +44,7 @@ func TestWorktreeAdapter_ScanReportsStrippableSeparatelyFromDeletable(t *testing
 	}
 	r := results[0]
 
-	canonicalCheckout := canonicalExistingPath(checkout)
+	canonicalCheckout := resolvedExistingPath(checkout)
 	wantPaths := []string{
 		filepath.Join(canonicalCheckout, "node_modules"),
 		filepath.Join(canonicalCheckout, "android", "build"),
@@ -77,7 +77,7 @@ func TestWorktreeAdapter_StripInventoryDirectWorktree(t *testing.T) {
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
-	want := filepath.Join(canonicalExistingPath(checkout), "node_modules")
+	want := filepath.Join(resolvedExistingPath(checkout), "node_modules")
 	if !reflect.DeepEqual(results[0].StrippablePaths, []string{want}) {
 		t.Fatalf("StrippablePaths = %v; want [%s]", results[0].StrippablePaths, want)
 	}
@@ -108,7 +108,7 @@ func TestWorktreeAdapter_StripInventoryPythonVenvFlutterAndNestedNodeModules(t *
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
-	canonicalCheckout := canonicalExistingPath(checkout)
+	canonicalCheckout := resolvedExistingPath(checkout)
 	wantPaths := []string{
 		filepath.Join(canonicalCheckout, ".venv"),
 		filepath.Join(canonicalCheckout, "build"),

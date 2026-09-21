@@ -30,14 +30,15 @@ func addConventionWorktreeRoots(
 			return err
 		}
 		for _, path := range worktreeRoots {
-			canonical := canonicalExistingPath(path)
-			if blockedAliases[canonical] {
+			resolved := resolvedExistingPath(path)
+			key := canonicalExistingPath(resolved)
+			if blockedAliases[key] {
 				continue
 			}
-			if _, registered := rootByPath[canonical]; registered {
+			if _, registered := rootByPath[key]; registered {
 				continue
 			}
-			rootByPath[canonical] = worktreeRoot{path: canonical}
+			rootByPath[key] = worktreeRoot{path: resolved}
 		}
 	}
 	return nil
@@ -67,7 +68,7 @@ func discoverRegisteredWorktreeRoots(ctx context.Context, containers []registere
 		// traverse it or let the convention fallback reintroduce its target.
 		if info.Mode()&os.ModeSymlink != 0 {
 			if resolved, resolveErr := filepath.EvalSymlinks(path); resolveErr == nil {
-				blockedAliases[filepath.Clean(resolved)] = true
+				blockedAliases[canonicalExistingPath(resolved)] = true
 			}
 			continue
 		}
@@ -80,14 +81,18 @@ func discoverRegisteredWorktreeRoots(ctx context.Context, containers []registere
 			return nil, nil, fmt.Errorf("resolving registered worktree container %q: %w", path, err)
 		}
 		resolved = filepath.Clean(resolved)
-		if resolved != filepath.Clean(path) || !pathUnderRoots(resolved, []string{registered.base}) || !pathUnderRoots(resolved, roots) {
-			blockedAliases[resolved] = true
+		// A case-only difference is still this directory. A symlink ancestor
+		// or a target outside the registered base changes the cleaned spelling
+		// and must not be scanned or rediscovered by convention fallback.
+		if !sameCleanPath(resolved, path) || !pathUnderRoots(resolved, []string{registered.base}) || !pathUnderRoots(resolved, roots) {
+			blockedAliases[canonicalExistingPath(resolved)] = true
 			continue
 		}
-		if seen[resolved] {
+		identity := canonicalExistingPath(resolved)
+		if seen[identity] {
 			continue
 		}
-		seen[resolved] = true
+		seen[identity] = true
 		results = append(results, worktreeRoot{
 			path:        resolved,
 			source:      registered.source,

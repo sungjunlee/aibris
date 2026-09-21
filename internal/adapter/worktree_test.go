@@ -715,7 +715,7 @@ func TestWorktreeAdapter_ExplicitRootOwnerDiscoversOneUnit(t *testing.T) {
 		t.Fatalf("results = %+v; want the explicit outer owner only", results)
 	}
 	got := results[0]
-	if got.ID != "repo-hash" || got.Source != ".relay" || got.Path != canonicalExistingPath(unit) {
+	if got.ID != "repo-hash" || got.Source != ".relay" || got.Path != resolvedExistingPath(unit) {
 		t.Fatalf("row = %+v; want relay unit %q", got, unit)
 	}
 	if !pathUnderRoots(got.Path, []string{unit}) {
@@ -733,7 +733,7 @@ func TestWorktreeAdapter_ExplicitRootDirectOwnerDiscoversOneUnit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 1 || results[0].Path != canonicalExistingPath(unit) || results[0].Status != types.WorktreeActive {
+	if len(results) != 1 || results[0].Path != resolvedExistingPath(unit) || results[0].Status != types.WorktreeActive {
 		t.Fatalf("results = %+v; want the direct outer owner", results)
 	}
 }
@@ -779,7 +779,7 @@ func TestWorktreeAdapter_ExplicitPlainDirIsNotAWorktreeUnit(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, row := range results {
-		if row.Path == canonicalExistingPath(root) {
+		if canonicalExistingPath(row.Path) == canonicalExistingPath(root) {
 			t.Fatalf("plain dir became a worktree unit: %+v", results)
 		}
 	}
@@ -842,7 +842,7 @@ func TestWorktreeAdapter_CodexHomeEnvOutsideHomeStillDiscovered(t *testing.T) {
 	if r.Source != ".codex" || r.Tool != types.ToolCodex {
 		t.Errorf("source/tool = %q/%q; want .codex/codex", r.Source, r.Tool)
 	}
-	if r.Path != canonicalExistingPath(unit) {
+	if r.Path != resolvedExistingPath(unit) {
 		t.Errorf("path = %q; want %q", r.Path, unit)
 	}
 	if r.Status != types.WorktreeActive {
@@ -871,10 +871,10 @@ func TestWorktreeAdapter_ExtraCodexHomesDiscovered(t *testing.T) {
 	for _, r := range results {
 		byID[r.ID] = r
 	}
-	if got := byID["home-hash"]; got.Source != ".codex" || got.Path != canonicalExistingPath(homeUnit) {
+	if got := byID["home-hash"]; got.Source != ".codex" || got.Path != resolvedExistingPath(homeUnit) {
 		t.Errorf("home-hash row = %+v; want the primary-home codex container", got)
 	}
-	if got := byID["extra-hash"]; got.Source != ".codex" || got.Path != canonicalExistingPath(extraUnit) {
+	if got := byID["extra-hash"]; got.Source != ".codex" || got.Path != resolvedExistingPath(extraUnit) {
 		t.Errorf("extra-hash row = %+v; want the extra-home codex container", got)
 	}
 }
@@ -920,7 +920,7 @@ func TestWorktreeAdapter_SuperpowersFullHomeAndScopedL2(t *testing.T) {
 		if row.Source != "superpowers" || row.Tool != types.ToolUnknown {
 			t.Errorf("source/tool = %q/%q; want superpowers/unknown", row.Source, row.Tool)
 		}
-		if row.Path != canonicalExistingPath(unit) {
+		if row.Path != resolvedExistingPath(unit) {
 			t.Errorf("path = %q; want shared physical owner %q", row.Path, unit)
 		}
 		statusByProject[row.Project] = row.Status
@@ -976,7 +976,7 @@ func TestWorktreeAdapter_RootAliasesAndRegistryFallbackDeduplicateDeterministica
 	if !reflect.DeepEqual(forward, reverse) {
 		t.Fatalf("root order changed results:\nforward=%+v\nreverse=%+v", forward, reverse)
 	}
-	if len(forward) != 1 || forward[0].Path != canonicalExistingPath(unit) {
+	if len(forward) != 1 || forward[0].Path != resolvedExistingPath(unit) {
 		t.Fatalf("canonical aliases were not deduplicated: %+v", forward)
 	}
 
@@ -1063,6 +1063,42 @@ func TestWorktreeAdapter_RegisteredInHomeSymlinkIsNotReintroducedByFallback(t *t
 	for _, row := range results {
 		if row.ID == "alias-target" {
 			t.Fatalf("registered symlink target was reintroduced by convention fallback: %+v", row)
+		}
+	}
+}
+
+func TestBlockedAliasKeyUsesCanonicalIdentity(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	actual := filepath.Join(home, "actual", "worktrees")
+	createWorktreeGit(t, filepath.Join(actual, "alias-target"), filepath.Join(home, "parent"), "alias-target")
+	registered := filepath.Join(home, ".config", "superpowers", "worktrees")
+	if err := os.MkdirAll(filepath.Dir(registered), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(actual, registered); err != nil {
+		t.Skipf("symlink not supported: %v", err)
+	}
+
+	containers, err := registeredWorktreeContainers(canonicalExistingPath(home))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, blocked, err := discoverRegisteredWorktreeRoots(context.Background(), containers, []string{canonicalExistingPath(home)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := canonicalExistingPath(actual)
+	if !blocked[key] {
+		t.Fatalf("blocked alias keys = %#v; want identity %q", blocked, key)
+	}
+	roots := map[string]worktreeRoot{}
+	if err := addConventionWorktreeRoots(context.Background(), []string{home}, blocked, roots); err != nil {
+		t.Fatal(err)
+	}
+	for _, root := range roots {
+		if canonicalExistingPath(root.path) == key {
+			t.Fatalf("convention reintroduced blocked target %q", root.path)
 		}
 	}
 }
@@ -1204,7 +1240,7 @@ func TestWorktreeAdapter_MixedValidAndInvalidNestedMarkersProtectOwner(t *testin
 			if len(results) != 1 {
 				t.Fatalf("mixed owner emitted valid sibling: %+v", results)
 			}
-			if results[0].Path != canonicalExistingPath(unit) || results[0].Status != types.WorktreePlain ||
+			if results[0].Path != resolvedExistingPath(unit) || results[0].Status != types.WorktreePlain ||
 				!strings.Contains(results[0].Reason, tt.want) {
 				t.Fatalf("mixed owner row = %+v; want protected plain-dir containing %q", results[0], tt.want)
 			}
@@ -1231,7 +1267,7 @@ func TestWorktreeAdapter_EmptyLeftoverSiblingKeepsValidMembers(t *testing.T) {
 	if results[0].Status == types.WorktreePlain {
 		t.Fatalf("empty leftover poisoned owner: %+v", results[0])
 	}
-	if results[0].Path != canonicalExistingPath(unit) || results[0].Project != "valid" {
+	if results[0].Path != resolvedExistingPath(unit) || results[0].Project != "valid" {
 		t.Fatalf("row = %+v; want owner path with valid project", results[0])
 	}
 }
@@ -1581,8 +1617,8 @@ func TestWorktreeAdapter_LinkedSiblingOutsideConvention(t *testing.T) {
 	if extra.Status != types.WorktreeActive {
 		t.Errorf("sibling Status = %q; want active", extra.Status)
 	}
-	if extra.Path != canonicalExistingPath(sibling) {
-		t.Errorf("sibling Path = %q; want %q", extra.Path, canonicalExistingPath(sibling))
+	if extra.Path != resolvedExistingPath(sibling) {
+		t.Errorf("sibling Path = %q; want %q", extra.Path, resolvedExistingPath(sibling))
 	}
 }
 
@@ -1661,8 +1697,8 @@ func TestWorktreeAdapter_LinkedSiblingSkipsPrimaryAndVisitedOwner(t *testing.T) 
 	if results[0].Status != types.WorktreePlain {
 		t.Errorf("Status = %q; want plain-dir", results[0].Status)
 	}
-	if results[0].Path != canonicalExistingPath(owner) {
-		t.Errorf("Path = %q; want mixed owner %q", results[0].Path, canonicalExistingPath(owner))
+	if results[0].Path != resolvedExistingPath(owner) {
+		t.Errorf("Path = %q; want mixed owner %q", results[0].Path, resolvedExistingPath(owner))
 	}
 }
 

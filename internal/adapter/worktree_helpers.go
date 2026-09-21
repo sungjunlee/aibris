@@ -42,23 +42,24 @@ func (a *WorktreeAdapter) scanRootAsWorktreeUnit(
 	blocked map[string]bool,
 	visited map[string]bool,
 ) ([]types.DebrisInfo, error) {
-	canonical := canonicalExistingPath(scanRoot)
-	if blocked[canonical] || visited[canonical] {
+	resolved := resolvedExistingPath(scanRoot)
+	identity := canonicalExistingPath(resolved)
+	if blocked[identity] || visited[identity] {
 		return nil, nil
 	}
-	if _, err := os.Stat(canonical); err != nil {
+	if _, err := os.Stat(resolved); err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
 		return nil, err
 	}
-	if _, isContainer := rootByPath[canonical]; isContainer {
+	if _, isContainer := rootByPath[identity]; isContainer {
 		return nil, nil
 	}
-	if !isWorktreeContainerMember(canonical, containers) {
+	if !isWorktreeContainerMember(resolved, containers) {
 		return nil, nil
 	}
-	owner, err := linkedWorktreeOwnerAt(ctx, canonical, containers)
+	owner, err := linkedWorktreeOwnerAt(ctx, resolved, containers)
 	if err != nil || owner.path == "" {
 		return nil, err
 	}
@@ -86,19 +87,19 @@ func isWorktreeContainerMember(path string, containers []registeredWorktreeConta
 }
 
 func worktreeUnitMeta(path string, containers []registeredWorktreeContainer) worktreeRoot {
-	canonical := canonicalExistingPath(path)
-	parent := filepath.Dir(canonical)
+	resolved := resolvedExistingPath(path)
+	parent := filepath.Dir(canonicalExistingPath(resolved))
 	for _, registered := range containers {
 		container := canonicalExistingPath(filepath.Join(registered.base, registered.relativePath))
 		if parent == container {
 			return worktreeRoot{
-				path:        path,
+				path:        resolved,
 				source:      registered.source,
 				memberDepth: registeredWorktreeMemberDepth,
 			}
 		}
 	}
-	return worktreeRoot{path: path, source: detectWorktreeSource(path)}
+	return worktreeRoot{path: resolved, source: detectWorktreeSource(resolved)}
 }
 
 func (a *WorktreeAdapter) scanWorktreeUnit(
@@ -106,16 +107,17 @@ func (a *WorktreeAdapter) scanWorktreeUnit(
 	root worktreeRoot,
 	visited map[string]bool,
 ) ([]types.DebrisInfo, error) {
-	canonical := canonicalExistingPath(root.path)
-	if visited[canonical] {
+	resolved := resolvedExistingPath(root.path)
+	identity := canonicalExistingPath(resolved)
+	if visited[identity] {
 		return nil, nil
 	}
-	items, err := a.scanEntry(ctx, canonical, root.source, root.memberDepth)
+	items, err := a.scanEntry(ctx, resolved, root.source, root.memberDepth)
 	if err != nil || len(items) == 0 {
 		return items, err
 	}
-	visited[canonical] = true
-	return applyWorktreeUnitSizes(ctx, items, canonical)
+	visited[identity] = true
+	return applyWorktreeUnitSizes(ctx, items, resolved)
 }
 
 func applyWorktreeUnitSizes(ctx context.Context, items []types.DebrisInfo, path string) ([]types.DebrisInfo, error) {
