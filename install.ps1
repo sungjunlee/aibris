@@ -110,7 +110,7 @@ function Normalize-Version {
 function Get-LatestReleaseTag {
     $url = "https://api.github.com/repos/$script:Repo/releases/latest"
     try {
-        $response = Invoke-RestMethod -Uri $url -UseBasicParsing
+        $response = Invoke-RestMethod -Uri $url -UseBasicParsing -TimeoutSec 10
         return $response.tag_name
     }
     catch {
@@ -171,8 +171,8 @@ function Install-Release {
 
     Write-Log "Downloading $asset..."
     try {
-        Invoke-WebRequest -Uri $url -OutFile $archivePath -UseBasicParsing
-        Invoke-WebRequest -Uri $checksumsUrl -OutFile $checksumsPath -UseBasicParsing
+        Invoke-WebRequest -Uri $url -OutFile $archivePath -UseBasicParsing -TimeoutSec 120
+        Invoke-WebRequest -Uri $checksumsUrl -OutFile $checksumsPath -UseBasicParsing -TimeoutSec 30
     }
     catch {
         Write-Error-Message "Failed to download release: $_"
