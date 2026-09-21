@@ -80,22 +80,23 @@ func TestWindowsClaudeAgentStateFixture(t *testing.T) {
 	}
 
 	var scan struct {
-		AgentState []struct {
+		Items []struct {
 			ID             string `json:"id"`
 			Tool           string `json:"tool"`
+			Category       string `json:"category"`
 			Classification string `json:"classification"`
-		} `json:"agent-state"`
+		} `json:"items"`
 	}
 	if err := json.Unmarshal([]byte(result.Stdout), &scan); err != nil {
 		t.Fatalf("decode scan JSON: %v\nstdout:\n%s", err, result.Stdout)
 	}
 
-	if len(scan.AgentState) == 0 {
+	if len(scan.Items) == 0 {
 		t.Fatalf("scan did not discover Claude agent-state fixtures:\n%s", result.Stdout)
 	}
 
 	byID := make(map[string]string)
-	for _, entry := range scan.AgentState {
+	for _, entry := range scan.Items {
 		if entry.Tool != "claude" {
 			continue
 		}
@@ -169,18 +170,18 @@ func TestWindowsCursorAgentStateFixture(t *testing.T) {
 	}
 
 	var scan struct {
-		AgentState []struct {
+		Items []struct {
 			ID             string `json:"id"`
 			Tool           string `json:"tool"`
 			Classification string `json:"classification"`
-		} `json:"agent-state"`
+		} `json:"items"`
 	}
 	if err := json.Unmarshal([]byte(result.Stdout), &scan); err != nil {
 		t.Fatalf("decode scan JSON: %v\nstdout:\n%s", err, result.Stdout)
 	}
 
 	byID := make(map[string]string)
-	for _, entry := range scan.AgentState {
+	for _, entry := range scan.Items {
 		if entry.Tool != "cursor" {
 			continue
 		}
@@ -242,17 +243,17 @@ func TestWindowsAgentStateCleanupEndToEndUnaudited(t *testing.T) {
 	}
 
 	var scan struct {
-		AgentState []struct {
+		Items []struct {
 			ID             string `json:"id"`
 			Classification string `json:"classification"`
-		} `json:"agent-state"`
+		} `json:"items"`
 	}
 	if err := json.Unmarshal([]byte(scanResult.Stdout), &scan); err != nil {
 		t.Fatalf("decode scan JSON: %v", err)
 	}
 
 	orphanedFound := false
-	for _, entry := range scan.AgentState {
+	for _, entry := range scan.Items {
 		if entry.ID == "cleanup-entry" {
 			orphanedFound = true
 			if entry.Classification != "orphaned" {
@@ -316,16 +317,16 @@ func TestWindowsRecordedCWDVolumeAmbiguity(t *testing.T) {
 	}
 
 	var scan struct {
-		AgentState []struct {
+		Items []struct {
 			ID             string `json:"id"`
 			Classification string `json:"classification"`
-		} `json:"agent-state"`
+		} `json:"items"`
 	}
 	if err := json.Unmarshal([]byte(result.Stdout), &scan); err != nil {
 		t.Fatalf("decode scan JSON: %v\nstdout:\n%s", err, result.Stdout)
 	}
 
-	for _, entry := range scan.AgentState {
+	for _, entry := range scan.Items {
 		if entry.ID == "ambiguous-entry" {
 			if entry.Classification == "orphaned" {
 				t.Errorf("ambiguous-entry classified as 'orphaned'; want 'undetermined' for unverifiable volume")
