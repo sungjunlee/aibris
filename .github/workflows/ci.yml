@@ -75,6 +75,8 @@ jobs:
         run: |
           go test -race -count=1 -cover ./test -run '^(TestWindowsLinkedWorktreeFixture|TestWindowsOrphanedWorktreeFixture|TestWindowsPlainDirWorktreeFixture|TestWindowsWorktreeFixtureRequiresGit)$'
           go test -race -count=1 -cover ./test -run '^(TestWindowsClaudeAgentStateFixture|TestWindowsCursorAgentStateFixture|TestWindowsAgentStateCleanupEndToEndUnaudited|TestWindowsRecordedCWDVolumeAmbiguity)$'
+      - name: Test PowerShell native installer
+        run: go test -race -count=1 -cover ./test -run '^TestNativeInstallPowerShell'
       - name: Test recorded-cwd volume safety
         run: go test -race -count=1 -cover ./internal/adapter -run '^(TestRecordedCWDVolumeIDUsesWindowsVolumePath|TestAgentStateStoreClassifiersRecordedCWDAncestorAvailability|TestBuildCacheAdapter_GoBuild$|TestBuildCacheAdapter_GOCACHEEnv|TestBuildCacheAdapter_GOCACHEOutsideRoots|TestBuildCacheAdapter_GOENVFile)$'
       - name: Test cross-platform CLI contracts
