@@ -82,7 +82,7 @@ if ! awk '
 			next
 		}
 
-		if (line !~ /^ {0,3}#{1,2}([[:space:]]|$)/) {
+		if (line !~ /^ {0,3}##?([[:space:]]|$)/) {
 			if (in_windows_status && line ~ /[^[:space:]]/ && !is_invisible_markdown(line)) {
 				has_content = 1
 			}
