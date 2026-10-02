@@ -270,8 +270,14 @@ func TestNormalizeRoots_RemovesNestedRoots(t *testing.T) {
 	if len(roots) != 1 {
 		t.Errorf("NormalizeRoots() = %d roots; want 1 (parent only)", len(roots))
 	}
-	if roots[0] != parent {
-		t.Errorf("NormalizeRoots() = %q; want parent %q", roots[0], parent)
+	
+	// Compare normalized paths: macOS /var symlinks to /private/var
+	expectedParent, err := resolveExistingPath(parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if roots[0] != expectedParent {
+		t.Errorf("NormalizeRoots() = %q; want parent %q", roots[0], expectedParent)
 	}
 }
 
