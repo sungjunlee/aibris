@@ -16,18 +16,21 @@ var markdownLinkPattern = regexp.MustCompile(`\[[^\]]+\]\(([^)]+)\)`)
 func TestPublicDocumentationLocalLinks(t *testing.T) {
 	files := []string{
 		"README.md",
-		filepath.Join("docs", "WINDOWS.md"),
+		"AGENTS.md",
 		"SECURITY.md",
-		filepath.Join("docs", "SECURITY_AUDIT.md"),
 		"CONTRIBUTING.md",
 		"CODE_OF_CONDUCT.md",
-		filepath.Join("docs", "ROADMAP.md"),
 	}
-	templates, err := filepath.Glob(filepath.Join(".github", "ISSUE_TEMPLATE", "*.md"))
-	if err != nil {
-		t.Fatal(err)
+	for _, pattern := range []string{
+		filepath.Join("docs", "*.md"),
+		filepath.Join(".github", "ISSUE_TEMPLATE", "*.md"),
+	} {
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files = append(files, matches...)
 	}
-	files = append(files, templates...)
 
 	for _, document := range files {
 		document := document
@@ -219,6 +222,23 @@ func TestHomebrewInstallContract(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
 	for _, required := range []string{
 		"brew install sungjunlee/tap/aibris",
+		"install.sh",
+		"(docs/INSTALL.md)",
+	} {
+		if !strings.Contains(readme, required) {
+			t.Errorf("README install section is missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{"system-wide", "brew tap sungjunlee/tap"} {
+		if strings.Contains(readme, forbidden) {
+			t.Errorf("README must not contain %q", forbidden)
+		}
+	}
+
+	// The full trust contract lives in one canonical install document.
+	install := readRepoFile(t, filepath.Join("docs", "INSTALL.md"))
+	for _, required := range []string{
+		"brew install sungjunlee/tap/aibris",
 		"third-party",
 		"https://github.com/sungjunlee/homebrew-tap",
 		"item trust",
@@ -231,19 +251,19 @@ func TestHomebrewInstallContract(t *testing.T) {
 		"PATH",
 		"brew upgrade",
 		"$HOME",
-		"docs/COMPLETIONS.md",
+		"COMPLETIONS.md",
 		"Homebrew prefix",
 		"brew shellenv",
 	} {
-		if !strings.Contains(readme, required) {
-			t.Errorf("README Homebrew install contract is missing %q", required)
+		if !strings.Contains(install, required) {
+			t.Errorf("docs/INSTALL.md Homebrew install contract is missing %q", required)
 		}
 	}
-	if strings.Contains(readme, "system-wide") {
-		t.Error("README must not call --prefix /usr/local/bin \"system-wide\"")
+	if strings.Contains(install, "system-wide") {
+		t.Error("docs/INSTALL.md must not call --prefix /usr/local/bin \"system-wide\"")
 	}
-	if strings.Contains(readme, "brew tap sungjunlee/tap") {
-		t.Error("README must not document brew tap + short name as the install path")
+	if strings.Contains(install, "brew tap sungjunlee/tap") {
+		t.Error("docs/INSTALL.md must not document brew tap + short name as the install path")
 	}
 
 	completions := readRepoFile(t, filepath.Join("docs", "COMPLETIONS.md"))
@@ -382,15 +402,15 @@ func TestReleaseSupplyChainContract(t *testing.T) {
 		t.Error("attest, publish, then tap must run after goreleaser creates a draft and before brew-pour")
 	}
 
-	readme := readRepoFile(t, "README.md")
+	install := readRepoFile(t, filepath.Join("docs", "INSTALL.md"))
 	for _, required := range []string{
 		"gh attestation verify",
 		"--owner sungjunlee",
 		"sha256sum -c checksums.txt",
 		"syft convert aibris_darwin_arm64.tar.gz.sbom.json",
 	} {
-		if !strings.Contains(readme, required) {
-			t.Errorf("README must document release verification command %q", required)
+		if !strings.Contains(install, required) {
+			t.Errorf("docs/INSTALL.md must document release verification command %q", required)
 		}
 	}
 

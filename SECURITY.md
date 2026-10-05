@@ -2,9 +2,12 @@
 
 ## Reporting a Vulnerability
 
-Please report suspected security vulnerabilities privately. Use GitHub private
-vulnerability reporting if it is available; otherwise contact the maintainer
-privately. Do not open a public issue for an unpatched vulnerability.
+Please report suspected security vulnerabilities privately through GitHub:
+<https://github.com/sungjunlee/aibris/security/advisories/new>. Do not open a
+public issue for an unpatched vulnerability.
+
+You can expect an acknowledgement within 7 days and a status update (fix
+plan, or why it is not treated as a vulnerability) within 30 days.
 
 Include as much detail as possible:
 
@@ -20,7 +23,7 @@ Include as much detail as possible:
 aibris is a local disk cleanup tool. Its primary security concerns are:
 
 1. **Accidental deletion** — The tool deletes files. `--dry-run`, `--interactive`, confirmation prompts, age gates, and `--risky` are the primary defenses.
-2. **Path boundaries** — Cleanup targets come from known locations under `$HOME`; arbitrary user-provided paths are not accepted.
+2. **Path boundaries** — Cleanup targets come from known locations under `$HOME`; arbitrary user-provided paths are not accepted, and every deletion passes one gate (`internal/safedelete`) that refuses protected locations, their ancestors, and Git repositories.
 3. **Symlink handling** — Safety checks resolve symlinks when possible before deletion.
 
 See [SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md) for the current safety model,
