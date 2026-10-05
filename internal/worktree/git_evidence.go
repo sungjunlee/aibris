@@ -9,7 +9,10 @@ import (
 	"time"
 )
 
-const GitEvidenceCommandTimeout = 5 * time.Second
+// GitEvidenceCommandTimeout bounds each Git evidence command. A timeout fails
+// closed: the unit is kept and reported as having unavailable evidence. Tests
+// raise it so a loaded machine cannot turn a safe outcome into a flaky one.
+var GitEvidenceCommandTimeout = 5 * time.Second
 
 // GitEvidenceReasonCode is a stable machine-readable recoverability result.
 type GitEvidenceReasonCode string

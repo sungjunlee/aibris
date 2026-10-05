@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	worktreepkg "github.com/sungjunlee/aibris/internal/worktree"
 )
 
 func TestAgentStateCLIContract(t *testing.T) {
@@ -452,6 +453,7 @@ func buildCLIContractBinary(t *testing.T) string {
 }
 
 func TestMain(m *testing.M) {
+	worktreepkg.GitEvidenceCommandTimeout = time.Minute
 	code := m.Run()
 	if cliContractBuild.dir != "" {
 		_ = os.RemoveAll(cliContractBuild.dir)
