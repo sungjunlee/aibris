@@ -7,14 +7,26 @@ date, or compatibility promise.
 Milestones are capability and quality gates rather than schedules. Releases
 are cut only after the relevant behavior is dogfooded and explicitly approved.
 
-## Current: after v0.12.0
+## Current: after v0.13.0
 
-v0.12.0 is published. Remaining 0.x work is the open OSS distribution track
-(#118, #120, #121, #122) and continued dogfood of reclaim UX. #218 stays a
-keep-current decision: `node_modules` still uses container mtime, and
-`ai-logs` stay behind `--risky`.
+v0.13.0 shipped the deletion safety gate, Grok session coverage, the cache
+catalog, faster guided review, and the output redesign. Next 0.x work:
+
+- Coverage for more AI agent stores, each backed by an orphan proof or a
+  rebuildable-cache contract (`docs/CATEGORY.md`).
+- Separate the owning tool from the provider in `--tool` and JSON
+  (`owner`, `target_id`) under the 0.x deprecation policy.
+- Tighten the remaining name-based cleanup allowlist to provider-declared
+  paths.
+- Clean plan output to match the new scan summary.
 
 ## Shipped
+
+### 0.13.0 Safety Gate and Coverage
+
+Published 2026-10-06. One deletion gate for every removal, Grok CLI session
+stores, an env-aware cache catalog with the npx cache, concurrent Git
+evidence for guided review, and a quieter, aligned scan summary.
 
 ### 0.12.0 Reclaim Accuracy
 
