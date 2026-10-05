@@ -54,11 +54,11 @@ func TestWriteHumanFixtureRendersFromView(t *testing.T) {
 	got := buf.String()
 	for _, want := range []string{
 		"summary",
-		"found       2 items",
-		"strippable  1.0 GB regenerable subtrees",
-		"default clean (estimate)",
-		"review-only worktrees  1 unit  9.0 GB",
-		"not a clean/--strip target",
+		"found        9.0 GB in 2 items",
+		"strippable   1.0 GB of dependencies and build output inside kept worktrees",
+		"reclaimable  ",
+		"review by hand               1 worktree unit, 9.0 GB",
+		"mixed or missing .git markers; never cleaned",
 		"aibris clean --dry-run",
 		"aibris scan --json",
 		"by category",
@@ -118,9 +118,9 @@ func TestWriteHumanNamesOfficialCacheAgeRelax(t *testing.T) {
 	WriteHuman(&buf, FromResult(r, policy))
 	got := buf.String()
 	for _, want := range []string{
-		"default clean (estimate)",
-		"official cache age relaxed (--pressure)",
-		"age-blocked 50 B younger than 7d (official caches already in default)",
+		"reclaimable  100 B",
+		"caches count at any age (--pressure)",
+		"held back    50 B younger than 7d",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("relaxed human output missing %q:\n%s", want, got)
@@ -129,7 +129,7 @@ func TestWriteHumanNamesOfficialCacheAgeRelax(t *testing.T) {
 	if strings.Contains(got, "aibris clean --pressure --dry-run") {
 		t.Errorf("folded pressure should stay on the default estimate, not a second next command:\n%s", got)
 	}
-	if strings.Contains(got, "on the home volume") || strings.Contains(got, "home-volume official caches") {
+	if strings.Contains(got, "on the home volume") {
 		t.Errorf("explicit --pressure copy named the home-volume pin:\n%s", got)
 	}
 
@@ -138,14 +138,13 @@ func TestWriteHumanNamesOfficialCacheAgeRelax(t *testing.T) {
 	WriteHuman(&buf, FromResult(r, policy))
 	auto := buf.String()
 	for _, want := range []string{
-		"official cache age relaxed on the home volume",
-		"home-volume official caches already in default",
+		"caches on the home volume count at any age (volume nearly full)",
 	} {
 		if !strings.Contains(auto, want) {
 			t.Errorf("auto-relax human output missing %q:\n%s", want, auto)
 		}
 	}
-	if strings.Contains(auto, "same as --pressure") || strings.Contains(auto, "official cache age relaxed (--pressure)") {
+	if strings.Contains(auto, "(--pressure)") {
 		t.Errorf("home-volume auto-relax copy claimed full --pressure:\n%s", auto)
 	}
 
@@ -154,11 +153,10 @@ func TestWriteHumanNamesOfficialCacheAgeRelax(t *testing.T) {
 	buf.Reset()
 	WriteHuman(&buf, FromResult(r, policy))
 	plain := buf.String()
-	if strings.Contains(plain, "official cache age relaxed") ||
-		strings.Contains(plain, "official caches already in default") {
+	if strings.Contains(plain, "count at any age") {
 		t.Errorf("non-critical scan named cache age relax:\n%s", plain)
 	}
-	if !strings.Contains(plain, "age-blocked") || strings.Contains(plain, "already in default") {
+	if !strings.Contains(plain, "held back    150 B younger than 7d") {
 		t.Errorf("non-critical age-blocked lost the plain 7d copy:\n%s", plain)
 	}
 }
@@ -175,9 +173,9 @@ func TestWriteHumanPartialDisablesCleanup(t *testing.T) {
 	WriteHuman(&buf, FromResult(r, testPolicy()))
 	got := buf.String()
 	for _, want := range []string{
-		"completeness partial",
-		"failed      codex",
-		"default clean unavailable",
+		"incomplete   results are partial",
+		"codex failed: permission denied",
+		"reclaimable  unknown until a complete scan succeeds",
 		"cleanup is disabled",
 	} {
 		if !strings.Contains(got, want) {

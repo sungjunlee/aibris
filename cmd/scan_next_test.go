@@ -38,7 +38,7 @@ func TestPrintHumanScanResultNextUsesReclaimLadder(t *testing.T) {
 	if strings.Contains(output, "aibris clean --strip --dry-run") {
 		t.Fatalf("zero strip path should be omitted:\n%s", output)
 	}
-	if strings.Contains(output, "review-only worktrees") {
+	if strings.Contains(output, "review by hand") {
 		t.Fatalf("review-only line should be omitted when the count is zero:\n%s", output)
 	}
 }
@@ -72,13 +72,13 @@ func reviewOnlyScanFixture(t *testing.T) (string, []types.DebrisInfo) {
 
 func assertReviewOnlyNextLine(t *testing.T, output, path string) {
 	t.Helper()
-	if !strings.Contains(output, "review-only worktrees  1 unit  9.0 GB") {
+	if !strings.Contains(output, "review by hand               1 worktree unit, 9.0 GB") {
 		t.Fatalf("missing review-only count+size:\n%s", output)
 	}
-	if !strings.Contains(output, "not a clean/--strip target") {
+	if !strings.Contains(output, "never cleaned") {
 		t.Fatalf("missing no-clean-target copy:\n%s", output)
 	}
-	if !strings.Contains(output, "inspect mixed/missing .git markers in owner directories") {
+	if !strings.Contains(output, "mixed or missing .git markers") {
 		t.Fatalf("missing owner-directory inspect copy:\n%s", output)
 	}
 	if strings.Contains(output, path) || strings.Contains(output, "plain-dir") {

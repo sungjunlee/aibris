@@ -96,8 +96,8 @@ func TestSummarizeCleanup_EligibilityMatchesFilterForMixedCategories(t *testing.
 				scanreport.WriteCleanupDiagnostics(os.Stdout, diagnostics, opts)
 			})
 			for _, want := range []string{
-				"agent-state 13 B live agent-state protected",
-				"agent-state 17 B undetermined agent-state protected",
+				"13 B agent state whose project still exists",
+				"17 B agent state not proven orphaned",
 			} {
 				if !strings.Contains(output, want) {
 					t.Errorf("scan diagnostics missing %q:\n%s", want, output)
@@ -195,8 +195,8 @@ func TestScanDefaultCleanEstimateMatchesCleanDryRunForNestedTargets(t *testing.T
 		rootCmd.SetArgs([]string{"scan"})
 		rootCmd.Execute()
 	})
-	estimateLine := cliContractLineWithPrefix(t, scanOutput, "default clean (estimate)")
-	estimateSize := strings.Join(strings.Fields(estimateLine)[3:], " ")
+	estimateLine := cliContractLineWithPrefix(t, scanOutput, "reclaimable")
+	estimateSize := strings.Join(strings.Fields(estimateLine)[1:], " ")
 
 	defer withStdin(t, "")()
 	cleanOutput := captureOutput(func() {

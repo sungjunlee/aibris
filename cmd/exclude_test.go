@@ -50,7 +50,7 @@ func TestScanCmd_ExcludeRemovesItemAndReportsScope(t *testing.T) {
 	}
 	for _, want := range []string{
 		"kept-wt",
-		"found       1 item",
+		" in 1 item",
 		"exclusions (discovery only)",
 		"patterns  1 flag, 0 ignore-file",
 		"1 item hidden from discovery",
@@ -148,7 +148,7 @@ func TestScanCmd_IgnoreFileMergesWithExcludeFlag(t *testing.T) {
 	}
 	for _, want := range []string{
 		"kept-wt",
-		"found       1 item",
+		" in 1 item",
 		"patterns  1 flag, 1 ignore-file",
 		"2 items hidden from discovery",
 	} {
@@ -174,7 +174,7 @@ func TestScanCmd_DefaultsUnchangedWithoutExcludes(t *testing.T) {
 	if strings.Contains(output, "exclusions") {
 		t.Errorf("scan without exclusion configuration must not print exclusion diagnostics:\n%s", output)
 	}
-	for _, want := range []string{"kept-wt", "found       1 item"} {
+	for _, want := range []string{"kept-wt", " in 1 item"} {
 		if !strings.Contains(output, want) {
 			t.Errorf("scan output missing %q:\n%s", want, output)
 		}

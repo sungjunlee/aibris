@@ -20,7 +20,7 @@ func writeCategorySummary(w io.Writer, summary map[types.Category]types.Category
 	fmt.Fprintln(w, "\nby category")
 	for _, category := range sortedCategories(summary) {
 		entry := summary[category]
-		fmt.Fprintf(w, "  %-13s %3d   %s\n", category, entry.PhysicalUnitCount, cleaner.FormatSize(entry.PhysicalTotalBytes))
+		fmt.Fprintf(w, "  %-13s %4d  %9s\n", category, entry.PhysicalUnitCount, cleaner.FormatSize(entry.PhysicalTotalBytes))
 	}
 }
 
@@ -36,11 +36,11 @@ func writeLargestItems(w io.Writer, items []Item) {
 
 	fmt.Fprintln(w, "\nlargest")
 	for _, item := range items[:limit] {
-		fmt.Fprintf(w, "  %8s  %-13s %-12s %-18s %s\n",
+		fmt.Fprintf(w, "  %9s  %-13s %-16s %-18s %s\n",
 			cleaner.FormatSize(item.Size),
 			item.Category,
-			itemName(item),
-			itemProject(item),
+			fitColumn(itemName(item), 16),
+			fitColumn(itemProject(item), 18),
 			itemAgeAndStatus(item))
 	}
 	if len(items) > limit {
@@ -74,4 +74,14 @@ func itemProject(item Item) string {
 
 func itemAgeAndStatus(item Item) string {
 	return ItemAgeAndStatus(item.debrisInfo())
+}
+
+// fitColumn truncates s to width runes with a trailing ellipsis so long
+// names (encoded store entries, deep project paths) keep columns aligned.
+func fitColumn(s string, width int) string {
+	runes := []rune(s)
+	if len(runes) <= width {
+		return s
+	}
+	return string(runes[:width-1]) + "…"
 }

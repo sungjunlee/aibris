@@ -34,21 +34,20 @@ aibris clean --dry-run  # the exact cleanup plan; nothing is deleted
 aibris clean            # review the plan, confirm, then delete
 ```
 
-`scan` leads with what it found, how full the home volume is, and what a
-default `clean` would reclaim, then shows what is held back and why:
+`scan` shows what it found, what a default `clean` would reclaim, what is
+held back and why, and how full the home volume is:
 
 ```text
 summary
-  94.2 MB found   92% used   34.0 GB free   tight
-  found       3 items
-  found size  94.2 MB
-  default clean (estimate) 0 B
-  age-blocked 20.0 KB younger than 7d
-  risky       94.2 MB requires --risky
+  found        94.2 MB in 3 items
+  reclaimable  0 B
+  held back    20.0 KB younger than 7d
+               94.2 MB AI logs (need --risky)
+  volume       home (apfs): 92% used, 34.0 GB free, tight
 
 by category
-  ai-logs         1   94.2 MB
-  node_modules    2   20.0 KB
+  ai-logs          1    94.2 MB
+  node_modules     2    20.0 KB
 ```
 
 `clean --dry-run` lists every target with its size, path, and the reason it
