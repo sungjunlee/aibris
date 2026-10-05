@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/safedelete"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -60,7 +61,7 @@ type UnitExecution struct {
 func DefaultExecutionOptions() ExecutionOptions {
 	return ExecutionOptions{
 		RemoveWorktree: RemoveGitWorktree,
-		RemoveAll:      os.RemoveAll,
+		RemoveAll:      safedelete.RemoveAllUnderHome,
 		Getwd:          os.Getwd,
 		UserHomeDir:    os.UserHomeDir,
 	}
@@ -68,7 +69,7 @@ func DefaultExecutionOptions() ExecutionOptions {
 
 func (opts ExecutionOptions) withDefaults() ExecutionOptions {
 	if opts.RemoveAll == nil {
-		opts.RemoveAll = os.RemoveAll
+		opts.RemoveAll = safedelete.RemoveAllUnderHome
 	}
 	if opts.Getwd == nil {
 		opts.Getwd = os.Getwd
@@ -201,6 +202,9 @@ func PreflightActiveWorktreeUnit(
 	if !cleaner.IsSafeTarget(home, target) {
 		return WorktreeCleanupUnit{}, memberErrors, fmt.Errorf("unsafe active worktree path %q rejected", target.Path)
 	}
+	if err := safedelete.Check(home, selected.TargetPath); err != nil {
+		return WorktreeCleanupUnit{}, memberErrors, err
+	}
 	cwd, err := opts.Getwd()
 	if err != nil {
 		return WorktreeCleanupUnit{}, memberErrors, fmt.Errorf("getting current working directory: %w", err)
@@ -240,6 +244,10 @@ func PreflightActiveWorktreeUnit(
 			continue
 		}
 		var reasons []string
+		// git worktree remove deletes the member directory: same gate.
+		if err := safedelete.Check(home, path); err != nil {
+			reasons = append(reasons, err.Error())
+		}
 		if !current.EvidenceAvailable || !current.GitEvidenceAvailable || current.HardLocked || !current.Recoverable {
 			reasons = append(reasons, current.Reason.Description)
 		}

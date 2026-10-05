@@ -12,6 +12,7 @@ import (
 	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/pathidentity"
+	"github.com/sungjunlee/aibris/internal/safedelete"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -269,7 +270,7 @@ func stripWorktreeUnit(ctx context.Context, home string, target types.DebrisInfo
 		// in that window is an accepted residual risk: closing it needs
 		// per-OS O_NOFOLLOW directory walking, and the threat here is
 		// accidental loss of the user's own files, not a racing adversary.
-		if err := root.RemoveAll(rel); err != nil {
+		if err := safedelete.RemoveAllIn(root, home, subtreePath, rel); err != nil {
 			subtree.Skipped = fmt.Sprintf("removal failed: %v", err)
 			outcome.Subtrees = append(outcome.Subtrees, subtree)
 			continue

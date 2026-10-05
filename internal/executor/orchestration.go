@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/safedelete"
 	"github.com/sungjunlee/aibris/internal/types"
 	"github.com/sungjunlee/aibris/internal/worktree"
 )
@@ -138,7 +139,7 @@ func ExecutePreparedTargets(
 		opts.RemoveWorktree = worktree.RemoveGitWorktree
 	}
 	if opts.RemoveAll == nil {
-		opts.RemoveAll = os.RemoveAll
+		opts.RemoveAll = safedelete.RemoveAllUnderHome
 	}
 	if opts.Getwd == nil {
 		opts.Getwd = os.Getwd

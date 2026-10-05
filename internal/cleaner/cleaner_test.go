@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -1768,6 +1769,32 @@ func TestFormatSize(t *testing.T) {
 	for _, tt := range tests {
 		if got := FormatSize(tt.bytes); got != tt.want {
 			t.Errorf("FormatSize(%d) = %q; want %q", tt.bytes, got, tt.want)
+		}
+	}
+}
+
+func TestCleanupCommandEnvPinsTheScannedCache(t *testing.T) {
+	tests := []struct {
+		argv []string
+		path string
+		want []string
+	}{
+		{[]string{"go", "clean", "-cache"}, "/h/Library/Caches/go-build", []string{"GOCACHE=/h/Library/Caches/go-build"}},
+		{[]string{"uv", "cache", "clean"}, "/h/.cache/uv", []string{"UV_CACHE_DIR=/h/.cache/uv"}},
+		{[]string{"brew", "cleanup", "--prune=all"}, "/h/Library/Caches/Homebrew", []string{"HOMEBREW_CACHE=/h/Library/Caches/Homebrew"}},
+		{[]string{"npm", "cache", "clean", "--force"}, "/h/.npm/_cacache", []string{"npm_config_cache=/h/.npm"}},
+		{[]string{"npm", "cache", "clean", "--force"}, "/h/.npm/other", nil},
+		{nil, "/h/x", nil},
+	}
+	for _, tt := range tests {
+		item := types.DebrisInfo{Path: filepath.FromSlash(tt.path), CleanupCommand: tt.argv}
+		got := cleanupCommandEnv(item)
+		var want []string
+		for _, w := range tt.want {
+			want = append(want, filepath.FromSlash(w))
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("cleanupCommandEnv(%v, %s) = %v; want %v", tt.argv, tt.path, got, want)
 		}
 	}
 }
