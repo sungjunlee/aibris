@@ -23,7 +23,7 @@ func newGuidedCleanExecutionReceipt(
 	prepared []preparedCleanTarget,
 ) (guidedCleanExecutionReceipt, error) {
 	components := cleanjson.SnapshotComponentsFromCmd(plan, audit.Components, inventory, protections)
-	
+
 	// Convert prepared targets to cleanjson format
 	preparedTargets := make([]cleanjson.PreparedTarget, len(prepared))
 	for i, p := range prepared {
@@ -32,7 +32,7 @@ func newGuidedCleanExecutionReceipt(
 			Component: p.Component,
 		}
 	}
-	
+
 	inner, err := cleanjson.NewGuidedExecutionReceipt(
 		cleanjson.SourceFromCleaner(source),
 		opts,
@@ -73,7 +73,7 @@ func (r *guidedCleanExecutionReceipt) finish(
 	if r.inner == nil {
 		return cleanJSONReceipt{}, nil
 	}
-	
+
 	// Convert execution receipt to cleanjson format
 	units := make([]cleanjson.ExecutionUnit, len(execution.Units))
 	for i, u := range execution.Units {
@@ -87,7 +87,7 @@ func (r *guidedCleanExecutionReceipt) finish(
 			FailureCause:               u.FailureCause,
 		}
 	}
-	
+
 	return r.inner.Finish(
 		cleanjson.ExecutionReceipt{Units: units},
 		executionErr,
@@ -106,7 +106,7 @@ func writeGuidedCleanExecutionReceipt(
 	if pending == nil || pending.inner == nil {
 		return
 	}
-	
+
 	// Convert execution receipt to cleanjson format
 	units := make([]cleanjson.ExecutionUnit, len(execution.Units))
 	for i, u := range execution.Units {
@@ -120,7 +120,7 @@ func writeGuidedCleanExecutionReceipt(
 			FailureCause:               u.FailureCause,
 		}
 	}
-	
+
 	cleanjson.WriteGuidedExecutionReceipt(
 		cleanReceiptFile,
 		pending.inner,

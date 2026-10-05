@@ -147,7 +147,7 @@ func TestGuidedCleanupPlanCandidatesReflectAcceptedSelection(t *testing.T) {
 		Key:      "locked-unit",
 		Policy:   guidedCleanPolicyLocked,
 		Selected: false,
-		Row:      guidedCodexWorktreeRow{Item: types.DebrisInfo{Path: "/home/.codex/worktrees/locked"}, Reason: "dirty worktree"},
+		Row:      guidedCodexWorktreeRow{Item: types.DebrisInfo{Path: "/aibris-test-home/.codex/worktrees/locked"}, Reason: "dirty worktree"},
 	}}
 
 	selected := guidedCleanState{}
@@ -155,7 +155,7 @@ func TestGuidedCleanupPlanCandidatesReflectAcceptedSelection(t *testing.T) {
 		Key:      "selected-unit",
 		Policy:   guidedCleanPolicyRecommended,
 		Selected: true,
-		Row:      guidedCodexWorktreeRow{Item: types.DebrisInfo{Path: "/home/.codex/worktrees/pick"}, Reason: "cleanup recommended"},
+		Row:      guidedCodexWorktreeRow{Item: types.DebrisInfo{Path: "/aibris-test-home/.codex/worktrees/pick"}, Reason: "cleanup recommended"},
 	}}
 
 	reviewable := guidedCleanState{}
@@ -163,7 +163,7 @@ func TestGuidedCleanupPlanCandidatesReflectAcceptedSelection(t *testing.T) {
 		Key:      "reviewable-unit",
 		Policy:   guidedCleanPolicyReviewable,
 		Selected: false,
-		Row:      guidedCodexWorktreeRow{Item: types.DebrisInfo{Path: "/home/.codex/worktrees/hold"}, Reason: "retained per repository"},
+		Row:      guidedCodexWorktreeRow{Item: types.DebrisInfo{Path: "/aibris-test-home/.codex/worktrees/hold"}, Reason: "retained per repository"},
 	}}
 
 	candidates := append(append(
@@ -192,12 +192,12 @@ func TestUnifiedCleanupPlanForCleanMergesGuidedAndClassicCandidates(t *testing.T
 		Key:      "guided-unit",
 		Policy:   guidedCleanPolicyRecommended,
 		Selected: true,
-		Row:      guidedCodexWorktreeRow{Item: types.DebrisInfo{Path: "/home/.codex/worktrees/g"}, Reason: "cleanup recommended"},
+		Row:      guidedCodexWorktreeRow{Item: types.DebrisInfo{Path: "/aibris-test-home/.codex/worktrees/g"}, Reason: "cleanup recommended"},
 	}}
 	classic := []types.DebrisInfo{{
 		Tool:     types.ToolNodeModules,
 		Category: types.CategoryNodeModules,
-		Path:     "/home/workspace/app/node_modules",
+		Path:     "/aibris-test-home/workspace/app/node_modules",
 		Size:     1024,
 	}}
 
@@ -222,7 +222,7 @@ func TestUnifiedCleanupPlanForCleanMergesGuidedAndClassicCandidates(t *testing.T
 
 func TestValidateAndSelectForExecutionGatesPartialAndStaleEvidence(t *testing.T) {
 	now := time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)
-	item := types.DebrisInfo{Path: "/home/target", Category: types.CategoryBuildCache}
+	item := types.DebrisInfo{Path: "/aibris-test-home/target", Category: types.CategoryBuildCache}
 	plan, err := BuildUnifiedCleanupPlan(context.Background(), []CleanupPlanCandidate{{
 		RowKey:    "c",
 		Item:      item,

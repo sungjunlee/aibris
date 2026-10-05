@@ -2277,7 +2277,7 @@ func TestPrintJSON_WithData(t *testing.T) {
 				ID:       "hash1",
 				Project:  "myproject",
 				Source:   ".codex",
-				Path:     "/home/user/.codex/worktrees/hash1",
+				Path:     "/aibris-test-home/user/.codex/worktrees/hash1",
 				Size:     102400,
 				ModTime:  now,
 				Status:   types.WorktreeActive,
@@ -2287,7 +2287,7 @@ func TestPrintJSON_WithData(t *testing.T) {
 				Category:       types.CategoryWorktree,
 				ID:             "session-42",
 				Project:        "otherproj",
-				Path:           "/home/user/.claude/worktrees/session-42",
+				Path:           "/aibris-test-home/user/.claude/worktrees/session-42",
 				Size:           204800,
 				ModTime:        now.Add(-72 * time.Hour),
 				Status:         types.WorktreeOrphaned,
@@ -2382,7 +2382,7 @@ func TestPrintJSON_WithData(t *testing.T) {
 	if !strings.Contains(w0.Reason, "protected") {
 		t.Errorf("Worktrees[0].Reason = %q; want protected", w0.Reason)
 	}
-	if w0.Path != "/home/user/.codex/worktrees/hash1" {
+	if w0.Path != "/aibris-test-home/user/.codex/worktrees/hash1" {
 		t.Errorf("Worktrees[0].Path = %q", w0.Path)
 	}
 
@@ -2515,14 +2515,14 @@ func TestPrintJSON_DerivedRiskAndReasonForCategories(t *testing.T) {
 
 func TestPrintJSON_AgentStateClassificationAndReason(t *testing.T) {
 	now := time.Date(2026, 7, 27, 12, 0, 0, 0, time.UTC)
-	absentCWD := "/home/user/workspace/removed/project_with-state"
+	absentCWD := "/aibris-test-home/user/workspace/removed/project_with-state"
 	r := &types.ScanResult{
 		Worktrees: []types.DebrisInfo{
 			{
 				Tool:           types.ToolClaude,
 				Category:       types.CategoryAgentState,
 				ID:             "encoded-project-key",
-				Path:           "/home/user/.claude/projects/encoded-project-key",
+				Path:           "/aibris-test-home/user/.claude/projects/encoded-project-key",
 				ModTime:        now,
 				Classification: types.EntryClassOrphaned,
 				Reason:         "recorded cwd does not exist: " + absentCWD,
@@ -2531,7 +2531,7 @@ func TestPrintJSON_AgentStateClassificationAndReason(t *testing.T) {
 				Tool:     types.ToolCodex,
 				Category: types.CategoryWorktree,
 				ID:       "worktree-without-classification",
-				Path:     "/home/user/.codex/worktrees/worktree-without-classification",
+				Path:     "/aibris-test-home/user/.codex/worktrees/worktree-without-classification",
 				ModTime:  now,
 				Status:   types.WorktreeActive,
 			},

@@ -85,6 +85,7 @@ publish_push_tap() {
 # EXIT runs after publish_main returns, when its locals are gone.
 # Bake paths now so `set -u` does not abort a successful tap push.
 publish_install_cleanup() {
+	# shellcheck disable=SC2064 # expanding now is the point (see above)
 	trap "rm -f -- $(printf '%q' "$1"); rm -rf -- $(printf '%q' "$2")" EXIT
 }
 

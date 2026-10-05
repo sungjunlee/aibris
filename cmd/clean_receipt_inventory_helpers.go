@@ -51,7 +51,7 @@ func finishCleanJSONReceiptWithInventory(receipt cleanJSONReceipt, executionErr 
 		receipt.PhysicalTargets[i].Requested = true
 		receipt.PhysicalTargets[i].ReasonCodes = append(receipt.PhysicalTargets[i].ReasonCodes, "execution_not_recorded")
 	}
-	
+
 	totals := cleanJSONReceiptTotals{}
 	for _, target := range receipt.PhysicalTargets {
 		switch target.State {
@@ -76,13 +76,13 @@ func finishCleanJSONReceiptWithInventory(receipt cleanJSONReceipt, executionErr 
 		totals.FreedBytes += target.FreedBytes
 	}
 	receipt.Totals = totals
-	
+
 	// Build post-clean from inventory
 	if receipt.PostClean == nil {
 		owners := remainingCleanJSONReceiptOwners(receipt, inventory)
 		receipt.PostClean = buildCleanJSONPostClean(owners)
 	}
-	
+
 	// Set final status
 	accountedRequests := totals.Removed + totals.Partial + totals.Failed + totals.Cancelled
 	if totals.Requested != accountedRequests {
@@ -103,6 +103,6 @@ func finishCleanJSONReceiptWithInventory(receipt cleanJSONReceipt, executionErr 
 	default:
 		receipt.Status = cleanJSONReceiptSucceeded
 	}
-	
+
 	return receipt, executionErr
 }

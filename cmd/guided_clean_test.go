@@ -288,7 +288,7 @@ func TestGuidedCleanAgeCommandReplansSelection(t *testing.T) {
 	if selected, size := guidedSelectionTotals(next); selected != 0 || size != 0 {
 		t.Fatalf("7d selected = %d/%d; want 0/0", selected, size)
 	}
-	row := guidedRowByKey(t, next, "/home/user/.codex/worktrees/older")
+	row := guidedRowByKey(t, next, "/aibris-test-home/user/.codex/worktrees/older")
 	if row.Policy != guidedCleanPolicyReviewable || row.Row.Reason != decisionReasonDescription(DecisionReasonMinimumIdleAge) {
 		t.Fatalf("7d row = %+v; want reviewable minimum-idle-age hold", row)
 	}
@@ -300,7 +300,7 @@ func TestGuidedCleanAgeCommandReplansSelection(t *testing.T) {
 func TestGuidedCleanAgeReplanKeepsUserDeselectOverride(t *testing.T) {
 	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
 	state := guidedCleanupPolicyState(now, 24*time.Hour)
-	row := guidedRowByKey(t, state, "/home/user/.codex/worktrees/older")
+	row := guidedRowByKey(t, state, "/aibris-test-home/user/.codex/worktrees/older")
 	if !toggleGuidedCleanRow(&state, row.Number) {
 		t.Fatal("recommended row should be toggleable")
 	}
@@ -309,7 +309,7 @@ func TestGuidedCleanAgeReplanKeepsUserDeselectOverride(t *testing.T) {
 	if selected, size := guidedSelectionTotals(next); selected != 0 || size != 0 {
 		t.Fatalf("selected after user override = %d/%d; want 0/0", selected, size)
 	}
-	row = guidedRowByKey(t, next, "/home/user/.codex/worktrees/older")
+	row = guidedRowByKey(t, next, "/aibris-test-home/user/.codex/worktrees/older")
 	if row.Policy != guidedCleanPolicyRecommended {
 		t.Fatalf("policy after replan = %s; want recommended", row.Policy)
 	}
@@ -415,11 +415,11 @@ func TestGuidedCleanupPolicyDecisionsDriveClassesAndAgeReplan(t *testing.T) {
 		}
 		return row
 	}
-	recent := assertGuidedRow("/home/user/.codex/worktrees/recent", guidedCleanPolicyLocked, false, "recent safety window")
-	retained := assertGuidedRow("/home/user/.codex/worktrees/alpha-one", guidedCleanPolicyReviewable, false, "most recent units")
-	assertGuidedRow("/home/user/.codex/worktrees/alpha-four", guidedCleanPolicyReviewable, false, "minimum idle age")
-	assertGuidedRow("/home/user/.codex/worktrees/beta-four", guidedCleanPolicyReviewable, false, "minimum recommendation size")
-	eligible := assertGuidedRow("/home/user/.codex/worktrees/gamma-four", guidedCleanPolicyRecommended, true, "local branch retained")
+	recent := assertGuidedRow("/aibris-test-home/user/.codex/worktrees/recent", guidedCleanPolicyLocked, false, "recent safety window")
+	retained := assertGuidedRow("/aibris-test-home/user/.codex/worktrees/alpha-one", guidedCleanPolicyReviewable, false, "most recent units")
+	assertGuidedRow("/aibris-test-home/user/.codex/worktrees/alpha-four", guidedCleanPolicyReviewable, false, "minimum idle age")
+	assertGuidedRow("/aibris-test-home/user/.codex/worktrees/beta-four", guidedCleanPolicyReviewable, false, "minimum recommendation size")
+	eligible := assertGuidedRow("/aibris-test-home/user/.codex/worktrees/gamma-four", guidedCleanPolicyRecommended, true, "local branch retained")
 	if !strings.Contains(eligible.Row.Reason, "no upstream configured") {
 		t.Fatalf("missing upstream should be explanatory only: %+v", eligible)
 	}

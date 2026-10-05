@@ -33,10 +33,6 @@ func newCleanJSONReceipt(document cleanJSONPlan) cleanJSONReceipt {
 	return cleanjson.NewReceipt(document, cleanIncludePaths)
 }
 
-func encodeCleanJSONReceipt(output io.Writer, receipt cleanJSONReceipt) error {
-	return cleanjson.EncodeReceipt(output, receipt)
-}
-
 func cleanJSONReceiptItemKey(item types.DebrisInfo) string {
 	return cleanjson.RowIdentityKey(item)
 }

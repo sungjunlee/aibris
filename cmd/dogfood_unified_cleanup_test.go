@@ -109,13 +109,11 @@ func TestDogfoodUnifiedJourneyRepresentativeHome(t *testing.T) {
 	// selected; safe active units stay unselected (reviewable); the dirty
 	// unit is hard-locked and never selectable.
 	var selectedCategories []string
-	var selectedNames []string
 	protectedNames := ""
 	for _, line := range strings.Split(output, "\n") {
 		switch {
 		case strings.Contains(line, "[x]"):
 			selectedCategories = append(selectedCategories, line)
-			selectedNames = append(selectedNames, line)
 		case strings.Contains(line, "[!]"):
 			protectedNames += line + "\n"
 		}

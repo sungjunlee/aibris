@@ -16,16 +16,16 @@ const (
 
 // RouteInput contains flags needed to determine the clean command route.
 type RouteInput struct {
-	IncludePaths   bool
-	ReceiptFile    string
-	DryRun         bool
-	Guide          bool
-	NoGuide        bool
-	Strip          bool
-	APFSSnapshots  bool
-	JSON           bool
-	Interactive    bool
-	Force          bool
+	IncludePaths  bool
+	ReceiptFile   string
+	DryRun        bool
+	Guide         bool
+	NoGuide       bool
+	Strip         bool
+	APFSSnapshots bool
+	JSON          bool
+	Interactive   bool
+	Force         bool
 }
 
 // ErrClassicRouteReceiptFile is the error message when --receipt-file is used on classic route.

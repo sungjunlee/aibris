@@ -392,7 +392,7 @@ type cleanupPolicyWant struct {
 }
 
 func cleanupPolicyUnit(name string, activity time.Time, size int64, repositoryIDs ...string) WorktreeCleanupUnit {
-	target := "/home/user/.codex/worktrees/" + name
+	target := "/aibris-test-home/user/.codex/worktrees/" + name
 	members := make([]GitWorktreeMember, 0, len(repositoryIDs))
 	for i, repositoryID := range repositoryIDs {
 		members = append(members, GitWorktreeMember{

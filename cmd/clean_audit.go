@@ -16,7 +16,6 @@ import (
 // The wrapper functions adapt internal types for cmd-layer orchestration.
 
 type (
-	scanSourceKind             = cleaner.ScanSourceKind
 	scanSource                 = cleaner.ScanSource
 	cleanAudit                 = cleaner.CleanAudit
 	cleanAuditCategory         = cleaner.CleanAuditCategory
@@ -338,10 +337,6 @@ func cleanAuditBlockReason(item types.DebrisInfo, opts types.PruneOptions, obser
 
 func cleanAuditReasonText(reason cleanAuditReason, opts types.PruneOptions) string {
 	return cleaner.AuditReasonText(reason, opts)
-}
-
-func cleanAuditReasonForOverlapSafety(reason cleaner.OverlapSafetyReason) cleanAuditReason {
-	return cleaner.AuditReasonForOverlapSafety(reason)
 }
 
 func mergeCleanAuditProtections(

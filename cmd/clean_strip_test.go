@@ -225,11 +225,11 @@ func TestStripEligibleUnitIsNeverAutoDeletedByClean(t *testing.T) {
 		Tool:            types.ToolCodex,
 		Category:        types.CategoryWorktree,
 		ID:              "unit",
-		Path:            "/home/u/.codex/worktrees/unit",
+		Path:            "/aibris-test-home/u/.codex/worktrees/unit",
 		Status:          types.WorktreeActive,
 		ModTime:         time.Now().Add(-time.Hour),
 		StrippableBytes: 1024,
-		StrippablePaths: []string{"/home/u/.codex/worktrees/unit/node_modules"},
+		StrippablePaths: []string{"/aibris-test-home/u/.codex/worktrees/unit/node_modules"},
 	}
 
 	tests := []struct {
@@ -609,7 +609,7 @@ func assertStripCloserReportsKeep(t *testing.T, output string, want ...string) {
 // the live process running from inside the unit, exactly as the deletion
 // route already protects it.
 func TestSelectStripTargetsMergesTwoLevelInventories(t *testing.T) {
-	owner := "/home/u/.codex/worktrees/owner"
+	owner := "/aibris-test-home/u/.codex/worktrees/owner"
 	first := types.DebrisInfo{
 		Tool:            types.ToolCodex,
 		Category:        types.CategoryWorktree,

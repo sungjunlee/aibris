@@ -29,17 +29,17 @@ const (
 
 // Receipt represents the machine-readable execution receipt of a cleanup run.
 type Receipt struct {
-	SchemaVersion   int                              `json:"schema_version"`
-	DocumentType    string                           `json:"document_type"`
-	Mode            string                           `json:"mode"`
-	PathsIncluded   bool                             `json:"paths_included"`
-	Status          string                           `json:"status"`
-	Plan            Plan                             `json:"plan"`
-	Exclusions      *scanreport.JSONExclusions       `json:"exclusions,omitempty"`
-	ProtectPaths    *scanreport.JSONProtectPaths     `json:"protect_paths,omitempty"`
-	Totals          ReceiptTotals                    `json:"totals"`
-	PhysicalTargets []ReceiptPhysicalTarget          `json:"physical_targets"`
-	PostClean       *ReceiptPostClean                `json:"post_clean"`
+	SchemaVersion   int                          `json:"schema_version"`
+	DocumentType    string                       `json:"document_type"`
+	Mode            string                       `json:"mode"`
+	PathsIncluded   bool                         `json:"paths_included"`
+	Status          string                       `json:"status"`
+	Plan            Plan                         `json:"plan"`
+	Exclusions      *scanreport.JSONExclusions   `json:"exclusions,omitempty"`
+	ProtectPaths    *scanreport.JSONProtectPaths `json:"protect_paths,omitempty"`
+	Totals          ReceiptTotals                `json:"totals"`
+	PhysicalTargets []ReceiptPhysicalTarget      `json:"physical_targets"`
+	PostClean       *ReceiptPostClean            `json:"post_clean"`
 
 	// inventory is the pre-execution debris owner list with its physical
 	// target identity; only owners whose targets were not physically removed
@@ -265,11 +265,11 @@ func ExecuteReceipt(
 	for _, target := range selectedPhysicalTargets() {
 		id := receiptTargetIDForItem(components, target)
 		if id == "" {
-		return finishReceipt(receipt,
-			fmt.Errorf("execution receipt invariant: no physical target ID for selected target %q", receiptItemKey(target)),
-			listSnapshots,
-			isMinimumAgeError,
-		)
+			return finishReceipt(receipt,
+				fmt.Errorf("execution receipt invariant: no physical target ID for selected target %q", receiptItemKey(target)),
+				listSnapshots,
+				isMinimumAgeError,
+			)
 		}
 		if selectedSet[id] {
 			continue
@@ -330,7 +330,7 @@ func ExecuteReceipt(
 		}
 		return finishReceipt(receipt, err, listSnapshots, isMinimumAgeError)
 	}
-	
+
 	execution, executionErr := executePrepared(ctx, prepared)
 	applyErr := applyExecutionReceipt(&receipt, targetIDs, execution, isMinimumAgeError)
 	return finishReceipt(receipt, errors.Join(executionErr, applyErr), listSnapshots, isMinimumAgeError)
@@ -379,10 +379,10 @@ func executeInteractiveReceipt(
 				}
 				markReceiptTarget(&receipt, id, state, true, code)
 				markPreparedReceiptTargets(&receipt, prepared[i+1:], targetIDs, ReceiptStatusCancelled, true, "cancelled_after_confirmation")
-			return finishReceipt(receipt, err, listSnapshots, isMinimumAgeError)
-		}
-		execution, err := executePrepared(ctx, []PreparedTarget{target})
-		applyErr := applyExecutionReceipt(&receipt, targetIDs, execution, isMinimumAgeError)
+				return finishReceipt(receipt, err, listSnapshots, isMinimumAgeError)
+			}
+			execution, err := executePrepared(ctx, []PreparedTarget{target})
+			applyErr := applyExecutionReceipt(&receipt, targetIDs, execution, isMinimumAgeError)
 			if executionErr == nil && err != nil {
 				executionErr = err
 			}
@@ -390,18 +390,18 @@ func executeInteractiveReceipt(
 				executionErr = applyErr
 			}
 			if err != nil && errors.Is(err, context.Canceled) {
-			markPreparedReceiptTargets(&receipt, prepared[i+1:], targetIDs, ReceiptStatusCancelled, true, "cancelled_after_execution")
-			return finishReceipt(receipt, errors.Join(err, applyErr), listSnapshots, isMinimumAgeError)
+				markPreparedReceiptTargets(&receipt, prepared[i+1:], targetIDs, ReceiptStatusCancelled, true, "cancelled_after_execution")
+				return finishReceipt(receipt, errors.Join(err, applyErr), listSnapshots, isMinimumAgeError)
 			}
 		case "n", "no":
 			markReceiptTarget(&receipt, id, ReceiptStatusSkipped, false, "not_confirmed")
 		default:
-		markReceiptTarget(&receipt, id, ReceiptStatusCancelled, true, "invalid_confirmation")
-		markPreparedReceiptTargets(&receipt, prepared[i+1:], targetIDs, ReceiptStatusCancelled, true, "invalid_confirmation")
-		return finishReceipt(receipt, errors.New("cleanup confirmation cancelled"), listSnapshots, isMinimumAgeError)
+			markReceiptTarget(&receipt, id, ReceiptStatusCancelled, true, "invalid_confirmation")
+			markPreparedReceiptTargets(&receipt, prepared[i+1:], targetIDs, ReceiptStatusCancelled, true, "invalid_confirmation")
+			return finishReceipt(receipt, errors.New("cleanup confirmation cancelled"), listSnapshots, isMinimumAgeError)
+		}
 	}
-}
-return finishReceipt(receipt, executionErr, listSnapshots, isMinimumAgeError)
+	return finishReceipt(receipt, executionErr, listSnapshots, isMinimumAgeError)
 }
 
 func readConfirmation(ctx context.Context, scanner *bufio.Scanner) (approved, cancelled bool) {

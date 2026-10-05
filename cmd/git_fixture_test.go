@@ -7,13 +7,6 @@ import (
 	"testing"
 )
 
-func newGitFixtureRepo(t *testing.T) string {
-	t.Helper()
-	repo := filepath.Join(t.TempDir(), "repo")
-	newGitFixtureRepoAt(t, repo)
-	return repo
-}
-
 func newGitFixtureRepoAt(t testing.TB, repo string) {
 	t.Helper()
 	root := filepath.Dir(repo)

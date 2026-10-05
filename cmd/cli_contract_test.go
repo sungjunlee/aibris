@@ -6,11 +6,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	worktreepkg "github.com/sungjunlee/aibris/internal/worktree"
 )
 
 func TestAgentStateCLIContract(t *testing.T) {
@@ -415,15 +418,47 @@ func writeNestedOverlapCLIContractFixture(
 	return outer, filepath.Join(home, ".claude", "projects", "nested-claude")
 }
 
+// The compiled CLI is identical for every contract test, so it is built once
+// per package run and removed by TestMain.
+var cliContractBuild struct {
+	once   sync.Once
+	dir    string
+	binary string
+	err    error
+	output []byte
+}
+
 func buildCLIContractBinary(t *testing.T) string {
 	t.Helper()
-	binary := filepath.Join(t.TempDir(), "aibris")
-	command := exec.Command("go", "build", "-o", binary, ".")
-	command.Dir = ".."
-	if output, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("building CLI contract binary: %v\n%s", err, output)
+	cliContractBuild.once.Do(func() {
+		dir, err := os.MkdirTemp("", "aibris-cmd-contract-")
+		if err != nil {
+			cliContractBuild.err = err
+			return
+		}
+		cliContractBuild.dir = dir
+		binary := filepath.Join(dir, "aibris")
+		if runtime.GOOS == "windows" {
+			binary += ".exe"
+		}
+		command := exec.Command("go", "build", "-o", binary, ".")
+		command.Dir = ".."
+		cliContractBuild.output, cliContractBuild.err = command.CombinedOutput()
+		cliContractBuild.binary = binary
+	})
+	if cliContractBuild.err != nil {
+		t.Fatalf("building CLI contract binary: %v\n%s", cliContractBuild.err, cliContractBuild.output)
 	}
-	return binary
+	return cliContractBuild.binary
+}
+
+func TestMain(m *testing.M) {
+	worktreepkg.GitEvidenceCommandTimeout = time.Minute
+	code := m.Run()
+	if cliContractBuild.dir != "" {
+		_ = os.RemoveAll(cliContractBuild.dir)
+	}
+	os.Exit(code)
 }
 
 func runCLIContract(binary, home string, args ...string) (string, error) {

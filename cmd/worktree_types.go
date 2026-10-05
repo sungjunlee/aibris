@@ -25,12 +25,12 @@ type (
 	WorktreeActivitySource   = worktree.WorktreeActivitySource
 	WorktreeActivityEvidence = worktree.WorktreeActivityEvidence
 	DefaultBranchUniqueness  = worktree.DefaultBranchUniqueness
-	worktreeGitCommandRunner = worktree.GitCommandRunner
-	guidedCleanRow           = worktree.GuidedCleanRow
-	guidedCleanState         = worktree.GuidedCleanState
-	guidedCodexWorktreeRow   = worktree.GuidedCodexWorktreeRow
-	stripSubtreeOutcome      = worktree.StripSubtreeOutcome
-	stripUnitOutcome         = worktree.StripUnitOutcome
+
+	guidedCleanRow         = worktree.GuidedCleanRow
+	guidedCleanState       = worktree.GuidedCleanState
+	guidedCodexWorktreeRow = worktree.GuidedCodexWorktreeRow
+	stripSubtreeOutcome    = worktree.StripSubtreeOutcome
+	stripUnitOutcome       = worktree.StripUnitOutcome
 )
 
 const (
@@ -76,11 +76,6 @@ const (
 	WorktreeActivityCodexSession = worktree.WorktreeActivityCodexSession
 	WorktreeActivityHeadReflog   = worktree.WorktreeActivityHeadReflog
 	WorktreeActivityFallback     = worktree.WorktreeActivityFallback
-
-	worktreeActivitySourceNotRegistered = worktree.ActivitySourceNotRegistered
-	worktreeActivityNotRegisteredReason = worktree.ActivityNotRegisteredReason
-
-	gitEvidenceCommandTimeout = worktree.GitEvidenceCommandTimeout
 )
 
 type guidedCleanPolicy = DecisionClass
@@ -117,22 +112,6 @@ func fillCleanupPolicy(policy CleanupPolicy) CleanupPolicy {
 
 func cleanupUnitStableKey(unit WorktreeCleanupUnit) string {
 	return worktree.CleanupUnitStableKey(unit)
-}
-
-func buildGitWorktreeMember(ctx context.Context, worktreePath string) GitWorktreeMember {
-	return worktree.BuildGitWorktreeMember(ctx, worktreePath)
-}
-
-func buildGitStripBaselineMember(ctx context.Context, worktreePath string) GitWorktreeMember {
-	return worktree.BuildGitStripBaselineMember(ctx, worktreePath)
-}
-
-func runWorktreeGitCommand(ctx context.Context, dir string, args ...string) ([]byte, error) {
-	return worktree.RunGitCommand(ctx, dir, args...)
-}
-
-func hasGitWorktreeMetadata(path string) bool {
-	return worktree.HasGitWorktreeMetadata(path)
 }
 
 func gitWorktreeRemoveArgs(repositoryID, worktreePath string) []string {
@@ -177,10 +156,6 @@ func guidedAgeString(age time.Duration) string {
 	return worktree.GuidedAgeString(age)
 }
 
-func guidedCodexWorktreeContainsCWD(worktreePath, cwd string) bool {
-	return worktree.GuidedCodexWorktreeContainsCWD(worktreePath, cwd)
-}
-
 func guidedCleanupUnitItem(unit WorktreeCleanupUnit, items []types.DebrisInfo) types.DebrisInfo {
 	return worktree.GuidedCleanupUnitItem(unit, items)
 }
@@ -196,4 +171,3 @@ func newGuidedCleanStateFromCleanupPlan(
 ) guidedCleanState {
 	return worktree.NewGuidedCleanStateFromCleanupPlan(source, reason, activity, policy, units, items, plan)
 }
-
