@@ -143,9 +143,11 @@ These hold for every change. Breaking one is a bug even if tests pass.
 6. Make sure every target path passes `safedelete.Check`, and add hermetic
    tests (`testutil.SetHome`) in `internal/adapter/<name>_test.go`.
 
-Known gap: providers are Go types, and `types.Tool` mixes vendors with
-provider names (the worktree provider reports `codex` for every tool). A
-declarative target catalog is planned; until then follow the existing pattern.
+Rebuildable caches do not need a provider: add an entry to `cacheCatalog` in
+`internal/adapter/cache_catalog.go` instead.
+
+Known gap: `types.Tool` mixes vendors with provider names (the worktree
+provider reports `codex` for every tool).
 
 ## Worktree discovery invariants
 
@@ -187,10 +189,18 @@ declarative target catalog is planned; until then follow the existing pattern.
 | windsurf | ai-logs | `--risky` only | `~/.codeium/windsurf/` |
 | ai-logs | ai-logs | `--risky` only | `$CODEX_HOME/logs_2.sqlite`, `$CODEX_HOME/archived_sessions/`, `~/.claude/command-audit.log`, `~/.claude/file-history/` |
 | node_modules | node_modules | older than `--age` | `node_modules` under scan roots, noisy trees pruned |
-| build-cache | build-cache | older than `--age` | effective `GOCACHE`, `~/.gradle/caches/`, `~/.npm/_cacache/`, `~/.cargo/registry/`, Xcode caches and DerivedData, Homebrew cache (`brew cleanup --prune=all`), CocoaPods cache, `~/.dartServer/` |
-| pip-cache | other-cache | older than `--age` | `~/.cache/pip/`, `~/.cache/uv/` |
+| build-cache | build-cache | older than `--age` | effective `GOCACHE`; Gradle, npm (`_cacache`, `_npx`), and Cargo registry caches; Xcode caches and DerivedData; Homebrew cache (`brew cleanup --prune=all`); CocoaPods cache; `~/.dartServer/` |
+| pip-cache | other-cache | older than `--age` | pip and uv caches |
 
-Cleanup commands run with their cache location pinned to the scanned path.
+Cache locations come from `internal/adapter/cache_catalog.go` and follow
+each tool's platform defaults. An override variable is honored only when the
+directory it names marks itself as a cache with a valid `CACHEDIR.TAG` (today
+`UV_CACHE_DIR`); otherwise an override could make an ordinary directory a
+cleanup target. Adding a
+rebuildable cache is one catalog entry; the cleanup allowlist accepts every
+path the catalog resolves to. Never add a cache whose wholesale removal can
+break installed projects (stores that projects link into). Cleanup commands
+run with their cache location pinned to the scanned path.
 
 ## Code rules
 

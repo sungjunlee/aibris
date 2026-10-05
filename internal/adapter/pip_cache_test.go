@@ -36,7 +36,7 @@ func TestPipCacheAdapter_NoCacheDirs(t *testing.T) {
 func TestPipCacheAdapter_PipOnly(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
-	pipDir := filepath.Join(home, ".cache", "pip")
+	pipDir, _ := pipCacheDir(home)
 	os.MkdirAll(filepath.Join(pipDir, "packages"), 0755)
 	os.WriteFile(filepath.Join(pipDir, "packages", "wheels.whl"), []byte("wheels"), 0644)
 
@@ -65,7 +65,8 @@ func TestPipCacheAdapter_PipOnly(t *testing.T) {
 func TestPipCacheAdapter_PipAndUv(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
-	os.MkdirAll(filepath.Join(home, ".cache", "pip", "packages"), 0755)
+	pipDir, _ := pipCacheDir(home)
+	os.MkdirAll(filepath.Join(pipDir, "packages"), 0755)
 	os.MkdirAll(filepath.Join(home, ".cache", "uv", "cache"), 0755)
 
 	a := &PipCacheAdapter{}
@@ -97,7 +98,8 @@ func TestPipCacheAdapter_FileNotDir(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	os.MkdirAll(filepath.Join(home, ".cache"), 0755)
-	os.WriteFile(filepath.Join(home, ".cache", "pip"), []byte("not-a-dir"), 0644)
+	pipFile, _ := pipCacheDir(home)
+	os.WriteFile(pipFile, []byte("not-a-dir"), 0644)
 
 	a := &PipCacheAdapter{}
 	results, err := a.Scan(context.Background(), types.ScanOptions{})

@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### Added
+
+- The `npx` package cache (`<npm cache>/_npx`) as a rebuildable build cache.
+
+### Changed
+
+- Build and Python caches come from one catalog that follows each tool's
+  platform defaults. `UV_CACHE_DIR` is honored when the directory carries
+  uv's `CACHEDIR.TAG`; other override variables are not, because an
+  unmarked override cannot be told apart from an ordinary directory.
+
+### Fixed
+
+- The pip cache is found at `~/Library/Caches/pip` on macOS (falling back to
+  the XDG location) and `%LOCALAPPDATA%\pip\Cache` on Windows instead of
+  always `~/.cache/pip`.
+
 ## [0.12.3] - 2026-10-05
 
 ### Fixed
