@@ -214,9 +214,20 @@ func stripWorktreeUnit(ctx context.Context, home string, target types.DebrisInfo
 			return outcome
 		}
 		subtree := StripSubtreeOutcome{Path: subtreePath}
+		if !pathStrictlyWithin(target.Path, subtreePath) {
+			subtree.Skipped = "subtree is outside the unit"
+			outcome.Subtrees = append(outcome.Subtrees, subtree)
+			continue
+		}
 		checkoutDir, ok := stripCheckoutDir(target.Path, subtreePath)
 		if !ok {
 			subtree.Skipped = "no linked worktree metadata"
+			outcome.Subtrees = append(outcome.Subtrees, subtree)
+			continue
+		}
+		identity, reason := stripSubtreeAuthority(ctx, target.Path, checkoutDir, subtreePath)
+		if reason != "" {
+			subtree.Skipped = reason
 			outcome.Subtrees = append(outcome.Subtrees, subtree)
 			continue
 		}
@@ -236,6 +247,14 @@ func stripWorktreeUnit(ctx context.Context, home string, target types.DebrisInfo
 			continue
 		}
 		subtree.Bytes = adapter.EstimateDirSize(ctx, subtreePath)
+		// Git checks and sizing take time; refuse if the directory that was
+		// authorized is no longer the one at this path.
+		if reason := stripSubtreeUnchanged(target.Path, subtreePath, identity); reason != "" {
+			subtree.Bytes = 0
+			subtree.Skipped = reason
+			outcome.Subtrees = append(outcome.Subtrees, subtree)
+			continue
+		}
 		if err := os.RemoveAll(subtreePath); err != nil {
 			subtree.Skipped = fmt.Sprintf("removal failed: %v", err)
 			outcome.Subtrees = append(outcome.Subtrees, subtree)
@@ -277,6 +296,9 @@ func stripWorktreeUnit(ctx context.Context, home string, target types.DebrisInfo
 // fixed and shallow, so this examines at most a few ancestors and never
 // searches recursively.
 func stripCheckoutDir(unitPath, subtreePath string) (string, bool) {
+	if !pathStrictlyWithin(unitPath, subtreePath) {
+		return "", false
+	}
 	dir := filepath.Dir(subtreePath)
 	for {
 		if HasGitWorktreeMetadata(dir) {
@@ -291,6 +313,87 @@ func stripCheckoutDir(unitPath, subtreePath string) (string, bool) {
 		}
 		dir = parent
 	}
+}
+
+// pathStrictlyWithin reports whether path lies strictly below root, compared
+// lexically after cleaning. It never touches the filesystem.
+func pathStrictlyWithin(root, path string) bool {
+	if root == "" || !filepath.IsAbs(root) || !filepath.IsAbs(path) {
+		return false
+	}
+	rel, err := filepath.Rel(filepath.Clean(root), filepath.Clean(path))
+	if err != nil || rel == "." || rel == ".." || filepath.IsAbs(rel) ||
+		strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return false
+	}
+	return true
+}
+
+// stripSubtreeAuthority re-derives, at the mutation boundary, that one
+// inventoried subtree may be stripped: it must still be a regenerable position
+// that the inventory rules produce for its checkout today, it must be a real
+// directory, and no directory between the unit and the subtree may be a
+// symlink, so the removal cannot be redirected outside the unit. It returns the
+// subtree's identity for a final check just before removal.
+func stripSubtreeAuthority(ctx context.Context, unitPath, checkoutDir, subtreePath string) (os.FileInfo, string) {
+	inventoried := false
+	for _, candidate := range adapter.WorktreeStripCandidates(ctx, checkoutDir) {
+		if filepath.Clean(candidate) == filepath.Clean(subtreePath) {
+			inventoried = true
+			break
+		}
+	}
+	if !inventoried {
+		return nil, "subtree is no longer a regenerable position"
+	}
+	if reason := stripPathHasNoSymlinks(unitPath, subtreePath); reason != "" {
+		return nil, reason
+	}
+	info, err := os.Lstat(subtreePath)
+	if err != nil {
+		return nil, "subtree unavailable"
+	}
+	return info, ""
+}
+
+// stripPathHasNoSymlinks walks from the unit root down to the subtree and
+// refuses any component that is a symlink or not a directory.
+func stripPathHasNoSymlinks(unitPath, subtreePath string) string {
+	rel, err := filepath.Rel(filepath.Clean(unitPath), filepath.Clean(subtreePath))
+	if err != nil {
+		return "subtree is outside the unit"
+	}
+	dir := filepath.Clean(unitPath)
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		dir = filepath.Join(dir, part)
+		info, err := os.Lstat(dir)
+		if err != nil {
+			return "subtree unavailable"
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return "symlink on the path to the subtree"
+		}
+		if !info.IsDir() {
+			return "subtree is not a directory"
+		}
+	}
+	return ""
+}
+
+// stripSubtreeUnchanged confirms the subtree is still the directory that was
+// authorized and that its path still has no symlinks.
+func stripSubtreeUnchanged(unitPath, subtreePath string, authorized os.FileInfo) string {
+	if reason := stripPathHasNoSymlinks(unitPath, subtreePath); reason != "" {
+		return reason
+	}
+	current, err := os.Lstat(subtreePath)
+	if err != nil {
+		return "subtree unavailable"
+	}
+	if !os.SameFile(authorized, current) {
+		return "subtree changed before removal"
+	}
+	return ""
 }
 
 // stripSubtreeGitSafe reports whether the subtree holds nothing Git can see.

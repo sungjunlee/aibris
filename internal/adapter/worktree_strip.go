@@ -26,10 +26,12 @@ var pythonProjectMarkers = []string{
 	"uv.lock",
 }
 
-// worktreeStripCandidates returns regenerable subtree candidates at fixed
+// WorktreeStripCandidates returns regenerable subtree candidates at fixed
 // known-relative positions inside the checkout rooted at checkoutPath, gated
 // by detected project-type markers. Candidates may not exist; callers filter.
-func worktreeStripCandidates(ctx context.Context, checkoutPath string) []string {
+// Strip execution re-derives this list at the mutation boundary, so a cached
+// inventory can never authorize a path these rules no longer produce.
+func WorktreeStripCandidates(ctx context.Context, checkoutPath string) []string {
 	if err := ctx.Err(); err != nil {
 		return nil
 	}
@@ -103,7 +105,7 @@ func (a *WorktreeAdapter) strippableSubtrees(ctx context.Context, checkoutPath s
 		return 0, nil
 	}
 	var paths []string
-	for _, candidate := range worktreeStripCandidates(ctx, checkoutPath) {
+	for _, candidate := range WorktreeStripCandidates(ctx, checkoutPath) {
 		if stripMarkerDirExists(candidate) {
 			paths = append(paths, candidate)
 		}
@@ -119,8 +121,11 @@ func (a *WorktreeAdapter) strippableSubtrees(ctx context.Context, checkoutPath s
 	return total, paths
 }
 
+// stripMarkerDirExists uses Lstat: a symlinked marker or candidate directory
+// would let a strip of <checkout>/android/build remove files outside the
+// checkout, so symlinks are never inventoried.
 func stripMarkerDirExists(path string) bool {
-	info, err := os.Stat(path)
+	info, err := os.Lstat(path)
 	return err == nil && info.IsDir()
 }
 
