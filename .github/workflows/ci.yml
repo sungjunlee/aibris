@@ -58,6 +58,7 @@ jobs:
         run: go build -o aibris.exe .
       - name: Exercise native Windows commands in an isolated profile
         run: |
+          $PSNativeCommandUseErrorActionPreference = $true
           $profileRoot = Join-Path $env:RUNNER_TEMP "aibris-windows-profile"
           New-Item -ItemType Directory -Force -Path $profileRoot | Out-Null
           $env:USERPROFILE = $profileRoot
@@ -93,6 +94,7 @@ jobs:
         run: go test -race -count=1 -cover ./test -run '^(TestWindowsCLIContractBinaryCommands|TestWindowsCLIContractRootContainmentAndHomeIsolation|TestCLIContractDestructiveCommandIsolatesWindowsUserCache|TestWindowsScanToDryRunContractPreservesClassification|TestWindowsDryRunPlanJSONMatchesScanReasons)$'
       - name: Test Windows worktree and agent-state reproduction fixtures
         run: |
+          $PSNativeCommandUseErrorActionPreference = $true
           go test -race -count=1 -cover ./test -run '^(TestWindowsLinkedWorktreeFixture|TestWindowsOrphanedWorktreeFixture|TestWindowsPlainDirWorktreeFixture|TestWindowsWorktreeFixtureRequiresGit)$'
           go test -race -count=1 -cover ./test -run '^(TestWindowsClaudeAgentStateFixture|TestWindowsCursorAgentStateFixture|TestWindowsAgentStateCleanupEndToEndUnaudited|TestWindowsRecordedCWDVolumeAmbiguity)$'
       - name: Test PowerShell native installer
@@ -103,12 +105,14 @@ jobs:
         run: go test -race -count=1 -cover ./test -run '^(TestCLIContractInvalidFlag|TestCLIContractCleanHelpMatchesPolicyVocabulary)$'
       - name: Test platform-safe command and cleanup identity behavior
         run: |
-          go test -race -count=1 -cover ./internal/scancache -run '^TestWindowsCleanupPathIdentityRejectsReparsePoint$'
+          $PSNativeCommandUseErrorActionPreference = $true
+          go test -race -count=1 -cover ./internal/pathidentity -run '^TestWindowsCleanupPathIdentityRejectsReparsePoint$'
           go test -race -count=1 -cover ./cmd -run '^(TestCleanCmd_NegativeAge|TestCleanCmd_GuideNoGuideErrors|TestParseAge|TestCleanCmd_InvalidSelector|TestParseCleanSelectorsTrimAndDeduplicate)$'
       - name: Test effective GOCACHE cleanup safety
         run: go test -race -count=1 -cover ./internal/cleaner -run '^TestIsSafeTarget_GoBuildCacheUnderHome$'
       - name: Test HOME hermeticity under isolated profile
         run: |
+          $PSNativeCommandUseErrorActionPreference = $true
           go test -race -count=1 -cover ./internal/testutil -run '^(TestSetHomeRedirectsUserHomeDir|TestSetHomeRedirectsUserCacheDir|TestSetHomePreservesVolumeShape|TestSetHomeClearsGOCACHE|TestSetHomeDisablesGOENV|TestGoBuildCacheMatchesUserCacheDir)$'
           go test -race -count=1 -cover ./cmd -run '^TestAgentStateEntryFingerprintTracksEntrySet$'
           go test -race -count=1 -cover ./internal/scanner -run '^(TestScan_Default|TestNormalizeRoots_DefaultHome)$'

@@ -55,8 +55,8 @@ Invoke-WebRequest `
 The installer:
 - Downloads the release archive and verifies its SHA-256 checksum against
   `checksums.txt`
-- Stages the download in a temporary directory, then replaces the existing
-  binary atomically
+- Downloads and extracts in a temporary directory, refuses replacement if the
+  existing binary is locked, then overwrites it with `Copy-Item -Force`
 - Preserves an existing installation if checksum verification fails or if the
   binary is locked (in use)
 - Defaults to `$env:LOCALAPPDATA\Programs\aibris` (no admin required)
@@ -174,7 +174,8 @@ aibris recognizes `~` and the Unix-style `~/...` form itself. It does not
 recognize `~\...` as a portable `--root` form, so PowerShell examples use the
 expanded `$env:USERPROFILE\...` absolute path. A root must exist, be a
 directory, resolve inside the current user home, and not merely share its
-string prefix.
+string prefix. The only exception is the resolved system temp directory passed
+explicitly as `--root`; default roots never include it.
 
 WSL is a separate Unix environment. When installing and running aibris inside
 WSL, use the Unix/Linux archive or `install.sh`, Linux home paths, and the Unix
