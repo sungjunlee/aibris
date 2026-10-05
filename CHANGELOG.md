@@ -2,7 +2,17 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-06
+
 ### Added
+
+- A single deletion safety gate (`internal/safedelete`), the only code allowed
+  to call `os.RemoveAll`. Every removal, cleanup command, and `git worktree
+  remove` refuses paths outside `$HOME`, protected locations and their
+  ancestors (user content folders, `~/Library`, credentials, shell config,
+  tool homes, agent stores and worktree containers, relocated `CODEX_HOME` /
+  `AIBRIS_CODEX_HOMES` / `CLAUDE_CONFIG_DIR` homes), primary Git
+  repositories, and Git metadata. An architecture test enforces it (#572).
 
 - Grok CLI session stores (`~/.grok/sessions/<url-encoded cwd>/`) as
   `agent-state` with tool `grok`. An entry is orphaned only when its encoded
@@ -11,19 +21,38 @@
   unavailable volume leaves it undetermined. Cleanup keeps the usual
   `--agent-state-grace` floor and pre-deletion revalidation.
 - The `npx` package cache (`<npm cache>/_npx`) as a rebuildable build cache.
+- Private vulnerability reporting, with response targets in `SECURITY.md`.
 
 ### Changed
 
+- Cleanup commands (`go clean`, `npm cache clean`, `uv cache clean`,
+  `brew cleanup`) run with their cache location pinned to the scanned path
+  (#572).
+- Agent-state cleanup re-checks in-store activity against
+  `--agent-state-grace` immediately before removal, so a session that
+  resumes while the user confirms is kept (#578).
+- Guided worktree review gathers Git evidence once and concurrently; with 12
+  worktrees `clean --dry-run --guide` went from 13-19s to 3-9s (#573).
+- Scan progress goes to stderr and prints only provider failures when stderr
+  is not a terminal (#577).
+- The scan summary shows each figure once in one aligned column: `found`,
+  `reclaimable` (default clean estimate), `strippable`, `held back`, and
+  `volume`; `next` lists each command with its size (#579).
+- README leads with what aibris does; install trust and artifact
+  verification moved to `docs/INSTALL.md`; `AGENTS.md` is in English with a
+  product direction and `CLAUDE.md` links to it (#575).
 - Build and Python caches come from one catalog that follows each tool's
   platform defaults. `UV_CACHE_DIR` is honored when the directory carries
   uv's `CACHEDIR.TAG`; other override variables are not, because an
-  unmarked override cannot be told apart from an ordinary directory.
+  unmarked override cannot be told apart from an ordinary directory (#576).
 
 ### Fixed
 
 - The pip cache is found at `~/Library/Caches/pip` on macOS (falling back to
   the XDG location) and `%LOCALAPPDATA%\pip\Cache` on Windows instead of
-  always `~/.cache/pip`.
+  always `~/.cache/pip` (#576).
+- `clean --age` help states that guided worktree review defaults to 3d
+  (#577).
 
 ## [0.12.3] - 2026-10-05
 
