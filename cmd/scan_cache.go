@@ -176,7 +176,7 @@ func (s lastScanSession) liveScan(ctx context.Context) (*types.ScanResult, scanS
 
 func (s lastScanSession) runLive(ctx context.Context) (*types.ScanResult, error) {
 	if s.progress {
-		progress := newScanProgressPrinter(os.Stdout)
+		progress := newScanProgressPrinter(os.Stderr)
 		result, err := scanner.ScanWithOptions(ctx, types.ScanOptions{
 			Roots:         s.roots,
 			ExplicitRoots: s.explicit,

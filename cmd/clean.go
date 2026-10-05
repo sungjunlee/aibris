@@ -70,7 +70,7 @@ without deleting the unit, its branch, or any uncommitted work.`,
 }
 
 func init() {
-	cleanCmd.Flags().StringVarP(&cleanAge, "age", "a", "7d", "Minimum idle age (7d, 2w, 1mo, 1y, 24h)")
+	cleanCmd.Flags().StringVarP(&cleanAge, "age", "a", "7d", "Minimum idle age (7d, 2w, 1mo, 1y, 24h); guided worktree review defaults to 3d")
 	cleanCmd.Flags().StringVarP(
 		&cleanCategory,
 		"category",
