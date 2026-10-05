@@ -52,10 +52,11 @@ var protected = []string{
 	".config", ".local", ".local/bin", ".local/share", ".local/state",
 	// Tool and language homes. Their caches are targets, the homes are not.
 	".cache", ".npm", ".gradle", ".cargo", ".rustup", "go", ".pub-cache",
-	".codex", ".claude", ".cursor", ".codeium", ".gemini", ".vscode",
+	".codex", ".claude", ".cursor", ".codeium", ".gemini", ".grok", ".vscode",
 	// Agent stores and worktree containers: their entries are targets, the
 	// store or container itself never is.
 	".codex/worktrees", ".codex/sessions", ".claude/projects", ".cursor/projects",
+	".grok/sessions",
 	".relay", ".relay/worktrees", ".gstack", ".gstack/worktrees",
 	".config/superpowers", ".config/superpowers/worktrees",
 }

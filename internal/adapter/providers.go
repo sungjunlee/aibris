@@ -23,6 +23,7 @@ var defaultProviders = []DebrisProvider{
 	&BuildCacheAdapter{},
 	&PipCacheAdapter{},
 	&CursorAdapter{},
+	&GrokSessionsAdapter{},
 	&ClaudeProjectAdapter{},
 	&AILogsAdapter{},
 	&WindsurfAdapter{},
@@ -57,6 +58,7 @@ func AgentStateStoreRoots() ([]string, error) {
 	return []string{
 		filepath.Join(home, ".claude", "projects"),
 		filepath.Join(home, ".cursor", "projects"),
+		filepath.Join(home, ".grok", "sessions"),
 	}, nil
 }
 

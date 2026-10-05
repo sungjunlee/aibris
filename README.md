@@ -64,7 +64,7 @@ used, or with commits no branch keeps), and you toggle what to remove.
 | Category | Examples | Cleaned by default |
 | --- | --- | --- |
 | AI worktrees | Codex, relay, gstack, and superpowers worktree containers, plus `$HOME` conventions such as `.tool/worktrees` | Orphaned ones; guided review recommends others from Git evidence |
-| Agent state | Claude Code and Cursor project stores | Only when proven orphaned and idle for 24h |
+| Agent state | Claude Code and Cursor project stores, Grok CLI session stores | Only when proven orphaned and idle for 24h |
 | AI logs | Codex, Claude Code, and Windsurf logs | Only with `--risky` |
 | Dependencies | project `node_modules` | Older than 7 days |
 | Build caches | Go, npm and npx, Gradle, Cargo, Xcode, Homebrew, CocoaPods | Older than 7 days, any age when the home volume is over 95% full |

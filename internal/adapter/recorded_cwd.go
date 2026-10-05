@@ -234,6 +234,7 @@ func RecordedCWDOwners(ctx context.Context) (map[string]types.Tool, error) {
 	}{
 		{filepath.Join(".claude", "projects"), types.ToolClaude, recordedCWDsFromClaudeProject},
 		{filepath.Join(".cursor", "projects"), types.ToolCursor, recordedCWDFromCursorProject},
+		{filepath.Join(".grok", "sessions"), types.ToolGrok, recordedCWDFromGrokSessions},
 	}
 	owners := make(map[string]types.Tool)
 	for _, store := range stores {

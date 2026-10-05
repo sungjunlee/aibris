@@ -49,7 +49,7 @@ snapshot rather than an age-based deletion path.
 | `node_modules` | yes | medium | Project dependency folders under `$HOME` scan roots. They can be recreated with package managers. |
 | `build-cache` | yes | medium | Go, Xcode, Gradle, npm (`_cacache` and the `npx` cache), Cargo, Homebrew, CocoaPods, and Dart analysis caches. They are rebuildable but may slow the next build. |
 | `other-cache` | yes | low | pip and uv package caches. |
-| `agent-state` | orphaned only | low | Claude and Cursor project-store entries are classified from recorded working directories. The classification is proof-based; `--agent-state-grace` gates default selection of proven orphaned entries, while `live` and `undetermined` entries are always protected. |
+| `agent-state` | orphaned only | low | Claude and Cursor project-store entries and Grok session-store entries are classified from recorded working directories. The classification is proof-based; `--agent-state-grace` gates default selection of proven orphaned entries, while `live` and `undetermined` entries are always protected. |
 | `ai-logs` | no | high | AI tool logs, archived sessions, file history, and similar records. Requires `--risky`. |
 
 Unknown or future categories should stay risky until they have explicit safety

@@ -4,6 +4,12 @@
 
 ### Added
 
+- Grok CLI session stores (`~/.grok/sessions/<url-encoded cwd>/`) as
+  `agent-state` with tool `grok`. An entry is orphaned only when its encoded
+  name and every session's recorded `working_directory` agree and that
+  directory is proven absent; disagreement, missing session context, or an
+  unavailable volume leaves it undetermined. Cleanup keeps the usual
+  `--agent-state-grace` floor and pre-deletion revalidation.
 - The `npx` package cache (`<npm cache>/_npx`) as a rebuildable build cache.
 
 ### Changed
