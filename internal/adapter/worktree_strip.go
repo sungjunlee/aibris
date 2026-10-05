@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -106,7 +107,7 @@ func (a *WorktreeAdapter) strippableSubtrees(ctx context.Context, checkoutPath s
 	}
 	var paths []string
 	for _, candidate := range WorktreeStripCandidates(ctx, checkoutPath) {
-		if stripMarkerDirExists(candidate) {
+		if stripCandidateIsRealDir(checkoutPath, candidate) {
 			paths = append(paths, candidate)
 		}
 	}
@@ -127,6 +128,25 @@ func (a *WorktreeAdapter) strippableSubtrees(ctx context.Context, checkoutPath s
 func stripMarkerDirExists(path string) bool {
 	info, err := os.Lstat(path)
 	return err == nil && info.IsDir()
+}
+
+// stripCandidateIsRealDir reports whether every component from the checkout
+// down to the candidate is a real directory. Lstat alone only checks the final
+// component; a symlinked android/app would otherwise put an external
+// android/app/build into the inventory.
+func stripCandidateIsRealDir(checkoutPath, candidate string) bool {
+	rel, err := filepath.Rel(checkoutPath, candidate)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		return false
+	}
+	dir := checkoutPath
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		dir = filepath.Join(dir, part)
+		if !stripMarkerDirExists(dir) {
+			return false
+		}
+	}
+	return true
 }
 
 func stripMarkerFileExists(path string) bool {
