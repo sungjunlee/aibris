@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
+	"github.com/sungjunlee/aibris/internal/safedelete"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -63,6 +64,12 @@ func executeWithContextOutput(
 		if !IsSafeTarget(home, w) {
 			errs = append(errs, fmt.Errorf("unsafe path %q rejected", w.Path))
 			fmt.Fprintf(errorOutput, "error: unsafe path %q rejected\n", w.Path)
+			continue
+		}
+		// Cleanup commands act on w.Path too, so both kinds pass the gate.
+		if err := safedelete.Check(home, w.Path); err != nil {
+			errs = append(errs, err)
+			fmt.Fprintf(errorOutput, "error: %v\n", err)
 			continue
 		}
 		if w.Category == types.CategoryAgentState {
@@ -147,7 +154,7 @@ func executeWithContextOutput(
 			})
 		}
 		freed, residual, err := observeReclamation(ctx, w.Path, func() error {
-			return os.RemoveAll(w.Path)
+			return safedelete.RemoveAll(home, w.Path)
 		})
 		total += freed
 		if observer != nil {
