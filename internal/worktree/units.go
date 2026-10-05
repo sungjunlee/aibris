@@ -150,6 +150,9 @@ func BuildWorktreeCleanupUnits(ctx context.Context, items []types.DebrisInfo) ([
 func CountWorktreeCleanupUnits(ctx context.Context, items []types.DebrisInfo) (int, int64, error) {
 	grouped := make(map[string][]types.DebrisInfo)
 	for _, item := range items {
+		if err := ctx.Err(); err != nil {
+			return 0, 0, err
+		}
 		if item.Category != types.CategoryWorktree {
 			continue
 		}
