@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/sungjunlee/aibris/internal/cleancommand"
 	"github.com/sungjunlee/aibris/internal/cleaner"
-	"github.com/sungjunlee/aibris/internal/cleanjson"
 	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -55,38 +54,9 @@ func runCleanCommand(cmd *cobra.Command) {
 		panic("unknown clean command route: " + string(route))
 	}
 
-	age, err := parseAge(cleanAge)
+	selectors, err := parseCleanSelectors(cmd)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "invalid age '%s': expected duration like 7d, 2w, 1mo, 1y, or 24h\n", cleanAge)
-		os.Exit(1)
-	}
-
-	if age <= 0 {
-		fmt.Fprintf(os.Stderr, "error: --age must be positive (got %s)\n", cleanAge)
-		os.Exit(1)
-	}
-	agentStateGrace, err := parseAge(cleanAgentStateGrace)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "invalid agent-state grace '%s': expected duration like 24h, 2d, 1w, or 0\n", cleanAgentStateGrace)
-		os.Exit(1)
-	}
-	if agentStateGrace < 0 {
-		fmt.Fprintf(os.Stderr, "error: --agent-state-grace must be non-negative (got %s)\n", cleanAgentStateGrace)
-		os.Exit(1)
-	}
-	guidedAge := guidedCleanAge(cmd, age)
-	if cleanGuide {
-		age = applyGuidedCleanDefaults(cmd, age)
-		guidedAge = age
-	}
-	categories, err := parseCleanCategories(cleanCategory)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
-	tools, err := parseCleanTools(cleanTools)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
@@ -121,7 +91,7 @@ func runCleanCommand(cmd *cobra.Command) {
 		usefulGuidedCodexReview = hasGuidedCodexCleanupPressure(ctx, result.Worktrees)
 	}
 	if cleanGuide || usefulGuidedCodexReview {
-		guidedState, err = buildGuidedCleanState(ctx, result, source, guidedAge, "")
+		guidedState, err = buildGuidedCleanState(ctx, result, source, selectors.guidedAge, "")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: preparing guided cleanup: %v\n", err)
 			os.Exit(1)
@@ -132,7 +102,7 @@ func runCleanCommand(cmd *cobra.Command) {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
-	if experience == cleanExperienceClassic && age < time.Hour {
+	if experience == cleanExperienceClassic && selectors.age < time.Hour {
 		fmt.Fprintf(
 			os.Stderr,
 			"Warning: --age %s is a very low classic minimum-age threshold; it broadens age-eligible items within the selected category/tool scope, but risky-category, active-worktree, agent-state, overlap, and Git safety protections still apply.\n",
@@ -140,18 +110,7 @@ func runCleanCommand(cmd *cobra.Command) {
 		)
 	}
 
-	opts := types.PruneOptions{
-		Age:                    age,
-		Categories:             categories,
-		Tools:                  tools,
-		DryRun:                 cleanDryRun,
-		Interactive:            cleanInteractive,
-		Risky:                  cleanRisky,
-		Force:                  cleanForce,
-		IncludeActiveWorktrees: cleanIncludeActiveWorktrees,
-		AgentStateMinIdleAge:   agentStateGrace,
-	}
-	opts.RelaxCacheAge, opts.PressureDevice = shouldRelaxCacheAge(cleanPressure)
+	opts := cleanPruneOptions(selectors, cleanInteractive)
 
 	// The route is only settled after the scan. A receipt file requested on
 	// a run that resolved to classic fails here, before any mutation.
@@ -176,41 +135,14 @@ func runCleanCommand(cmd *cobra.Command) {
 		opts.IncludeActiveWorktrees = false
 	}
 
-	targets := cleaner.Filter(result.Worktrees, opts)
-	targets, physicalOwnerEligibility := cleaner.ApplyPhysicalOwnerSafety(
-		result.Worktrees,
-		targets,
-		opts.IncludeActiveWorktrees,
-	)
-	physicalOwnerProtections := cleanAuditReasonsFromEligibility(physicalOwnerEligibility)
-	targets, protectPathProtections := applyProtectPathProtections(result.Worktrees, targets, protectMatcher)
-	targets = cleaner.FilterExistingTargets(targets)
-	targets, scanEvidenceProtections := filterTargetsWithoutScanEvidence(targets)
-	targets = cleaner.NormalizeTargets(targets)
-	targets, gitSafetyProtections := filterGitUnsafeActiveWorktreeTargets(ctx, targets)
-	classicProtections := mergeCleanAuditProtections(
-		physicalOwnerProtections,
-		protectPathProtections,
-		scanEvidenceProtections,
-		gitSafetyProtections,
-	)
-	logicalInputs := cleanjson.LogicalInputsForAuditWithPolicy(
-		result.Worktrees,
-		opts,
-		classicProtections,
-	)
-	overlapSelection, err := applyCleanupOverlapSafetyWithRows(
-		ctx,
-		overlapSafety,
-		targets,
-		logicalInputs,
-	)
+	selection, err := selectCleanTargets(ctx, result.Worktrees, opts, protectMatcher, overlapSafety)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: preparing overlap safety: %v\n", err)
 		os.Exit(1)
 	}
+	overlapSelection := selection.overlap
 	printOverlapSafetyRefusals(overlapSelection)
-	targets = overlapSelection.Targets
+	targets := selection.targets()
 
 	if experience == cleanExperienceGuided {
 		runUnifiedGuidedClean(
@@ -220,28 +152,22 @@ func runCleanCommand(cmd *cobra.Command) {
 			opts,
 			guidedStatePtr,
 			targets,
-			classicProtections,
+			selection.protections,
 			overlapSafety,
 			os.Stdin,
 			os.Stdout,
 		)
 		return
 	}
-	auditTargets := targets
-	auditProtections := mergeCleanAuditProtections(
-		classicProtections,
-		overlapSelection.Protections,
-	)
-	auditComponents := overlapSelection.Components
 	audit := buildPhysicalCleanAuditWithLogicalInputs(
 		result.Worktrees,
-		auditComponents,
-		auditTargets,
+		overlapSelection.Components,
+		targets,
 		opts,
 		len(scanner.DefaultScanner.Providers),
 		source,
-		auditProtections,
-		logicalInputs,
+		selection.auditProtections(),
+		selection.logicalInputs,
 	)
 	printCleanAudit(audit, opts)
 	printCleanCandidateSummary(targets)

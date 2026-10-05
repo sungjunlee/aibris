@@ -13,40 +13,19 @@ import (
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/cleanjson"
 	"github.com/sungjunlee/aibris/internal/scanner"
-	"github.com/sungjunlee/aibris/internal/types"
 )
 
 func runCleanJSON(cmd *cobra.Command) {
 	if !cleanDryRun && cleanGuide {
 		failCleanJSON("non-dry-run --json cannot use --guide")
 	}
-	age, err := parseAge(cleanAge)
+	selectors, err := parseCleanSelectors(cmd)
 	if err != nil {
-		failCleanJSON("invalid --age value")
-	}
-	if age <= 0 {
-		failCleanJSON("--age must be positive")
-	}
-	agentStateGrace, err := parseAge(cleanAgentStateGrace)
-	if err != nil {
-		failCleanJSON("invalid --agent-state-grace value")
-	}
-	if agentStateGrace < 0 {
-		failCleanJSON("--agent-state-grace must be non-negative")
-	}
-
-	guidedAge := guidedCleanAge(cmd, age)
-	if cleanGuide {
-		age = applyGuidedCleanDefaults(cmd, age)
-		guidedAge = age
-	}
-	categories, err := parseCleanCategories(cleanCategory)
-	if err != nil {
-		failCleanJSON("invalid --category selector")
-	}
-	tools, err := parseCleanTools(cleanTools)
-	if err != nil {
-		failCleanJSON("invalid --tool selector")
+		var inputErr cleanInputError
+		if errors.As(err, &inputErr) {
+			failCleanJSON(inputErr.json)
+		}
+		failCleanJSON("invalid clean flags")
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -79,7 +58,7 @@ func runCleanJSON(cmd *cobra.Command) {
 			usefulGuidedCodexReview = hasGuidedCodexCleanupPressure(ctx, result.Worktrees)
 		}
 		if cleanGuide || usefulGuidedCodexReview {
-			guidedState, err = buildGuidedCleanState(ctx, result, source, guidedAge, "")
+			guidedState, err = buildGuidedCleanState(ctx, result, source, selectors.guidedAge, "")
 			if err != nil {
 				failCleanJSON("guided cleanup planning failed")
 			}
@@ -90,17 +69,7 @@ func runCleanJSON(cmd *cobra.Command) {
 		}
 	}
 
-	opts := types.PruneOptions{
-		Age:                    age,
-		Categories:             categories,
-		Tools:                  tools,
-		DryRun:                 cleanDryRun,
-		Risky:                  cleanRisky,
-		Force:                  cleanForce,
-		IncludeActiveWorktrees: cleanIncludeActiveWorktrees,
-		AgentStateMinIdleAge:   agentStateGrace,
-	}
-	opts.RelaxCacheAge, opts.PressureDevice = shouldRelaxCacheAge(cleanPressure)
+	opts := cleanPruneOptions(selectors, false)
 	var guidedStatePtr *guidedCleanState
 	if experience == cleanExperienceGuided {
 		guidedState.Reason = reason
@@ -110,40 +79,14 @@ func runCleanJSON(cmd *cobra.Command) {
 		opts.IncludeActiveWorktrees = false
 	}
 
-	targets := cleaner.Filter(result.Worktrees, opts)
-	targets, physicalOwnerEligibility := cleaner.ApplyPhysicalOwnerSafety(
-		result.Worktrees,
-		targets,
-		opts.IncludeActiveWorktrees,
-	)
-	physicalOwnerProtections := cleanAuditReasonsFromEligibility(physicalOwnerEligibility)
-	targets, protectPathProtections := applyProtectPathProtections(result.Worktrees, targets, protectMatcher)
-	targets = cleaner.FilterExistingTargets(targets)
-	targets, scanEvidenceProtections := filterTargetsWithoutScanEvidence(targets)
-	targets = cleaner.NormalizeTargets(targets)
-	targets, gitSafetyProtections := filterGitUnsafeActiveWorktreeTargets(ctx, targets)
-	classicProtections := mergeCleanAuditProtections(
-		physicalOwnerProtections,
-		protectPathProtections,
-		scanEvidenceProtections,
-		gitSafetyProtections,
-	)
-	logicalInputs := cleanjson.LogicalInputsForAuditWithPolicy(
-		result.Worktrees,
-		opts,
-		classicProtections,
-	)
-	overlapSelection, err := applyCleanupOverlapSafetyWithRows(
-		ctx,
-		overlapSafety,
-		targets,
-		logicalInputs,
-	)
+	selection, err := selectCleanTargets(ctx, result.Worktrees, opts, protectMatcher, overlapSafety)
 	if err != nil {
 		failCleanJSON("cleanup overlap safety preparation failed")
 	}
+	overlapSelection := selection.overlap
+	logicalInputs := selection.logicalInputs
 
-	auditProtections := mergeCleanAuditProtections(classicProtections, overlapSelection.Protections)
+	auditProtections := selection.auditProtections()
 	audit := buildPhysicalCleanAuditWithLogicalInputs(
 		result.Worktrees,
 		overlapSelection.Components,
