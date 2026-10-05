@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -26,10 +27,12 @@ var pythonProjectMarkers = []string{
 	"uv.lock",
 }
 
-// worktreeStripCandidates returns regenerable subtree candidates at fixed
+// WorktreeStripCandidates returns regenerable subtree candidates at fixed
 // known-relative positions inside the checkout rooted at checkoutPath, gated
 // by detected project-type markers. Candidates may not exist; callers filter.
-func worktreeStripCandidates(ctx context.Context, checkoutPath string) []string {
+// Strip execution re-derives this list at the mutation boundary, so a cached
+// inventory can never authorize a path these rules no longer produce.
+func WorktreeStripCandidates(ctx context.Context, checkoutPath string) []string {
 	if err := ctx.Err(); err != nil {
 		return nil
 	}
@@ -103,8 +106,8 @@ func (a *WorktreeAdapter) strippableSubtrees(ctx context.Context, checkoutPath s
 		return 0, nil
 	}
 	var paths []string
-	for _, candidate := range worktreeStripCandidates(ctx, checkoutPath) {
-		if stripMarkerDirExists(candidate) {
+	for _, candidate := range WorktreeStripCandidates(ctx, checkoutPath) {
+		if stripCandidateIsRealDir(checkoutPath, candidate) {
 			paths = append(paths, candidate)
 		}
 	}
@@ -119,9 +122,31 @@ func (a *WorktreeAdapter) strippableSubtrees(ctx context.Context, checkoutPath s
 	return total, paths
 }
 
+// stripMarkerDirExists uses Lstat: a symlinked marker or candidate directory
+// would let a strip of <checkout>/android/build remove files outside the
+// checkout, so symlinks are never inventoried.
 func stripMarkerDirExists(path string) bool {
-	info, err := os.Stat(path)
+	info, err := os.Lstat(path)
 	return err == nil && info.IsDir()
+}
+
+// stripCandidateIsRealDir reports whether every component from the checkout
+// down to the candidate is a real directory. Lstat alone only checks the final
+// component; a symlinked android/app would otherwise put an external
+// android/app/build into the inventory.
+func stripCandidateIsRealDir(checkoutPath, candidate string) bool {
+	rel, err := filepath.Rel(checkoutPath, candidate)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		return false
+	}
+	dir := checkoutPath
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		dir = filepath.Join(dir, part)
+		if !stripMarkerDirExists(dir) {
+			return false
+		}
+	}
+	return true
 }
 
 func stripMarkerFileExists(path string) bool {

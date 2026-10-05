@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/sungjunlee/aibris/internal/testutil"
@@ -144,6 +145,45 @@ func TestWorktreeAdapter_StripInventoryRequiresMarkersAndFixedPositions(t *testi
 	if results[0].StrippableBytes != 0 || len(results[0].StrippablePaths) != 0 {
 		t.Fatalf("unexpected strippable inventory: %d %v",
 			results[0].StrippableBytes, results[0].StrippablePaths)
+	}
+}
+
+func TestWorktreeAdapter_StripInventoryDoesNotFollowSymlinks(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	checkout := filepath.Join(home, ".codex", "worktrees", "links", "proj")
+	createWorktreeGit(t, checkout, filepath.Join(home, "main-repo"), "links")
+	writeStripFixtureFile(t, checkout, "package.json", 10)
+	outsideAndroid := filepath.Join(home, "shared-android")
+	writeStripFixtureFile(t, outsideAndroid, "build/out.bin", 4096)
+	outsideModules := filepath.Join(home, "shared-node-modules")
+	writeStripFixtureFile(t, outsideModules, "dep/index.js", 4096)
+	if err := os.Symlink(outsideAndroid, filepath.Join(checkout, "android")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	if err := os.Symlink(outsideModules, filepath.Join(checkout, "node_modules")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	// A real ios/ with a symlinked intermediate: ios/Pods is fine to inventory
+	// only if no component on the way is a symlink.
+	outsideIOS := filepath.Join(home, "shared-ios-build")
+	writeStripFixtureFile(t, outsideIOS, "out.bin", 4096)
+	writeStripFixtureFile(t, checkout, "ios/Pods/pod.txt", 10)
+	if err := os.Symlink(outsideIOS, filepath.Join(checkout, "ios", "build")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	results, err := (&WorktreeAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	got := results[0].StrippablePaths
+	want := string(filepath.Separator) + filepath.Join("proj", "ios", "Pods")
+	if len(got) != 1 || !strings.HasSuffix(got[0], want) {
+		t.Fatalf("StrippablePaths = %v; want only the real ios/Pods", got)
 	}
 }
 

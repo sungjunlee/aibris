@@ -31,7 +31,10 @@ func newStripFixtureWorktree(t *testing.T, home, branch, ignore string) (reposit
 	worktree = filepath.Join(home, "worktrees", branch)
 	runGitFixture(t, repository, "worktree", "add", "-b", branch, worktree, "HEAD")
 	writeGitFixtureFile(t, worktree, ".gitignore", ignore)
-	runGitFixture(t, worktree, "add", ".gitignore")
+	// The manifest is what makes node_modules an inventoried strip position;
+	// strip re-derives that inventory before it mutates anything.
+	writeGitFixtureFile(t, worktree, "package.json", "{\"name\":\"fixture\"}\n")
+	runGitFixture(t, worktree, "add", ".gitignore", "package.json")
 	runGitFixture(t, worktree, "commit", "-m", "ignore regenerable subtrees")
 	runGitFixture(t, worktree, "push", "origin", branch)
 	return repository, worktree
@@ -570,6 +573,7 @@ func newStripNoEvidenceUnit(t *testing.T, home string) string {
 	unit := filepath.Join(home, ".codex", "worktrees", "noevidence")
 	writeGitFixtureFile(t, unit, ".git",
 		"gitdir: "+filepath.Join(home, "missing-git-dir", "worktrees", "noevidence")+"\n")
+	writeGitFixtureFile(t, unit, "package.json", "{\"name\":\"noevidence\"}\n")
 	writeGitFixtureFile(t, unit, "node_modules/dep/index.js", "untracked\n")
 	return unit
 }
@@ -704,5 +708,92 @@ func TestStripExecutionRefusesUnitHoldingWorkingDirectory(t *testing.T) {
 	}
 	if _, err := os.Stat(subtree); err != nil {
 		t.Fatalf("subtree removed while the working directory was inside the unit: %v", err)
+	}
+}
+
+// Strip trusts nothing from the (possibly cached) inventory: each subtree is
+// re-authorized against the unit, the live inventory rules, and the
+// filesystem right before removal. Every case below must leave the would-be
+// victim untouched and itemize a refusal.
+func TestStripRefusesSubtreesTheUnitDoesNotOwn(t *testing.T) {
+	tests := []struct {
+		name   string
+		setup  func(t *testing.T, home, worktree string) (subtree, victim string)
+		reason string
+	}{
+		{
+			name: "subtree in a sibling linked worktree",
+			setup: func(t *testing.T, home, worktree string) (string, string) {
+				repository := filepath.Join(home, "main-repo")
+				sibling := filepath.Join(home, "worktrees", "sibling")
+				runGitFixture(t, repository, "worktree", "add", "-b", "sibling", sibling, "feature")
+				writeGitFixtureFile(t, sibling, "node_modules/dep/index.js", "sibling\n")
+				victim := filepath.Join(sibling, "node_modules", "dep", "index.js")
+				return filepath.Join(sibling, "node_modules"), victim
+			},
+			reason: "subtree is outside the unit",
+		},
+		{
+			name: "ignored directory that is not a regenerable position",
+			setup: func(t *testing.T, home, worktree string) (string, string) {
+				writeGitFixtureFile(t, worktree, ".gitignore", stripFixtureIgnore+"notes/\n")
+				runGitFixture(t, worktree, "commit", "-am", "ignore notes")
+				writeGitFixtureFile(t, worktree, "notes/draft.md", "keep me\n")
+				return filepath.Join(worktree, "notes"), filepath.Join(worktree, "notes", "draft.md")
+			},
+			reason: "subtree is no longer a regenerable position",
+		},
+		{
+			name: "symlinked ancestor redirects outside the unit",
+			setup: func(t *testing.T, home, worktree string) (string, string) {
+				outside := filepath.Join(home, "outside-android")
+				writeGitFixtureFile(t, outside, "build/precious.txt", "keep me\n")
+				if err := os.Symlink(outside, filepath.Join(worktree, "android")); err != nil {
+					t.Skipf("symlink unavailable: %v", err)
+				}
+				return filepath.Join(worktree, "android", "build"), filepath.Join(outside, "build", "precious.txt")
+			},
+			// Inventory rules never follow symlinks, so the live re-derivation
+			// refuses first; the symlink walk is the second layer.
+			reason: "subtree is no longer a regenerable position",
+		},
+		{
+			name: "subtree itself is a symlink",
+			setup: func(t *testing.T, home, worktree string) (string, string) {
+				outside := filepath.Join(home, "outside-modules")
+				writeGitFixtureFile(t, outside, "precious.txt", "keep me\n")
+				if err := os.Symlink(outside, filepath.Join(worktree, "node_modules")); err != nil {
+					t.Skipf("symlink unavailable: %v", err)
+				}
+				return filepath.Join(worktree, "node_modules"), filepath.Join(outside, "precious.txt")
+			},
+			reason: "symlink on the path to the subtree",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			testutil.SetHome(t, home)
+			_, worktree := newStripFixtureWorktree(t, home, "feature", stripFixtureIgnore)
+			subtree, victim := tt.setup(t, home, worktree)
+
+			outcomes, err := worktreepkg.ExecuteStripTargets(context.Background(),
+				[]types.DebrisInfo{stripFixtureTarget(worktree, subtree)}, t.TempDir())
+			if err != nil {
+				t.Fatalf("strip returned error: %v", err)
+			}
+			if len(outcomes) != 1 || len(outcomes[0].Subtrees) != 1 {
+				t.Fatalf("outcomes = %+v; want one unit with one subtree", outcomes)
+			}
+			if got := outcomes[0].Subtrees[0].Skipped; got != tt.reason {
+				t.Errorf("skip reason = %q; want %q", got, tt.reason)
+			}
+			if outcomes[0].Freed != 0 {
+				t.Errorf("Freed = %d; want 0", outcomes[0].Freed)
+			}
+			if _, err := os.Stat(victim); err != nil {
+				t.Errorf("victim %s was touched: %v", victim, err)
+			}
+		})
 	}
 }
