@@ -1,137 +1,219 @@
 # AGENTS.md
 
-`aibris` (AI + debris). AI 코딩 도구들의 작업 잔해(worktree, node_modules, build cache)를
-탐지+정리하는 Go CLI.
+Shared guidance for any AI agent (Claude Code, Codex, and others) working on
+this repository. `CLAUDE.md` is a symlink to this file.
 
-## AI-guided 정리 워크플로우 (사용자 요청 시)
+## Project
 
-사용자가 "디스크 정리", "오래된 워크트리 삭제" 등을 요청하면
-`skills/aibris/SKILL.md`의 워크플로우에 따라 진행한다:
+aibris (AI + debris) is a Go CLI that finds and removes the disk debris AI
+coding agents leave under `$HOME`: Git worktrees, agent project stores, and
+agent logs, plus generic build debris (`node_modules`, build and package
+caches) so one scan shows the whole picture. It deletes files, so safety
+matters more than coverage or speed.
 
-```
-1. aibris scan --json  → 전체 현황 파악
-2. 항목별 분석 제시     (프로젝트/크기/경과시간)
-3. 질문으로 의도 구체화  (이거 지워도 되나요?)
-4. aibris clean --flag  → 적절한 옵션으로 실행
-```
+## Product direction
 
-CLI 자체는 dumb executor. Q&A와 판단은 AI 스킬이 담당한다.
+### What aibris should do
 
-## 동작 원리
+- Make cleanup boring and reviewable: `scan`, then `clean --dry-run`, then
+  `clean` with a confirmation. Every target shows its size, path, and reason;
+  everything kept shows why.
+- Delete only what it can justify from evidence: a worktree whose parent
+  repository is gone, an agent store whose recorded project directory is gone,
+  a cache that is rebuildable by definition.
+- Prefer fail-closed: when evidence is missing, unavailable, or ambiguous,
+  keep the item and say so.
+- Stay focused on what AI agents produce. New agent tools appear constantly;
+  covering their worktrees, stores, and logs is the core of the product.
+- Keep output dense and terminal-native, and keep `--json` stable for agents
+  that drive the CLI (see `skills/aibris/SKILL.md`).
 
-```
-사용자 입력 → cobra 커맨드 (cmd/) → scanner.Scan() → adapter 각각 스캔
-                                   → cleaner.Filter() + Execute()
-```
+### What aibris should not do
 
-각 `adapter`는 `DebrisProvider` 인터페이스를 구현한다. Worktree는 특정 도구별 adapter를
-계속 늘리기보다 bounded `$HOME` convention fallback과 finite exact container
-registry를 함께 사용하고 `.git` metadata로 검증한다.
+- Do not compete with general-purpose cleaners on generic caches. Cover them
+  for a complete picture, but do not add cache targets for their own sake.
+- Do not delete agent project stores without proof that the owning project is
+  gone. Logs and archived sessions are cleaned only behind `--risky`.
+  Protected retention stores are read-only.
+- Do not call GitHub or any network service to decide what is safe.
+- Do not add a flag, environment variable, or config key to resolve one edge
+  case. A new knob carries the same weight as a new setting: state the
+  fix-by-default alternative and why it fails before adding one.
+- Do not add background daemons, schedulers, or automatic cleanup.
 
-## 개발 규칙
+### Decision filter for new features
 
-**1. Adapter 추가시 꼭 지킬 것**
-- `internal/adapter/<name>.go` 에 `DebrisProvider` 구현
-- `Name()`은 kebab-case 단일 소문자 (e.g. `codex`, `claude`)
-- `Scan()`은 context 취소를 존중해야 함
-- 발견된 모든 경로의 크기를 `estimateDirSize()`로 계산 (WalkDir 기반)
-- 중첩 캐시 트리(build cache, pip/uv cache)와 agent-state project store는 트리 내부 최신 mtime을 `ModTime`으로 보고하며, 컨테이너 mtime만 활동 신호로 사용하지 않는다. 컨테이너 자체 mtime이 곧 활동인 adapter(`node_modules` 등)에는 적용되지 않는다
-- `ModTime`을 트리 내부 활동에서 유도하는 adapter는 `PathModTime`에 경로 자체의 stat mtime을 반드시 채운다 (비우면 cleanup preflight가 `ModTime`을 컨테이너 mtime으로 덮어써 활동 신호가 사라진다)
-- worktree 컨테이너처럼 프로젝트가 하위 디렉토리인 adapter는 `detectProjectName()`으로 추론 (숨김 디렉토리 제외)
-- recorded cwd 자체가 프로젝트를 가리키는 store adapter는 `projectNameFromRecordedCWD()`로 마지막 경로 조각을 사용 (파일시스템 조회 금지)
-- `internal/adapter/providers.go` 의 `providers` 목록에 등록
-- `Category()`가 `agent-state`인 adapter는 `AgentStateRevalidator`도 구현 (`agent-state` 분류는 recorded cwd 부재 증명 기반이고, `--age`는 적용되지 않으며, `--agent-state-grace` 최소 idle age는 기본 선택만 제한한다. 등록된 revalidator가 없으면 삭제 거부)
+1. Does it reclaim space that AI-agent work produces, or complete the picture
+   of one home directory?
+2. Is it safe by default, previewable with `--dry-run`, and explainable in one
+   terminal screen?
+3. Is the target rebuildable, or backed by evidence that its owner is gone?
+4. Can it be tested hermetically, without the maintainer's real home?
 
-**1-1. Worktree discovery 변경시 꼭 지킬 것**
-- known deep container는 finite exact registry로만 추가한다. 현재 registry는 `~/.codex/worktrees`(codex 컨테이너는 `$CODEX_HOME`, `$AIBRIS_CODEX_HOMES` home 기준), `~/.relay/worktrees`, `~/.gstack/worktrees`, `~/.config/superpowers/worktrees`
-- generic fallback은 `$HOME` 아래 `worktrees`, `worktree`, `worktree-*`, `worktrees-*`, `*-worktree`, `*-worktrees` 디렉토리를 찾고 `maxWorktreeContainerDepth=4`를 유지한다
-- 이미 발견한 valid linked member가 있으면 그 repo의 `.git/worktrees/*/gitdir`으로 scan root 안 sibling checkout을 추가한다. checkout `.git` pointer가 그 admin entry로 되돌아가고, primary checkout(`.git` 디렉터리), 없는/prunable 경로, root 밖, 이미 visit한 owner 소속은 건너뛴다. `$HOME` 전체 git 저장소 재귀는 하지 않는다
-- hidden owner 디렉토리(`.codex`, `.somename` 등)는 worktree source일 수 있으므로 일반적으로 숨김이라는 이유만으로 prune하지 않는다
-- 전체 `$HOME`이나 hidden owner를 무제한 재귀 탐색하지 않는다. hidden owner는 immediate convention child까지만 확인한다
-- 후보는 direct `<entry>/.git` 또는 nested `<entry>/<project>/.git` 파일이 있어야 한다. registered container owner는 `<owner>/<leaf>/<checkout>/.git` 두 단계까지 허용한다
-- member 탐색은 convention fallback에서 direct 또는 one-level nested까지만 허용한다. registered container만 two-level member를 본다. 전체 `$HOME` 재귀는 하지 않는다
-- outer `<entry>` 하나가 물리 mutation owner 하나다. valid/invalid marker가 섞이면 valid sibling을 내보내지 않고 owner 하나를 `plain-dir`로 보고한다. 빈 leftover member(엔트리 없음)는 invalid marker가 아니다. registered sidecar 이름은 finite exact registry이며 현재 `.orca-worktree-trash`만 해당한다. sidecar는 내용이 있어도 member 분류에서 건너뛴다
-- readable missing/empty/malformed/directory marker는 explicit `Reason`이 있는 review-only `plain-dir`; I/O 실패는 provider error/partial scan이다
-- `.git` 파일의 `gitdir:`를 읽어 `active`/`orphaned`를 판정한다. referenced gitdir가 없으면 `orphaned`
-- `Source`는 path-derived owner(`.codex`, `.somename`, `project-local`) 또는 registered `superpowers`로 채운다
-- `plain-dir`, empty, unknown worktree status는 age/`--risky`/`--include-active-worktrees`와 무관하게 절대 정리 후보가 아니다
-- `--protect-path`는 clean-only(repeatable)다. nested checkout이나 debris item의 자손은 그 outer owner를 delete/strip에서 보호하고, owner는 plan에 protected로 남는다. scan inventory와 `--exclude` discovery-hide matching은 바꾸지 않는다
-- explicit `--root`는 hard boundary다. `appendUncoveredCodexHomes`는 기본 `$HOME` 스캔에만 적용한다. 명시적 root가 Codex home을 포함하지 않으면 한 줄 diagnostic만 내고 범위를 넓히지 않는다. `--root`가 valid worktree outer owner이면 그 unit 하나를 발견한다
+If the answer is no or unclear, narrow the feature or decline it.
 
-**2. Prune 안전장치**
-- 기본 `--age`는 `7d`
-- `--dry-run` 없이 실행 시 confirm 요청
-- `--force`로만 confirm 생략 가능
-- `--interactive`는 항목별 y/N 확인
-- 절대 경로나 시스템 경로 삭제 금지
-- `--protect-path`는 nested checkout이 outer owner를 보호하는 clean-only pin이다. `--exclude`는 discovery-hide만 하고 ancestor-match하지 않는다
-
-**3. 코드 규칙**
-- 불필요한 추상화 금지. 인터페이스는 진짜 확장 지점에만
-- 에러 처리는 가능한 시나리오에만. "일어날 수 없는" 에러는 무시
-- 인접 코드 "개선" 금지. 시키지 않은 리팩터링 금지
-- 기존 스타일 유지. tab indentation, Go 표준 포맷
-- 새 패키지 추가시 `go mod tidy` 필수
-
-**4. 작업 순서**
-1. 무슨 일인지 명확히 파악
-2. 플랜을 1-2문장으로 말하고 확인
-3. 구현
-4. `go build ./...` 로 컴파일 확인
-5. `go vet ./...` 로 정적 분석
-
-## 구조
+## Repository map
 
 ```
-cmd/         → cobra commands (root, scan, clean) and CLI I/O
+main.go
+cmd/                  cobra commands (root, scan, clean), flags, terminal I/O
 internal/
-  adapter/   → DebrisProvider 인터페이스 + codex, claude 등 구현
-  scanner/   → Scan(): 전체 adapter 순회하며 수집
-  scancache/     → last-scan snapshot persistence and path identity
-  codexactivity/ → Codex session-activity index and cache
-  apfs/          → local APFS snapshot list/thin via tmutil
-  worktree/      → worktree units, policy, git evidence, activity enrichment, cleanup-safety inspection
-  cleaner/   → Filter(): 조건에 따라 필터, Execute() 삭제
-  types/     → DebrisInfo, ScanResult, PruneOptions
-test/        → black-box CLI, install, docs, Homebrew script tests
-skills/
-  aibris/    → AI-assisted 정리 워크플로우 (SKILL.md)
+  adapter/            DebrisProvider implementations and provider registry
+  scanner/            runs providers, aggregates results, normalizes roots
+  scancache/          last-scan snapshot persistence and path identity
+  exclude/            --exclude, ignore files, --protect-path matching
+  cleaner/            eligibility, filtering, overlap safety, classic execution
+  worktree/           worktree units, Git evidence, guided policy, execution, strip
+  executor/           prepared-target orchestration and execution receipts
+  safedelete/         the only package that may recursively delete
+  cleanjson/          JSON plan and receipt documents
+  cleancommand/       clean route selection
+  scanreport/         human and JSON scan rendering
+  codexhome/          Codex home resolution (CODEX_HOME, AIBRIS_CODEX_HOMES)
+  codexsession/       Codex session metadata reader
+  codexactivity/      Codex session-activity index for worktree activity
+  retention/          read-only protected retention inventory
+  volume/             home-volume capacity and filesystem type
+  apfs/               local APFS snapshot list and thin (macOS)
+  pathidentity/       platform file identity for TOCTOU checks
+  types/              DebrisInfo, ScanResult, PruneOptions
+  testutil/           hermetic HOME and environment helpers
+test/                 black-box CLI, install, docs, and Homebrew script tests
+tools/                release-asset generator and performance harness
+skills/aibris/        agent skill that drives the CLI through JSON
+docs/                 user documentation, spec, and design notes
 ```
 
-## 경로 규칙
-
-| Tool | Category | clean 기본 | 기본 경로 |
-|------|----------|-----------|---------|
-| worktree (registry + convention) | worktree | orphaned만 ✅ | finite exact registry + depth-4 `{worktrees,worktree,worktree-*,worktrees-*,*-worktree,*-worktrees}/<entry>/` fallback; linked sibling checkouts under scan roots via `.git/worktrees/*/gitdir`; direct/one-level `.git`, plus two-level `<owner>/<leaf>/<checkout>/.git` inside registered containers only |
-| claude | agent-state | orphaned만 ✅ (분류는 증명 기반; `--age` 미적용; `--agent-state-grace`가 기본 선택을 지연; live/undetermined 보호) | `~/.claude/projects/<name>/` |
-| cursor | agent-state | orphaned만 ✅ (분류는 증명 기반; `--age` 미적용; `--agent-state-grace`가 기본 선택을 지연; live/undetermined 보호) | `~/.cursor/projects/<name>/` |
-| windsurf | ai-logs | 🚫 `--risky` | `~/.codeium/windsurf/` |
-| node_modules | node_modules | ✅ | `$HOME/**/node_modules/` with noisy directories pruned |
-| build-cache | build-cache | ✅ | process `$GOCACHE`, else `go env -w` file, else `UserCacheDir/go-build` (Linux `~/.cache/go-build`, Darwin `~/Library/Caches/go-build`, Windows `%LocalAppData%\go-build`); configured GOCACHE outside roots is skipped; `~/.gradle/caches/`, `~/.npm/_cacache/`, `~/.cargo/registry/`, `~/Library/Caches/Xcode/`, `~/Library/Caches/Homebrew/` (`brew cleanup --prune=all`), `~/Library/Developer/Xcode/DerivedData/`, `~/Library/Caches/CocoaPods/`, `~/.dartServer/` (never `~/.pub-cache`) |
-| pip-cache | other-cache | ✅ | `~/.cache/pip/`, `~/.cache/uv/` |
-| ai-logs | ai-logs | 🚫 `--risky` | `$CODEX_HOME/logs_2.sqlite`, `$CODEX_HOME/archived_sessions/` (`$CODEX_HOME` 기본값 `~/.codex`; `$AIBRIS_CODEX_HOMES` 추가 home 지원), `~/.claude/command-audit.log`, `~/.claude/file-history/` |
-
-### Worktree health
-
-`WorktreeAdapter`는 각 worktree의 `.git` 파일을 읽어 상위 repo 생존 여부를 확인합니다.
-`source`는 `.codex`, `.claude`, `.somename`, `project-local`처럼 경로에서 추론하며
-registered superpowers container는 `superpowers`를 사용합니다:
-
-| Status | 의미 |
-|--------|------|
-| `active` | `.git` 존재, 상위 repo 살아있음 (최근 사용·머지 여부가 아님) |
-| `orphaned` | `.git` 존재, 상위 repo 사라짐 (정리 대상) |
-| `plain-dir` | valid metadata 없음 또는 한 owner 안의 invalid/mixed marker (review-only, 정리 금지) |
-
-Guided cleanup treats unique-vs-`refs/remotes/origin/HEAD` (or unknown uniqueness)
-as `reviewable`, never auto-recommended. It does not call GitHub. Scan `active`
-stays gitdir liveness. All-merged units are not promoted past keep=3 / min-idle /
-min-size / recent locks.
-
-## 빌드
+## Commands
 
 ```bash
-go build -o aibris .
-./aibris scan
+make build       # go build -o aibris .
+make check       # gofmt, go mod tidy -diff, vet, staticcheck, govulncheck, shellcheck
+make test        # go test ./...
+make test-race   # go test -race ./...
+./aibris scan --root <dir-under-home>
 ./aibris clean --dry-run
 ```
+
+Run `make check` and the relevant tests before every commit. CI runs the same
+check job plus tests on Linux, macOS, and Windows.
+
+## Safety invariants
+
+These hold for every change. Breaking one is a bug even if tests pass.
+
+- **One deletion gate.** Only `internal/safedelete` may call `os.RemoveAll`
+  (an architecture test enforces it). Every removal, cleanup command, and
+  `git worktree remove` passes `safedelete.Check`: canonical path strictly
+  inside `$HOME`, not a protected location or its ancestor, not a primary Git
+  repository (a `.git` directory) or Git metadata. Add new protected
+  locations there, not in providers.
+- **Re-verify at the mutation boundary.** Scan results can come from a cache.
+  Executors re-check identity, age, Git state, agent-state classification,
+  and overlap right before mutating, and refuse on drift.
+- **Never trust inventory for authority.** A path from a scan or cache is a
+  claim; execution re-derives whether it may be removed (see strip).
+- **Preview and confirm.** `--dry-run` never mutates. A real `clean` prompts;
+  `--force` skips only the prompt, never a safety check. `--interactive`
+  confirms per item.
+- **Defaults:** classic `--age` is `7d` (caches on a home volume over 95% full
+  relax it); AI logs need `--risky`; active worktrees need explicit selection;
+  orphaned agent state ignores `--age` and waits for `--agent-state-grace`
+  (24h).
+- **`--exclude` only hides** from discovery and never matches ancestors.
+  **`--protect-path`** is clean-only and protects every outer owner that
+  contains the path.
+
+## Adding a provider
+
+1. Implement `DebrisProvider` in `internal/adapter/<name>.go` and register it
+   in `defaultProviders` in `internal/adapter/providers.go`.
+2. `Scan()` honors context cancellation and measures sizes with
+   `estimateDirSize()`.
+3. For nested cache trees and agent stores, report the newest in-tree mtime as
+   `ModTime` and always set `PathModTime` to the path's own mtime; otherwise
+   cleanup preflight overwrites `ModTime` with the container mtime. Providers
+   whose container mtime is the activity signal (`node_modules`) skip this.
+4. Projects that are subdirectories of a container use `detectProjectName()`
+   (hidden directories excluded). Stores whose recorded cwd names the project
+   use `projectNameFromRecordedCWD()` and never touch the filesystem.
+5. An `agent-state` provider must also implement `AgentStateRevalidator`;
+   cleanup refuses agent-state items without one. Classification is proof
+   based (`live` / `orphaned` / `undetermined`); `--age` does not apply.
+6. Make sure every target path passes `safedelete.Check`, and add hermetic
+   tests (`testutil.SetHome`) in `internal/adapter/<name>_test.go`.
+
+Known gap: providers are Go types, and `types.Tool` mixes vendors with
+provider names (the worktree provider reports `codex` for every tool). A
+declarative target catalog is planned; until then follow the existing pattern.
+
+## Worktree discovery invariants
+
+- Known deep containers come only from a finite registry: `~/.codex/worktrees`
+  (per Codex home from `$CODEX_HOME` and `$AIBRIS_CODEX_HOMES`),
+  `~/.relay/worktrees`, `~/.gstack/worktrees`, `~/.config/superpowers/worktrees`.
+- The convention fallback looks under `$HOME` for directories named
+  `worktrees`, `worktree`, `worktree-*`, `worktrees-*`, `*-worktree`, or
+  `*-worktrees`, up to `maxWorktreeContainerDepth = 4`.
+- Once a valid linked member is found, sibling checkouts of the same repository
+  under the scan roots are added from `.git/worktrees/*/gitdir`, only when the
+  checkout's `.git` points back to that admin entry. Primary checkouts, missing
+  or prunable paths, paths outside the roots, and owners already visited are
+  skipped. Never recurse all of `$HOME` looking for repositories.
+- Hidden owners (`.codex`, `.something`) can hold worktrees; do not prune them
+  for being hidden, but only check their immediate convention children.
+- A candidate needs a `<entry>/.git` or `<entry>/<project>/.git` file.
+  Registered containers also allow `<owner>/<leaf>/<checkout>/.git`.
+- One outer `<entry>` is one physical mutation owner. Mixed valid and invalid
+  markers make the whole owner a review-only `plain-dir`. An empty leftover
+  member is not an invalid marker. Registered sidecars (currently only
+  `.orca-worktree-trash`) are skipped during member classification.
+- Missing, empty, malformed, or directory markers produce a review-only
+  `plain-dir` with an explicit reason; I/O failures are provider errors.
+- `.git` `gitdir:` decides `active` vs `orphaned`; a missing gitdir is
+  `orphaned`. `plain-dir`, empty, and unknown statuses are never cleanup
+  candidates regardless of flags.
+- An explicit `--root` is a hard boundary. Extra Codex homes are added only to
+  the default `$HOME` scan; an explicit root that excludes them gets a
+  one-line diagnostic.
+
+## Default targets
+
+| Provider | Category | Default clean | Paths |
+| --- | --- | --- | --- |
+| codex (worktree provider; reports `codex` for every tool) | worktree | orphaned only in the classic plan; guided review may recommend active ones from Git evidence | registry and convention containers above |
+| claude | agent-state | proven orphaned, after grace | `~/.claude/projects/<name>/` |
+| cursor | agent-state | proven orphaned, after grace | `~/.cursor/projects/<name>/` |
+| windsurf | ai-logs | `--risky` only | `~/.codeium/windsurf/` |
+| ai-logs | ai-logs | `--risky` only | `$CODEX_HOME/logs_2.sqlite`, `$CODEX_HOME/archived_sessions/`, `~/.claude/command-audit.log`, `~/.claude/file-history/` |
+| node_modules | node_modules | older than `--age` | `node_modules` under scan roots, noisy trees pruned |
+| build-cache | build-cache | older than `--age` | effective `GOCACHE`, `~/.gradle/caches/`, `~/.npm/_cacache/`, `~/.cargo/registry/`, Xcode caches and DerivedData, Homebrew cache (`brew cleanup --prune=all`), CocoaPods cache, `~/.dartServer/` |
+| pip-cache | other-cache | older than `--age` | `~/.cache/pip/`, `~/.cache/uv/` |
+
+Cleanup commands run with their cache location pinned to the scanned path.
+
+## Code rules
+
+- No speculative abstraction; interfaces only at real extension points.
+- Handle errors that can happen; fail closed on safety decisions.
+- Match surrounding style; `gofmt`; tabs. Run `go mod tidy` after adding a
+  dependency.
+- Change only what the task needs; report unrelated problems instead of fixing
+  them in the same change.
+
+## Testing rules
+
+- Tests are hermetic: use `testutil.SetHome` and `t.TempDir()`; never read the
+  developer's real home or depend on host disk fullness.
+- Do not write tests that pin source layout (which file defines what). Pin
+  behavior, or a real invariant such as the deletion-gate architecture test.
+- Synthetic paths must not start with `/home/` (an autofs mount on macOS that
+  makes every stat slow); use `/aibris-test-home/...` or a temp dir.
+- Git fixtures are slow; reuse helpers in `git_fixture_test.go` and keep
+  per-test repositories small.
+
+## Workflow
+
+1. Understand the problem and state the plan in a sentence or two.
+2. Implement the smallest change that solves it, with tests.
+3. `make check` and the affected tests pass before committing.

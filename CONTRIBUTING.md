@@ -1,59 +1,50 @@
 # Contributing to aibris
 
-## Getting Started
+Thanks for helping. aibris deletes files, so the bar for safety is high and
+the bar for new flags is higher; read the product direction in
+[AGENTS.md](AGENTS.md) before proposing a feature.
+
+## Getting started
 
 ```bash
 git clone https://github.com/sungjunlee/aibris.git
 cd aibris
 make build
 ./aibris scan
+./aibris clean --dry-run
 ```
 
 ## Development
 
 ```bash
-make build    # go build -o aibris .
-make test     # go test ./...
-make lint     # go vet ./...
-make tidy     # go mod tidy
-make dist     # goreleaser release --snapshot --clean
+make check       # gofmt, go mod tidy -diff, vet, staticcheck, govulncheck, shellcheck
+make test        # go test ./...
+make test-race   # go test -race ./...
+make dist        # goreleaser snapshot build
 ```
+
+`make check` takes about ten seconds and is what CI's check job runs.
 
 ## Architecture
 
-See [AGENTS.md](AGENTS.md) for the full architecture overview and development rules.
+[AGENTS.md](AGENTS.md) has the repository map, the safety invariants every
+change must keep, and the rules for adding a provider or touching worktree
+discovery. [docs/SPEC.md](docs/SPEC.md) specifies flag semantics and the
+guided cleanup policy.
 
-```
-cmd/         → cobra commands (root, scan, clean) and CLI I/O
-internal/
-  adapter/   → DebrisProvider interface + codex, claude, etc.
-  scanner/   → Scan(): iterates all adapters, collects results
-  scancache/     → last-scan snapshot persistence and path identity
-  codexactivity/ → Codex session-activity index and cache
-  apfs/          → local APFS snapshot list/thin via tmutil
-  worktree/      → worktree units, policy, git evidence, activity enrichment, cleanup-safety inspection
-  cleaner/   → Filter(): applies category-specific eligibility and selectors, Execute()
-  types/     → DebrisInfo, ScanResult, PruneOptions
-test/        → black-box CLI, install, docs, and Homebrew script tests
-```
+## Adding support for a new AI tool
 
-## Adding a New Adapter
+Open an issue with the "adapter request" template first, with the paths the
+tool writes, what each one holds, and how you know a path is safe to delete
+(for example, a recorded project directory that no longer exists). Then follow
+"Adding a provider" in [AGENTS.md](AGENTS.md).
 
-1. Create `internal/adapter/<name>.go` implementing `DebrisProvider`
-2. `Name()` returns kebab-case Tool constant
-3. `Scan()` respects context cancellation
-4. Use `estimateDirSize(ctx, path)` for size calculation
-5. Register in the `internal/adapter/providers.go` `providers` slice
-6. For an adapter whose `Category()` is `agent-state`, also implement `AgentStateRevalidator`; classification is proof-based from the recorded cwd, while `--agent-state-grace` only gates default selection (the classic `--age` filter does not apply), and cleanup refuses entries without a registered revalidator
-7. Report `ModTime` as the later of the path's own mtime and `NewestTreeModTime(ctx, path)` when the container's own mtime is not the activity signal (cache trees, agent-state stores), and always set `PathModTime` to the path's own mtime in that case — leaving it empty makes the cleanup preflight overwrite `ModTime` with the container mtime
-8. Add tests in `internal/adapter/<name>_test.go`
+## Before submitting
 
-## Before Submitting
-
-- `make lint` passes
-- `make test` passes
-- New adapters have tests
-- Run `make tidy` if adding imports
+- `make check` and `make test` pass.
+- New behavior has hermetic tests (`testutil.SetHome`, temp directories).
+- Every new delete target passes `safedelete.Check`.
+- User-visible changes have a `CHANGELOG.md` entry under `[Unreleased]`.
 
 ## License
 
