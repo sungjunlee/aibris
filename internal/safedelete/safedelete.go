@@ -12,7 +12,10 @@
 //  1. The path is strictly inside the home directory.
 //  2. The path is not a protected location and not an ancestor of one.
 //  3. The path is not a primary Git repository (a directory whose .git entry
-//     is itself a directory).
+//     is itself a directory) and is not inside Git metadata.
+//
+// The path must already be clean: a "link/../x" path would be judged on one
+// location and removed at another once the symlink is resolved.
 //
 // No other package calls os.RemoveAll; an architecture test enforces it.
 package safedelete
@@ -53,26 +56,73 @@ var protected = []string{
 	// Agent stores and worktree containers: their entries are targets, the
 	// store or container itself never is.
 	".codex/worktrees", ".codex/sessions", ".claude/projects", ".cursor/projects",
+	".relay", ".relay/worktrees", ".gstack", ".gstack/worktrees",
+	".config/superpowers", ".config/superpowers/worktrees",
 }
+
+// homeEnv names environment variables that relocate an agent home. The homes
+// they name, and their stores, are protected wherever they live.
+var homeEnv = []string{"CODEX_HOME", "AIBRIS_CODEX_HOMES", "CLAUDE_CONFIG_DIR"}
+
+// relocatedHomeStores are protected below every relocated agent home.
+var relocatedHomeStores = []string{"worktrees", "sessions", "projects"}
 
 // Check returns nil when path may be removed, or an error wrapping
 // ErrRefused that says why not.
 func Check(home, path string) error {
+	if path != filepath.Clean(path) {
+		return refuse(path, "path is not clean")
+	}
 	rel, canonical, err := homeRel(home, path)
 	if err != nil {
 		return refuse(path, err.Error())
 	}
 	key := foldCase(filepath.ToSlash(rel))
 	for _, p := range protected {
-		p = foldCase(p)
-		if key == p || strings.HasPrefix(p, key+"/") {
+		if coversProtected(key, foldCase(p)) {
 			return refuse(path, "protected location")
+		}
+	}
+	for _, p := range relocatedHomes() {
+		if coversProtected(foldCase(filepath.ToSlash(canonical)), foldCase(filepath.ToSlash(p))) {
+			return refuse(path, "agent home or store")
+		}
+	}
+	for _, part := range strings.Split(key, "/") {
+		if part == ".git" {
+			return refuse(path, "Git metadata")
 		}
 	}
 	if info, err := os.Lstat(filepath.Join(canonical, ".git")); err == nil && info.IsDir() {
 		return refuse(path, "primary Git repository")
 	}
 	return nil
+}
+
+// coversProtected reports whether target is the protected path or one of its
+// ancestors. Both are slash-separated and case-folded.
+func coversProtected(target, protected string) bool {
+	return target == protected || strings.HasPrefix(protected, target+"/")
+}
+
+// relocatedHomes returns the canonical agent homes named by homeEnv and their
+// stores. Relative or unresolvable entries are ignored: they cannot widen
+// what is allowed, only fail to add protection the defaults already give.
+func relocatedHomes() []string {
+	var out []string
+	for _, name := range homeEnv {
+		for _, entry := range filepath.SplitList(os.Getenv(name)) {
+			if entry == "" || !filepath.IsAbs(entry) {
+				continue
+			}
+			entry = canonicalize(entry)
+			out = append(out, entry)
+			for _, store := range relocatedHomeStores {
+				out = append(out, filepath.Join(entry, store))
+			}
+		}
+	}
+	return out
 }
 
 // RemoveAll removes path after Check passes.
@@ -108,8 +158,7 @@ func refuse(path, reason string) error {
 }
 
 // homeRel returns path relative to home after resolving symlinks in both,
-// and the canonical path. A path that does not exist yet is resolved through
-// home's canonical form so a symlinked home still compares correctly.
+// and the canonical path.
 func homeRel(home, path string) (string, string, error) {
 	if home == "" || !filepath.IsAbs(home) {
 		return "", "", errors.New("home directory is not absolute")
@@ -117,23 +166,34 @@ func homeRel(home, path string) (string, string, error) {
 	if !filepath.IsAbs(path) {
 		return "", "", errors.New("path is not absolute")
 	}
-	rawHome := filepath.Clean(home)
-	path = filepath.Clean(path)
-	canonicalHome := rawHome
-	if resolved, err := filepath.EvalSymlinks(rawHome); err == nil {
-		canonicalHome = filepath.Clean(resolved)
-	}
-	canonical := path
-	if resolved, err := filepath.EvalSymlinks(path); err == nil {
-		canonical = filepath.Clean(resolved)
-	} else if rel, ok := within(rawHome, path); ok {
-		canonical = filepath.Join(canonicalHome, rel)
-	}
-	rel, ok := within(canonicalHome, canonical)
+	canonical := canonicalize(path)
+	rel, ok := within(canonicalize(home), canonical)
 	if !ok {
 		return "", "", errors.New("outside the home directory")
 	}
 	return rel, canonical, nil
+}
+
+// canonicalize resolves symlinks in the longest existing prefix of path and
+// appends the rest, so paths that do not exist yet still compare against
+// resolved ones (macOS /var is /private/var).
+func canonicalize(path string) string {
+	path = filepath.Clean(path)
+	var rest []string
+	for dir := path; ; {
+		if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+			for i := len(rest) - 1; i >= 0; i-- {
+				resolved = filepath.Join(resolved, rest[i])
+			}
+			return filepath.Clean(resolved)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return path
+		}
+		rest = append(rest, filepath.Base(dir))
+		dir = parent
+	}
 }
 
 // within reports path relative to root when path is strictly below root.

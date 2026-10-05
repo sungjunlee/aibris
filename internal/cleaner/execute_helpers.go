@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
@@ -109,7 +110,7 @@ func executeWithContextOutput(
 				continue
 			}
 			freed, residual, err := observeReclamation(ctx, w.Path, func() error {
-				return runCleanupCommand(ctx, w.CleanupCommand, func() {
+				return runCleanupCommand(ctx, w.CleanupCommand, cleanupCommandEnv(w), func() {
 					if observer != nil {
 						observer(CleanupMutationOutcome{Item: w, MutationAttempted: true})
 					}
@@ -234,7 +235,31 @@ func reportCommandResidual(output io.Writer, w types.DebrisInfo, freed, residual
 		w.ID, FormatSize(residual), FormatSize(freed))
 }
 
-func runCleanupCommand(ctx context.Context, argv []string, beforeStart func()) error {
+// cleanupCommandEnv pins the cache location a cleanup command acts on to the
+// path that was scanned, measured, and passed the deletion gate. Without it,
+// an inherited npm_config_cache or UV_CACHE_DIR would point the command at a
+// directory nothing checked.
+func cleanupCommandEnv(item types.DebrisInfo) []string {
+	if len(item.CleanupCommand) == 0 || item.Path == "" {
+		return nil
+	}
+	switch item.CleanupCommand[0] {
+	case "go":
+		return []string{"GOCACHE=" + item.Path}
+	case "uv":
+		return []string{"UV_CACHE_DIR=" + item.Path}
+	case "brew":
+		return []string{"HOMEBREW_CACHE=" + item.Path}
+	case "npm":
+		// The scanned path is <cache>/_cacache; npm takes <cache>.
+		if filepath.Base(item.Path) == "_cacache" {
+			return []string{"npm_config_cache=" + filepath.Dir(item.Path)}
+		}
+	}
+	return nil
+}
+
+func runCleanupCommand(ctx context.Context, argv []string, env []string, beforeStart func()) error {
 	if len(argv) == 0 {
 		return nil
 	}
@@ -243,6 +268,9 @@ func runCleanupCommand(ctx context.Context, argv []string, beforeStart func()) e
 		return errCleanupCommandNotFound
 	}
 	cmd := commandContext(ctx, bin, argv[1:]...)
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	if beforeStart != nil {
 		beforeStart()
 	}

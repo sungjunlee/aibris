@@ -45,12 +45,29 @@ func TestNoRemoveAllOutsideTheGate(t *testing.T) {
 			return err
 		}
 		rel, _ := filepath.Rel(repo, path)
+		osName := ""
+		for _, spec := range file.Imports {
+			if spec.Path.Value != `"os"` {
+				continue
+			}
+			osName = "os"
+			if spec.Name != nil {
+				osName = spec.Name.Name
+			}
+		}
+		switch osName {
+		case "":
+			return nil
+		case ".", "_":
+			t.Errorf("%s: package os imported as %q; use a named import", rel, osName)
+			return nil
+		}
 		ast.Inspect(file, func(node ast.Node) bool {
 			sel, ok := node.(*ast.SelectorExpr)
 			if !ok {
 				return true
 			}
-			if recv, ok := sel.X.(*ast.Ident); ok && recv.Name == "os" {
+			if recv, ok := sel.X.(*ast.Ident); ok && recv.Name == osName {
 				switch {
 				case sel.Sel.Name == "RemoveAll":
 					t.Errorf("%s: os.RemoveAll outside internal/safedelete", rel)

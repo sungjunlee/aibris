@@ -140,3 +140,48 @@ func TestRemoveAllRemovesOnlyWhatCheckAllows(t *testing.T) {
 		t.Fatalf("Documents removed: %v", err)
 	}
 }
+
+func TestCheckRefusesUncleanPathsAndGitMetadata(t *testing.T) {
+	home := t.TempDir()
+	for _, path := range []string{
+		home + string(filepath.Separator) + "work" + string(filepath.Separator) + ".." +
+			string(filepath.Separator) + "Documents",
+		filepath.Join(home, "work", "app", ".git"),
+		filepath.Join(home, "work", "app", ".git", "objects"),
+	} {
+		if err := Check(home, path); !errors.Is(err, ErrRefused) {
+			t.Errorf("Check(%s) = %v; want refusal", path, err)
+		}
+	}
+}
+
+func TestCheckProtectsRelocatedAgentHomes(t *testing.T) {
+	home := t.TempDir()
+	codexHome := filepath.Join(home, "agents", "codex")
+	extra := filepath.Join(home, "sandboxes", "codex-two")
+	claudeHome := filepath.Join(home, "agents", "claude")
+	t.Setenv("CODEX_HOME", codexHome)
+	t.Setenv("AIBRIS_CODEX_HOMES", extra)
+	t.Setenv("CLAUDE_CONFIG_DIR", claudeHome)
+	for _, path := range []string{
+		codexHome,
+		filepath.Join(codexHome, "worktrees"),
+		filepath.Join(extra, "sessions"),
+		claudeHome,
+		filepath.Join(claudeHome, "projects"),
+		filepath.Join(home, "agents"),
+	} {
+		if err := Check(home, path); !errors.Is(err, ErrRefused) {
+			t.Errorf("Check(%s) = %v; want refusal", path, err)
+		}
+	}
+	for _, path := range []string{
+		filepath.Join(codexHome, "worktrees", "abc"),
+		filepath.Join(codexHome, "archived_sessions"),
+		filepath.Join(claudeHome, "projects", "encoded"),
+	} {
+		if err := Check(home, path); err != nil {
+			t.Errorf("Check(%s) = %v; want allowed", path, err)
+		}
+	}
+}
