@@ -97,14 +97,11 @@ func guidedCodexCleanupPressure(ctx context.Context, items []types.DebrisInfo) (
 	// guided review will actually show once it opens.
 	candidates := activeWorktrees(items)
 
-	units, err := worktree.BuildWorktreeCleanupUnits(ctx, candidates)
-	if err != nil || len(units) == 0 {
+	// Pressure only needs unit count and size, which come from filesystem
+	// structure; the full Git evidence pass runs once, in guided planning.
+	count, totalSize, err := worktree.CountWorktreeCleanupUnits(ctx, candidates)
+	if err != nil {
 		return 0, 0
 	}
-
-	var totalSize int64
-	for _, unit := range units {
-		totalSize += unit.Size
-	}
-	return len(units), totalSize
+	return count, totalSize
 }

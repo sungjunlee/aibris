@@ -97,7 +97,15 @@ func BuildWorktreeCleanupUnits(ctx context.Context, items []types.DebrisInfo) ([
 		return groups[i].targetPath < groups[j].targetPath
 	})
 
-	units := make([]WorktreeCleanupUnit, 0, len(groups))
+	// Discover every unit's members from structure first, then gather Git
+	// evidence for all members across all units in one bounded pool.
+	type pendingUnit struct {
+		group worktreeCleanupUnitRows
+		first int // index of the unit's first member in allPaths
+		count int
+	}
+	var pending []pendingUnit
+	var allPaths []string
 	for _, group := range groups {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -105,16 +113,25 @@ func BuildWorktreeCleanupUnits(ctx context.Context, items []types.DebrisInfo) ([
 		if cleanupUnitHasReviewOnlyStatus(group.items) {
 			continue
 		}
-		members, err := discoverGitWorktreeMembers(ctx, group.targetPath)
+		paths, err := discoverGitWorktreeMemberPaths(ctx, group.targetPath)
 		if err != nil {
 			return nil, fmt.Errorf("enumerating Git worktree members under %q: %w", group.targetPath, err)
 		}
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		if len(members) == 0 {
+		if len(paths) == 0 {
 			continue
 		}
+		pending = append(pending, pendingUnit{group: group, first: len(allPaths), count: len(paths)})
+		allPaths = append(allPaths, paths...)
+	}
+	allMembers := buildGitWorktreeMembers(ctx, allPaths)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	units := make([]WorktreeCleanupUnit, 0, len(pending))
+	for _, p := range pending {
+		group := p.group
+		members := allMembers[p.first : p.first+p.count : p.first+p.count]
 		hardLockReasons := cleanupUnitHardLockReasons(members)
 		units = append(units, WorktreeCleanupUnit{
 			TargetPath:      group.targetPath,
@@ -126,6 +143,43 @@ func BuildWorktreeCleanupUnits(ctx context.Context, items []types.DebrisInfo) ([
 		})
 	}
 	return units, nil
+}
+
+// CountWorktreeCleanupUnits returns how many cleanup units BuildWorktreeCleanupUnits
+// would produce and their total size, without running any Git command.
+func CountWorktreeCleanupUnits(ctx context.Context, items []types.DebrisInfo) (int, int64, error) {
+	grouped := make(map[string][]types.DebrisInfo)
+	for _, item := range items {
+		if err := ctx.Err(); err != nil {
+			return 0, 0, err
+		}
+		if item.Category != types.CategoryWorktree {
+			continue
+		}
+		if targetPath, ok := cleaner.TargetPathKey(item.Path); ok {
+			grouped[targetPath] = append(grouped[targetPath], item)
+		}
+	}
+	var count int
+	var size int64
+	for targetPath, rows := range grouped {
+		if err := ctx.Err(); err != nil {
+			return 0, 0, err
+		}
+		if cleanupUnitHasReviewOnlyStatus(rows) {
+			continue
+		}
+		paths, err := discoverGitWorktreeMemberPaths(ctx, targetPath)
+		if err != nil {
+			return 0, 0, fmt.Errorf("enumerating Git worktree members under %q: %w", targetPath, err)
+		}
+		if len(paths) == 0 {
+			continue
+		}
+		count++
+		size += cleanupUnitSize(rows)
+	}
+	return count, size, nil
 }
 
 func BuildGitWorktreeMember(ctx context.Context, worktreePath string) GitWorktreeMember {
