@@ -255,10 +255,6 @@ func cleanupCommandEnv(item types.DebrisInfo) []string {
 		if filepath.Base(item.Path) == "_cacache" {
 			return []string{"npm_config_cache=" + filepath.Dir(item.Path)}
 		}
-	case "pnpm":
-		return []string{"npm_config_store_dir=" + item.Path}
-	case "bun":
-		return []string{"BUN_INSTALL_CACHE_DIR=" + item.Path}
 	}
 	return nil
 }

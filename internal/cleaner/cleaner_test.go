@@ -1784,8 +1784,6 @@ func TestCleanupCommandEnvPinsTheScannedCache(t *testing.T) {
 		{[]string{"brew", "cleanup", "--prune=all"}, "/h/Library/Caches/Homebrew", []string{"HOMEBREW_CACHE=/h/Library/Caches/Homebrew"}},
 		{[]string{"npm", "cache", "clean", "--force"}, "/h/.npm/_cacache", []string{"npm_config_cache=/h/.npm"}},
 		{[]string{"npm", "cache", "clean", "--force"}, "/h/.npm/other", nil},
-		{[]string{"pnpm", "store", "prune"}, "/h/Library/pnpm/store", []string{"npm_config_store_dir=/h/Library/pnpm/store"}},
-		{[]string{"bun", "pm", "cache", "rm"}, "/h/.bun/install/cache", []string{"BUN_INSTALL_CACHE_DIR=/h/.bun/install/cache"}},
 		{nil, "/h/x", nil},
 	}
 	for _, tt := range tests {
@@ -1804,21 +1802,37 @@ func TestCleanupCommandEnvPinsTheScannedCache(t *testing.T) {
 func TestIsSafeTargetAcceptsExactCatalogCachePaths(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
-	var bun string
+	var npx string
 	for _, path := range adapter.CacheTargetPaths() {
-		if strings.HasSuffix(path, filepath.Join("install", "cache")) {
-			bun = path
+		if filepath.Base(path) == "_npx" {
+			npx = path
 		}
 	}
-	if bun == "" {
-		t.Fatal("bun cache missing from the catalog")
+	if npx == "" {
+		t.Fatal("npx cache missing from the catalog")
 	}
-	if !IsSafeTarget(home, types.DebrisInfo{Path: bun, Category: types.CategoryBuildCache, Tool: types.ToolBuildCache}) {
-		t.Errorf("catalog cache %s rejected", bun)
+	// ~/.npm/_npx also matches the legacy allowlist; check a relocated one the
+	// legacy allowlist would reject.
+	relocated := filepath.Join(home, "tools", "npm-cache")
+	if err := os.MkdirAll(filepath.Join(relocated, "_cacache", "index-v5"), 0o755); err != nil {
+		t.Fatal(err)
 	}
-	// Only the exact catalog path is accepted, not its neighbors.
-	neighbor := filepath.Join(filepath.Dir(bun), "other")
+	t.Setenv("npm_config_cache", relocated)
+	target := filepath.Join(relocated, "_npx")
+	if !IsSafeTarget(home, types.DebrisInfo{Path: target, Category: types.CategoryBuildCache, Tool: types.ToolBuildCache}) {
+		t.Errorf("relocated catalog cache %s rejected", target)
+	}
+	neighbor := filepath.Join(relocated, "other")
 	if IsSafeTarget(home, types.DebrisInfo{Path: neighbor, Category: types.CategoryBuildCache, Tool: types.ToolBuildCache}) {
 		t.Errorf("non-catalog path %s accepted", neighbor)
+	}
+	// An override pointing at a directory without the cache signature is not
+	// a cache: neither scanned nor allowlisted.
+	t.Setenv("npm_config_cache", filepath.Join(home, "work", "archive"))
+	if err := os.MkdirAll(filepath.Join(home, "work", "archive", "_npx"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if IsSafeTarget(home, types.DebrisInfo{Path: filepath.Join(home, "work", "archive", "_npx"), Category: types.CategoryBuildCache, Tool: types.ToolBuildCache}) {
+		t.Error("override without cache signature was allowlisted")
 	}
 }

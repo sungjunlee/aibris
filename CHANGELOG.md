@@ -4,21 +4,21 @@
 
 ### Added
 
-- Rebuildable caches: the `npx` cache (`<npm cache>/_npx`), the pnpm store
-  (`pnpm store prune`), and the bun install cache (`bun pm cache rm`).
+- The `npx` package cache (`<npm cache>/_npx`) as a rebuildable build cache.
 
 ### Changed
 
 - Cache locations follow each tool's own override variables
   (`PIP_CACHE_DIR`, `UV_CACHE_DIR`, `npm_config_cache`, `CARGO_HOME`,
-  `GRADLE_USER_HOME`, `HOMEBREW_CACHE`, `BUN_INSTALL_CACHE_DIR`,
-  `npm_config_store_dir`) and platform defaults; the build and Python cache
-  providers share one catalog.
+  `GRADLE_USER_HOME`, `HOMEBREW_CACHE`) and platform defaults. A directory
+  chosen by an override is used only if it looks like that cache. The build
+  and Python cache providers share one catalog.
 
 ### Fixed
 
-- The pip cache is found at `~/Library/Caches/pip` on macOS and
-  `%LOCALAPPDATA%\pip\Cache` on Windows instead of `~/.cache/pip`.
+- The pip cache is found at `~/Library/Caches/pip` on macOS (falling back to
+  the XDG location) and `%LOCALAPPDATA%\pip\Cache` on Windows instead of
+  always `~/.cache/pip`.
 
 ## [0.12.3] - 2026-10-05
 
