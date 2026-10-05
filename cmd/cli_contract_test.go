@@ -231,7 +231,7 @@ func TestAgentStateGraceCLIContract(t *testing.T) {
 
 // TestScanDefaultCleanEstimateMatchesAgentStateGrace pins scan and clean to the
 // same agent-state idle floor. The documented AI workflow starts from scan's
-// "default clean (estimate)", so an estimate that counts an entry clean will
+// "reclaimable", so an estimate that counts an entry clean will
 // not select sends the workflow after bytes it cannot free.
 func TestScanDefaultCleanEstimateMatchesAgentStateGrace(t *testing.T) {
 	binary := buildCLIContractBinary(t)
@@ -255,8 +255,8 @@ func TestScanDefaultCleanEstimateMatchesAgentStateGrace(t *testing.T) {
 		if err != nil {
 			t.Fatalf("scan failed: %v\n%s", err, scanOutput)
 		}
-		estimate := cliContractLineWithPrefix(t, scanOutput, "default clean (estimate)")
-		if !strings.HasSuffix(strings.TrimSpace(estimate), " 0 B") {
+		estimate := cliContractLineWithPrefix(t, scanOutput, "reclaimable")
+		if !strings.Contains(estimate, "reclaimable  0 B ") {
 			t.Fatalf("scan estimate counts an entry clean will not select: %q\n%s", estimate, scanOutput)
 		}
 
@@ -277,8 +277,8 @@ func TestScanDefaultCleanEstimateMatchesAgentStateGrace(t *testing.T) {
 		if err != nil {
 			t.Fatalf("scan failed: %v\n%s", err, scanOutput)
 		}
-		estimate := cliContractLineWithPrefix(t, scanOutput, "default clean (estimate)")
-		if strings.HasSuffix(strings.TrimSpace(estimate), " 0 B") {
+		estimate := cliContractLineWithPrefix(t, scanOutput, "reclaimable")
+		if strings.Contains(estimate, "reclaimable  0 B ") {
 			t.Fatalf("scan estimate dropped an entry clean will select: %q\n%s", estimate, scanOutput)
 		}
 

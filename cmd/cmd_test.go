@@ -106,7 +106,7 @@ func TestScanCmd_NoWorktrees(t *testing.T) {
 		rootCmd.SetArgs([]string{"scan"})
 		rootCmd.Execute()
 	})
-	for _, want := range []string{"scan", "roots", "summary", "found       0 items", "found size  0 B", "default clean (estimate) 0 B", "next", "aibris scan --json"} {
+	for _, want := range []string{"scan", "roots", "summary", "found        0 B in 0 items", "reclaimable  0 B by default", "next", "aibris scan --json"} {
 		if !strings.Contains(output, want) {
 			t.Errorf("output missing %q; got: %s", want, output)
 		}
@@ -129,7 +129,7 @@ func TestScanReportsHomeVolumeWithoutMountPath(t *testing.T) {
 		rootCmd.Execute()
 	})
 	if !strings.Contains(human, "volume") || !strings.Contains(human, "% used") ||
-		!strings.Contains(human, "free") || !strings.Contains(human, "on this volume") {
+		!strings.Contains(human, "free") {
 		t.Fatalf("human scan missing volume pressure:\n%s", human)
 	}
 	for _, line := range strings.Split(human, "\n") {
@@ -2197,9 +2197,9 @@ func TestPrintHumanScanResultLabelsPartialScan(t *testing.T) {
 		printHumanScanResult(context.Background(), r)
 	})
 	for _, want := range []string{
-		"completeness partial",
-		"failed      codex",
-		"default clean unavailable",
+		"incomplete   results are partial",
+		"codex failed",
+		"reclaimable  unknown until a complete scan succeeds",
 		"cleanup is disabled",
 	} {
 		if !strings.Contains(output, want) {

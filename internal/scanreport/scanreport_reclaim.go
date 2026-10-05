@@ -1,9 +1,7 @@
 package scanreport
 
 import (
-	"fmt"
 	"os"
-	"strings"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
@@ -108,23 +106,6 @@ func HomeVolumeReport(items []types.DebrisInfo) *volume.Report {
 	report.DebrisBytes = on
 	report.OtherVolumeDebrisBytes = other
 	return &report
-}
-
-// Headline is the one-line scan summary: found size, largest non-default
-// reclaim, and home-volume pressure.
-func Headline(found int64, paths []ReclaimPath, report *volume.Report) string {
-	parts := []string{fmt.Sprintf("%s found", cleaner.FormatSize(found))}
-	if path, ok := LargestNonDefault(paths); ok {
-		parts = append(parts, fmt.Sprintf("largest reclaim %s (%s)",
-			cleaner.FormatSize(path.Size), path.Flag()))
-	}
-	if report != nil {
-		parts = append(parts, fmt.Sprintf("%.0f%% used   %s free   %s",
-			report.UsedPercent,
-			cleaner.FormatSize(int64(report.AvailableBytes)),
-			volume.HumanWord(report.Band)))
-	}
-	return "  " + strings.Join(parts, "   ")
 }
 
 func beatsDefaultReclaim(path ReclaimPath, defaultSize int64) bool {

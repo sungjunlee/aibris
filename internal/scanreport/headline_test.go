@@ -21,35 +21,39 @@ func testPolicy() types.PruneOptions {
 	}
 }
 
-func TestHeadlinePinsPressureOnTightVolume(t *testing.T) {
+func TestSummaryPointsAtPressureOnTightVolume(t *testing.T) {
 	items := headlineFixture(t)
 	paths := ReclaimPaths(items, testPolicy())
-	report := &volume.Report{
-		Role:           "home",
-		FSType:         "apfs",
-		UsedPercent:    92,
-		AvailableBytes: 34 * 1024 * 1024 * 1024,
-		Band:           volume.BandLow,
+	view := View{
+		TotalCount:         2,
+		PhysicalTotalBytes: 7*1024*1024*1024 + 42*1024*1024,
+		ReclaimPaths:       paths,
+		DefaultCleanSize:   SizeByLabel(paths, labelDefaultDelete),
+		Policy:             testPolicy(),
+		Volume: &volume.Report{
+			Role:           "home",
+			FSType:         "apfs",
+			UsedPercent:    92,
+			AvailableBytes: 34 * 1024 * 1024 * 1024,
+			Band:           volume.BandLow,
+		},
 	}
-
-	got := Headline(7*1024*1024*1024+42*1024*1024, paths, report)
+	var buf strings.Builder
+	WriteHuman(&buf, view)
+	got := buf.String()
 	for _, want := range []string{
-		"7.0 GB found",
-		"largest reclaim 7.0 GB",
-		"--pressure",
+		"found        7.0 GB in 2 items",
+		"7.0 GB with --pressure",
 		"92% used",
 		"34.0 GB free",
 		"tight",
 	} {
 		if !strings.Contains(got, want) {
-			t.Errorf("headline missing %q:\n%s", want, got)
+			t.Errorf("summary missing %q:\n%s", want, got)
 		}
 	}
-	if strings.Contains(got, "low") {
-		t.Errorf("human headline used JSON band word:\n%s", got)
-	}
-	if strings.Contains(got, "default clean") {
-		t.Errorf("headline led with default clean instead of --pressure:\n%s", got)
+	if strings.Contains(got, ", low") {
+		t.Errorf("human summary used the JSON band word:\n%s", got)
 	}
 }
 
@@ -66,7 +70,7 @@ func TestPressureEstimateIgnoresOtherVolumeCaches(t *testing.T) {
 		Role: "home", FSType: "apfs", UsedPercent: 92,
 		AvailableBytes: 34 * 1024 * 1024 * 1024, Band: volume.BandLow,
 	}
-	headline := Headline(7*1024*1024*1024+42*1024*1024, paths, report)
+	headline := summaryFor(7*1024*1024*1024+42*1024*1024, paths, report)
 	if !strings.Contains(headline, "--pressure") || !strings.Contains(headline, "tight") {
 		t.Fatalf("headline missing home --pressure:\n%s", headline)
 	}
@@ -125,8 +129,8 @@ func TestReclaimPathsKeepsHomePressureWhenOffVolumeDefaultIsLarger(t *testing.T)
 		AvailableBytes: 34 * 1024 * 1024 * 1024, Band: volume.BandLow,
 	}
 	found := int64(17 * 1024 * 1024 * 1024)
-	headline := Headline(found, paths, report)
-	for _, want := range []string{"largest reclaim 7.0 GB", "--pressure", "tight"} {
+	headline := summaryFor(found, paths, report)
+	for _, want := range []string{"7.0 GB with --pressure", "tight"} {
 		if !strings.Contains(headline, want) {
 			t.Errorf("headline missing %q:\n%s", want, headline)
 		}
@@ -226,4 +230,18 @@ func reclaimPathMap(paths []ReclaimPath) map[string]int64 {
 		got[path.Command] = path.Size
 	}
 	return got
+}
+
+// summaryFor renders the human summary for found bytes, reclaim paths, and a
+// home-volume report.
+func summaryFor(found int64, paths []ReclaimPath, report *volume.Report) string {
+	var buf strings.Builder
+	WriteHuman(&buf, View{
+		PhysicalTotalBytes: found,
+		ReclaimPaths:       paths,
+		DefaultCleanSize:   SizeByLabel(paths, labelDefaultDelete),
+		Policy:             testPolicy(),
+		Volume:             report,
+	})
+	return buf.String()
 }

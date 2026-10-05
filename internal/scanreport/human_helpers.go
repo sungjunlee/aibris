@@ -16,54 +16,17 @@ import (
 // Human report section printers and display helpers.
 // WriteHuman orchestration stays in human.go.
 
-func writeScanHeadline(w io.Writer, view View) {
-	if view.Partial {
-		return
-	}
-	WriteHeadline(w, view.PhysicalTotalBytes, view.ReclaimPaths, view.Volume)
-}
-
-// WriteHeadline prints the one-line scan summary and optional pressure hint.
-func WriteHeadline(w io.Writer, found int64, paths []ReclaimPath, report *volume.Report) {
-	fmt.Fprintln(w, Headline(found, paths, report))
-	writePressureHint(w, paths, report)
-}
-
-func writePressureHint(w io.Writer, paths []ReclaimPath, report *volume.Report) {
-	if report == nil || (report.Band != volume.BandLow && report.Band != volume.BandCritical) {
-		return
-	}
-	pressure := SizeByLabel(paths, "pressure caches")
-	if pressure <= 0 {
-		return
-	}
-	if largest, ok := LargestNonDefault(paths); ok && largest.Flag() == "--pressure" {
-		return
-	}
-	fmt.Fprintf(w, "  reclaim --pressure %s\n", cleaner.FormatSize(pressure))
-}
-
-func writeDefaultCacheRelaxNote(w io.Writer, policy types.PruneOptions) {
-	if !policy.RelaxCacheAge {
-		return
-	}
-	if policy.PressureDevice != "" {
-		fmt.Fprintln(w, "  official cache age relaxed on the home volume")
-		return
-	}
-	fmt.Fprintln(w, "  official cache age relaxed (--pressure)")
-}
-
-// WriteNext prints the reclaim ladder, review-only line, and scan --json hint.
+// WriteNext prints the commands that act on this scan, largest first after
+// the default, plus the review-only line and the JSON hint.
 func WriteNext(w io.Writer, view View) {
 	fmt.Fprintln(w, "\nnext")
 	if view.Partial {
-		fmt.Fprintln(w, "  retry aibris scan; cleanup is disabled for this result")
+		fmt.Fprintln(w, "  aibris scan                  retry; cleanup is disabled for this result")
 	} else {
 		writeReclaimLadder(w, view.ReclaimPaths)
 	}
 	WriteReviewOnlyLine(w, view.ReviewOnly.Count, view.ReviewOnly.Size)
-	fmt.Fprintln(w, "  aibris scan --json")
+	fmt.Fprintln(w, "  aibris scan --json           machine-readable inventory")
 }
 
 // WriteReviewOnlyLine prints the next-section review-only worktree summary.
@@ -71,7 +34,7 @@ func WriteReviewOnlyLine(w io.Writer, n int, size int64) {
 	if n == 0 {
 		return
 	}
-	fmt.Fprintf(w, "  review-only worktrees  %d %s  %s   not a clean/--strip target; inspect mixed/missing .git markers in owner directories\n",
+	fmt.Fprintf(w, "  review by hand               %d worktree %s, %s: mixed or missing .git markers; never cleaned\n",
 		n, reviewOnlyNoun(n), cleaner.FormatSize(size))
 }
 
@@ -83,26 +46,56 @@ func reviewOnlyNoun(n int) string {
 }
 
 func writeReclaimLadder(w io.Writer, paths []ReclaimPath) {
+	width := nextCommandWidth
 	for _, path := range paths {
-		fmt.Fprintf(w, "  %-20s %10s   %s\n", path.Label, cleaner.FormatSize(path.Size), path.Command)
+		width = max(width, len(path.Command))
+	}
+	for _, path := range paths {
+		fmt.Fprintf(w, "  %-*s %s %s\n", width, path.Command, cleaner.FormatSize(path.Size), reclaimLadderNote(path))
 	}
 }
 
-// WriteVolumePressure prints the home-volume pressure lines.
+// nextCommandWidth is the minimum command column in the next section; the
+// fixed review-only and JSON lines are written to the same width.
+const nextCommandWidth = 28
+
+func reclaimLadderNote(path ReclaimPath) string {
+	switch path.Label {
+	case labelDefaultDelete:
+		return "by default"
+	case labelStrip:
+		return "from inside kept worktrees"
+	case labelPressure:
+		return "including younger caches"
+	default:
+		return path.Label
+	}
+}
+
+// writeCacheRelaxNote explains why young caches count as reclaimable.
+func writeCacheRelaxNote(w io.Writer, policy types.PruneOptions) {
+	switch {
+	case !policy.RelaxCacheAge:
+	case policy.PressureDevice != "":
+		summaryRow(w, "", "caches on the home volume count at any age (volume nearly full)")
+	default:
+		summaryRow(w, "", "caches count at any age (--pressure)")
+	}
+}
+
+// WriteVolumePressure prints the home volume's capacity and, when debris
+// spans volumes, how much of it is here.
 func WriteVolumePressure(w io.Writer, report *volume.Report) {
 	if report == nil {
 		return
 	}
-	fmt.Fprintf(w, "  volume     %s  %s  %.0f%% used   %s free   %s\n",
+	summaryRow(w, "volume", "%s (%s): %.0f%% used, %s free, %s",
 		report.Role, report.FSType, report.UsedPercent,
 		cleaner.FormatSize(int64(report.AvailableBytes)), volume.HumanWord(report.Band))
 	if report.OtherVolumeDebrisBytes > 0 {
-		fmt.Fprintf(w, "  debris     %s on this volume   %s other volumes\n",
-			cleaner.FormatSize(report.DebrisBytes),
-			cleaner.FormatSize(report.OtherVolumeDebrisBytes))
-		return
+		summaryRow(w, "", "%s of the debris is here, %s on other volumes",
+			cleaner.FormatSize(report.DebrisBytes), cleaner.FormatSize(report.OtherVolumeDebrisBytes))
 	}
-	fmt.Fprintf(w, "  debris     %s on this volume\n", cleaner.FormatSize(report.DebrisBytes))
 }
 
 // WriteHumanExclusions prints discovery-only exclusion diagnostics.
@@ -240,36 +233,28 @@ func codexWorktreeNoun(count int) string {
 
 // WriteCleanupDiagnostics prints default-clean blocked-reason buckets.
 func WriteCleanupDiagnostics(w io.Writer, summary CleanupProjection, opts types.PruneOptions) {
-	if summary.ActiveCount > 0 {
-		fmt.Fprintf(w, "  protected   %s active worktrees; use --include-active-worktrees after review\n",
-			cleaner.FormatSize(summary.ActiveSize))
+	label := "held back"
+	row := func(size int64, format string, args ...any) {
+		summaryRow(w, label, "%s %s", cleaner.FormatSize(size), fmt.Sprintf(format, args...))
+		label = ""
 	}
 	if summary.AgeCount > 0 {
-		switch {
-		case opts.RelaxCacheAge && opts.PressureDevice != "":
-			fmt.Fprintf(w, "  age-blocked %s younger than %s (home-volume official caches already in default)\n",
-				cleaner.FormatSize(summary.AgeSize), CleanAgeDisplay(opts.Age))
-		case opts.RelaxCacheAge:
-			fmt.Fprintf(w, "  age-blocked %s younger than %s (official caches already in default)\n",
-				cleaner.FormatSize(summary.AgeSize), CleanAgeDisplay(opts.Age))
-		default:
-			fmt.Fprintf(w, "  age-blocked %s younger than %s\n",
-				cleaner.FormatSize(summary.AgeSize), CleanAgeDisplay(opts.Age))
-		}
+		row(summary.AgeSize, "younger than %s", CleanAgeDisplay(opts.Age))
+	}
+	if summary.ActiveCount > 0 {
+		row(summary.ActiveSize, "active worktrees (review with clean --guide)")
 	}
 	if summary.RiskyCount > 0 {
-		fmt.Fprintf(w, "  risky       %s requires --risky\n", cleaner.FormatSize(summary.RiskySize))
+		row(summary.RiskySize, "AI logs (need --risky)")
 	}
 	if summary.FilterCount > 0 && (len(opts.Categories) > 0 || len(opts.Tools) > 0) {
-		fmt.Fprintf(w, "  filtered    %s outside category/tool filters\n", cleaner.FormatSize(summary.FilterSize))
+		row(summary.FilterSize, "outside --category/--tool")
 	}
 	if summary.AgentStateLiveCount > 0 {
-		fmt.Fprintf(w, "  agent-state %s %s\n",
-			cleaner.FormatSize(summary.AgentStateLiveSize), cleaner.EligibilityReasonAgentStateLive)
+		row(summary.AgentStateLiveSize, "agent state whose project still exists")
 	}
 	if summary.AgentStateUndeterminedCount > 0 {
-		fmt.Fprintf(w, "  agent-state %s %s\n",
-			cleaner.FormatSize(summary.AgentStateUndeterminedSize), cleaner.EligibilityReasonAgentStateUndetermined)
+		row(summary.AgentStateUndeterminedSize, "agent state not proven orphaned")
 	}
 	if len(summary.OtherBlocked) > 0 {
 		reasons := make([]string, 0, len(summary.OtherBlocked))
@@ -278,8 +263,7 @@ func WriteCleanupDiagnostics(w io.Writer, summary CleanupProjection, opts types.
 		}
 		sort.Strings(reasons)
 		for _, reason := range reasons {
-			bucket := summary.OtherBlocked[cleaner.EligibilityReason(reason)]
-			fmt.Fprintf(w, "  blocked     %s %s\n", cleaner.FormatSize(bucket.Size), reason)
+			row(summary.OtherBlocked[cleaner.EligibilityReason(reason)].Size, "%s", reason)
 		}
 	}
 }
