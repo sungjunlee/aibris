@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"unicode"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/types"
@@ -36,7 +37,7 @@ func writeLargestItems(w io.Writer, items []Item) {
 
 	fmt.Fprintln(w, "\nlargest")
 	for _, item := range items[:limit] {
-		fmt.Fprintf(w, "  %9s  %-13s %-16s %-18s %s\n",
+		fmt.Fprintf(w, "  %9s  %-13s %s %s %s\n",
 			cleaner.FormatSize(item.Size),
 			item.Category,
 			fitColumn(itemName(item), 16),
@@ -76,12 +77,54 @@ func itemAgeAndStatus(item Item) string {
 	return ItemAgeAndStatus(item.debrisInfo())
 }
 
-// fitColumn truncates s to width runes with a trailing ellipsis so long
-// names (encoded store entries, deep project paths) keep columns aligned.
+// fitColumn truncates s to width terminal cells, with a trailing ellipsis
+// when it is cut, and pads it to exactly width cells, so wide (CJK) names and
+// long encoded store entries keep the columns aligned.
 func fitColumn(s string, width int) string {
+	var out []rune
+	used := 0
 	runes := []rune(s)
-	if len(runes) <= width {
-		return s
+	for i, r := range runes {
+		w := runeCells(r)
+		rest := 0
+		for _, next := range runes[i:] {
+			rest += runeCells(next)
+		}
+		if used+rest <= width {
+			out = append(out, runes[i:]...)
+			used += rest
+			break
+		}
+		if used+w > width-1 {
+			out = append(out, '…')
+			used++
+			break
+		}
+		out = append(out, r)
+		used += w
 	}
-	return string(runes[:width-1]) + "…"
+	for ; used < width; used++ {
+		out = append(out, ' ')
+	}
+	return string(out)
+}
+
+// runeCells approximates terminal display width: combining marks take no
+// cell, East Asian wide and fullwidth characters take two.
+func runeCells(r rune) int {
+	switch {
+	case unicode.Is(unicode.Mn, r) || unicode.Is(unicode.Me, r):
+		return 0
+	case r >= 0x1100 && r <= 0x115F, // Hangul Jamo
+		r >= 0x2E80 && r <= 0xA4CF, // CJK radicals through Yi
+		r >= 0xAC00 && r <= 0xD7A3, // Hangul syllables
+		r >= 0xF900 && r <= 0xFAFF, // CJK compatibility ideographs
+		r >= 0xFE30 && r <= 0xFE4F, // CJK compatibility forms
+		r >= 0xFF00 && r <= 0xFF60, // fullwidth forms
+		r >= 0xFFE0 && r <= 0xFFE6,
+		r >= 0x20000 && r <= 0x3FFFD:
+		return 2
+	default:
+		return 1
+	}
 }

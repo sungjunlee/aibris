@@ -40,7 +40,7 @@ held back and why, and how full the home volume is:
 ```text
 summary
   found        94.2 MB in 3 items
-  reclaimable  0 B
+  reclaimable  0 B by default (estimate)
   held back    20.0 KB younger than 7d
                94.2 MB AI logs (need --risky)
   volume       home (apfs): 92% used, 34.0 GB free, tight

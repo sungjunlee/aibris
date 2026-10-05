@@ -31,7 +31,7 @@ func WriteHuman(w io.Writer, view View) {
 	if view.Partial {
 		summaryRow(w, "reclaimable", "unknown until a complete scan succeeds")
 	} else {
-		summaryRow(w, "reclaimable", "%s", cleaner.FormatSize(view.DefaultCleanSize))
+		summaryRow(w, "reclaimable", "%s by default (estimate)", cleaner.FormatSize(view.DefaultCleanSize))
 		writeCacheRelaxNote(w, view.Policy)
 		if path, ok := LargestNonDefault(view.ReclaimPaths); ok {
 			summaryRow(w, "", "%s with %s", cleaner.FormatSize(path.Size), path.Flag())

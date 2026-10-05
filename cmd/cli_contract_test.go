@@ -256,7 +256,7 @@ func TestScanDefaultCleanEstimateMatchesAgentStateGrace(t *testing.T) {
 			t.Fatalf("scan failed: %v\n%s", err, scanOutput)
 		}
 		estimate := cliContractLineWithPrefix(t, scanOutput, "reclaimable")
-		if !strings.HasSuffix(strings.TrimSpace(estimate), " 0 B") {
+		if !strings.Contains(estimate, "reclaimable  0 B ") {
 			t.Fatalf("scan estimate counts an entry clean will not select: %q\n%s", estimate, scanOutput)
 		}
 
@@ -278,7 +278,7 @@ func TestScanDefaultCleanEstimateMatchesAgentStateGrace(t *testing.T) {
 			t.Fatalf("scan failed: %v\n%s", err, scanOutput)
 		}
 		estimate := cliContractLineWithPrefix(t, scanOutput, "reclaimable")
-		if strings.HasSuffix(strings.TrimSpace(estimate), " 0 B") {
+		if strings.Contains(estimate, "reclaimable  0 B ") {
 			t.Fatalf("scan estimate dropped an entry clean will select: %q\n%s", estimate, scanOutput)
 		}
 

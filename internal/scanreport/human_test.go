@@ -118,7 +118,7 @@ func TestWriteHumanNamesOfficialCacheAgeRelax(t *testing.T) {
 	WriteHuman(&buf, FromResult(r, policy))
 	got := buf.String()
 	for _, want := range []string{
-		"reclaimable  100 B",
+		"reclaimable  100 B by default (estimate)",
 		"caches count at any age (--pressure)",
 		"held back    50 B younger than 7d",
 	} {
@@ -223,5 +223,32 @@ func TestWriteHumanRetentionAndDiagnostics(t *testing.T) {
 	}
 	if strings.Contains(got, "session-private") || strings.Contains(got, ".jsonl") {
 		t.Errorf("retention leaked private evidence:\n%s", got)
+	}
+}
+
+func TestFitColumnUsesDisplayCells(t *testing.T) {
+	tests := []struct {
+		in    string
+		width int
+		want  string
+	}{
+		{"npm", 6, "npm   "},
+		{"abcdefgh", 6, "abcde…"},
+		{"한글이름", 8, "한글이름"},
+		{"한글이름입니다", 8, "한글이… "},
+		{"e\u0301cole", 6, "e\u0301cole "},
+	}
+	for _, tt := range tests {
+		got := fitColumn(tt.in, tt.width)
+		if got != tt.want {
+			t.Errorf("fitColumn(%q, %d) = %q; want %q", tt.in, tt.width, got, tt.want)
+		}
+		cells := 0
+		for _, r := range got {
+			cells += runeCells(r)
+		}
+		if cells != tt.width {
+			t.Errorf("fitColumn(%q, %d) spans %d cells", tt.in, tt.width, cells)
+		}
 	}
 }

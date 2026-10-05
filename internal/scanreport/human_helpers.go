@@ -46,10 +46,18 @@ func reviewOnlyNoun(n int) string {
 }
 
 func writeReclaimLadder(w io.Writer, paths []ReclaimPath) {
+	width := nextCommandWidth
 	for _, path := range paths {
-		fmt.Fprintf(w, "  %-28s %s %s\n", path.Command, cleaner.FormatSize(path.Size), reclaimLadderNote(path))
+		width = max(width, len(path.Command))
+	}
+	for _, path := range paths {
+		fmt.Fprintf(w, "  %-*s %s %s\n", width, path.Command, cleaner.FormatSize(path.Size), reclaimLadderNote(path))
 	}
 }
+
+// nextCommandWidth is the minimum command column in the next section; the
+// fixed review-only and JSON lines are written to the same width.
+const nextCommandWidth = 28
 
 func reclaimLadderNote(path ReclaimPath) string {
 	switch path.Label {

@@ -196,7 +196,7 @@ func TestScanDefaultCleanEstimateMatchesCleanDryRunForNestedTargets(t *testing.T
 		rootCmd.Execute()
 	})
 	estimateLine := cliContractLineWithPrefix(t, scanOutput, "reclaimable")
-	estimateSize := strings.Join(strings.Fields(estimateLine)[1:], " ")
+	estimateSize := strings.Join(strings.Fields(estimateLine)[1:3], " ")
 
 	defer withStdin(t, "")()
 	cleanOutput := captureOutput(func() {
