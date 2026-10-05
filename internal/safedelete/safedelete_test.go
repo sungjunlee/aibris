@@ -163,6 +163,7 @@ func TestCheckProtectsRelocatedAgentHomes(t *testing.T) {
 	t.Setenv("CODEX_HOME", codexHome)
 	t.Setenv("AIBRIS_CODEX_HOMES", extra)
 	t.Setenv("CLAUDE_CONFIG_DIR", claudeHome)
+	t.Setenv("AIBRIS_CODEX_HOMES", "  "+extra+"  ")
 	for _, path := range []string{
 		codexHome,
 		filepath.Join(codexHome, "worktrees"),
@@ -178,10 +179,29 @@ func TestCheckProtectsRelocatedAgentHomes(t *testing.T) {
 	for _, path := range []string{
 		filepath.Join(codexHome, "worktrees", "abc"),
 		filepath.Join(codexHome, "archived_sessions"),
+		filepath.Join(codexHome, "projects"), // Codex has no projects store
 		filepath.Join(claudeHome, "projects", "encoded"),
 	} {
 		if err := Check(home, path); err != nil {
 			t.Errorf("Check(%s) = %v; want allowed", path, err)
 		}
+	}
+}
+
+func TestCheckRefusesPathsThroughASymlinkedGitDirectory(t *testing.T) {
+	home := t.TempDir()
+	store := filepath.Join(home, "git-store")
+	if err := os.MkdirAll(filepath.Join(store, "objects"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	repo := filepath.Join(home, "work", "repo")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(store, filepath.Join(repo, ".git")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	if err := Check(home, filepath.Join(repo, ".git", "objects")); !errors.Is(err, ErrRefused) {
+		t.Fatalf("Check(.git/objects via symlink) = %v; want refusal", err)
 	}
 }

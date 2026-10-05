@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -45,21 +46,21 @@ func TestNoRemoveAllOutsideTheGate(t *testing.T) {
 			return err
 		}
 		rel, _ := filepath.Rel(repo, path)
-		osName := ""
+		osNames := map[string]bool{}
 		for _, spec := range file.Imports {
-			if spec.Path.Value != `"os"` {
+			if importPath, err := strconv.Unquote(spec.Path.Value); err != nil || importPath != "os" {
 				continue
 			}
-			osName = "os"
+			name := "os"
 			if spec.Name != nil {
-				osName = spec.Name.Name
+				name = spec.Name.Name
 			}
+			if name == "." {
+				t.Errorf("%s: package os dot-imported; use a named import", rel)
+			}
+			osNames[name] = true
 		}
-		switch osName {
-		case "":
-			return nil
-		case ".", "_":
-			t.Errorf("%s: package os imported as %q; use a named import", rel, osName)
+		if len(osNames) == 0 {
 			return nil
 		}
 		ast.Inspect(file, func(node ast.Node) bool {
@@ -67,7 +68,7 @@ func TestNoRemoveAllOutsideTheGate(t *testing.T) {
 			if !ok {
 				return true
 			}
-			if recv, ok := sel.X.(*ast.Ident); ok && recv.Name == osName {
+			if recv, ok := sel.X.(*ast.Ident); ok && osNames[recv.Name] {
 				switch {
 				case sel.Sel.Name == "RemoveAll":
 					t.Errorf("%s: os.RemoveAll outside internal/safedelete", rel)

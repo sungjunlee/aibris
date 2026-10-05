@@ -60,12 +60,20 @@ var protected = []string{
 	".config/superpowers", ".config/superpowers/worktrees",
 }
 
-// homeEnv names environment variables that relocate an agent home. The homes
-// they name, and their stores, are protected wherever they live.
-var homeEnv = []string{"CODEX_HOME", "AIBRIS_CODEX_HOMES", "CLAUDE_CONFIG_DIR"}
+// relocatedHome names an environment variable that relocates an agent home
+// and the stores below it. The home and its stores are protected wherever
+// they live; entries inside a store stay eligible.
+type relocatedHome struct {
+	env    string
+	list   bool // a path list rather than a single path
+	stores []string
+}
 
-// relocatedHomeStores are protected below every relocated agent home.
-var relocatedHomeStores = []string{"worktrees", "sessions", "projects"}
+var relocatedHomeEnv = []relocatedHome{
+	{env: "CODEX_HOME", stores: []string{"worktrees", "sessions"}},
+	{env: "AIBRIS_CODEX_HOMES", list: true, stores: []string{"worktrees", "sessions"}},
+	{env: "CLAUDE_CONFIG_DIR", stores: []string{"projects"}},
+}
 
 // Check returns nil when path may be removed, or an error wrapping
 // ErrRefused that says why not.
@@ -88,9 +96,12 @@ func Check(home, path string) error {
 			return refuse(path, "agent home or store")
 		}
 	}
-	for _, part := range strings.Split(key, "/") {
-		if part == ".git" {
-			return refuse(path, "Git metadata")
+	// Both spellings: a symlinked .git resolves to a name without ".git".
+	for _, form := range []string{key, foldCase(filepath.ToSlash(path))} {
+		for _, part := range strings.Split(form, "/") {
+			if part == ".git" {
+				return refuse(path, "Git metadata")
+			}
 		}
 	}
 	if info, err := os.Lstat(filepath.Join(canonical, ".git")); err == nil && info.IsDir() {
@@ -110,14 +121,20 @@ func coversProtected(target, protected string) bool {
 // what is allowed, only fail to add protection the defaults already give.
 func relocatedHomes() []string {
 	var out []string
-	for _, name := range homeEnv {
-		for _, entry := range filepath.SplitList(os.Getenv(name)) {
+	for _, home := range relocatedHomeEnv {
+		value := os.Getenv(home.env)
+		entries := []string{value}
+		if home.list {
+			entries = filepath.SplitList(value)
+		}
+		for _, entry := range entries {
+			entry = strings.TrimSpace(entry)
 			if entry == "" || !filepath.IsAbs(entry) {
 				continue
 			}
 			entry = canonicalize(entry)
 			out = append(out, entry)
-			for _, store := range relocatedHomeStores {
+			for _, store := range home.stores {
 				out = append(out, filepath.Join(entry, store))
 			}
 		}
