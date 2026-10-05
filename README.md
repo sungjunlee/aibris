@@ -56,8 +56,8 @@ was chosen, plus everything it kept and why. Drop `--dry-run` to run the same
 plan; aibris asks `Proceed? [y/N]` before deleting anything.
 
 When several AI worktrees are worth reviewing, `clean` opens a guided review:
-each worktree is shown as recommended, reviewable, or locked (dirty, unpushed,
-or recently used), and you toggle what to remove.
+each worktree is shown as recommended, reviewable, or locked (dirty, recently
+used, or with commits no branch keeps), and you toggle what to remove.
 
 ## What it finds
 
@@ -67,8 +67,8 @@ or recently used), and you toggle what to remove.
 | Agent state | Claude Code and Cursor project stores | Only when proven orphaned and idle for 24h |
 | AI logs | Codex, Claude Code, and Windsurf logs | Only with `--risky` |
 | Dependencies | project `node_modules` | Older than 7 days |
-| Build caches | Go, npm, Gradle, Cargo, Xcode, Homebrew, CocoaPods | Older than 7 days |
-| Python caches | pip and uv | Older than 7 days |
+| Build caches | Go, npm, Gradle, Cargo, Xcode, Homebrew, CocoaPods | Older than 7 days, any age when the home volume is over 95% full |
+| Python caches | pip and uv | Same as build caches |
 
 The first three rows are agent-produced state, aibris's reason to exist. The
 rest is generic build debris, covered so one `scan` shows the whole picture.
@@ -80,15 +80,16 @@ Category definitions are in [docs/CATEGORY.md](docs/CATEGORY.md).
   before deleting; `--force` skips that prompt and nothing else.
 - **Worktrees** whose parent repository still exists are kept unless you
   select them in guided review or pass `--include-active-worktrees`. Guided
-  review locks dirty, unpushed, and recently used checkouts. Directories that
-  are not valid linked worktrees are never removed.
+  review locks dirty and recently used checkouts and any whose commits no
+  branch keeps. Directories that are not valid linked worktrees are never
+  removed.
 - **Agent state** is removed only when the project directory it recorded is
   gone, and only after the idle floor (`--agent-state-grace`, 24h).
 - **AI logs** need `--risky`.
 - **Every deletion passes one gate**: the path must be inside `$HOME`, must
   not be a protected location or its ancestor (`~/Documents`, `~/Library`,
-  `~/.ssh`, a tool's whole home, an agent store), and must not be a Git
-  repository or Git metadata.
+  `~/.ssh`, a tool's whole home, an agent store), and must not be a primary
+  Git repository (a `.git` directory) or Git metadata.
 - **Protected content is read-only.** Codex session retention is reported,
   never cleaned; see [docs/PROTECTED_RETENTION.md](docs/PROTECTED_RETENTION.md).
 
@@ -101,7 +102,7 @@ The full model is in [docs/SPEC.md](docs/SPEC.md) and
 aibris scan --root ~/.codex            # narrow to part of $HOME
 aibris scan --json                     # machine-readable (docs/JSON_SCHEMA.md)
 
-aibris clean --age 30d                 # only items idle for 30+ days (h, d, w, mo, y)
+aibris clean --age 30d                 # idle 30+ days (h, d, w, mo, y); agent state uses --agent-state-grace
 aibris clean --category node_modules   # one category
 aibris clean --tool codex,claude       # specific tools
 aibris clean --risky                   # include AI logs
@@ -126,12 +127,14 @@ item that contains it.
 ## For AI agents
 
 Agents can drive the same loop through JSON: scan, summarize, show a dry-run
-plan, ask the user, then run the identical command without `--dry-run`.
+plan, ask the user, then run the same selectors without `--dry-run`. A
+non-dry-run `--json` run also needs `--force` (after the user confirmed) or
+`--interactive`.
 
 ```bash
 aibris scan --json
 aibris clean --no-guide --category worktree --age 7d --dry-run --json
-aibris clean --no-guide --category worktree --age 7d
+aibris clean --no-guide --category worktree --age 7d --json --force
 ```
 
 [`skills/aibris/SKILL.md`](skills/aibris/SKILL.md) packages this workflow as

@@ -32,8 +32,9 @@ matters more than coverage or speed.
 
 - Do not compete with general-purpose cleaners on generic caches. Cover them
   for a complete picture, but do not add cache targets for their own sake.
-- Do not delete agent state, sessions, or transcripts without proof that the
-  owning project is gone. Protected retention stores are read-only.
+- Do not delete agent project stores without proof that the owning project is
+  gone. Logs and archived sessions are cleaned only behind `--risky`.
+  Protected retention stores are read-only.
 - Do not call GitHub or any network service to decide what is safe.
 - Do not add a flag, environment variable, or config key to resolve one edge
   case. A new knob carries the same weight as a new setting: state the
@@ -104,9 +105,9 @@ These hold for every change. Breaking one is a bug even if tests pass.
 - **One deletion gate.** Only `internal/safedelete` may call `os.RemoveAll`
   (an architecture test enforces it). Every removal, cleanup command, and
   `git worktree remove` passes `safedelete.Check`: canonical path strictly
-  inside `$HOME`, not a protected location or its ancestor, not a Git
-  repository or Git metadata. Add new protected locations there, not in
-  providers.
+  inside `$HOME`, not a protected location or its ancestor, not a primary Git
+  repository (a `.git` directory) or Git metadata. Add new protected
+  locations there, not in providers.
 - **Re-verify at the mutation boundary.** Scan results can come from a cache.
   Executors re-check identity, age, Git state, agent-state classification,
   and overlap right before mutating, and refuse on drift.
@@ -115,9 +116,10 @@ These hold for every change. Breaking one is a bug even if tests pass.
 - **Preview and confirm.** `--dry-run` never mutates. A real `clean` prompts;
   `--force` skips only the prompt, never a safety check. `--interactive`
   confirms per item.
-- **Defaults:** classic `--age` is `7d`; AI logs need `--risky`; active
-  worktrees need explicit selection; orphaned agent state waits for
-  `--agent-state-grace` (24h).
+- **Defaults:** classic `--age` is `7d` (caches on a home volume over 95% full
+  relax it); AI logs need `--risky`; active worktrees need explicit selection;
+  orphaned agent state ignores `--age` and waits for `--agent-state-grace`
+  (24h).
 - **`--exclude` only hides** from discovery and never matches ancestors.
   **`--protect-path`** is clean-only and protects every outer owner that
   contains the path.
@@ -179,7 +181,7 @@ declarative target catalog is planned; until then follow the existing pattern.
 
 | Provider | Category | Default clean | Paths |
 | --- | --- | --- | --- |
-| worktree | worktree | orphaned only | registry and convention containers above |
+| codex (worktree provider; reports `codex` for every tool) | worktree | orphaned only in the classic plan; guided review may recommend active ones from Git evidence | registry and convention containers above |
 | claude | agent-state | proven orphaned, after grace | `~/.claude/projects/<name>/` |
 | cursor | agent-state | proven orphaned, after grace | `~/.cursor/projects/<name>/` |
 | windsurf | ai-logs | `--risky` only | `~/.codeium/windsurf/` |
