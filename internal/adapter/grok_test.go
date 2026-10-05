@@ -76,6 +76,7 @@ func TestGrokSessionsClassification(t *testing.T) {
 		{"session disagrees with the name", grokEntry(t, home, filepath.Join(home, "work", "renamed"), gone), types.EntryClassUndetermined},
 		{"no session corroborates the name", grokEntry(t, home, filepath.Join(home, "work", "only-history")), types.EntryClassUndetermined},
 		{"session without context", grokEntry(t, home, filepath.Join(home, "work", "no-context"), ""), types.EntryClassUndetermined},
+		{"one session corroborates, another lacks context", grokEntry(t, home, filepath.Join(home, "work", "mixed"), filepath.Join(home, "work", "mixed"), ""), types.EntryClassUndetermined},
 	}
 	malformed := filepath.Join(home, ".grok", "sessions", "not-an-encoded-path")
 	if err := os.MkdirAll(malformed, 0o700); err != nil {

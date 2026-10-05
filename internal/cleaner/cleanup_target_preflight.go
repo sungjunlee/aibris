@@ -78,8 +78,8 @@ func RefreshCleanupInventoryMetadataWithContext(ctx context.Context, items []typ
 		// Agent-state stores are small and their whole point is the session
 		// history inside them, so re-derive rather than rely on the raise: an
 		// append to an existing session file moves neither the store directory's
-		// mtime nor anything else this refresh would see, and the cleanup
-		// preflight gives agent-state no minimum age to recheck later.
+		// mtime nor anything else this refresh would see. The cleanup snapshot
+		// re-walks the tree against the grace floor again right before removal.
 		if items[i].Category == types.CategoryAgentState {
 			if activity := adapter.NewestTreeModTime(ctx, items[i].Path); activity.After(items[i].ModTime) {
 				items[i].ModTime = activity
@@ -123,8 +123,13 @@ func CaptureCleanupTargetSnapshot(
 		info = current
 	}
 	minimumAge := time.Duration(0)
-	if item.Category != types.CategoryAgentState && !isActiveWorktreeTarget(item) &&
-		!ShouldRelaxCacheAge(item, opts) {
+	switch {
+	case item.Category == types.CategoryAgentState:
+		// The idle floor that gated selection is re-checked at the mutation
+		// boundary: a session that resumes while the user is confirming
+		// appends to existing files, which moves no directory mtime.
+		minimumAge = opts.AgentStateMinIdleAge
+	case !isActiveWorktreeTarget(item) && !ShouldRelaxCacheAge(item, opts):
 		minimumAge = opts.Age
 	}
 	snapshot := &CleanupTargetSnapshot{

@@ -131,10 +131,9 @@ func recordedCWDFromGrokSessions(ctx context.Context, entryPath string) (recorde
 		contextFile := filepath.Join(entryPath, session.Name(), "prompt_context.json")
 		cwd, err := grokPromptContextCWD(contextFile)
 		switch {
-		case errors.Is(err, os.ErrNotExist):
-			// A session that never wrote its context records nothing either way.
-			continue
 		case err != nil:
+			// A session without readable context could have run anywhere, so
+			// it blocks the absence proof for the whole entry.
 			evidence.unverifiableFiles = append(evidence.unverifiableFiles,
 				filepath.Join(session.Name(), "prompt_context.json"))
 			continue

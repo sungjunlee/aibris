@@ -1844,3 +1844,46 @@ func TestIsSafeTargetAcceptsDirectChildrenOfAgentStateStores(t *testing.T) {
 		}
 	}
 }
+
+func TestAgentStateSnapshotRechecksActivityAtTheMutationBoundary(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	entry := filepath.Join(home, ".grok", "sessions", "%2Fgone")
+	session := filepath.Join(entry, "s1", "chat_history.jsonl")
+	if err := os.MkdirAll(filepath.Dir(session), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(session, []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-72 * time.Hour)
+	for _, path := range []string{session, filepath.Dir(session), entry} {
+		if err := os.Chtimes(path, old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+	item := types.DebrisInfo{
+		Tool: types.ToolGrok, Category: types.CategoryAgentState, Path: entry,
+		ModTime: old, PathModTime: old, Classification: types.EntryClassOrphaned,
+	}
+	opts := types.PruneOptions{AgentStateMinIdleAge: 24 * time.Hour}
+	snapshot, err := CaptureCleanupTargetSnapshot(item, opts)
+	if err != nil {
+		t.Fatalf("capture: %v", err)
+	}
+	if err := snapshot.Validate(context.Background()); err != nil {
+		t.Fatalf("idle store refused: %v", err)
+	}
+	// A resumed session appends to an existing file: no directory mtime moves.
+	file, err := os.OpenFile(session, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.WriteString("{}\n"); err != nil {
+		t.Fatal(err)
+	}
+	_ = file.Close()
+	if err := snapshot.Validate(context.Background()); !errors.Is(err, ErrCleanupTargetYoungerThanMinimumAge) {
+		t.Fatalf("Validate after append = %v; want the minimum-age refusal", err)
+	}
+}
