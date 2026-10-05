@@ -8,11 +8,10 @@
 
 ### Changed
 
-- Cache locations follow each tool's own override variables
-  (`PIP_CACHE_DIR`, `UV_CACHE_DIR`, `npm_config_cache`, `CARGO_HOME`,
-  `GRADLE_USER_HOME`, `HOMEBREW_CACHE`) and platform defaults. A directory
-  chosen by an override is used only if it looks like that cache. The build
-  and Python cache providers share one catalog.
+- Build and Python caches come from one catalog that follows each tool's
+  platform defaults. `UV_CACHE_DIR` is honored when the directory carries
+  uv's `CACHEDIR.TAG`; other override variables are not, because an
+  unmarked override cannot be told apart from an ordinary directory.
 
 ### Fixed
 

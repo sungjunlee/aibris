@@ -1802,37 +1802,28 @@ func TestCleanupCommandEnvPinsTheScannedCache(t *testing.T) {
 func TestIsSafeTargetAcceptsExactCatalogCachePaths(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
-	var npx string
-	for _, path := range adapter.CacheTargetPaths() {
-		if filepath.Base(path) == "_npx" {
-			npx = path
-		}
-	}
-	if npx == "" {
-		t.Fatal("npx cache missing from the catalog")
-	}
-	// ~/.npm/_npx also matches the legacy allowlist; check a relocated one the
-	// legacy allowlist would reject.
-	relocated := filepath.Join(home, "tools", "npm-cache")
-	if err := os.MkdirAll(filepath.Join(relocated, "_cacache", "index-v5"), 0o755); err != nil {
+	// A tagged uv cache relocated to a path the legacy allowlist rejects.
+	relocated := filepath.Join(home, "tools", "uv-store")
+	if err := os.MkdirAll(relocated, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("npm_config_cache", relocated)
-	target := filepath.Join(relocated, "_npx")
-	if !IsSafeTarget(home, types.DebrisInfo{Path: target, Category: types.CategoryBuildCache, Tool: types.ToolBuildCache}) {
-		t.Errorf("relocated catalog cache %s rejected", target)
+	tag := "Signature: 8a477f597d28d172789f06886806bc55\n"
+	if err := os.WriteFile(filepath.Join(relocated, "CACHEDIR.TAG"), []byte(tag), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	neighbor := filepath.Join(relocated, "other")
-	if IsSafeTarget(home, types.DebrisInfo{Path: neighbor, Category: types.CategoryBuildCache, Tool: types.ToolBuildCache}) {
+	t.Setenv("UV_CACHE_DIR", relocated)
+	if !IsSafeTarget(home, types.DebrisInfo{Path: relocated, Category: types.CategoryOtherCache, Tool: types.ToolPipCache}) {
+		t.Errorf("relocated catalog cache %s rejected", relocated)
+	}
+	neighbor := filepath.Join(home, "tools", "other")
+	if IsSafeTarget(home, types.DebrisInfo{Path: neighbor, Category: types.CategoryOtherCache, Tool: types.ToolPipCache}) {
 		t.Errorf("non-catalog path %s accepted", neighbor)
 	}
-	// An override pointing at a directory without the cache signature is not
-	// a cache: neither scanned nor allowlisted.
-	t.Setenv("npm_config_cache", filepath.Join(home, "work", "archive"))
-	if err := os.MkdirAll(filepath.Join(home, "work", "archive", "_npx"), 0o755); err != nil {
+	// Without the tag the override is not a cache and is not allowlisted.
+	if err := os.Remove(filepath.Join(relocated, "CACHEDIR.TAG")); err != nil {
 		t.Fatal(err)
 	}
-	if IsSafeTarget(home, types.DebrisInfo{Path: filepath.Join(home, "work", "archive", "_npx"), Category: types.CategoryBuildCache, Tool: types.ToolBuildCache}) {
-		t.Error("override without cache signature was allowlisted")
+	if IsSafeTarget(home, types.DebrisInfo{Path: relocated, Category: types.CategoryOtherCache, Tool: types.ToolPipCache}) {
+		t.Error("untagged override allowlisted")
 	}
 }

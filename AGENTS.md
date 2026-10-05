@@ -192,11 +192,11 @@ provider reports `codex` for every tool).
 | build-cache | build-cache | older than `--age` | effective `GOCACHE`; Gradle, npm (`_cacache`, `_npx`), and Cargo registry caches; Xcode caches and DerivedData; Homebrew cache (`brew cleanup --prune=all`); CocoaPods cache; `~/.dartServer/` |
 | pip-cache | other-cache | older than `--age` | pip and uv caches |
 
-Cache locations come from `internal/adapter/cache_catalog.go`, which honors
-each tool's own override variables (`PIP_CACHE_DIR`, `UV_CACHE_DIR`,
-`npm_config_cache`, `CARGO_HOME`, `GRADLE_USER_HOME`, ...) and platform
-defaults. A directory chosen by an override must carry the cache's signature
-entries, so an override cannot make an ordinary directory a target. Adding a
+Cache locations come from `internal/adapter/cache_catalog.go` and follow
+each tool's platform defaults. An override variable is honored only when the
+directory it names marks itself as a cache with a valid `CACHEDIR.TAG` (today
+`UV_CACHE_DIR`); otherwise an override could make an ordinary directory a
+cleanup target. Adding a
 rebuildable cache is one catalog entry; the cleanup allowlist accepts every
 path the catalog resolves to. Never add a cache whose wholesale removal can
 break installed projects (stores that projects link into). Cleanup commands

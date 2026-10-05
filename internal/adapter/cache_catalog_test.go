@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/sungjunlee/aibris/internal/testutil"
@@ -32,63 +33,50 @@ func catalogTarget(t *testing.T, id string) cacheTarget {
 	return cacheTarget{}
 }
 
-func TestCacheCatalogHonorsOverridesThatLookLikeCaches(t *testing.T) {
-	home := t.TempDir()
-	testutil.SetHome(t, home)
-	elsewhere := filepath.Join(home, "relocated")
-	t.Setenv("PIP_CACHE_DIR", filepath.Join(elsewhere, "pip"))
-	t.Setenv("UV_CACHE_DIR", filepath.Join(elsewhere, "uv"))
-	t.Setenv("npm_config_cache", filepath.Join(elsewhere, "npm"))
-	t.Setenv("CARGO_HOME", filepath.Join(elsewhere, "cargo"))
-	t.Setenv("GRADLE_USER_HOME", filepath.Join(elsewhere, "gradle"))
-	mkdirs(t,
-		filepath.Join(elsewhere, "pip", "http-v2"),
-		filepath.Join(elsewhere, "npm", "_cacache", "index-v5"),
-		filepath.Join(elsewhere, "npm", "_npx"),
-		filepath.Join(elsewhere, "cargo", "registry", "index"),
-		filepath.Join(elsewhere, "gradle", "caches", "modules-2"),
-		filepath.Join(elsewhere, "uv"),
-	)
-	if err := os.WriteFile(filepath.Join(elsewhere, "uv", "CACHEDIR.TAG"), []byte("Signature: 8a477f597d28d172789f06886806bc55"), 0o644); err != nil {
+func writeCacheDirTag(t *testing.T, dir string) {
+	t.Helper()
+	mkdirs(t, dir)
+	if err := os.WriteFile(filepath.Join(dir, "CACHEDIR.TAG"), []byte(cacheDirTagSignature+"\n# uv\n"), 0o644); err != nil {
 		t.Fatal(err)
-	}
-	want := map[string]string{
-		"pip":    filepath.Join(elsewhere, "pip"),
-		"uv":     filepath.Join(elsewhere, "uv"),
-		"npm":    filepath.Join(elsewhere, "npm", "_cacache"),
-		"npx":    filepath.Join(elsewhere, "npm", "_npx"),
-		"cargo":  filepath.Join(elsewhere, "cargo", "registry"),
-		"gradle": filepath.Join(elsewhere, "gradle", "caches"),
-	}
-	for id, path := range want {
-		if got := catalogTarget(t, id).resolve(home); got != path {
-			t.Errorf("%s resolve = %q; want %q", id, got, path)
-		}
 	}
 }
 
-func TestCacheCatalogRefusesOverridesWithoutCacheSignature(t *testing.T) {
+func TestCacheCatalogHonorsOnlyTaggedOverrides(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
-	archive := filepath.Join(home, "work", "archive")
-	mkdirs(t, filepath.Join(archive, "notes"), filepath.Join(archive, "_cacache"), filepath.Join(archive, "registry"))
-	for _, name := range []string{"PIP_CACHE_DIR", "UV_CACHE_DIR"} {
-		t.Setenv(name, archive)
+	tagged := filepath.Join(home, "relocated", "uv")
+	writeCacheDirTag(t, tagged)
+	t.Setenv("UV_CACHE_DIR", tagged)
+	if got := catalogTarget(t, "uv").resolve(home); got != tagged {
+		t.Errorf("uv resolve = %q; want the tagged override %q", got, tagged)
 	}
-	t.Setenv("npm_config_cache", archive)
-	t.Setenv("CARGO_HOME", archive)
-	for _, id := range []string{"pip", "uv", "npm", "cargo"} {
-		if got := catalogTarget(t, id).resolve(home); got != "" {
-			t.Errorf("%s resolved an ordinary directory %q", id, got)
-		}
+
+	// An override without a valid tag is not a cache.
+	archive := filepath.Join(home, "work", "archive")
+	mkdirs(t, archive)
+	if err := os.WriteFile(filepath.Join(archive, "CACHEDIR.TAG"), []byte("not a tag"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("UV_CACHE_DIR", archive)
+	if got := catalogTarget(t, "uv").resolve(home); got != "" {
+		t.Errorf("uv resolved an untagged override %q", got)
 	}
 	if slices.Contains(CacheTargetPaths(), archive) {
-		t.Error("ordinary directory allowlisted")
+		t.Error("untagged override allowlisted")
 	}
-	// Relative overrides are ignored rather than resolved against the cwd.
-	t.Setenv("PIP_CACHE_DIR", "relative/pip")
-	if got, overridden := pipCacheDir(home); overridden || got == "relative/pip" {
-		t.Errorf("relative PIP_CACHE_DIR used: %q", got)
+}
+
+func TestCacheCatalogIgnoresUnmarkedOverrides(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	elsewhere := filepath.Join(home, "work", "archive")
+	for _, name := range []string{"PIP_CACHE_DIR", "npm_config_cache", "CARGO_HOME", "GRADLE_USER_HOME", "HOMEBREW_CACHE"} {
+		t.Setenv(name, elsewhere)
+	}
+	for _, path := range CacheTargetPaths() {
+		if strings.HasPrefix(path, elsewhere) {
+			t.Errorf("override honored: %s", path)
+		}
 	}
 }
 

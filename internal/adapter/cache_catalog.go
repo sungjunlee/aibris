@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -20,11 +21,12 @@ type cacheTarget struct {
 	// chose it. It must honor the tool's own overrides so scan and cleanup see
 	// the directory the tool uses.
 	locate func(home string) (path string, overridden bool)
-	// signature lists entries, relative to the cache directory, at least one
-	// of which a real cache of this kind contains. A directory chosen by an
-	// override variable must show one; otherwise an override could turn any
-	// ordinary directory into a cleanup target.
-	signature []string
+	// verify must accept a directory chosen by an override variable before it
+	// is scanned or allowlisted; otherwise an override could turn an ordinary
+	// directory into a cleanup target. Only caches that mark themselves
+	// unambiguously (a CACHEDIR.TAG) honor overrides; the rest use their
+	// default location only.
+	verify func(path string) bool
 	// command, when set, is the tool's own cleanup command. It runs with its
 	// cache location pinned to the scanned path (see cleaner.cleanupCommandEnv).
 	command []string
@@ -42,30 +44,28 @@ var cacheCatalog = []cacheTarget{
 		if runtime.GOOS != "darwin" {
 			return "", false
 		}
-		return envOr("HOMEBREW_CACHE", filepath.Join(home, "Library", "Caches", "Homebrew"))
-	}, signature: []string{"downloads", "api"}, command: []string{"brew", "cleanup", "--prune=all"}},
+		return filepath.Join(home, "Library", "Caches", "Homebrew"), false
+	}, command: []string{"brew", "cleanup", "--prune=all"}},
 	{id: "cocoapods", tool: types.ToolBuildCache, locate: darwinOnly("Library", "Caches", "CocoaPods")},
 	{id: "gradle", tool: types.ToolBuildCache, locate: func(home string) (string, bool) {
-		base, overridden := envOr("GRADLE_USER_HOME", filepath.Join(home, ".gradle"))
-		return filepath.Join(base, "caches"), overridden
-	}, signature: []string{"modules-2", "jars-9", "transforms-3", "transforms-4"}},
+		return filepath.Join(home, ".gradle", "caches"), false
+	}},
 	{id: "npm", tool: types.ToolBuildCache, locate: func(home string) (string, bool) {
 		root, overridden := npmCacheRoot(home)
 		return filepath.Join(root, "_cacache"), overridden
-	}, signature: []string{"index-v5", "content-v2"}, command: []string{"npm", "cache", "clean", "--force"}},
+	}, command: []string{"npm", "cache", "clean", "--force"}},
 	{id: "npx", tool: types.ToolBuildCache, locate: func(home string) (string, bool) {
 		root, overridden := npmCacheRoot(home)
 		return filepath.Join(root, "_npx"), overridden
-	}, signature: []string{filepath.Join("..", "_cacache")}},
+	}},
 	{id: "cargo", tool: types.ToolBuildCache, locate: func(home string) (string, bool) {
-		base, overridden := envOr("CARGO_HOME", filepath.Join(home, ".cargo"))
-		return filepath.Join(base, "registry"), overridden
-	}, signature: []string{"index", "cache", "src"}},
+		return filepath.Join(home, ".cargo", "registry"), false
+	}},
 	{id: "dart-analysis", tool: types.ToolBuildCache, locate: func(home string) (string, bool) {
 		return filepath.Join(home, ".dartServer"), false
 	}},
-	{id: "pip", tool: types.ToolPipCache, locate: pipCacheDir, signature: []string{"http", "http-v2", "wheels", "selfcheck"}},
-	{id: "uv", tool: types.ToolPipCache, locate: uvCacheDir, signature: []string{"CACHEDIR.TAG"}, command: []string{"uv", "cache", "clean"}},
+	{id: "pip", tool: types.ToolPipCache, locate: pipCacheDir},
+	{id: "uv", tool: types.ToolPipCache, locate: uvCacheDir, verify: hasCacheDirTag, command: []string{"uv", "cache", "clean"}},
 }
 
 // resolve returns the target's cache directory, or "" when it does not apply
@@ -76,19 +76,26 @@ func (t cacheTarget) resolve(home string) string {
 		return ""
 	}
 	path = filepath.Clean(path)
-	if overridden && !hasAnyEntry(path, t.signature) {
+	if overridden && (t.verify == nil || !t.verify(path)) {
 		return ""
 	}
 	return path
 }
 
-func hasAnyEntry(dir string, entries []string) bool {
-	for _, entry := range entries {
-		if _, err := os.Lstat(filepath.Join(dir, entry)); err == nil {
-			return true
-		}
+// cacheDirTagSignature starts every valid CACHEDIR.TAG
+// (https://bford.info/cachedir/).
+const cacheDirTagSignature = "Signature: 8a477f597d28d172789f06886806bc55"
+
+// hasCacheDirTag reports whether dir holds a regular CACHEDIR.TAG file with
+// the standard signature, the convention tools use to mark a cache directory.
+func hasCacheDirTag(dir string) bool {
+	tag := filepath.Join(dir, "CACHEDIR.TAG")
+	info, err := os.Lstat(tag)
+	if err != nil || !info.Mode().IsRegular() {
+		return false
 	}
-	return false
+	data, err := os.ReadFile(tag)
+	return err == nil && strings.HasPrefix(string(data), cacheDirTagSignature)
 }
 
 // CacheTargetPaths returns every cache directory the catalog resolves to in
@@ -188,25 +195,21 @@ func xdgCacheHome(home string) string {
 	return path
 }
 
+// npmCacheRoot is npm's default cache root. npm_config_cache is not
+// honored: npm does not mark its cache, so an override could not be told
+// apart from an ordinary directory.
 func npmCacheRoot(home string) (string, bool) {
-	for _, name := range []string{"npm_config_cache", "NPM_CONFIG_CACHE"} {
-		if value := os.Getenv(name); value != "" && filepath.IsAbs(value) {
-			return value, true
-		}
-	}
 	if runtime.GOOS == "windows" {
 		return filepath.Join(localAppData(home), "npm-cache"), false
 	}
 	return filepath.Join(home, ".npm"), false
 }
 
-// pipCacheDir follows pip: PIP_CACHE_DIR, else the platform user cache. On
-// macOS pip has used both ~/Library/Caches/pip and the XDG location, so the
-// first one that exists wins.
+// pipCacheDir is pip's default cache directory. PIP_CACHE_DIR is not honored
+// for the same reason as npm_config_cache. On macOS pip has used both
+// ~/Library/Caches/pip and the XDG location, so the Library one wins unless
+// only the XDG one exists.
 func pipCacheDir(home string) (string, bool) {
-	if path, overridden := envOr("PIP_CACHE_DIR", ""); overridden {
-		return path, true
-	}
 	switch runtime.GOOS {
 	case "windows":
 		return filepath.Join(localAppData(home), "pip", "Cache"), false
