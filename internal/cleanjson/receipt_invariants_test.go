@@ -18,7 +18,7 @@ func TestReceiptInvariantNoPreparedTargetID(t *testing.T) {
 	root := t.TempDir()
 	path1 := filepath.Join(root, "component")
 	path2 := filepath.Join(root, "orphan")
-	
+
 	key1, ok := cleaner.TargetPathKey(path1)
 	if !ok {
 		t.Fatal("component path did not canonicalize")
@@ -81,12 +81,12 @@ func TestReceiptInvariantInvalidTargetIDFormat(t *testing.T) {
 // units without a ReceiptTargetKey are rejected during applyExecutionReceipt.
 func TestReceiptInvariantExecutionUnitMissingIdentity(t *testing.T) {
 	item := types.DebrisInfo{ID: "test", Size: 100}
-	
+
 	plan := Plan{
 		PhysicalTargets: []PhysicalTarget{{ID: "target-1", Decision: DecisionSelected, Bytes: 100}},
 	}
 	receipt := NewReceipt(plan, false)
-	
+
 	targetIDs := map[string]string{receiptItemKey(item): "target-1"}
 
 	// Execution unit with empty ReceiptTargetKey
@@ -115,12 +115,12 @@ func TestReceiptInvariantExecutionUnitUnknownTargetID(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "target")
 	item := types.DebrisInfo{Path: path, ID: "test", Size: 100}
-	
+
 	plan := Plan{
 		PhysicalTargets: []PhysicalTarget{{ID: "target-1", Decision: DecisionSelected, Bytes: 100}},
 	}
 	receipt := NewReceipt(plan, false)
-	
+
 	// Empty targetIDs mapping
 	targetIDs := map[string]string{}
 
@@ -149,12 +149,12 @@ func TestReceiptInvariantExecutionUnitMismatchedID(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "target")
 	item := types.DebrisInfo{Path: path, ID: "test", Size: 100}
-	
+
 	plan := Plan{
 		PhysicalTargets: []PhysicalTarget{{ID: "target-1", Decision: DecisionSelected, Bytes: 100}},
 	}
 	receipt := NewReceipt(plan, false)
-	
+
 	// Mapping points to a different target ID than what's in the receipt
 	targetIDs := map[string]string{receiptItemKey(item): "target-999"}
 
@@ -189,12 +189,12 @@ func TestReceiptAccountingInvariantRequestedMismatch(t *testing.T) {
 		},
 	}
 	receipt := NewReceipt(plan, false)
-	
+
 	// Mark one as removed and requested (correct)
 	receipt.PhysicalTargets[0].State = "removed"
 	receipt.PhysicalTargets[0].Requested = true
 	receipt.PhysicalTargets[0].PhysicalRemoved = true
-	
+
 	// Mark second as cancelled but NOT requested (incorrect - creates mismatch)
 	// This simulates a bug in execution unit application
 	receipt.PhysicalTargets[1].State = "cancelled"
@@ -218,10 +218,10 @@ func TestReceiptTargetSetMismatchRefusesExecution(t *testing.T) {
 	root := t.TempDir()
 	path1 := filepath.Join(root, "target1")
 	path2 := filepath.Join(root, "target2")
-	
+
 	item1 := types.DebrisInfo{Path: path1, ID: "item1", Size: 100}
 	item2 := types.DebrisInfo{Path: path2, ID: "item2", Size: 200}
-	
+
 	key1, ok := cleaner.TargetPathKey(path1)
 	if !ok {
 		t.Fatal("target path 1 did not canonicalize")
@@ -277,7 +277,7 @@ func TestReceiptTargetSetMismatchRefusesExecution(t *testing.T) {
 	if receipt.Status != ReceiptStatusFailed {
 		t.Fatalf("receipt status = %q; want failed when sets differ", receipt.Status)
 	}
-	
+
 	// Verify both targets are marked as failed
 	failedCount := 0
 	for _, target := range receipt.PhysicalTargets {
@@ -297,7 +297,7 @@ func TestReceiptMinimumAgeErrorPreservesRetryability(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "target")
 	item := types.DebrisInfo{Path: path, ID: "test", Size: 100}
-	
+
 	key, ok := cleaner.TargetPathKey(path)
 	if !ok {
 		t.Fatal("target path did not canonicalize")
@@ -347,7 +347,7 @@ func TestReceiptMinimumAgeErrorPreservesRetryability(t *testing.T) {
 	if !found {
 		t.Fatalf("reason codes = %v; want minimum_age for retry-later failure", target.ReasonCodes)
 	}
-	
+
 	// Should NOT have "execution_failed" when it's a minimum age issue
 	for _, code := range target.ReasonCodes {
 		if code == "execution_failed" {
@@ -363,7 +363,7 @@ func TestReceiptPhysicalOwnerPresentWithZeroFreedBytes(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "target")
 	item := types.DebrisInfo{Path: path, ID: "test", Size: 100}
-	
+
 	key, ok := cleaner.TargetPathKey(path)
 	if !ok {
 		t.Fatal("target path did not canonicalize")

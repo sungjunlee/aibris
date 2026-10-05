@@ -22,7 +22,7 @@ func TestCodexActivityRecommendationsProtectActiveWorktreesWhenIndexUnavailable(
 		ID:       "wt-1",
 		Project:  "project-a",
 		Source:   ".codex",
-		Path:     "/home/user/.codex/worktrees/wt-1",
+		Path:     "/aibris-test-home/user/.codex/worktrees/wt-1",
 		Size:     512 * 1024 * 1024,
 		ModTime:  now.Add(-48 * time.Hour),
 		Status:   types.WorktreeActive,

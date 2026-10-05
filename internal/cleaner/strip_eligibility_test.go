@@ -17,13 +17,13 @@ func TestEvaluateStripEligibility(t *testing.T) {
 		item := types.DebrisInfo{
 			Tool:     types.ToolCodex,
 			Category: types.CategoryWorktree,
-			Path:     "/home/u/.codex/worktrees/unit",
+			Path:     "/aibris-test-home/u/.codex/worktrees/unit",
 			Status:   status,
 			ModTime:  modTime,
 		}
 		if strippable {
 			item.StrippableBytes = 1024
-			item.StrippablePaths = []string{"/home/u/.codex/worktrees/unit/node_modules"}
+			item.StrippablePaths = []string{"/aibris-test-home/u/.codex/worktrees/unit/node_modules"}
 		}
 		return item
 	}
@@ -91,10 +91,10 @@ func TestEvaluateStripEligibility(t *testing.T) {
 			name: "non-worktree categories never strip",
 			item: types.DebrisInfo{
 				Category:        types.CategoryNodeModules,
-				Path:            "/home/u/workspace/node_modules",
+				Path:            "/aibris-test-home/u/workspace/node_modules",
 				ModTime:         young,
 				StrippableBytes: 1024,
-				StrippablePaths: []string{"/home/u/workspace/node_modules"},
+				StrippablePaths: []string{"/aibris-test-home/u/workspace/node_modules"},
 			},
 			opts:       defaultPolicy,
 			wantDelete: false,
@@ -136,11 +136,11 @@ func TestStripEligibleWorktreeIsNeverSelectedForDeletion(t *testing.T) {
 		Tool:            types.ToolCodex,
 		Category:        types.CategoryWorktree,
 		ID:              "unit",
-		Path:            "/home/u/.codex/worktrees/unit",
+		Path:            "/aibris-test-home/u/.codex/worktrees/unit",
 		Status:          types.WorktreeActive,
 		ModTime:         time.Now(),
 		StrippableBytes: 1024,
-		StrippablePaths: []string{"/home/u/.codex/worktrees/unit/node_modules"},
+		StrippablePaths: []string{"/aibris-test-home/u/.codex/worktrees/unit/node_modules"},
 	}
 	opts := types.PruneOptions{Age: 7 * 24 * time.Hour}
 

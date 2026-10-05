@@ -47,10 +47,10 @@ type GitWorktreeMember struct {
 	// EvidenceAvailable reports whether repository identity metadata resolved.
 	// GitEvidenceAvailable separately reports whether the recoverability
 	// inspection completed; both are required for a member to pass hard safety.
-	EvidenceAvailable           bool
-	EvidenceError               string
-	GitEvidenceAvailable        bool
-	GitEvidenceError            string
+	EvidenceAvailable    bool
+	EvidenceError        string
+	GitEvidenceAvailable bool
+	GitEvidenceError     string
 	// GitStatusError records a failed full-checkout untracked status walk
 	// that did not invalidate HEAD/ref evidence (strip baseline only).
 	GitStatusError              string

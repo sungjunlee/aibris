@@ -17,7 +17,7 @@ import (
 )
 
 func TestIsSafePath(t *testing.T) {
-	home := "/home/user"
+	home := "/aibris-test-home/user"
 
 	tests := []struct {
 		name   string

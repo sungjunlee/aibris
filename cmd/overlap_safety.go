@@ -91,13 +91,6 @@ func mutationSafetyForTarget(
 	return cleaner.MutationSafetyForTarget(selection, runtime, target)
 }
 
-func cleanupOverlapComponentForTarget(
-	selection cleanupOverlapSafetySelection,
-	target types.DebrisInfo,
-) (cleanupOverlapComponent, bool) {
-	return cleaner.CleanupOverlapComponentForTarget(selection, target)
-}
-
 func overlapSafetyAuditProtections(plan cleaner.OverlapSafetyPlan) map[string]cleanAuditReason {
 	protections := make(map[string]cleanAuditReason)
 	for _, component := range plan.Components {

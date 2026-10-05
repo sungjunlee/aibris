@@ -489,7 +489,7 @@ func TestExecuteActiveWorktreePreservesPartialReceiptWhenBarrierFailsBetweenMemb
 	opts.RemoveWorktree = realRemove
 	prepared := preparedExecutorTarget(t, item, selected)
 	refreshCalls := 0
-		prepared.MutationSafety.Runtime.Refresh = func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
+	prepared.MutationSafety.Runtime.Refresh = func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
 		refreshCalls++
 		if refreshCalls >= 3 {
 			return cleaner.OverlapSafetyEvidence{}, errors.New("injected second-member safety refresh failure")
@@ -523,7 +523,7 @@ func TestExecuteActiveWorktreeOwnerRemovedBeforeFirstMemberMutationDoesNotCredit
 	selected := buildExecutorUnit(t, item)
 	prepared := preparedExecutorTarget(t, item, selected)
 	refreshCalls := 0
-		prepared.MutationSafety.Runtime.Refresh = func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
+	prepared.MutationSafety.Runtime.Refresh = func(context.Context) (cleaner.OverlapSafetyEvidence, error) {
 		refreshCalls++
 		if refreshCalls == 2 {
 			if err := os.RemoveAll(target); err != nil {
@@ -936,20 +936,6 @@ func singleExecutionUnit(t *testing.T, receipt cleanExecutionReceipt) cleanUnitE
 		t.Fatalf("execution units = %d; want 1 (%+v)", len(receipt.Units), receipt.Units)
 	}
 	return receipt.Units[0]
-}
-
-func assertRemovedExecutionUnit(t *testing.T, receipt cleanExecutionReceipt, wantFreed int64, worktree string) {
-	t.Helper()
-	unit := singleExecutionUnit(t, receipt)
-	if unit.State != cleanExecutionRemoved || !unit.PhysicalRemoved || unit.FreedBytes != wantFreed || receipt.FreedBytes != wantFreed {
-		t.Fatalf("unit = %+v, total freed=%d; want removed and %d freed", unit, receipt.FreedBytes, wantFreed)
-	}
-	if len(unit.Members) != 1 || !unit.Members[0].Removed || unit.Members[0].WorktreePath != worktree || unit.Members[0].Error != "" {
-		t.Errorf("member receipts = %+v; want removed %q", unit.Members, worktree)
-	}
-	if !pathDoesNotExist(worktree) {
-		t.Errorf("worktree %q still exists", worktree)
-	}
 }
 
 func assertPathExists(t *testing.T, path string) {

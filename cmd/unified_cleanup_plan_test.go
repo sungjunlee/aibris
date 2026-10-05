@@ -300,7 +300,7 @@ func TestClassicCleanupPlanCandidatesPreserveVolumePressure(t *testing.T) {
 	cache := types.DebrisInfo{
 		Tool:     types.ToolBuildCache,
 		Category: types.CategoryBuildCache,
-		Path:     "/home/u/.cache/go-build",
+		Path:     "/aibris-test-home/u/.cache/go-build",
 		Size:     100,
 		ModTime:  time.Now().Add(-time.Hour),
 	}

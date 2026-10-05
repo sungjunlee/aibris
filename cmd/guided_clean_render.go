@@ -22,13 +22,6 @@ const (
 	guidedCleanPromptTTY  guidedCleanPromptMode = "tty checklist"
 )
 
-func promptGuidedCleanForFiles(input *os.File, output *os.File, state guidedCleanState) ([]types.DebrisInfo, bool, error) {
-	if isTerminal(input) && isTerminal(output) {
-		return promptGuidedCleanWithMode(input, output, state, guidedCleanPromptTTY)
-	}
-	return promptGuidedClean(input, output, state)
-}
-
 // promptGuidedCleanStateForFiles returns the accepted selection state so the
 // unified cleanup plan can reuse the same policy decisions and toggles.
 func promptGuidedCleanStateForFiles(input *os.File, output *os.File, state guidedCleanState) (guidedCleanState, bool, error) {

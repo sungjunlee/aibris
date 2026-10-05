@@ -131,7 +131,7 @@ func TestRenderUnifiedCleanupReviewOmitsEmptySections(t *testing.T) {
 }
 
 func TestRenderUnifiedCleanupReviewRendersAggregatedGuidedReasonOnce(t *testing.T) {
-	item := cleanupReviewTestItem("/home/user/.codex/worktrees/recommended", "recommended", types.CategoryWorktree, 1024)
+	item := cleanupReviewTestItem("/aibris-test-home/user/.codex/worktrees/recommended", "recommended", types.CategoryWorktree, 1024)
 	aggregated := "eligible for cleanup recommendation; local branch retained; no upstream configured"
 	candidates := []CleanupPlanCandidate{
 		{

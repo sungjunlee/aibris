@@ -17,19 +17,13 @@ import (
 const scanJSONSchemaVersion = scanreport.JSONSchemaVersion
 
 type (
-	jsonWorktree               = scanreport.JSONItem
-	jsonSummaryEntry           = scanreport.JSONSummaryEntry
-	jsonSummary                = scanreport.JSONSummary
-	jsonProviderError          = scanreport.JSONProviderError
-	jsonProviderDiagnostic     = scanreport.JSONProviderDiagnostic
-	jsonRetentionProviderError = scanreport.JSONRetentionProviderError
-	jsonRetentionBucket        = scanreport.JSONRetentionBucket
-	jsonRetention              = scanreport.JSONRetention
-	jsonExcludedScope          = scanreport.JSONExcludedScope
-	jsonRejectedExclude        = scanreport.JSONRejectedExclude
-	jsonExclusions             = scanreport.JSONExclusions
-	jsonVolume                 = scanreport.JSONVolume
-	jsonOutput                 = scanreport.JSONOutput
+	jsonWorktree = scanreport.JSONItem
+
+	jsonProviderDiagnostic = scanreport.JSONProviderDiagnostic
+
+	jsonExclusions = scanreport.JSONExclusions
+	jsonVolume     = scanreport.JSONVolume
+	jsonOutput     = scanreport.JSONOutput
 )
 
 var (

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"sort"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -47,36 +46,6 @@ func mergeGuidedPreviewWithClassicTargets(guided, classic []types.DebrisInfo) ([
 	auditTargets = append(auditTargets, guidedTargets...)
 	auditTargets = append(auditTargets, classicTargets...)
 	return classicTargets, auditTargets
-}
-
-func mergeCleanupOverlapComponents(
-	preferred []cleanupOverlapComponent,
-	remaining []cleanupOverlapComponent,
-) []cleanupOverlapComponent {
-	merged := append([]cleanupOverlapComponent(nil), preferred...)
-	for _, component := range remaining {
-		overlapsPreferred := false
-		for _, existing := range preferred {
-			if _, overlaps := cleaner.CleanupLogicalRelation(
-				existing.CanonicalPath,
-				component.CanonicalPath,
-			); overlaps {
-				overlapsPreferred = true
-				break
-			}
-		}
-		if !overlapsPreferred {
-			merged = append(merged, component)
-		}
-	}
-	sort.Slice(merged, func(i, j int) bool {
-		if merged[i].CanonicalPath == merged[j].CanonicalPath {
-			return cleaner.TargetStableKey(merged[i].Owner) <
-				cleaner.TargetStableKey(merged[j].Owner)
-		}
-		return merged[i].CanonicalPath < merged[j].CanonicalPath
-	})
-	return merged
 }
 
 func applyGuidedCleanDefaults(cmd *cobra.Command, age time.Duration) time.Duration {

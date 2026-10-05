@@ -100,4 +100,3 @@ func treeActivityCategory(category types.Category) bool {
 		category == types.CategoryOtherCache ||
 		category == types.CategoryAgentState
 }
-

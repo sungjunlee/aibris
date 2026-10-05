@@ -466,7 +466,7 @@ func TestGuidedCleanExecutionReceiptFailsClosedOnUnrecordedTarget(t *testing.T) 
 		},
 	})
 	targetIDs := map[string]string{"key-1": "target-1", "key-2": "target-2"}
-	
+
 	// Create a guided receipt for testing by wrapping the internal structure
 	inner := cleanjson.GuidedExecutionReceipt{}
 	// Use reflection or recreate the internal state needed for testing
@@ -474,7 +474,7 @@ func TestGuidedCleanExecutionReceiptFailsClosedOnUnrecordedTarget(t *testing.T) 
 	pending := guidedCleanExecutionReceipt{
 		inner: &inner,
 	}
-	
+
 	// Since we can't directly set internal state, we'll test through finish
 	// which will apply the execution and finalize
 	finalized, err := pending.finish(cleanExecutionReceipt{

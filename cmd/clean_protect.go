@@ -71,22 +71,6 @@ func applyProtectPathProtections(
 	return filtered, protections
 }
 
-func applyProtectPathToGuidedState(state *guidedCleanState, matcher *exclude.Matcher) {
-	if state == nil || matcher == nil {
-		return
-	}
-	for i := range state.Rows {
-		if !matcher.ProtectMatch(state.Rows[i].Row.Item.Path) {
-			continue
-		}
-		state.Rows[i].Policy = guidedCleanPolicyLocked
-		state.Rows[i].Selected = false
-		state.Rows[i].SelectionOverride = nil
-		state.Rows[i].Row.Reason = string(cleanReasonProtectPath)
-		state.Rows[i].ReasonCodes = []DecisionReasonCode{DecisionReasonCode("protect_path")}
-	}
-}
-
 func protectPathRefusedTargets(targets []types.DebrisInfo, protections map[string]cleanAuditReason) []types.DebrisInfo {
 	if len(protections) == 0 {
 		return nil
