@@ -77,18 +77,13 @@ func TestScanProgressLabel_WorktreeAdapterIsNotCodex(t *testing.T) {
 		t.Fatalf("scanProgressLabel(node_modules) = %q; want node_modules", got)
 	}
 
-	output := captureOutput(func() {
-		printScanProgress(types.ScanProgressEvent{
-			State: types.ScanProgressDone,
-			Tool:  types.ToolCodex,
-			Count: 4,
-			Size:  1024,
-		})
-	})
-	if !strings.Contains(output, "found    worktree") {
-		t.Fatalf("progress missing worktree label; got: %q", output)
+	var buf strings.Builder
+	printScanProgressError(&buf, types.ScanProgressEvent{State: types.ScanProgressDone, Tool: types.ToolCodex, Count: 4})
+	if buf.Len() != 0 {
+		t.Fatalf("non-interactive progress printed a done line: %q", buf.String())
 	}
-	if strings.Contains(output, "found    codex") {
-		t.Fatalf("progress still attributes worktree rows to codex; got: %q", output)
+	printScanProgressError(&buf, types.ScanProgressEvent{State: types.ScanProgressError, Tool: types.ToolCodex, Err: errors.New("boom")})
+	if got := buf.String(); got != "error: scanning worktree: boom\n" {
+		t.Fatalf("error line = %q; want worktree label", got)
 	}
 }

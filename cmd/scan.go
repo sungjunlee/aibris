@@ -71,7 +71,7 @@ var scanCmd = &cobra.Command{
 		}
 		printScanHeader(roots)
 
-		progress := newScanProgressPrinter(os.Stdout)
+		progress := newScanProgressPrinter(os.Stderr)
 		result, err := scanner.DefaultScanner.ScanWithOptions(ctx, types.ScanOptions{
 			Roots:         roots,
 			ExplicitRoots: len(scanRoots) > 0,

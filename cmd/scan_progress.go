@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -12,17 +13,14 @@ import (
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
-func printScanProgress(event types.ScanProgressEvent) {
-	label := scanProgressLabel(event.Tool)
-	switch event.State {
-	case types.ScanProgressStart:
-		fmt.Printf("  scanning %-12s\n", label)
-	case types.ScanProgressDone:
-		fmt.Printf("  found    %-12s %3d items   %s\n\n",
-			label, event.Count, cleaner.FormatSize(event.Size))
-	case types.ScanProgressError:
-		fmt.Printf("  error    %-12s %s\n\n", label, event.Err)
+// printScanProgressError reports a provider failure when progress is not
+// interactive. Per-provider start and done lines are noise in logs and pipes,
+// so only failures are written; the summary reports totals.
+func printScanProgressError(out io.Writer, event types.ScanProgressEvent) {
+	if event.State != types.ScanProgressError {
+		return
 	}
+	fmt.Fprintf(out, "error: scanning %s: %v\n", scanProgressLabel(event.Tool), event.Err)
 }
 
 // scanProgressLabel is the human name for a provider in scan progress.
@@ -67,7 +65,7 @@ func newScanProgressPrinter(out *os.File) *scanProgressPrinter {
 
 func (p *scanProgressPrinter) Handle(event types.ScanProgressEvent) {
 	if !p.interactive {
-		printScanProgress(event)
+		printScanProgressError(p.out, event)
 		return
 	}
 

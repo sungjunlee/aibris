@@ -106,7 +106,7 @@ func TestScanCmd_NoWorktrees(t *testing.T) {
 		rootCmd.SetArgs([]string{"scan"})
 		rootCmd.Execute()
 	})
-	for _, want := range []string{"scan", "roots", "scanning", "found", "summary", "found       0 items", "found size  0 B", "default clean (estimate) 0 B", "next", "aibris scan --json"} {
+	for _, want := range []string{"scan", "roots", "summary", "found       0 items", "found size  0 B", "default clean (estimate) 0 B", "next", "aibris scan --json"} {
 		if !strings.Contains(output, want) {
 			t.Errorf("output missing %q; got: %s", want, output)
 		}
@@ -183,7 +183,7 @@ func TestScanCmd_WithWorktrees(t *testing.T) {
 	if !strings.Contains(output, "myproj") {
 		t.Errorf("output missing project name; got: %s", output)
 	}
-	for _, want := range []string{"scanning", "found", "summary", "by category", "largest", "next"} {
+	for _, want := range []string{"found", "summary", "by category", "largest", "next"} {
 		if !strings.Contains(output, want) {
 			t.Errorf("output missing %q; got: %s", want, output)
 		}
@@ -840,7 +840,7 @@ func TestCleanCmd_HelpDocumentsDefaultGuidedCleanAndNoGuide(t *testing.T) {
 	}
 }
 
-func TestCleanCmd_DryRunShowsScanProgressAndCandidates(t *testing.T) {
+func TestCleanCmd_DryRunShowsScanSourceAndCandidates(t *testing.T) {
 	resetCleanFlags()
 	home := t.TempDir()
 	testutil.SetHome(t, home)
@@ -857,7 +857,6 @@ func TestCleanCmd_DryRunShowsScanProgressAndCandidates(t *testing.T) {
 	for _, want := range []string{
 		"clean",
 		"roots",
-		"scanning",
 		"found",
 		"policy",
 		"age>1h",
@@ -927,7 +926,7 @@ func TestCleanCmd_ReusesFreshCurrentSchemaLastScanCache(t *testing.T) {
 	if strings.Contains(output, "using cached scan") {
 		t.Errorf("clean should use audit scan source instead of legacy cache line; got: %s", output)
 	}
-	if strings.Contains(output, "scanning ") {
+	if strings.Contains(output, "scan    live") {
 		t.Errorf("clean should not run live scan when cache is fresh; got: %s", output)
 	}
 	if !strings.Contains(output, filepath.Join("~", "workspace", "app", "node_modules")) {
@@ -976,7 +975,7 @@ func testCleanCmdProviderIdentityFallback(t *testing.T, providerIdentity string)
 	if strings.Contains(output, "scan    cached") {
 		t.Errorf("clean should reject incompatible provider identity; got: %s", output)
 	}
-	if !strings.Contains(output, "scanning ") || !strings.Contains(output, "scan    live") {
+	if !strings.Contains(output, "scan    live") {
 		t.Errorf("clean should visibly run a live scan after rejecting provider identity; got: %s", output)
 	}
 	if !strings.Contains(output, filepath.Join("~", "workspace", "app", "node_modules")) {
@@ -1021,7 +1020,7 @@ func TestCleanCmd_RejectsPreCursorAgentStateSchemaLastScanCacheAndRunsLiveScan(t
 	if strings.Contains(output, "scan    cached") {
 		t.Errorf("clean should reject the previous-schema cache; got: %s", output)
 	}
-	if !strings.Contains(output, "scanning ") {
+	if !strings.Contains(output, "scan    live") {
 		t.Errorf("clean should show live scan progress after rejecting the previous schema; got: %s", output)
 	}
 	if !strings.Contains(output, "scan    live") {
@@ -1393,7 +1392,7 @@ func TestCleanCmd_IgnoresStaleLastScanCache(t *testing.T) {
 	if strings.Contains(output, "using cached scan") {
 		t.Errorf("clean should ignore stale cache; got: %s", output)
 	}
-	if !strings.Contains(output, "scanning ") {
+	if !strings.Contains(output, "scan    live") {
 		t.Errorf("clean should run live scan when cache is stale; got: %s", output)
 	}
 	if !strings.Contains(output, filepath.Join("~", "workspace", "app", "node_modules")) {
@@ -1433,7 +1432,7 @@ func TestCleanCmd_IgnoresFutureLastScanCache(t *testing.T) {
 	if strings.Contains(output, "using cached scan") {
 		t.Errorf("clean should ignore future-dated cache; got: %s", output)
 	}
-	if !strings.Contains(output, "scanning ") {
+	if !strings.Contains(output, "scan    live") {
 		t.Errorf("clean should run live scan when cache timestamp is in the future; got: %s", output)
 	}
 	if !strings.Contains(output, filepath.Join("~", "workspace", "app", "node_modules")) {
@@ -1473,7 +1472,7 @@ func TestCleanCmd_IgnoresSchemaMismatchedLastScanCache(t *testing.T) {
 	if strings.Contains(output, "using cached scan") {
 		t.Errorf("clean should ignore schema-mismatched cache; got: %s", output)
 	}
-	if !strings.Contains(output, "scanning ") {
+	if !strings.Contains(output, "scan    live") {
 		t.Errorf("clean should run live scan when cache schema differs; got: %s", output)
 	}
 	if !strings.Contains(output, filepath.Join("~", "workspace", "app", "node_modules")) {
@@ -1515,7 +1514,7 @@ func TestCleanCmd_IgnoresRootMismatchedLastScanCache(t *testing.T) {
 	if strings.Contains(output, "using cached scan") {
 		t.Errorf("clean should ignore root-mismatched cache; got: %s", output)
 	}
-	if !strings.Contains(output, "scanning ") {
+	if !strings.Contains(output, "scan    live") {
 		t.Errorf("clean should run live scan when cache roots differ; got: %s", output)
 	}
 	if !strings.Contains(output, filepath.Join("~", "workspace", "app", "node_modules")) {
