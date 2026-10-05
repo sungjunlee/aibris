@@ -1784,6 +1784,8 @@ func TestCleanupCommandEnvPinsTheScannedCache(t *testing.T) {
 		{[]string{"brew", "cleanup", "--prune=all"}, "/h/Library/Caches/Homebrew", []string{"HOMEBREW_CACHE=/h/Library/Caches/Homebrew"}},
 		{[]string{"npm", "cache", "clean", "--force"}, "/h/.npm/_cacache", []string{"npm_config_cache=/h/.npm"}},
 		{[]string{"npm", "cache", "clean", "--force"}, "/h/.npm/other", nil},
+		{[]string{"pnpm", "store", "prune"}, "/h/Library/pnpm/store", []string{"npm_config_store_dir=/h/Library/pnpm/store"}},
+		{[]string{"bun", "pm", "cache", "rm"}, "/h/.bun/install/cache", []string{"BUN_INSTALL_CACHE_DIR=/h/.bun/install/cache"}},
 		{nil, "/h/x", nil},
 	}
 	for _, tt := range tests {
@@ -1796,5 +1798,27 @@ func TestCleanupCommandEnvPinsTheScannedCache(t *testing.T) {
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("cleanupCommandEnv(%v, %s) = %v; want %v", tt.argv, tt.path, got, want)
 		}
+	}
+}
+
+func TestIsSafeTargetAcceptsExactCatalogCachePaths(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	var bun string
+	for _, path := range adapter.CacheTargetPaths() {
+		if strings.HasSuffix(path, filepath.Join("install", "cache")) {
+			bun = path
+		}
+	}
+	if bun == "" {
+		t.Fatal("bun cache missing from the catalog")
+	}
+	if !IsSafeTarget(home, types.DebrisInfo{Path: bun, Category: types.CategoryBuildCache, Tool: types.ToolBuildCache}) {
+		t.Errorf("catalog cache %s rejected", bun)
+	}
+	// Only the exact catalog path is accepted, not its neighbors.
+	neighbor := filepath.Join(filepath.Dir(bun), "other")
+	if IsSafeTarget(home, types.DebrisInfo{Path: neighbor, Category: types.CategoryBuildCache, Tool: types.ToolBuildCache}) {
+		t.Errorf("non-catalog path %s accepted", neighbor)
 	}
 }

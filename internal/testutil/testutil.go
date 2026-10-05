@@ -30,6 +30,15 @@ func SetHome(tb testing.TB, home string) {
 	tb.Setenv("AIBRIS_CODEX_HOMES", "")
 	tb.Setenv("GOCACHE", "")
 	tb.Setenv("GOENV", "off")
+	// Cache relocation variables the cache catalog honors; unset so fixtures
+	// see each tool's default location inside the fixture home.
+	for _, name := range []string{
+		"PIP_CACHE_DIR", "UV_CACHE_DIR", "npm_config_cache", "NPM_CONFIG_CACHE",
+		"npm_config_store_dir", "XDG_DATA_HOME", "BUN_INSTALL", "BUN_INSTALL_CACHE_DIR",
+		"CARGO_HOME", "GRADLE_USER_HOME", "HOMEBREW_CACHE",
+	} {
+		tb.Setenv(name, "")
+	}
 	tb.Setenv("HOME", home)
 	tb.Setenv("USERPROFILE", home)
 	drive := filepath.VolumeName(home)

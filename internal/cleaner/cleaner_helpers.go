@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -38,11 +39,26 @@ func IsSafeTarget(home string, item types.DebrisInfo) bool {
 		_, ok := safeHomeRel(home, item.Path)
 		return ok
 	}
-	if goBuildCacheTarget(item) {
+	if goBuildCacheTarget(item) || catalogCacheTarget(item) {
 		_, ok := safeHomeRel(home, item.Path)
 		return ok
 	}
 	return IsSafePath(home, item.Path)
+}
+
+// catalogCacheTarget reports whether a cache item sits exactly at a path the
+// cache catalog resolves to now. New catalog entries need no allowlist edit.
+func catalogCacheTarget(item types.DebrisInfo) bool {
+	if item.Category != types.CategoryBuildCache && item.Category != types.CategoryOtherCache {
+		return false
+	}
+	path := filepath.Clean(item.Path)
+	for _, target := range adapter.CacheTargetPaths() {
+		if target == path {
+			return true
+		}
+	}
+	return false
 }
 
 func goBuildCacheTarget(item types.DebrisInfo) bool {
