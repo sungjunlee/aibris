@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## [0.12.3] - 2026-10-05
+
+### Fixed
+
+- `clean --strip` could remove files outside the worktree. A symlinked
+  `android/` or `ios/` directory made the scan inventory `android/build`
+  through the symlink, and strip deleted the external directory; a stale or
+  edited inventory could also strip a sibling worktree's subtree or a
+  git-ignored non-regenerable directory. Strip now re-authorizes each subtree
+  at the mutation boundary (clean path strictly inside the unit, still
+  produced by the inventory rules, no symlinks on the way, unchanged identity)
+  and removes it through an `os.Root` opened on the unit; the scan inventory
+  no longer follows symlinks (#569).
+- Windows worktree path identity and blocked-alias keys stay consistent
+  (#564).
+
+### Changed
+
+- Development: `make check` (gofmt, `go mod tidy -diff`, vet, staticcheck,
+  govulncheck, shellcheck) runs as a CI job; tests are faster on macOS and no
+  longer flaky under load; refactor-hostile source-layout tests were removed
+  (#565, #566, #567, #570).
+
 ## [0.12.2] - 2026-09-22
 
 ### Added
