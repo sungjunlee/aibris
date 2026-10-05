@@ -83,7 +83,7 @@ jobs:
         run: go test -race -count=1 -cover ./test -run '^(TestCLIContractInvalidFlag|TestCLIContractCleanHelpMatchesPolicyVocabulary)$'
       - name: Test platform-safe command and cleanup identity behavior
         run: |
-          go test -race -count=1 -cover ./internal/scancache -run '^TestWindowsCleanupPathIdentityRejectsReparsePoint$'
+          go test -race -count=1 -cover ./internal/pathidentity -run '^TestWindowsCleanupPathIdentityRejectsReparsePoint$'
           go test -race -count=1 -cover ./cmd -run '^(TestCleanCmd_NegativeAge|TestCleanCmd_GuideNoGuideErrors|TestParseAge|TestCleanCmd_InvalidSelector|TestParseCleanSelectorsTrimAndDeduplicate)$'
       - name: Test effective GOCACHE cleanup safety
         run: go test -race -count=1 -cover ./internal/cleaner -run '^TestIsSafeTarget_GoBuildCacheUnderHome$'
