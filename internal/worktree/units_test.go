@@ -251,6 +251,18 @@ func TestBuildWorktreeCleanupUnits(t *testing.T) {
 			if len(units) != tt.wantUnits {
 				t.Fatalf("units = %d; want %d (%+v)", len(units), tt.wantUnits, units)
 			}
+			// The Git-free count must agree with the full build.
+			count, size, err := CountWorktreeCleanupUnits(context.Background(), items)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var wantSize int64
+			for _, unit := range units {
+				wantSize += unit.Size
+			}
+			if count != len(units) || size != wantSize {
+				t.Errorf("CountWorktreeCleanupUnits = %d, %d; want %d, %d", count, size, len(units), wantSize)
+			}
 			for i, unit := range units {
 				if got := relativeCleanupUnitPath(t, root, unit.TargetPath); got != tt.wantTargets[i] {
 					t.Errorf("unit[%d].TargetPath = %q; want %q", i, got, tt.wantTargets[i])

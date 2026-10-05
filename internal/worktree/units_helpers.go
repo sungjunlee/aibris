@@ -5,12 +5,17 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/cleaner"
 )
 
-func discoverGitWorktreeMembers(ctx context.Context, targetPath string) ([]GitWorktreeMember, error) {
+// discoverGitWorktreeMemberPaths finds the linked checkouts that make up one
+// cleanup unit from filesystem structure alone; it runs no Git commands.
+// Membership never depends on Git evidence, so counting units needs only
+// this, and evidence can then be gathered for all members concurrently.
+func discoverGitWorktreeMemberPaths(ctx context.Context, targetPath string) ([]string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -22,7 +27,7 @@ func discoverGitWorktreeMembers(ctx context.Context, targetPath string) ([]GitWo
 		return nil, nil
 	}
 	if linked {
-		return []GitWorktreeMember{BuildGitWorktreeMember(ctx, targetPath)}, nil
+		return []string{targetPath}, nil
 	}
 
 	entries, err := os.ReadDir(targetPath)
@@ -62,15 +67,38 @@ func discoverGitWorktreeMembers(ctx context.Context, targetPath string) ([]GitWo
 		paths = append(paths, path)
 	}
 	sort.Strings(paths)
+	return paths, nil
+}
 
-	members := make([]GitWorktreeMember, 0, len(paths))
-	for _, path := range paths {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		members = append(members, BuildGitWorktreeMember(ctx, path))
+// gitEvidenceWorkers bounds concurrent Git evidence collection. Each member
+// runs a handful of short git processes; more workers than this mostly
+// contend for the same disk.
+const gitEvidenceWorkers = 8
+
+// buildGitWorktreeMembers gathers Git evidence for each path concurrently and
+// returns members in the order of paths.
+func buildGitWorktreeMembers(ctx context.Context, paths []string) []GitWorktreeMember {
+	members := make([]GitWorktreeMember, len(paths))
+	next := make(chan int)
+	var wg sync.WaitGroup
+	for w := 0; w < min(gitEvidenceWorkers, len(paths)); w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range next {
+				members[i] = BuildGitWorktreeMember(ctx, paths[i])
+			}
+		}()
 	}
-	return members, nil
+	for i := range paths {
+		if ctx.Err() != nil {
+			break
+		}
+		next <- i
+	}
+	close(next)
+	wg.Wait()
+	return members
 }
 
 func classifyMissingCleanupMember(ctx context.Context, memberPath string) (bool, []string, error) {
