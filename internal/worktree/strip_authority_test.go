@@ -77,7 +77,7 @@ func TestStripSubtreeUnchangedDetectsDirectoryReplacement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := stripSubtreeUnchanged(root, "node_modules", authorized); got != "" {
+	if got := stripSubtreeUnchanged(root, unit, "node_modules", authorized); got != "" {
 		t.Fatalf("unchanged subtree refused: %q", got)
 	}
 	// Keep the old directory alive under another name so its inode cannot be
@@ -88,7 +88,7 @@ func TestStripSubtreeUnchangedDetectsDirectoryReplacement(t *testing.T) {
 	if err := os.Mkdir(subtree, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got := stripSubtreeUnchanged(root, "node_modules", authorized); got != "subtree changed before removal" {
+	if got := stripSubtreeUnchanged(root, unit, "node_modules", authorized); got != "subtree changed before removal" {
 		t.Fatalf("reason = %q; want replacement refusal", got)
 	}
 }
@@ -154,5 +154,55 @@ func TestStripRefusesUnitReplacedSinceScan(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(unit, "node_modules")); err != nil {
 		t.Fatalf("replacement unit was stripped: %v", err)
+	}
+}
+
+func TestStripSubtreeUnchangedDetectsUnitMovedAfterOpen(t *testing.T) {
+	base := t.TempDir()
+	unit := filepath.Join(base, "unit")
+	if err := os.MkdirAll(filepath.Join(unit, "node_modules"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	root := openTestRoot(t, unit)
+	authorized, err := root.Lstat("node_modules")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Git checks name the path; removal names the root. If the opened unit
+	// moves and another checkout takes its path, the two diverge.
+	if err := os.Rename(unit, unit+"-moved"); err != nil {
+		t.Skipf("rename of an open directory unavailable: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(unit, "node_modules"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := stripSubtreeUnchanged(root, unit, "node_modules", authorized); got != "unit changed before removal" {
+		t.Fatalf("reason = %q; want unit-moved refusal", got)
+	}
+}
+
+func TestStripRefusesUnitWithoutRequiredScanIdentity(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	unit := filepath.Join(home, "worktrees", "feature")
+	if err := os.MkdirAll(filepath.Join(unit, "node_modules"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	target := types.DebrisInfo{
+		Tool:                     types.ToolCodex,
+		Category:                 types.CategoryWorktree,
+		ID:                       "feature",
+		Path:                     unit,
+		Status:                   types.WorktreeActive,
+		StrippablePaths:          []string{filepath.Join(unit, "node_modules")},
+		ScanPathEvidenceRequired: true,
+	}
+	outcomes, err := ExecuteStripTargets(context.Background(), []types.DebrisInfo{target}, t.TempDir())
+	if err != nil {
+		t.Fatalf("strip returned error: %v", err)
+	}
+	if len(outcomes) != 1 || len(outcomes[0].Subtrees) != 1 ||
+		outcomes[0].Subtrees[0].Skipped != "unit identity unavailable from scan" {
+		t.Fatalf("outcomes = %+v; want refusal without scan identity", outcomes)
 	}
 }

@@ -257,7 +257,7 @@ func stripWorktreeUnit(ctx context.Context, home string, target types.DebrisInfo
 		subtree.Bytes = adapter.EstimateDirSize(ctx, subtreePath)
 		// Git checks and sizing take time; refuse if the directory that was
 		// authorized is no longer the one at this path.
-		if reason := stripSubtreeUnchanged(root, rel, identity); reason != "" {
+		if reason := stripSubtreeUnchanged(root, target.Path, rel, identity); reason != "" {
 			subtree.Bytes = 0
 			subtree.Skipped = reason
 			outcome.Subtrees = append(outcome.Subtrees, subtree)
@@ -265,7 +265,10 @@ func stripWorktreeUnit(ctx context.Context, home string, target types.DebrisInfo
 		}
 		// Removal goes through the unit's os.Root: even if a directory on the
 		// path is swapped for a symlink after the last check, the removal
-		// cannot leave the unit.
+		// cannot leave the unit. A swap to a symlink that stays inside the unit
+		// in that window is an accepted residual risk: closing it needs
+		// per-OS O_NOFOLLOW directory walking, and the threat here is
+		// accidental loss of the user's own files, not a racing adversary.
 		if err := root.RemoveAll(rel); err != nil {
 			subtree.Skipped = fmt.Sprintf("removal failed: %v", err)
 			outcome.Subtrees = append(outcome.Subtrees, subtree)
@@ -364,6 +367,9 @@ func openStripUnitRoot(target types.DebrisInfo) (*os.Root, string) {
 	if err != nil || !info.IsDir() {
 		return nil, "unit is not a real directory"
 	}
+	if target.ScanPathEvidenceRequired && target.ScanPathIdentity == "" {
+		return nil, "unit identity unavailable from scan"
+	}
 	if target.ScanPathIdentity != "" && identity != target.ScanPathIdentity {
 		return nil, "unit changed since scan"
 	}
@@ -426,17 +432,27 @@ func stripPathHasNoSymlinks(root *os.Root, rel string) string {
 	return ""
 }
 
-// stripSubtreeUnchanged confirms the subtree is still the directory that was
-// authorized and that its path still has no symlinks.
-func stripSubtreeUnchanged(root *os.Root, rel string, authorized os.FileInfo) string {
+// stripSubtreeUnchanged confirms, just before removal, that the unit path
+// still names the opened root (Git checks ran on the path, removal runs on the
+// root), that the subtree is still the directory that was authorized, and that
+// its path still has no symlinks.
+func stripSubtreeUnchanged(root *os.Root, unitPath, rel string, authorized os.FileInfo) string {
+	opened, err := root.Stat(".")
+	if err != nil {
+		return "unit unavailable"
+	}
+	current, err := os.Lstat(unitPath)
+	if err != nil || !os.SameFile(opened, current) {
+		return "unit changed before removal"
+	}
 	if reason := stripPathHasNoSymlinks(root, rel); reason != "" {
 		return reason
 	}
-	current, err := root.Lstat(rel)
+	subtree, err := root.Lstat(rel)
 	if err != nil {
 		return "subtree unavailable"
 	}
-	if !os.SameFile(authorized, current) {
+	if !os.SameFile(authorized, subtree) {
 		return "subtree changed before removal"
 	}
 	return ""
