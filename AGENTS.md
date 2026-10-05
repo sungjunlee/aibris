@@ -186,6 +186,7 @@ provider reports `codex` for every tool).
 | codex (worktree provider; reports `codex` for every tool) | worktree | orphaned only in the classic plan; guided review may recommend active ones from Git evidence | registry and convention containers above |
 | claude | agent-state | proven orphaned, after grace | `~/.claude/projects/<name>/` |
 | cursor | agent-state | proven orphaned, after grace | `~/.cursor/projects/<name>/` |
+| grok | agent-state | proven orphaned, after grace | `~/.grok/sessions/<url-encoded cwd>/`; the name must agree with every session's `prompt_context.json` `working_directory` |
 | windsurf | ai-logs | `--risky` only | `~/.codeium/windsurf/` |
 | ai-logs | ai-logs | `--risky` only | `$CODEX_HOME/logs_2.sqlite`, `$CODEX_HOME/archived_sessions/`, `~/.claude/command-audit.log`, `~/.claude/file-history/` |
 | node_modules | node_modules | older than `--age` | `node_modules` under scan roots, noisy trees pruned |

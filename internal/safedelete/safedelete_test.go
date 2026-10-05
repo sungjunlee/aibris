@@ -19,6 +19,7 @@ func TestCheckAllowsCleanupTargetsBelowProtectedLocations(t *testing.T) {
 		".codex/worktrees/abc",
 		".codex/archived_sessions",
 		".claude/projects/encoded-project",
+		".grok/sessions/%2Fwork%2Fproject",
 		".dartServer",
 		"node_modules",
 		"work/app/node_modules",
@@ -40,6 +41,7 @@ func TestCheckRefusesProtectedLocationsAndTheirAncestors(t *testing.T) {
 		".codex",
 		".claude/projects",
 		".codex/worktrees",
+		".grok/sessions",
 		"AppData/Local",
 	} {
 		err := Check(home, filepath.Join(home, filepath.FromSlash(rel)))

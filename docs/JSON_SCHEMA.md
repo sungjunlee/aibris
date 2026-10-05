@@ -202,7 +202,7 @@ item list, not as a worktree-only list.
 
 | Field | Type | Description |
 | ------- | ------ | ------------- |
-| `tool` | string | Tool name (`codex`, `claude`, `unknown`, `cursor`, `windsurf`, `node_modules`, `build-cache`, `pip-cache`, `ai-logs`). Generic worktree owners may remain `unknown`. |
+| `tool` | string | Tool name (`codex`, `claude`, `unknown`, `cursor`, `grok`, `windsurf`, `node_modules`, `build-cache`, `pip-cache`, `ai-logs`). Generic worktree owners may remain `unknown`. |
 | `category` | string | Debris category (`worktree`, `node_modules`, `build-cache`, `other-cache`, `agent-state`, `ai-logs`). Cursor entries under `~/.cursor/projects` use `agent-state`, not `ai-logs`. |
 | `id` | string | Unique identifier (hash, directory name, or cache key) |
 | `project` | string | Project name if detectable, empty otherwise |

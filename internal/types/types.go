@@ -12,6 +12,7 @@ const (
 	ToolCodex       Tool = "codex"
 	ToolClaude      Tool = "claude"
 	ToolCursor      Tool = "cursor"
+	ToolGrok        Tool = "grok"
 	ToolWindsurf    Tool = "windsurf"
 	ToolNodeModules Tool = "node_modules"
 	ToolUnknown     Tool = "unknown"

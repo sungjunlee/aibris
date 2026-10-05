@@ -20,6 +20,7 @@ var validCleanTools = []types.Tool{
 	types.ToolCodex,
 	types.ToolClaude,
 	types.ToolCursor,
+	types.ToolGrok,
 	types.ToolWindsurf,
 	types.ToolNodeModules,
 	types.ToolUnknown,

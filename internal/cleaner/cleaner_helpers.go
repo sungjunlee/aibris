@@ -39,11 +39,30 @@ func IsSafeTarget(home string, item types.DebrisInfo) bool {
 		_, ok := safeHomeRel(home, item.Path)
 		return ok
 	}
-	if goBuildCacheTarget(item) || catalogCacheTarget(item) {
+	if goBuildCacheTarget(item) || catalogCacheTarget(item) || agentStateStoreEntry(item) {
 		_, ok := safeHomeRel(home, item.Path)
 		return ok
 	}
 	return IsSafePath(home, item.Path)
+}
+
+// agentStateStoreEntry reports whether an agent-state item is a direct child
+// of a registered store root. New stores need no allowlist edit.
+func agentStateStoreEntry(item types.DebrisInfo) bool {
+	if item.Category != types.CategoryAgentState {
+		return false
+	}
+	roots, err := adapter.AgentStateStoreRoots()
+	if err != nil {
+		return false
+	}
+	parent := filepath.Dir(filepath.Clean(item.Path))
+	for _, root := range roots {
+		if filepath.Clean(root) == parent {
+			return true
+		}
+	}
+	return false
 }
 
 // catalogCacheTarget reports whether a cache item sits exactly at a path the

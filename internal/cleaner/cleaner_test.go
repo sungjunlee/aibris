@@ -1827,3 +1827,20 @@ func TestIsSafeTargetAcceptsExactCatalogCachePaths(t *testing.T) {
 		t.Error("untagged override allowlisted")
 	}
 }
+
+func TestIsSafeTargetAcceptsDirectChildrenOfAgentStateStores(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	entry := filepath.Join(home, ".grok", "sessions", "%2Fsome%2Fproject")
+	if !IsSafeTarget(home, types.DebrisInfo{Path: entry, Category: types.CategoryAgentState, Tool: types.ToolGrok}) {
+		t.Errorf("store entry %s rejected", entry)
+	}
+	for _, path := range []string{
+		filepath.Join(home, ".grok", "other", "x"),
+		filepath.Join(home, ".grok", "sessions", "a", "b"),
+	} {
+		if IsSafeTarget(home, types.DebrisInfo{Path: path, Category: types.CategoryAgentState, Tool: types.ToolGrok}) {
+			t.Errorf("non-store path %s accepted", path)
+		}
+	}
+}
