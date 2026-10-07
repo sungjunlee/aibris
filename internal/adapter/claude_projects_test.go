@@ -573,3 +573,86 @@ func writeClaudeProjectSession(t *testing.T, path, content string) {
 		t.Fatal(err)
 	}
 }
+
+func TestClaudeProjectAdapter_AmbiguousCWDDiscoveryAndRevalidation(t *testing.T) {
+	for _, name := range []string{"missing-live", "live-missing", "live-live", "missing-missing", "escaped-second", "escaped-first", "both-escaped"} {
+		t.Run(name, func(t *testing.T) {
+			home := t.TempDir()
+			testutil.SetHome(t, home)
+			live := filepath.Join(home, "live")
+			if err := os.MkdirAll(live, 0755); err != nil {
+				t.Fatal(err)
+			}
+			missingJSON := mustMarshalJSON(t, filepath.Join(home, "missing"))
+			liveJSON := mustMarshalJSON(t, live)
+			first, second := missingJSON, liveJSON
+			firstKey, secondKey := `"cwd"`, `"cwd"`
+			switch name {
+			case "live-missing":
+				first, second = liveJSON, missingJSON
+			case "live-live":
+				first = liveJSON
+			case "missing-missing":
+				second = missingJSON
+			case "escaped-second":
+				secondKey = `"\u0063wd"`
+			case "escaped-first":
+				firstKey = `"c\u0077d"`
+			case "both-escaped":
+				firstKey, secondKey = `"cw\u0064"`, `"\u0063\u0077\u0064"`
+			}
+			entry := filepath.Join(home, ".claude", "projects", "entry")
+			writeClaudeProjectSession(t, filepath.Join(entry, "session.jsonl"),
+				"{"+firstKey+":"+first+`,"message":"`+strings.Repeat("x", 8192)+`",`+secondKey+":"+second+"}\n")
+			adapter := &ClaudeProjectAdapter{}
+			results, err := adapter.Scan(context.Background(), types.ScanOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(results) != 1 {
+				t.Fatalf("results = %d; want 1", len(results))
+			}
+			if results[0].Classification != types.EntryClassUndetermined || !strings.Contains(results[0].Reason, "session.jsonl:1") {
+				t.Errorf("discovery = %q (%s); want undetermined with record diagnostic", results[0].Classification, results[0].Reason)
+			}
+			classification, err := adapter.RevalidateAgentState(context.Background(), entry)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if classification != types.EntryClassUndetermined {
+				t.Errorf("revalidation = %q; want undetermined", classification)
+			}
+		})
+	}
+}
+
+func TestClaudeProjectAdapter_EscapedCWDDiscoveryAndRevalidation(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	live := filepath.Join(home, "live")
+	if err := os.MkdirAll(live, 0755); err != nil {
+		t.Fatal(err)
+	}
+	entry := filepath.Join(home, ".claude", "projects", "entry")
+	writeClaudeProjectSession(t, filepath.Join(entry, "session.jsonl"),
+		claudeSessionLine(t, filepath.Join(home, "missing"))+"\n"+
+			`{"message":"`+strings.Repeat("x", 8192)+`","\u0063\u0077\u0064":`+mustMarshalJSON(t, live)+"}\n")
+	adapter := &ClaudeProjectAdapter{}
+	results, err := adapter.Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results = %d; want 1", len(results))
+	}
+	if results[0].Classification != types.EntryClassLive {
+		t.Errorf("discovery = %q; want live", results[0].Classification)
+	}
+	classification, err := adapter.RevalidateAgentState(context.Background(), entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if classification != types.EntryClassLive {
+		t.Errorf("revalidation = %q; want live", classification)
+	}
+}
