@@ -19,8 +19,16 @@ Pull-request CI uses an amd64 `windows-latest` runner to:
   sibling-prefix root and a root outside the profile;
 - verify that scan results do not escape the isolated profile;
 - exercise Windows recorded-CWD volume lookup and its fail-closed error path;
-  and
-- reject reusable cleanup-target identities for Windows reparse points.
+- reject reusable cleanup-target identities for Windows reparse points;
+- run the complete deletion-gate, path-identity, and HOME-isolation packages,
+  reporting symlink-fixture skips when the runner lacks privilege;
+- run the nested perfharness module tests; and
+- exercise the real PowerShell installer in isolated subprocess fixtures with
+  stub downloads and injected failures, rather than real release downloads.
+
+Release CI reruns these jobs on the tag event's exact SHA before publication;
+see [SPEC.md](SPEC.md#verification). A local non-Windows run does not establish
+native Windows or PowerShell execution.
 
 GoReleaser cross-builds zip archives for both Windows `amd64` and `arm64`, and
 lists both in `checksums.txt`. The Windows runner builds and runs an amd64
@@ -56,9 +64,11 @@ The installer:
 - Downloads the release archive and verifies its SHA-256 checksum against
   `checksums.txt`
 - Downloads and extracts in a temporary directory, refuses replacement if the
-  existing binary is locked, then overwrites it with `Copy-Item -Force`
-- Preserves an existing installation if checksum verification fails or if the
-  binary is locked (in use)
+  existing binary is locked, copies into a unique stage beside the destination,
+  then replaces it with a same-volume native rename
+- Preserves an existing installation on failed download, checksum verification,
+  staging, or replacement, and if the binary is locked (in use); cleanup removes
+  only the owned stage and temporary download directory
 - Defaults to `$env:LOCALAPPDATA\Programs\aibris` (no admin required)
 - Shows PATH setup guidance; add `-AddToPath` to update the user PATH automatically
 
@@ -214,8 +224,9 @@ reviewable cleanup candidates, and `plain-dir` entries are never cleaned.
 ## Reproducing unaudited scenarios
 
 Issue [#550](https://github.com/sungjunlee/aibris/issues/550) provides isolated
-reproduction fixtures for Windows-specific scenarios that are not yet audited
-in native CI:
+reproduction fixtures for Windows-specific scenarios. Native CI runs these
+synthetic fixtures, but they do not establish real vendor layouts or
+end-to-end cleanup mutation assurance:
 
 1. **Synthetic Git linked worktrees:** `test/windows_worktree_fixtures_test.go`
    creates `.git` pointer files and `gitdir` references using Windows absolute
@@ -257,14 +268,16 @@ match these layouts, and they do NOT exercise actual file deletion.
 
 These areas are unsupported or unaudited:
 
-- The native installation workflow is manual; `install.sh` does not install or
-  update `aibris.exe`.
+- Native arm64 installation/execution is unaudited; `install.ps1` and manual
+  installation are available, but `install.sh` does not update `aibris.exe`.
 - The Go build cache is discovered as process `$GOCACHE`, else the `go env -w`
   file, else `%LocalAppData%\go-build`. A configured GOCACHE outside requested
-  roots is skipped rather than falling back. npm, pip, and uv
-  cache candidates still use Unix-oriented home paths such as `.npm\_cacache`,
-  `.cache\pip`, and `.cache\uv`; do not rely on them to find normal Windows
-  cache installations.
+  roots is skipped rather than falling back. Cache candidates and command
+  authorization come from the live catalog; execution re-derives the recipe
+  and pins its cache environment to the canonical scanned target. Removed or
+  changed recipes refuse execution and fallback. This is a mutation boundary,
+  not a guarantee that every vendor cache installation is discovered; see
+  [SPEC.md](SPEC.md) for command-backed cleanup.
 - Real Windows vendor-store layouts and migrations for Codex, Claude, Cursor,
   Windsurf, Gradle, and Cargo have not been broadly audited. Coverage of a
   fixture or a conventional home-relative dot directory is not a promise that
