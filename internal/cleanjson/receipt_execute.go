@@ -16,6 +16,7 @@ import (
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/scanreport"
 	"github.com/sungjunlee/aibris/internal/types"
+	"github.com/sungjunlee/aibris/internal/worktree"
 )
 
 const (
@@ -652,6 +653,9 @@ func receiptStateReasons(unit ExecutionUnit, isMinimumAgeError func(error) bool)
 	case "partial":
 		return append(codes, "partial_failure")
 	case "failed":
+		if errors.Is(unit.FailureCause, worktree.ErrWorktreeEvidenceChanged) {
+			return append(codes, "worktree_evidence_changed")
+		}
 		if unit.FailureCause != nil && isMinimumAgeError(unit.FailureCause) {
 			// The pre-mutation barrier refused a target that went live again.
 			// That is retry-later, not a removal failure.
