@@ -101,31 +101,7 @@ func TestReasonCodeAllowListPreservesKnownCodes(t *testing.T) {
 	if got := ReasonCode("no_bytes_reclaimed"); got != "no_bytes_reclaimed" {
 		t.Fatalf("no_bytes_reclaimed reason code normalized to %q", got)
 	}
-	decisionCodes := []worktree.DecisionReasonCode{
-		worktree.DecisionReasonCurrentWorkingDirectory,
-		worktree.DecisionReasonDirtyWorktree,
-		worktree.DecisionReasonGitEvidenceUnavailable,
-		worktree.DecisionReasonDetachedUnreferenced,
-		worktree.DecisionReasonActivityUnavailable,
-		worktree.DecisionReasonRecentActivity,
-		worktree.DecisionReasonRepositoryRetention,
-		worktree.DecisionReasonMinimumIdleAge,
-		worktree.DecisionReasonMinimumSize,
-		worktree.DecisionReasonEligible,
-		worktree.DecisionReasonUniqueCommits,
-		worktree.DecisionReasonMergeEvidenceUnknown,
-	}
-	gitEvidenceCodes := []worktree.GitEvidenceReasonCode{
-		worktree.GitReasonEvidenceUnavailable,
-		worktree.GitReasonDirtyWorktree,
-		worktree.GitReasonAttachedBranch,
-		worktree.GitReasonDetachedHeadReachable,
-		worktree.GitReasonDetachedHeadUnreferenced,
-	}
-	for _, code := range append(
-		append([]string(nil), decisionReasonStrings(decisionCodes)...),
-		gitEvidenceReasonStrings(gitEvidenceCodes)...,
-	) {
+	for code := range supportedReasonCodes {
 		if got := ReasonCode(code); got != code {
 			t.Errorf("known reason code %q normalized to %q", code, got)
 		}
@@ -167,20 +143,4 @@ func TestReasonCodeAllowListPreservesKnownCodes(t *testing.T) {
 			t.Errorf("audit reason %q mapped to %q; want preserved %q", tt.reason, code, tt.code)
 		}
 	}
-}
-
-func decisionReasonStrings(codes []worktree.DecisionReasonCode) []string {
-	out := make([]string, 0, len(codes))
-	for _, code := range codes {
-		out = append(out, string(code))
-	}
-	return out
-}
-
-func gitEvidenceReasonStrings(codes []worktree.GitEvidenceReasonCode) []string {
-	out := make([]string, 0, len(codes))
-	for _, code := range codes {
-		out = append(out, string(code))
-	}
-	return out
 }

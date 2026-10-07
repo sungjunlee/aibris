@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 	"github.com/sungjunlee/aibris/internal/worktree"
 )
@@ -833,4 +834,83 @@ func jsonRowWithReason(t *testing.T, document Plan, reason string) Row {
 	}
 	t.Fatalf("row with %s missing: %+v", reason, document.Rows)
 	return Row{}
+}
+
+func TestSupportedReasonCodesRoundTripPlanAndReceipt(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	for code := range supportedReasonCodes {
+		t.Run(code, func(t *testing.T) {
+			assertReasonCodeRoundTrip(t, home, code, code)
+		})
+	}
+}
+
+func TestUnknownReasonTextRoundTripRedactsMetadata(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	for _, reason := range []string{
+		"", "unknown_reason_code", "cleanup refused for " + home,
+		`C:\Users\private-user\secret-project`,
+		`{"project":"secret-project","metadata":"private-metadata"}`,
+	} {
+		t.Run(reason, func(t *testing.T) {
+			assertReasonCodeRoundTrip(t, home, reason, "policy_decision")
+		})
+	}
+}
+
+func assertReasonCodeRoundTrip(t *testing.T, home, reason, want string) {
+	t.Helper()
+	path := filepath.Join(home, "secret-project", "private-cache")
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	item := types.DebrisInfo{
+		Tool: types.ToolBuildCache, Category: types.CategoryBuildCache,
+		Path: path, ID: "secret-item", Project: "secret-project", Size: 64,
+		CleanupCommand: []string{"private-cleanup-command", "--private-metadata"},
+	}
+	canonical := mustPathKey(t, path)
+	document := mustBuild(t, Input{
+		Result: &types.ScanResult{Worktrees: []types.DebrisInfo{item}},
+		Source: Source{Kind: SourceLive, ObservedAt: time.Now()},
+		Plan:   selectedPlan(item, reason),
+		Audit: []AuditComponent{{
+			CanonicalPath: canonical, Owner: item,
+			LogicalRows: []AuditRow{{
+				Item: item, CanonicalPath: canonical, Relation: overlapOwner,
+				PolicyDecision: PolicyEligible, ReasonCodes: []string{reason},
+			}},
+		}},
+	})
+	planJSON, err := json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded Plan
+	if err := json.Unmarshal(planJSON, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	receiptJSON, err := json.Marshal(NewReceipt(decoded, false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var receipt Receipt
+	if err := json.Unmarshal(receiptJSON, &receipt); err != nil {
+		t.Fatal(err)
+	}
+	for label, rows := range map[string][]Row{"plan": decoded.Rows, "receipt plan": receipt.Plan.Rows} {
+		if len(rows) != 1 || !slices.Equal(rows[0].ReasonCodes, []string{want}) {
+			t.Errorf("%s rows = %+v; want exactly reason %q", label, rows, want)
+		}
+	}
+	if len(receipt.PhysicalTargets) != 1 || !slices.Equal(receipt.PhysicalTargets[0].ReasonCodes, []string{want}) {
+		t.Errorf("receipt targets = %+v; want exactly reason %q", receipt.PhysicalTargets, want)
+	}
+	for _, secret := range []string{home, "secret-project", "private-cache", "secret-item", "private-cleanup-command", "private-metadata", "private-user", "unknown_reason_code"} {
+		if strings.Contains(string(planJSON), secret) || strings.Contains(string(receiptJSON), secret) {
+			t.Errorf("plan or receipt leaked %q", secret)
+		}
+	}
 }
