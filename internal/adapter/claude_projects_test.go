@@ -625,3 +625,34 @@ func TestClaudeProjectAdapter_AmbiguousCWDDiscoveryAndRevalidation(t *testing.T)
 		})
 	}
 }
+
+func TestClaudeProjectAdapter_EscapedCWDDiscoveryAndRevalidation(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	live := filepath.Join(home, "live")
+	if err := os.MkdirAll(live, 0755); err != nil {
+		t.Fatal(err)
+	}
+	entry := filepath.Join(home, ".claude", "projects", "entry")
+	writeClaudeProjectSession(t, filepath.Join(entry, "session.jsonl"),
+		claudeSessionLine(t, filepath.Join(home, "missing"))+"\n"+
+			`{"message":"`+strings.Repeat("x", 8192)+`","\u0063\u0077\u0064":`+mustMarshalJSON(t, live)+"}\n")
+	adapter := &ClaudeProjectAdapter{}
+	results, err := adapter.Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results = %d; want 1", len(results))
+	}
+	if results[0].Classification != types.EntryClassLive {
+		t.Errorf("discovery = %q; want live", results[0].Classification)
+	}
+	classification, err := adapter.RevalidateAgentState(context.Background(), entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if classification != types.EntryClassLive {
+		t.Errorf("revalidation = %q; want live", classification)
+	}
+}

@@ -31,8 +31,8 @@ func readRecordedCWDs(ctx context.Context, path string) (recordedCWDReadResult, 
 	var result recordedCWDReadResult
 	var recordCWD string
 	lineNumber := 1
-	recordUnverifiable := func() {
-		// A duplicate or unreadable key makes every cwd in this record
+	finishRecord := func() {
+		// A duplicate cwd makes every value in this record
 		// ambiguous. Do not let an early value become ownership evidence.
 		if recordCWD != "" && !extractor.cwdAmbiguous {
 			result.cwds = append(result.cwds, recordCWD)
@@ -57,14 +57,14 @@ func readRecordedCWDs(ctx context.Context, path string) (recordedCWDReadResult, 
 		}
 		switch {
 		case readErr == nil:
-			recordUnverifiable()
+			finishRecord()
 			extractor.reset()
 			recordCWD = ""
 			lineNumber++
 		case errors.Is(readErr, bufio.ErrBufferFull):
 			continue
 		case errors.Is(readErr, io.EOF):
-			recordUnverifiable()
+			finishRecord()
 			return result, nil
 		default:
 			return result, readErr
@@ -105,8 +105,8 @@ const (
 	jsonNumberExponent
 )
 
-// cwdMetadataExtractor validates JSON incrementally until it recognizes a
-// top-level "cwd" string. Other values are never decoded or retained.
+// cwdMetadataExtractor validates an entire JSON record incrementally and
+// recognizes a top-level "cwd" string. Other values are never retained.
 type cwdMetadataExtractor struct {
 	containers       []jsonContainer
 	started          bool
@@ -118,6 +118,7 @@ type cwdMetadataExtractor struct {
 	stringIsCWD      bool
 	escaped          bool
 	unicodeDigits    int
+	unicodeValue     uint16
 	keyMatched       bool
 	keyLength        int
 	cwdFieldSeen     bool
