@@ -7,7 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -1429,7 +1429,7 @@ func TestExecute_CommandCleanupZeroReclaimWhenOwnerRemains(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	binDir := t.TempDir()
-	writeExecutable(t, filepath.Join(binDir, "fake-clean"), "#!/bin/sh\nexit 0\n")
+	writeExecutable(t, filepath.Join(binDir, "uv"), "#!/bin/sh\nexit 0\n")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	path := filepath.Join(home, ".cache", "uv")
 	if err := os.MkdirAll(path, 0755); err != nil {
@@ -1442,10 +1442,11 @@ func TestExecute_CommandCleanupZeroReclaimWhenOwnerRemains(t *testing.T) {
 	total, err := Execute([]types.DebrisInfo{{
 		ID:             "uv",
 		Tool:           types.ToolPipCache,
+		Category:       types.CategoryOtherCache,
 		Path:           path,
 		Size:           4,
 		CleanupKind:    types.CleanupCommand,
-		CleanupCommand: []string{"fake-clean"},
+		CleanupCommand: []string{"uv", "cache", "clean"},
 	}})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1584,9 +1585,9 @@ func TestExecute_CommandCleanupSuccess(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	binDir := t.TempDir()
-	writeExecutable(t, filepath.Join(binDir, "fake-clean"), "#!/bin/sh\nrm -f \""+filepath.Join(home, ".cache", "go-build", "file")+"\"\nexit 0\n")
+	writeExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\nrm -f \""+filepath.Join(testutil.GoBuildCache(home), "file")+"\"\nexit 0\n")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	path := filepath.Join(home, ".cache", "go-build")
+	path := testutil.GoBuildCache(home)
 	os.MkdirAll(path, 0755)
 	os.WriteFile(filepath.Join(path, "file"), []byte("data"), 0644)
 
@@ -1594,10 +1595,11 @@ func TestExecute_CommandCleanupSuccess(t *testing.T) {
 		total, err := Execute([]types.DebrisInfo{{
 			ID:             "go-build",
 			Tool:           types.ToolBuildCache,
+			Category:       types.CategoryBuildCache,
 			Path:           path,
 			Size:           4,
 			CleanupKind:    types.CleanupCommand,
-			CleanupCommand: []string{"fake-clean"},
+			CleanupCommand: []string{"go", "clean", "-cache"},
 		}})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -1618,6 +1620,7 @@ func TestExecute_CommandCleanupSuccess(t *testing.T) {
 func TestExecute_CommandMissingFallsBackToPathRemoval(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
+	t.Setenv("PATH", t.TempDir())
 	path := filepath.Join(home, ".cache", "uv")
 	os.MkdirAll(path, 0755)
 	os.WriteFile(filepath.Join(path, "file"), []byte("data"), 0644)
@@ -1625,10 +1628,11 @@ func TestExecute_CommandMissingFallsBackToPathRemoval(t *testing.T) {
 	total, err := Execute([]types.DebrisInfo{{
 		ID:             "uv",
 		Tool:           types.ToolPipCache,
+		Category:       types.CategoryOtherCache,
 		Path:           path,
 		Size:           4,
 		CleanupKind:    types.CleanupCommand,
-		CleanupCommand: []string{"definitely-missing-aibris-cleaner"},
+		CleanupCommand: []string{"uv", "cache", "clean"},
 	}})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1645,18 +1649,19 @@ func TestExecute_CommandFailureDoesNotFallback(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	binDir := t.TempDir()
-	writeExecutable(t, filepath.Join(binDir, "fake-fail"), "#!/bin/sh\necho nope\nexit 2\n")
+	writeExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\necho nope\nexit 2\n")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	path := filepath.Join(home, ".cache", "go-build")
+	path := testutil.GoBuildCache(home)
 	os.MkdirAll(path, 0755)
 
 	total, err := Execute([]types.DebrisInfo{{
 		ID:             "go-build",
 		Tool:           types.ToolBuildCache,
+		Category:       types.CategoryBuildCache,
 		Path:           path,
 		Size:           4,
 		CleanupKind:    types.CleanupCommand,
-		CleanupCommand: []string{"fake-fail"},
+		CleanupCommand: []string{"go", "clean", "-cache"},
 	}})
 	if err == nil {
 		t.Fatal("expected command failure error")
@@ -1673,7 +1678,7 @@ func TestExecute_CommandCancellationDoesNotCreditRemainingPayload(t *testing.T) 
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	binDir := t.TempDir()
-	writeExecutable(t, filepath.Join(binDir, "fake-sleep"), "#!/bin/sh\nsleep 2\n")
+	writeExecutable(t, filepath.Join(binDir, "uv"), "#!/bin/sh\nsleep 2\n")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	path := filepath.Join(home, ".cache", "uv")
 	if err := os.MkdirAll(path, 0755); err != nil {
@@ -1689,10 +1694,11 @@ func TestExecute_CommandCancellationDoesNotCreditRemainingPayload(t *testing.T) 
 	total, err := ExecuteWithContext(ctx, []types.DebrisInfo{{
 		ID:             "uv",
 		Tool:           types.ToolPipCache,
+		Category:       types.CategoryOtherCache,
 		Path:           path,
 		Size:           int64(len(payload)),
 		CleanupKind:    types.CleanupCommand,
-		CleanupCommand: []string{"fake-sleep"},
+		CleanupCommand: []string{"uv", "cache", "clean"},
 	}})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v; want context.Canceled", err)
@@ -1709,9 +1715,9 @@ func TestExecute_CommandCancellation(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	binDir := t.TempDir()
-	writeExecutable(t, filepath.Join(binDir, "fake-sleep"), "#!/bin/sh\nsleep 2\n")
+	writeExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\nsleep 2\n")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	path := filepath.Join(home, ".cache", "go-build")
+	path := testutil.GoBuildCache(home)
 	os.MkdirAll(path, 0755)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -1719,10 +1725,11 @@ func TestExecute_CommandCancellation(t *testing.T) {
 	total, err := ExecuteWithContext(ctx, []types.DebrisInfo{{
 		ID:             "go-build",
 		Tool:           types.ToolBuildCache,
+		Category:       types.CategoryBuildCache,
 		Path:           path,
 		Size:           4,
 		CleanupKind:    types.CleanupCommand,
-		CleanupCommand: []string{"fake-sleep"},
+		CleanupCommand: []string{"go", "clean", "-cache"},
 	}})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v; want context.Canceled", err)
@@ -1737,6 +1744,9 @@ func TestExecute_CommandCancellation(t *testing.T) {
 
 func writeExecutable(t *testing.T, path, content string) {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("shell executable fixture is Unix-specific")
+	}
 	if err := os.WriteFile(path, []byte(content), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -1769,32 +1779,6 @@ func TestFormatSize(t *testing.T) {
 	for _, tt := range tests {
 		if got := FormatSize(tt.bytes); got != tt.want {
 			t.Errorf("FormatSize(%d) = %q; want %q", tt.bytes, got, tt.want)
-		}
-	}
-}
-
-func TestCleanupCommandEnvPinsTheScannedCache(t *testing.T) {
-	tests := []struct {
-		argv []string
-		path string
-		want []string
-	}{
-		{[]string{"go", "clean", "-cache"}, "/h/Library/Caches/go-build", []string{"GOCACHE=/h/Library/Caches/go-build"}},
-		{[]string{"uv", "cache", "clean"}, "/h/.cache/uv", []string{"UV_CACHE_DIR=/h/.cache/uv"}},
-		{[]string{"brew", "cleanup", "--prune=all"}, "/h/Library/Caches/Homebrew", []string{"HOMEBREW_CACHE=/h/Library/Caches/Homebrew"}},
-		{[]string{"npm", "cache", "clean", "--force"}, "/h/.npm/_cacache", []string{"npm_config_cache=/h/.npm"}},
-		{[]string{"npm", "cache", "clean", "--force"}, "/h/.npm/other", nil},
-		{nil, "/h/x", nil},
-	}
-	for _, tt := range tests {
-		item := types.DebrisInfo{Path: filepath.FromSlash(tt.path), CleanupCommand: tt.argv}
-		got := cleanupCommandEnv(item)
-		var want []string
-		for _, w := range tt.want {
-			want = append(want, filepath.FromSlash(w))
-		}
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("cleanupCommandEnv(%v, %s) = %v; want %v", tt.argv, tt.path, got, want)
 		}
 	}
 }

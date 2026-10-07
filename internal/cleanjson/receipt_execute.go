@@ -652,6 +652,9 @@ func receiptStateReasons(unit ExecutionUnit, isMinimumAgeError func(error) bool)
 	case "partial":
 		return append(codes, "partial_failure")
 	case "failed":
+		if errors.Is(unit.FailureCause, cleaner.ErrCleanupRecipeChanged) {
+			return append(codes, "cleanup_recipe_changed")
+		}
 		if unit.FailureCause != nil && isMinimumAgeError(unit.FailureCause) {
 			// The pre-mutation barrier refused a target that went live again.
 			// That is retry-later, not a removal failure.

@@ -8,6 +8,9 @@ import (
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
+// ErrCleanupRecipeChanged is the stable refusal for untrusted command inventory.
+var ErrCleanupRecipeChanged = adapter.ErrCleanupRecipeChanged
+
 // Execute removes the given worktrees from disk.
 func Execute(worktrees []types.DebrisInfo) (int64, error) {
 	return ExecuteWithContext(context.Background(), worktrees)
