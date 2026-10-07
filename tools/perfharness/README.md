@@ -117,11 +117,18 @@ go run ./tools/perfharness --home "$HOME" --pairs 4 --md-out real-home.md
 | `-min-bytes` / `-max-bytes` | `512` / `4096` | apparent-byte range per rollout (synthetic) |
 | `-live-every` | `3` | one live recorded cwd per N rollouts; `0` ⇒ all orphaned (synthetic) |
 | `-node-modules-files` | `3` | files in the auxiliary node_modules dir; `<=0` omits it (synthetic) |
-| `-workdir` | a temp dir | working dir for exported trees, binaries, and the synthetic home |
-| `-keep` | off | keep the working dir after the run |
+| `-workdir` | system temp directory | parent for a unique run temp directory containing exported trees, binaries, and the synthetic home; the parent is never removed |
+| `-keep` | off | preserve only the run temp directory and print its path, including on error |
 | `-md-out` / `-json-out` | (unset) | write the Markdown / JSON report to a path (Markdown also prints to stdout) |
 
 Synthetic-home flags are ignored when `-home` is set.
+
+Each run creates its own `aibris-perfharness-*` child directory with
+`MkdirTemp`, under `-workdir` (creating the parent if needed) or the system
+temp directory. Without `-keep`, only that child is removed on success or
+error; existing parent files and sibling directories are preserved. If child
+creation fails, the harness returns an error without removing the parent.
+With `-keep`, the child is retained and its path is printed on success or error.
 
 ## Files
 

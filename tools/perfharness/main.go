@@ -32,8 +32,8 @@ func run() error {
 		threshold     = flag.Duration("threshold", 0, "predeclared regression threshold for median change-minus-base (0 = report inconclusive)")
 		minPairs      = flag.Int("min-pairs", 3, "minimum drift-free pairs required for a pass/fail threshold verdict")
 		quorum        = flag.Float64("quorum", 0.67, "fraction of accepted pairs that must individually exceed the threshold for a regression")
-		workdirFlag   = flag.String("workdir", "", "working directory for exported trees/binaries/home (default: a temp dir)")
-		keep          = flag.Bool("keep", false, "keep the working directory after the run")
+		workdirFlag   = flag.String("workdir", "", "parent directory for a unique run temp directory; parent is never removed (default: system temp directory)")
+		keep          = flag.Bool("keep", false, "keep only the run temp directory and print its path, including on error")
 		jsonOut       = flag.String("json-out", "", "write the JSON report to this path")
 		mdOut         = flag.String("md-out", "", "write the Markdown report to this path")
 		quick         = flag.Bool("quick", false, "small synthetic home for a fast smoke run")
@@ -60,17 +60,21 @@ func run() error {
 		baseRef = mb
 	}
 
-	workdir := *workdirFlag
-	if workdir == "" {
-		wd, err := os.MkdirTemp("", "aibris-perfharness-")
-		if err != nil {
-			return err
+	parent := *workdirFlag
+	if parent != "" {
+		if err := os.MkdirAll(parent, 0o755); err != nil {
+			return fmt.Errorf("creating workdir parent: %w", err)
 		}
-		workdir = wd
-	} else if err := os.MkdirAll(workdir, 0o755); err != nil {
-		return err
 	}
-	if !*keep {
+	workdir, err := os.MkdirTemp(parent, "aibris-perfharness-")
+	if err != nil {
+		return fmt.Errorf("creating run temp directory: %w", err)
+	}
+	if *keep {
+		defer func() {
+			fmt.Fprintf(os.Stderr, "kept working directory: %s\n", workdir)
+		}()
+	} else {
 		defer os.RemoveAll(workdir)
 	}
 
@@ -149,9 +153,6 @@ func run() error {
 			return err
 		}
 		fmt.Fprintf(os.Stderr, "wrote %s\n", *mdOut)
-	}
-	if *keep {
-		fmt.Fprintf(os.Stderr, "kept working directory: %s\n", workdir)
 	}
 	return nil
 }
