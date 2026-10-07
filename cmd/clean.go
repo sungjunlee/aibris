@@ -1,13 +1,17 @@
 package cmd
 
 import (
+	"bufio"
+	"context"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/confirminput"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -113,18 +117,22 @@ func init() {
 		"Write a machine-readable execution receipt to this path",
 	)
 }
-func confirmCleanExecution() bool {
-	fmt.Print("Proceed? [y/N]: ")
-	var response string
-	if _, err := fmt.Scanln(&response); err != nil {
-		fmt.Println("No confirmation received; rerun with --dry-run to review or --force to delete selected targets.")
-		return false
+func confirmCleanExecution(ctx context.Context, input io.Reader, output io.Writer) (bool, error) {
+	fmt.Fprint(output, "Proceed? [y/N]: ")
+	response, ok, err := confirminput.Scan(ctx, bufio.NewScanner(input))
+	if err != nil {
+		return false, err
 	}
+	if !ok || strings.TrimSpace(response) == "" {
+		fmt.Fprintln(output, "No confirmation received; rerun with --dry-run to review or --force to delete selected targets.")
+		return false, nil
+	}
+	response = strings.TrimSpace(response)
 	if response != "y" && response != "Y" {
-		fmt.Println("Aborted.")
-		return false
+		fmt.Fprintln(output, "Aborted.")
+		return false, nil
 	}
-	return true
+	return true, nil
 }
 
 type cleanPlanMode string

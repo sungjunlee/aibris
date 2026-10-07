@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -140,14 +141,18 @@ func cleanupLogicalDisplayPath(
 }
 
 func printCleanTarget(w types.DebrisInfo, home string) {
-	fmt.Println(cleanPlanLine(w))
+	printCleanTargetTo(os.Stdout, w, home)
+}
+
+func printCleanTargetTo(output io.Writer, w types.DebrisInfo, home string) {
+	fmt.Fprintln(output, cleanPlanLine(w))
 	if home != "" {
-		fmt.Printf("    %s\n", displayHomePath(home, w.Path))
+		fmt.Fprintf(output, "    %s\n", displayHomePath(home, w.Path))
 	} else {
-		fmt.Printf("    %s\n", w.Path)
+		fmt.Fprintf(output, "    %s\n", w.Path)
 	}
 	if cleanupKind(w) == types.CleanupCommand && len(w.CleanupCommand) > 0 {
-		fmt.Printf("    command: %s\n", strings.Join(w.CleanupCommand, " "))
+		fmt.Fprintf(output, "    command: %s\n", strings.Join(w.CleanupCommand, " "))
 	}
 }
 

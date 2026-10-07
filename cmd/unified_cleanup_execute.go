@@ -78,7 +78,7 @@ func runUnifiedGuidedClean(
 	// combined toggle review; a pure guided selection is already settled by
 	// the guided prompt and only needs the final plan render.
 	if guidedState != nil && len(classicTargets) > 0 {
-		accepted, aborted, promptErr := promptUnifiedCleanupReview(stdin, stdout, plan, mode, 0)
+		accepted, aborted, promptErr := promptUnifiedCleanupReview(ctx, stdin, stdout, plan, mode, 0)
 		if promptErr != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", promptErr)
 			os.Exit(1)
@@ -142,7 +142,7 @@ func runUnifiedGuidedClean(
 		return
 	}
 	if opts.Interactive {
-		receipt, interactiveErr := interactiveCleanWithValidationAndObserver(ctx, prepared, func(ctx context.Context) error {
+		receipt, interactiveErr := interactiveCleanWithValidationAndObserver(ctx, stdin, stdout, prepared, func(ctx context.Context) error {
 			return validateUnifiedCleanupPlanForMutation(ctx, plan, time.Now())
 		}, guidedCleanSkipObserver(pendingReceipt))
 		printWorktreeExecutionReceipts(receipt)
@@ -155,7 +155,14 @@ func runUnifiedGuidedClean(
 		return
 	}
 	if !opts.Force {
-		if !confirmCleanExecution() {
+		approved, err := confirmCleanExecution(ctx, stdin, stdout)
+		if err != nil {
+			reportUnansweredCleanTargets(guidedCleanSkipObserver(pendingReceipt), prepared)
+			writeGuidedCleanExecutionReceipt(pendingReceipt, cleanExecutionReceipt{}, err)
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		if !approved {
 			return
 		}
 	}

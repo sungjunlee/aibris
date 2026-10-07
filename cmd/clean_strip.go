@@ -97,8 +97,15 @@ func runStripClean() {
 		fmt.Println("[DRY-RUN] No files were removed.")
 		return
 	}
-	if !opts.Force && !confirmCleanExecution() {
-		return
+	if !opts.Force {
+		approved, err := confirmCleanExecution(ctx, os.Stdin, os.Stdout)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		if !approved {
+			return
+		}
 	}
 	outcomes := executeStripTargetsWithProgress(ctx, targets, cwd)
 	printStripOutcomes(outcomes, len(outcomes))

@@ -1,12 +1,18 @@
 package cmd
 
 import (
+	"bufio"
+	"context"
 	"fmt"
+	"io"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/spf13/cobra"
 	"github.com/sungjunlee/aibris/internal/apfs"
+	"github.com/sungjunlee/aibris/internal/confirminput"
 	"github.com/sungjunlee/aibris/internal/volume"
 )
 
@@ -25,13 +31,15 @@ func apfsSnapshotFlagConflict(cmd *cobra.Command) string {
 }
 
 func runAPFSSnapshotClean() {
-	if err := runAPFSSnapshotAction(cleanDryRun, cleanForce); err != nil {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	if err := runAPFSSnapshotAction(ctx, cleanDryRun, cleanForce); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func runAPFSSnapshotAction(dryRun, force bool) error {
+func runAPFSSnapshotAction(ctx context.Context, dryRun, force bool) error {
 	count, err := listLocalAPFSSnapshots()
 	if err != nil {
 		return err
@@ -45,9 +53,18 @@ func runAPFSSnapshotAction(dryRun, force bool) error {
 		fmt.Println("No local snapshots to thin.")
 		return nil
 	}
-	if !force && !confirmAPFSSnapshotThin() {
-		fmt.Println("Aborted.")
-		return nil
+	if !force {
+		approved, err := confirmAPFSSnapshotThin(ctx, os.Stdin, os.Stdout)
+		if err != nil {
+			return err
+		}
+		if !approved {
+			fmt.Println("Aborted.")
+			return nil
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	return thinAndReportAPFSSnapshots(count)
 }
@@ -59,11 +76,10 @@ func printAPFSSnapshotPlan(count int) {
 	fmt.Println("  Finder / df free space may change only after thinning.")
 }
 
-func confirmAPFSSnapshotThin() bool {
-	fmt.Print("Thin local APFS snapshots? [y/N]: ")
-	var answer string
-	_, _ = fmt.Scanln(&answer)
-	return strings.EqualFold(strings.TrimSpace(answer), "y")
+func confirmAPFSSnapshotThin(ctx context.Context, input io.Reader, output io.Writer) (bool, error) {
+	fmt.Fprint(output, "Thin local APFS snapshots? [y/N]: ")
+	answer, ok, err := confirminput.Scan(ctx, bufio.NewScanner(input))
+	return ok && strings.EqualFold(strings.TrimSpace(answer), "y"), err
 }
 
 func thinAndReportAPFSSnapshots(startCount int) error {

@@ -2,12 +2,14 @@ package cleaner
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/sungjunlee/aibris/internal/confirminput"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -31,20 +33,21 @@ type numberedCleanupPlanRow struct {
 // PromptUnifiedCleanupReview lets text and TTY frontends mutate the same plan
 // state. Rendering is deliberately separate from execution; #115 wires the
 // accepted selection through preflight, confirmation, and receipts.
-func PromptUnifiedCleanupReview(input io.Reader, output io.Writer, plan UnifiedCleanupPlan, mode CleanupReviewMode, width int) (UnifiedCleanupPlan, bool, error) {
+func PromptUnifiedCleanupReview(ctx context.Context, input io.Reader, output io.Writer, plan UnifiedCleanupPlan, mode CleanupReviewMode, width int) (UnifiedCleanupPlan, bool, error) {
 	scanner := bufio.NewScanner(input)
 	status := ""
 	for {
 		RenderUnifiedCleanupReview(output, plan, status, mode, width)
 		fmt.Fprint(output, "\nEnter numbers to toggle, Enter to preview, q to abort: ")
 		status = ""
-		if !scanner.Scan() {
-			if err := scanner.Err(); err != nil {
-				return plan, false, err
-			}
+		line, ok, err := confirminput.Scan(ctx, scanner)
+		if err != nil {
+			return plan, false, err
+		}
+		if !ok {
 			return plan, false, nil
 		}
-		line := strings.TrimSpace(scanner.Text())
+		line = strings.TrimSpace(line)
 		if line == "" {
 			return plan, false, nil
 		}
