@@ -559,10 +559,25 @@ Adapter rules:
 Before release:
 
 ```bash
-go test ./...
-go build ./...
-go vet ./...
-goreleaser release --snapshot --clean
+make check
+make test
+make build
+make dist
 ```
 
-For release tags, GitHub Actions runs CI on push/PR and GoReleaser on `v*` tags.
+For `v*` tag events, the release workflow calls the same CI workflow used by
+main pushes and pull requests, passing the event's immutable commit SHA. Every
+verification and release checkout explicitly uses that SHA. Required Linux,
+macOS, Windows safety, and cross-build jobs must all succeed before GoReleaser
+can create a draft. Failure, cancellation, or skipped verification blocks
+publication; an earlier green run or a different SHA cannot authorize it.
+
+Publication remains draft → artifact attestation → public GitHub Release →
+Homebrew tap update → macOS pour verification. Attestation or publication
+failure stops the later steps and preserves the draft when it has not yet been
+made public. Action references are pinned to full commit SHAs with version
+comments for Dependabot; GoReleaser and syft use exact release versions. Local
+YAML graph contracts and stub publication fixtures verify these dependencies
+and ordering without creating a tag, release, or tap commit. Native runner
+behavior still requires GitHub Actions; local contracts are not a claim that
+Windows or PowerShell has executed successfully.
