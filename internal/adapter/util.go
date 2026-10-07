@@ -21,8 +21,9 @@ func EstimateDirSize(ctx context.Context, path string) int64 {
 }
 
 // EstimateDirSizeWithError retains partial byte observations but reports any
-// missing evidence. Reporting callers may ignore the error; reclamation must
-// not treat an incomplete residual observation as proof of freed bytes.
+// missing evidence. Reporting callers may ignore the error; reclamation uses
+// it to distinguish comparable approximate observations from a complete
+// baseline followed by an incomplete residual walk.
 func EstimateDirSizeWithError(ctx context.Context, path string) (int64, error) {
 	activity := estimateDirActivityWithOptions(ctx, path, false)
 	return activity.Size, activity.Err

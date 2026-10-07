@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/sungjunlee/aibris/internal/testutil"
-	"github.com/sungjunlee/aibris/internal/types"
 	"io"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/sungjunlee/aibris/internal/testutil"
+	"github.com/sungjunlee/aibris/internal/types"
 )
 
 func TestExecuteRefusesPostBarrierCancellation(t *testing.T) {
@@ -92,12 +93,12 @@ func TestExecuteRechecksMeasurementAndObserverDrift(t *testing.T) {
 				}
 				original := observedSize
 				t.Cleanup(func() { observedSize = original })
-				observedSize = func(ctx context.Context, p string) int64 {
-					size := original(ctx, p)
+				observedSize = func(ctx context.Context, p string) (int64, error) {
+					size, err := original(ctx, p)
 					if phase == "measurement" {
 						inject()
 					}
-					return size
+					return size, err
 				}
 				var last CleanupMutationOutcome
 				total, err := ExecuteWithContextAndBarrierWithOutputAndObserver(ctx, []types.DebrisInfo{item},
@@ -166,6 +167,54 @@ func TestObserveReclamationAfterPartialCancellation(t *testing.T) {
 			}
 			if _, err := os.Stat(filepath.Join(path, "keep")); err != nil {
 				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestObserveReclamationIncompleteSizeEvidence(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		beforeErr    error
+		afterErr     error
+		wantFreed    int64
+		wantResidual int64
+		cancelWalk   bool
+	}{
+		{"complete", nil, nil, 900, 100, false},
+		{"both unreadable", os.ErrPermission, os.ErrPermission, 900, 100, false},
+		{"both missing descendant", os.ErrNotExist, os.ErrNotExist, 900, 100, false},
+		{"incomplete baseline only", os.ErrPermission, nil, 900, 100, false},
+		{"incomplete residual only", nil, os.ErrPermission, 0, 1000, false},
+		{"residual missing descendant only", nil, os.ErrNotExist, 0, 1000, false},
+		{"residual I/O error only", nil, io.ErrUnexpectedEOF, 0, 1000, false},
+		{"timeout with incomplete baseline", os.ErrPermission, context.DeadlineExceeded, 0, 1000, false},
+		{"cancellation with incomplete baseline", os.ErrPermission, context.Canceled, 0, 1000, false},
+		{"traversal error masks cancellation", os.ErrPermission, os.ErrPermission, 0, 1000, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			testutil.SetHome(t, home)
+			path := filepath.Join(home, "cache")
+			if err := os.Mkdir(path, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			originalBefore, originalAfter := observedSize, observedResidualSize
+			t.Cleanup(func() { observedSize, observedResidualSize = originalBefore, originalAfter })
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			observedSize = func(context.Context, string) (int64, error) { return 1000, tt.beforeErr }
+			observedResidualSize = func(context.Context, string) (int64, error) {
+				if tt.cancelWalk {
+					cancel()
+				}
+				return 100, tt.afterErr
+			}
+			freed, residual, attempted, err := observeReclamation(ctx, path, func() (bool, error) {
+				return true, os.ErrPermission
+			})
+			if !errors.Is(err, os.ErrPermission) || !attempted || freed != tt.wantFreed || residual != tt.wantResidual {
+				t.Errorf("partial mutation: freed=%d residual=%d attempted=%t err=%v; want freed=%d residual=%d", freed, residual, attempted, err, tt.wantFreed, tt.wantResidual)
 			}
 		})
 	}

@@ -9,7 +9,7 @@ import (
 	"github.com/sungjunlee/aibris/internal/adapter"
 )
 
-var observedSize = adapter.EstimateDirSize
+var observedSize = adapter.EstimateDirSizeWithError
 var observedResidualSize = adapter.EstimateDirSizeWithError
 
 // Residual reporting must remain bounded even after a partially completed
@@ -27,7 +27,7 @@ func reclaimedBytes(before, after int64) int64 {
 // Its bool distinguishes a refusal from a mutation attempt so cancellation
 // before mutation neither claims reclaimed bytes nor walks the residual tree.
 func observeReclamation(ctx context.Context, path string, mutate func() (bool, error)) (int64, int64, bool, error) {
-	before := observedSize(ctx, path)
+	before, beforeErr := observedSize(ctx, path)
 	if err := ctx.Err(); err != nil {
 		return 0, before, false, err
 	}
@@ -54,9 +54,12 @@ func observeReclamation(ctx context.Context, path string, mutate func() (bool, e
 			after, measureErr = 0, nil
 		}
 	}
-	if measureErr != nil && after < before {
-		// Preserve a conservative residual rather than inventing reclamation from
-		// the partial lower bound (the JSON schema has no unknown-size field).
+	measurementInterrupted := measure.Err() != nil || errors.Is(measureErr, context.Canceled) || errors.Is(measureErr, context.DeadlineExceeded)
+	if measureErr != nil && after < before && (beforeErr == nil || measurementInterrupted) {
+		// A complete baseline cannot be compared with an incomplete residual;
+		// a canceled walk may also omit readable bytes counted before mutation.
+		// Otherwise retain approximate reporting when both walks are incomplete
+		// (for example, the same unreadable sibling survives a partial removal).
 		after = before
 	}
 	return reclaimedBytes(before, after), after, true, err

@@ -6,10 +6,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/cleanjson"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -135,5 +137,65 @@ func TestPreparedCancellationAfterCompletedMutationPreservesBatchReceipt(t *test
 				t.Errorf("second target lost: %v", err)
 			}
 		})
+	}
+}
+
+func TestPreparedPartialRemovalWithUnreadableSiblingPreservesReceipt(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	path := filepath.Join(home, "project", "node_modules")
+	unreadable := filepath.Join(path, "a")
+	removable := filepath.Join(path, "b")
+	for _, dir := range []string{unreadable, removable} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(unreadable, "keep"), make([]byte, 10), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(removable, "payload"), make([]byte, 1000), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chmod(unreadable, 0o700); err != nil {
+			t.Error(err)
+		}
+	})
+	if err := os.Chmod(unreadable, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.ReadDir(unreadable); !os.IsPermission(err) {
+		t.Skipf("fixture requires enforced directory permissions (e.g. non-root Unix): %v", err)
+	}
+	item := types.DebrisInfo{Path: path, Category: types.CategoryNodeModules, Tool: types.ToolNodeModules}
+	ctx := context.Background()
+	evidence := cleaner.OverlapSafetyEvidence{Complete: true}
+	runtime := cleaner.NewCleanupOverlapSafetyRuntime(evidence, func(context.Context) (cleaner.OverlapSafetyEvidence, error) { return evidence, nil }, nil)
+	selection, err := cleaner.ApplyCleanupOverlapSafety(ctx, runtime, []types.DebrisInfo{item})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared := PrepareExecutionWithSafety(ctx, selection, runtime)
+	receipt, err := ExecutePreparedTargets(ctx, prepared, ExecutionOptions{Output: io.Discard, ErrorOutput: io.Discard, ReceiptKeyFn: func(item types.DebrisInfo) string { return item.Path }}, nil)
+	if !errors.Is(err, os.ErrPermission) || len(receipt.Units) != 1 {
+		t.Fatalf("receipt=%+v err=%v; want one unit and a permission error", receipt, err)
+	}
+	unit := receipt.Units[0]
+	// The unreadable bytes are absent from both approximate measurements.
+	if unit.State != ExecutionPartial || !unit.MutationAttempted || unit.PhysicalRemoved || unit.FreedBytes != 1000 || unit.ResidualBytes != 0 || receipt.FreedBytes != 1000 || !errors.Is(unit.FailureCause, os.ErrPermission) {
+		t.Errorf("partial removal receipt=%+v batch freed=%d", unit, receipt.FreedBytes)
+	}
+	if reasons := cleanjson.CleanJSONReceiptStateReasons(string(unit.State), unit.PhysicalRemoved, unit.FreedBytes, unit.CommandFallbackPathRemoval, unit.FailureCause, func(err error) bool { return errors.Is(err, cleaner.ErrCleanupTargetYoungerThanMinimumAge) }); !slices.Contains(reasons, "partial_failure") {
+		t.Errorf("partial removal JSON reasons=%v; want partial_failure", reasons)
+	}
+	if _, err := os.Stat(removable); !os.IsNotExist(err) {
+		t.Errorf("removable sibling survived: %v", err)
+	}
+	if err := os.Chmod(unreadable, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(filepath.Join(unreadable, "keep")); err != nil || len(data) != 10 {
+		t.Errorf("unreadable sibling lost: bytes=%d err=%v", len(data), err)
 	}
 }
