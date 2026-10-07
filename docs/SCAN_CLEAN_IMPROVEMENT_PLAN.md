@@ -1,5 +1,11 @@
 # Scan and Cleanup Improvement Plan
 
+As of 2026-10-07: reviewed as historical material.
+
+This historical plan is preserved for context. Current cleanup behavior is
+maintained in [SPEC.md](SPEC.md); release status and proposals are maintained in
+[ROADMAP.md](ROADMAP.md).
+
 **🚨 HISTORICAL DOCUMENT — NOT CURRENT PRODUCT TRUTH 🚨**
 
 This plan documents the classic scan/filter safety baseline that shipped in

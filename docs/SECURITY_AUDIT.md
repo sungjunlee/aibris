@@ -1,7 +1,12 @@
 # aibris Security Audit
 
-This document describes the security-relevant behavior of `aibris`. Because it
-is a local cleanup tool, its primary risk is unintended local data loss.
+As of 2026-10-07, this is a current security summary for this checkout, not a
+record of a particular released binary. The primary risk is unintended local
+data loss. Canonical contracts live in [SPEC.md](SPEC.md) (cleanup safety),
+[JSON_SCHEMA.md](JSON_SCHEMA.md) (plans and receipts), [INSTALL.md](INSTALL.md)
+(release integrity and installation), and [WINDOWS.md](WINDOWS.md) (native
+Windows support). Historical findings are labeled in the
+[dogfood notes](DOGFOOD.md); release status is in [ROADMAP.md](ROADMAP.md).
 
 ## Executive Summary
 
@@ -40,40 +45,47 @@ registered adapters and are filtered before deletion.
 
 ## Destructive Operation Boundaries
 
-Ordinary and orphaned targets go through the shared prepared cleanup executor
-and `cleaner.ExecuteWithContext`, which check:
+Every removal, cleanup command, and Git worktree removal passes
+`internal/safedelete`: the canonical target must be strictly inside `$HOME`,
+outside protected locations and their ancestors, and outside primary Git
+repositories and Git metadata. Only that package performs recursive deletion.
+The detailed invariants are maintained in [AGENTS.md](../AGENTS.md) and the
+[cleanup safety contract](SPEC.md#safety-requirements).
 
-- the target path is absolute
-- the target is under `$HOME`
-- symlink-resolved home and target still keep the target under home when both
-  paths can be resolved
-- non-worktree paths contain a known-safe path component such as `.codex`,
-  `.claude`, `.cursor`, `.cache`, `.npm`, `.gradle`, `.cargo`, `Caches`,
-  `projects`, `.codeium`, or `node_modules`
-- worktree paths carry scanner-validated active or orphaned Git metadata
+The shared prepared executor retains typed target, overlap, filesystem, and
+Git evidence through review and execution. Scan/cache inventory is never
+deletion authority. Executors re-derive evidence at the mutation boundary and
+refuse drift or incomplete activity evidence; cancellation is checked after
+the barrier and before mutation. Receipts preserve any already completed
+reclamation when a later target fails or is cancelled.
 
-Interactive cleanup uses the same prepared executor and target checks. Active
-worktrees use a separate Git-aware executor: it captures cleanup-unit identity,
-revalidates members and refs immediately before mutation, calls non-forced
-`git worktree remove`, verifies the result, and never falls back to raw path
-deletion after a Git failure.
+Orphaned worktrees must still be wholly orphaned with unchanged members and
+regular `.git` marker files. Restored Git metadata, changed markers, symlinked
+markers, or newly active members refuse deletion rather than switching to an
+active removal route. Active removal uses non-forced `git worktree remove`,
+preserves refs, and never falls back to raw deletion after a Git failure.
+
+Command recipes are re-derived from the live cache catalog, including tool,
+category, canonical path, argv, and pinned cache environment. Recipe drift
+refuses execution and path fallback. Homebrew cache cleanup removes only the
+verified cache path through the deletion gate. Receipt refusal codes and
+fallback semantics are maintained in [JSON_SCHEMA.md](JSON_SCHEMA.md#clean-execution-receipt).
 
 ## Path and Symlink Handling
 
-`cleaner.IsSafePath` rejects relative paths and paths outside `$HOME`.
-
-When possible, it resolves symlinks for both home and target and re-checks the
-target boundary after resolution. If symlink resolution fails, the raw absolute
-path must still be under `$HOME` and must still include a safe path component.
-
-Known limitation: `os.RemoveAll` permanently removes the selected target. There
-is no Trash or undo flow.
+Containment and protected-path checks resolve symlinks and fail closed when
+identity or containment cannot be established. Cached symlink or Windows
+reparse-point targets cannot provide reusable cleanup identity. See
+[SPEC.md](SPEC.md) for cache evidence and [WINDOWS.md](WINDOWS.md) for native
+platform boundaries. Deletion is permanent; there is no Trash or undo flow.
 
 ## Risky Categories
 
-The Claude and Cursor project stores (`~/.claude/projects` and
-`~/.cursor/projects`) are `agent-state`; Cursor project state is not `ai-logs`.
-Orphaned entries are eligible for cleanup by default with no age gate, while
+Claude, Cursor, and Grok project/session stores are `agent-state`; Cursor
+project state is not `ai-logs`. Proven orphaned entries ignore classic `--age`,
+but default selection waits for `--agent-state-grace` (default `24h`). `0`
+disables that floor; negative values are rejected. The floor uses the newest
+in-tree activity and is rechecked immediately before mutation when enabled.
 `live` and `undetermined` entries are always protected. The classification is
 proved from working-directory metadata recorded in each entry rather than
 inferred from the entry name or path.
@@ -116,42 +128,35 @@ cleanup.
 
 ## Release Integrity
 
-Repository release controls include:
+Release controls implemented in this checkout include:
 
-- GitHub Actions CI on push and pull requests across Linux, macOS, and Windows
-- `go test -race -count=1 -cover ./...`
-- `go vet ./...`
-- Dependabot for Go modules and GitHub Actions
-- GoReleaser builds for Linux, macOS, and Windows
-- GoReleaser checksum generation
-- `install.sh` verifies downloaded release archives against `checksums.txt`
-- the Homebrew path is the third-party tap `sungjunlee/tap/aibris`
-  (https://github.com/sungjunlee/homebrew-tap). Homebrew item-trusts that
-  formula; `sha256` is the same publisher as `checksums.txt` (TOFU), not a
-  second signer
+- Required CI verification of the tag event's exact SHA before a draft release
+  can be created, covering both Go modules and the native Windows safety job.
+- An SPDX SBOM per archive and GitHub build provenance attestations. The order
+  is draft, attestation, public release, Homebrew tap update, then macOS pour
+  verification. Failure or cancellation blocks dependent steps.
+- `checksums.txt` verification by the Unix `install.sh` and native PowerShell
+  `install.ps1` installers. Both stage a replacement beside the destination;
+  failed download, verification, staging, or replacement preserves the existing
+  binary. The Windows installer also refuses a locked binary.
+- The third-party Homebrew tap `sungjunlee/tap/aibris`
+  (https://github.com/sungjunlee/homebrew-tap). Homebrew item-trusts the formula;
+  formula hashes and `checksums.txt` have the same publisher (TOFU), not a
+  second signer or `homebrew/core` review.
 
-Future hardening should add artifact attestations (#121).
+Artifact verification commands and installer trust boundaries are maintained
+in [INSTALL.md](INSTALL.md); native installer and platform assurance are in
+[WINDOWS.md](WINDOWS.md). These repository contracts do not establish that a
+new release was published or a native platform was run during a local audit.
 
 ## Testing Coverage
 
-Security-relevant behavior is covered by focused Go tests for:
-
-- cleaner filtering
-- safe path rejection
-- symlink-aware path checks
-- adapter discovery
-- worktree health detection
-- scanner context cancellation
-- command-level dry-run and forced cleanup flows
-- compiled-process stdout, stderr, prompt, signal, and exit-status contracts
-
-Release readiness requires:
-
-```bash
-go test ./...
-go build ./...
-go vet ./...
-```
+Focused tests cover deletion gates, containment, identity/Git/catalog drift,
+agent-state classification, incomplete activity, cancellation, dry-run,
+receipts, installer failures, and the release dependency graph. Local release
+tests use stub publication and download fixtures. Onboarding prerequisites,
+root/nested-module checks, and reporting of unrun platforms are maintained in
+[CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ## Known Limitations
 
@@ -164,11 +169,8 @@ go vet ./...
 - Homebrew installation uses the third-party tap `sungjunlee/tap`; Homebrew
   item-trusts the formula, and checksums are same-publisher TOFU, not
   `homebrew/core` review.
-- Release archives have checksums but do not yet publish an SBOM or signed
-  provenance.
-- Windows artifacts are experimental. Windows CI runs native recorded-cwd
-  safety and platform-safe command tests plus vet, but the Bash installer and
-  complete adapter/cache support contract have not yet been replaced by native
-  Windows installation and coverage guidance.
+- Windows artifacts remain experimental; native amd64 CI and the PowerShell
+  installer do not establish native arm64 or every vendor-store layout. See
+  [WINDOWS.md](WINDOWS.md) for tested and unaudited boundaries.
 - The JSON top-level `worktrees` field contains all debris items for backward
   compatibility, not only worktrees.

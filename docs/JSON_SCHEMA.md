@@ -215,7 +215,7 @@ item list, not as a worktree-only list.
 | `risk` | string | Derived cleanup risk (`low`, `medium`, `high`) |
 | `reason` | string | Short derived explanation for cleanup review |
 | `cleanup_kind` | string | Cleanup strategy (`remove-path` or `command`) |
-| `cleanup_command` | array | Argv command used when `cleanup_kind` is `command`; empty for path removal |
+| `cleanup_command` | array | Inventory argv claim when `cleanup_kind` is `command`; empty for path removal. Execution re-derives argv and the pinned environment from the live catalog; inventory is not command authority. |
 | `physical_target_id` | string | Document-local physical unit id (`target-1`, `target-2`, …), the same pattern as clean `physical_target_id`. Nested members under one outer owner share one id. These ids are not path hashes and are not stable across runs. |
 | `strippable_bytes` | integer | Apparent bytes under the same `size` accounting in regenerable subtrees (dependency directories and platform build output) inventoried at fixed known-relative positions inside a `worktree` unit. Omitted when zero. Reported separately from `size` so protected worktrees do not read as unrecoverable; only `clean --strip` removes them, and strip eligibility never authorizes deletion. |
 | `strippable_paths` | array | Absolute paths of those regenerable subtrees. Omitted when empty. |
@@ -337,6 +337,12 @@ Diagnostics carry only aggregate accounting (tool, state, count, bytes,
 duration, error). They never contain file paths, item paths, or file content.
 
 ## Retention projection (read-only, shipped)
+
+An explicit `--root` is a hard boundary for this projection too: an excluded
+Codex sessions store is not added back implicitly. Default-home scans may add
+the resolved primary Codex home; additional homes do not expand this retention
+store contract. Traversal stays inside that store, skips non-regular leaves
+without skipping their ordinary siblings, and never follows directory symlinks.
 
 The top-level `retention` object is always present. It is non-additive
 physical accounting: one aggregate row exists per `(store_id, bucket_id)`,
@@ -688,6 +694,10 @@ The mutation-boundary refusal codes are also in the supported reason catalog:
 | `cleanup_recipe_changed` | The current cleanup recipe differs from the prepared recipe; execution is refused before mutation. |
 | `worktree_evidence_changed` | Current worktree Git evidence differs from the prepared evidence; execution is refused before mutation. |
 
+`cleanup_recipe_changed` also covers removed recipes and mismatched tool,
+category, canonical target, or argv. It does not trigger a path-removal fallback.
+`worktree_evidence_changed` covers orphaned Git/member/marker drift, including
+symlinked `.git` markers; it never upgrades an orphan request to active removal.
 These codes preserve the specific refusal instead of using `execution_failed`.
 Re-scan and review a new plan before retrying; `--force` does not bypass the
 revalidation.

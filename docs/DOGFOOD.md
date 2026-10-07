@@ -1,5 +1,11 @@
 # Evidence-Based Reclamation Dogfood
 
+As of 2026-10-07: reviewed as historical material.
+
+These historical observations record separate dated exercises, not a current
+coverage or cleanup guarantee. The current cleanup contract is [SPEC.md](SPEC.md);
+current machine-readable output is [JSON_SCHEMA.md](JSON_SCHEMA.md).
+
 The initial notes record the sanitized evidence used for issue #90; later
 sections add separate read-only coverage and classification audits. The real
 `$HOME` exercises were limited to scan, metadata/Git inspection, and dry-run

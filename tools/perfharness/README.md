@@ -1,15 +1,22 @@
 # perfharness — offline four-pair measurement for #139 L2
 
-An offline measurement harness implementing the **frozen #139 L2 four-pair
-performance + correctness/A-B protocol**. It is the deterministic-input layer
-that issue **#129** owns: it produces reproducible evidence about the
-Codex-sessions retention projection without modifying the inventory-bearing
-stores of a live home, so that the
-eventual real-home measurement (the still-open Done Criteria **DC19-21**) can be
-short and low-risk.
+As of 2026-10-07, this tool maintains the historical **#139 L2 four-pair
+retention A/B protocol**, including synthetic fixtures, drift rejection,
+threshold verdicts, isolated subprocess environments, and run-owned temporary
+directory cleanup. It is not a general full-home performance budget or a
+comparison tool for arbitrary current releases.
 
-This tool **only produces evidence**. It does **not** close DC19-21, does
-**not** publish or merge anything, and leaves the **#139 L2 park in effect**.
+The frozen A/B contract requires a base **without** retention and a change
+**with** additive retention, with identical existing inventory. Current
+releases already include the read-only projection: comparing two such refs
+fails the additive check by design. The historical default change ref may be
+absent in a fresh clone; measurements need explicit locally available
+`-base` and `-change` refs satisfying that protocol.
+
+The current read-only inventory contract is maintained in
+[PROTECTED_RETENTION.md](../../docs/PROTECTED_RETENTION.md); retention execution
+remains parked. Synthetic results do not close historical real-home Done
+Criteria DC19-21 or authorize cleanup, publication, or a merge.
 
 ## What it does
 
@@ -85,19 +92,24 @@ Linux).
 
 ## Usage
 
-Run from anywhere inside the aibris repo:
+Run from the repository root; this is a separate Go module:
 
 ```sh
-# Fast synthetic smoke run (tiny home, 2 pairs), printing a Markdown report.
-go run ./tools/perfharness --quick --pairs 2
+# Inspect options without scanning or requiring historical refs.
+go -C tools/perfharness run . --help
 
-# Larger synthetic run with a machine-readable report.
-go run ./tools/perfharness --pairs 4 --json-out report.json --md-out report.md
+# Synthetic protocol, lifecycle, and environment regression tests.
+go -C tools/perfharness test ./...
 
-# Measure an EXISTING home (the real-home workflow). Run only during a quiet
-# window; the input-fingerprint drift check rejects pairs if the home changes.
-go run ./tools/perfharness --home "$HOME" --pairs 4 --md-out real-home.md
+# Optional immutable build + scan smoke test; all inputs are temporary.
+PERFHARNESS_INTEGRATION=1 go -C tools/perfharness test ./... -run '^TestBuildBinaryIntegration$' -count=1
 ```
+
+For a historical A/B experiment, use `go -C tools/perfharness run .` with
+explicit `-base` / `-change` refs and `-quick` for a small synthetic input.
+Omitting `-home` generates the synthetic home. Report output paths should be
+inside a disposable directory. The `-home` option is reserved for a separately
+reviewed, quiescent existing-home experiment; it is not an onboarding step.
 
 ### Flags
 
@@ -144,7 +156,8 @@ With `-keep`, the child is retained and its path is printed on success or error.
 - `report.go` — Markdown + JSON rendering.
 - `main.go` — CLI wiring.
 
-The package imports no aibris `internal/` package, so it compiles on `main`
-independently of the (unpublished) retention provider and can build a base
-binary from a tree that predates it. Heavy build/scan integration tests are
+The executable imports no aibris `internal/` package and can build a base
+binary from a tree that predates retention. Tests use the root module's shared
+`internal/testutil` HOME isolation through the nested module's local replace;
+run them from a complete checkout. Heavy build/scan integration tests are
 gated behind `PERFHARNESS_INTEGRATION=1`.

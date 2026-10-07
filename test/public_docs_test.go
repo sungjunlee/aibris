@@ -1,10 +1,12 @@
 package test
 
 import (
+	"encoding/json"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime"
 	"slices"
@@ -21,6 +23,7 @@ func TestPublicDocumentationLocalLinks(t *testing.T) {
 		"SECURITY.md",
 		"CONTRIBUTING.md",
 		"CODE_OF_CONDUCT.md",
+		"tools/perfharness/README.md",
 	}
 	for _, pattern := range []string{
 		filepath.Join("docs", "*.md"),
@@ -74,26 +77,27 @@ func TestScanJSONSchemaVersioningDocumented(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	content := string(data)
-	for _, want := range []string{
-		"schema_version",
-		"`items` is the canonical all-debris array",
-		"0.x compatibility\n  alias",
-		"mirrors `items` exactly",
-		"[0.x compatibility and deprecation policy](COMPATIBILITY.md)",
-		"retained throughout 0.x",
-	} {
+	content := strings.Join(strings.Fields(strings.ReplaceAll(string(data), "**", "")), " ")
+	for _, want := range []string{"schema_version", "`items`", "`worktrees`", "0.x compatibility alias", "retained throughout 0.x", "](COMPATIBILITY.md)"} {
 		if !strings.Contains(content, want) {
 			t.Errorf("docs/JSON_SCHEMA.md must document %q", want)
 		}
 	}
-	// The canonical items array and the 0.x worktrees alias must both appear in
-	// the top-level structure fixture with identical item content.
-	if !strings.Contains(content, `"schema_version": 1,`+"\n"+`  "items": [`) {
-		t.Errorf("docs/JSON_SCHEMA.md top-level fixture must lead with schema_version then items")
+	// Parse the example rather than fixing key order, indentation, or wrapping.
+	fixture := regexp.MustCompile("(?s)```json\\r?\\n(.*?)\\r?\\n```").FindStringSubmatch(string(data))
+	if len(fixture) != 2 {
+		t.Fatal("scan schema needs a JSON fixture")
 	}
-	if !strings.Contains(content, `"worktrees": [`) {
-		t.Errorf("docs/JSON_SCHEMA.md must retain the worktrees compatibility alias in the fixture")
+	var scan struct {
+		SchemaVersion int              `json:"schema_version"`
+		Items         []map[string]any `json:"items"`
+		Worktrees     []map[string]any `json:"worktrees"`
+	}
+	if err := json.Unmarshal([]byte(fixture[1]), &scan); err != nil {
+		t.Fatal(err)
+	}
+	if scan.SchemaVersion != 1 || len(scan.Items) == 0 || !reflect.DeepEqual(scan.Items, scan.Worktrees) {
+		t.Error("scan fixture must have schema_version 1 and identical non-empty items/worktrees arrays")
 	}
 }
 
@@ -102,17 +106,17 @@ func TestCompatibilityPolicyDocumentsStable0xContracts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	content := string(data)
+	content := strings.Join(strings.Fields(string(data)), " ")
 	for _, want := range []string{
 		"Stable documented surfaces",
-		"Flag names, documented short aliases, accepted selector values, defaults",
-		"`scan --json`, `clean --dry-run --json` (`clean_plan`), and execution",
+		"Flag names", "short aliases", "selector values", "defaults",
+		"`scan --json`", "`clean --dry-run --json`", "`clean_plan`", "`clean_receipt`",
 		"Process exit status",
 		"`CHANGELOG.md` entry",
 		"Upgrade and migration",
 		"new schema version",
 		"retained throughout 0.x",
-		"two subsequent 0.x feature/minor releases and 90\ncalendar days, whichever is longer",
+		"two subsequent 0.x feature/minor releases and 90 calendar days, whichever is longer",
 		"does not promise a v1.0 scope",
 		"release schedule",
 	} {
@@ -125,7 +129,7 @@ func TestCompatibilityPolicyDocumentsStable0xContracts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(readme), "[0.x compatibility and deprecation policy](docs/COMPATIBILITY.md)") {
+	if !strings.Contains(string(readme), "](docs/COMPATIBILITY.md)") {
 		t.Error("README must link to the canonical compatibility policy")
 	}
 
@@ -133,7 +137,7 @@ func TestCompatibilityPolicyDocumentsStable0xContracts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(spec), "[COMPATIBILITY.md](COMPATIBILITY.md)") {
+	if !strings.Contains(string(spec), "](COMPATIBILITY.md)") {
 		t.Error("SPEC must link to the canonical compatibility policy")
 	}
 }
@@ -150,7 +154,7 @@ func TestReleaseNotesTemplatePromptsCompatibilityImpact(t *testing.T) {
 		"Compatible addition",
 		"Breaking change",
 		"Deprecation",
-		"replacement and the earliest removal version",
+		"replacement", "earliest removal version",
 		"## Upgrade and migration",
 		"## Safety",
 		"## Windows status",
@@ -172,19 +176,19 @@ func TestWindowsReleaseDocumentationContract(t *testing.T) {
 	}
 
 	readme := read("README.md")
-	if !strings.Contains(readme, "[Windows support contract](docs/WINDOWS.md)") {
+	if !strings.Contains(readme, "](docs/WINDOWS.md)") {
 		t.Error("README must link to the canonical Windows support contract")
 	}
 
 	windows := read(filepath.Join("docs", "WINDOWS.md"))
 	for _, required := range []string{
-		"Windows archives are **experimental**",
+		"Windows archives are experimental",
 		"`windows-latest`",
 		"`aibris_windows_amd64.zip`",
 		"`aibris_windows_arm64.zip`",
 		"`install.sh`",
 	} {
-		if !strings.Contains(windows, required) {
+		if !strings.Contains(strings.Join(strings.Fields(strings.ReplaceAll(windows, "**", "")), " "), required) {
 			t.Errorf("Windows support contract is missing %q", required)
 		}
 	}
@@ -533,7 +537,8 @@ func TestPublicDocumentationCommunityAndRoadmapContracts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(roadmap), "remain in the 0.x series until the maintainer is satisfied") {
+	intro := strings.SplitN(string(roadmap), "\n## ", 2)[0]
+	if !strings.Contains(intro, "0.x") || !strings.Contains(intro, "v1.0.0") || !strings.Contains(intro, "maintainer") {
 		t.Error("roadmap is missing the explicit 0.x release posture")
 	}
 }
@@ -544,4 +549,90 @@ func isExternalDocumentationLink(target string) bool {
 		strings.HasPrefix(lower, "https://") ||
 		strings.HasPrefix(lower, "http://") ||
 		strings.HasPrefix(lower, "mailto:")
+}
+
+// These checks pin current contracts and runnable module boundaries, not prose
+// wrapping or the wording of historical design decisions.
+func TestPublicDocumentationCurrentSafetyAndRelease(t *testing.T) {
+	audit := readRepoFile(t, "docs/SECURITY_AUDIT.md")
+	risky := documentationSection(t, audit, "Risky Categories")
+	for _, token := range []string{"--agent-state-grace", "24h", "--age", "live", "undetermined"} {
+		if !strings.Contains(risky, token) {
+			t.Errorf("agent-state safety summary is missing %q", token)
+		}
+	}
+	release := documentationSection(t, audit, "Release Integrity")
+	for _, token := range []string{"SBOM", "provenance", "checksums.txt", "INSTALL.md", "WINDOWS.md", "install.ps1"} {
+		if !strings.Contains(release, token) {
+			t.Errorf("current release summary is missing %q", token)
+		}
+	}
+	for _, obsolete := range []string{"Future hardening should add artifact attestations", "do not yet publish an SBOM", "have not yet been replaced by native"} {
+		if strings.Contains(audit, obsolete) {
+			t.Errorf("current security summary contains obsolete claim %q", obsolete)
+		}
+	}
+}
+
+func TestPublicDocumentationHistoryBoundaries(t *testing.T) {
+	for _, path := range []string{"docs/DOGFOOD.md", "docs/GUIDED_CLEAN_TTY_CHECKLIST.md", "docs/SCAN_CLEAN_IMPROVEMENT_PLAN.md"} {
+		t.Run(path, func(t *testing.T) {
+			content := strings.ReplaceAll(readRepoFile(t, path), "\r\n", "\n")
+			intro := strings.SplitN(content, "\n## ", 2)[0]
+			if !regexp.MustCompile(`As of \d{4}-\d{2}-\d{2}`).MatchString(intro) {
+				t.Error("historical document needs a dated introductory boundary")
+			}
+			if !strings.Contains(strings.ToLower(intro), "histor") || !strings.Contains(intro, "](SPEC.md)") {
+				t.Error("historical introduction must link the current canonical SPEC")
+			}
+		})
+	}
+	roadmap := readRepoFile(t, "docs/ROADMAP.md")
+	current := documentationSection(t, roadmap, "Current unreleased work")
+	for _, token := range []string{"#585", "#587", "#590", "#593", "#595", "CHANGELOG.md"} {
+		if !strings.Contains(current, token) {
+			t.Errorf("unreleased work must distinguish integrated change %q from tagged releases", token)
+		}
+	}
+	shipped := documentationSection(t, roadmap, "Shipped")
+	if strings.Contains(shipped, "Unreleased on `main` since the tag:") {
+		t.Error("shipped release history must not describe shipped features as currently unreleased")
+	}
+}
+
+func TestPublicDocumentationContributorAndHarnessCommands(t *testing.T) {
+	contributing := readRepoFile(t, "CONTRIBUTING.md")
+	for _, token := range []string{"shellcheck", "Go", "Git", "./aibris --help", "./aibris clean --help", "env -i", "mktemp -d", "go test ./...", "go -C tools/perfharness test ./...", "not run"} {
+		if !strings.Contains(strings.Join(strings.Fields(contributing), " "), token) {
+			t.Errorf("safe onboarding is missing %q", token)
+		}
+	}
+	harness := readRepoFile(t, "tools/perfharness/README.md")
+	for _, token := range []string{"go -C tools/perfharness run . --help", "go -C tools/perfharness test ./...", "PROTECTED_RETENTION.md"} {
+		if !strings.Contains(harness, token) {
+			t.Errorf("nested-module onboarding is missing %q", token)
+		}
+	}
+	for _, obsolete := range []string{"go run ./tools/perfharness", "--home \"$HOME\"", "(unpublished) retention provider"} {
+		if strings.Contains(harness, obsolete) {
+			t.Errorf("harness instructions contain unsafe or obsolete example %q", obsolete)
+		}
+	}
+}
+
+func documentationSection(t *testing.T, content, title string) string {
+	t.Helper()
+	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+	for i, line := range lines {
+		if strings.TrimSpace(line) != "## "+title {
+			continue
+		}
+		end := i + 1
+		for end < len(lines) && !strings.HasPrefix(lines[end], "## ") {
+			end++
+		}
+		return strings.Join(strings.Fields(strings.Join(lines[i+1:end], "\n")), " ")
+	}
+	t.Fatalf("missing documentation section %q", title)
+	return ""
 }

@@ -7,18 +7,30 @@ date, or compatibility promise.
 Milestones are capability and quality gates rather than schedules. Releases
 are cut only after the relevant behavior is dogfooded and explicitly approved.
 
-## Current: after v0.13.0
+## Current unreleased work
 
-v0.13.0 shipped the deletion safety gate, Grok session coverage, the cache
-catalog, faster guided review, and the output redesign. Next 0.x work:
+As of 2026-10-07, the latest tagged release is v0.13.0 (2026-10-06). The
+following changes are implemented in this audit integration checkout after
+that release; they are not claims about the v0.13.0 binary. Tagged history is
+recorded in [CHANGELOG.md](../CHANGELOG.md). Current behavior is specified in
+[SPEC.md](SPEC.md), [JSON_SCHEMA.md](JSON_SCHEMA.md),
+[INSTALL.md](INSTALL.md), and [WINDOWS.md](WINDOWS.md).
 
-- Coverage for more AI agent stores, each backed by an orphan proof or a
-  rebuildable-cache contract (`docs/CATEGORY.md`).
-- Separate the owning tool from the provider in `--tool` and JSON
-  (`owner`, `target_id`) under the 0.x deprecation policy.
-- Tighten the remaining name-based cleanup allowlist to provider-declared
-  paths.
-- Clean plan output to match the new scan summary.
+- Mutation safety: fresh orphaned-worktree Git evidence (#585), unambiguous
+  Claude recorded-cwd proof (#586), live catalog command authority and
+  cache-only Homebrew removal (#587), complete activity evidence and final
+  cancellation barriers (#589), and cancellable confirmation accounting (#594).
+- Execution and JSON: one domain plan with typed prepared evidence (#590),
+  indexed plan projection (#591), and preserved receipt reason codes (#596).
+- Inventory: home-scoped Codex activity and shared bounded session metadata
+  (#592), explicit-root retention boundaries (#597), consistent apparent-size
+  accounting (#598), and an unregistered Codex tmp contract experiment (#600).
+- Tooling and distribution: run-owned perfharness temporary directories (#588),
+  same-SHA release verification for both modules and native safety (#593), and
+  real installer failure fixtures plus staged binary replacement (#595).
+
+Release availability must be checked against a tag's notes; integration does
+not set a release date.
 
 ## Shipped
 
@@ -58,10 +70,11 @@ are parked or blocked:
 - #142 L2/L3 stay blocked on producer-documented layouts and fencing
 - session / transcript / run-manifest stores beyond Codex stay future work
 
-Unreleased on `main` since the tag: `--exclude`, packaged completions and man
-pages, explicit system-temp-dir roots, `--diagnostics`, README first-cleanup
-restructure, `CODEX_HOME` / `AIBRIS_CODEX_HOMES`, `--receipt-file`,
-`--agent-state-grace`, in-tree cache activity, and #141.
+Historical status as of 2026-08-09: the then-unreleased work included
+`--exclude`, completions/man pages, explicit temp roots, `--diagnostics`,
+README onboarding, Codex home overrides, receipts, agent-state grace, in-tree
+activity, and #141. These subsequently shipped in the 0.10.x/0.11.x series;
+see the dated [changelog](../CHANGELOG.md). This is not the current backlog.
 
 ### 0.9.0 Unified Cleanup Experience
 
@@ -72,15 +85,16 @@ One plan, one mixed-category review, one confirmation and receipt contract.
 Selector, execution-failure, and partial-scan outcomes made unambiguous;
 CLI contracts locked with compiled-process tests.
 
-## Parallel 0.x Tracks
+## Completed distribution and automation tracks
 
 ### OSS Distribution & Release Trust
 
 - packaged completions and manual pages (shipped, #119)
-- verified Homebrew installation (#118)
-- an explicit Windows support contract (#120)
-- SBOM and artifact provenance (#121)
-- curated release notes and public link checks (#122)
+- verified Homebrew installation (shipped, #118)
+- an explicit experimental Windows support contract (shipped, #120); native
+  PowerShell installation shipped in v0.12.2
+- SBOM and artifact provenance (shipped in v0.12.0, #121)
+- curated release notes and public link checks (shipped, #122)
 
 ### Automation & Schema
 
@@ -90,6 +104,11 @@ machine-readable clean plans and receipts, provider diagnostics, and
 
 ## Future
 
+Additional proof-backed AI stores and separation of owning tool from provider
+(`owner`, `target_id`) remain proposals under the 0.x compatibility policy.
+Further narrowing of name-based cleanup checks and alignment of clean-plan
+output with the scan summary also remain proposals; live catalog command
+authorization is already implemented in the unreleased work above.
 Repeatable full-home performance budgets, parked retention execution, and
 further session-store providers remain future work. Exclusions and project
 ignore rules already shipped (#128). Priorities may change based on

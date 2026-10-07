@@ -66,6 +66,12 @@ curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/i
 ```
 
 The installer downloads GitHub Release binaries and verifies `checksums.txt`.
+Both installers stage a replacement beside the destination before the final
+rename. Failed download, checksum, staging, or replacement leaves an existing
+binary intact; fixtures exercise these failure paths without real downloads.
+The PowerShell installer additionally refuses a locked binary; see
+[WINDOWS.md](WINDOWS.md).
+
 The default install path uses GitHub's `releases/latest/download` URLs for
 prebuilt binaries. `main` builds from source with Go.
 
@@ -81,7 +87,11 @@ curl -fsSL https://raw.githubusercontent.com/sungjunlee/aibris/refs/heads/main/i
 
 Release archives ship `checksums.txt` (verified by `install.sh`), an SPDX SBOM
 (`<archive>.sbom.json`), and a GitHub artifact attestation produced by the release
-workflow. Copy-paste verification for a downloaded archive:
+workflow. The current [release verification contract](SPEC.md#verification)
+requires the tag event's same-SHA checks to succeed before creating the draft;
+attestation must succeed before publication and the tap update. Local workflow
+tests do not establish that a real release was published. Copy-paste
+verification for a downloaded archive:
 
 ```bash
 # Attestation: binds the archive to the release workflow build
