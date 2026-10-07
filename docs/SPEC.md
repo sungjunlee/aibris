@@ -38,12 +38,13 @@ confirmation path before deletion.
 - Return context cancellation and deadline errors immediately.
 - `Size` measures apparent bytes: sum non-directory entry lengths, count sparse
   files at logical length and hardlinks per path independently per target, and
-  count symlinks at their own length without following them (including at the
-  root). Directory metadata is excluded. Report-only size can be partial when
-  entries are unreadable; incomplete activity evidence still refuses safety
-  approval. Cache, worktree, strip, reclaim estimates, and size thresholds share
-  this contract. `PhysicalTotalBytes` deduplicates outer owners, not allocated
-  blocks; neither size field guarantees reclaimed disk space.
+  follow root symlinks. Nested symlinks count at their own length without
+  following them. Directory metadata is excluded. Report-only size can be
+  partial when entries are unreadable; incomplete activity evidence still
+  refuses safety approval. Cache, worktree, strip, reclaim estimates, and size
+  thresholds share this contract. `PhysicalTotalBytes` deduplicates outer
+  owners, not allocated blocks; neither size field guarantees reclaimed disk
+  space.
 - Sort discovered items by size descending.
 - Print progress for human-readable scans. Interactive terminals use a
   single-line spinner summary; non-interactive output uses plain progress

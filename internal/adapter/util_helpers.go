@@ -28,9 +28,9 @@ type dirActivityAccumulator struct {
 }
 
 // estimateDirSize returns apparent bytes under the DebrisInfo.Size contract:
-// directories contribute no bytes, hardlinks count per path, and symlinks
-// contribute their own length without following their targets, including at
-// the root. Unreadable entries leave a partial report-only size.
+// directories contribute no bytes and hardlinks count per path. Root symlinks
+// are followed; nested symlinks contribute their own length without following
+// their targets. Unreadable entries leave a partial report-only size.
 // For directories it uses a worker pool that walks top-level subdirectories
 // in parallel, with each worker traversing its assigned subtree sequentially
 // (no recursive goroutine spawning). This avoids the goroutine explosion that
@@ -48,7 +48,9 @@ func estimateDirActivityWithOptions(ctx context.Context, path string, trackModTi
 		return dirActivity{Err: err}
 	}
 
-	info, err := os.Lstat(path)
+	// Cache discovery accepts directory symlinks. Observe the same root target
+	// so size and safety-critical activity evidence describe its contents.
+	info, err := os.Stat(path)
 	if err != nil {
 		return dirActivity{Err: err}
 	}

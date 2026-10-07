@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
@@ -109,7 +110,7 @@ func TestEstimateDirSizesHardlinksCountEachPath(t *testing.T) {
 	}
 }
 
-func TestEstimateDirSizesSymlinksNeverFollowTargets(t *testing.T) {
+func TestEstimateDirSizesNestedSymlinksNeverFollowTargets(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	sizeTestDU(t, "missing")
@@ -127,7 +128,6 @@ func TestEstimateDirSizesSymlinksNeverFollowTargets(t *testing.T) {
 		filepath.Join(root, "dangling"):           filepath.Join(home, "missing"),
 	}
 	var want int64
-	paths := []string{root}
 	for link, target := range links {
 		if err := os.Symlink(target, link); err != nil {
 			t.Skipf("symlinks unavailable: %v", err)
@@ -137,21 +137,80 @@ func TestEstimateDirSizesSymlinksNeverFollowTargets(t *testing.T) {
 			t.Fatal(err)
 		}
 		want += info.Size()
-		paths = append(paths, link)
 	}
 	ctx := context.Background()
-	got := estimateDirSizes(ctx, paths)
+	got := estimateDirSizes(ctx, []string{root})
 	if got[root] != want {
 		t.Errorf("tree size = %d; want link lengths %d", got[root], want)
 	}
-	for link := range links {
-		info, _ := os.Lstat(link)
-		if got[link] != info.Size() {
-			t.Errorf("root link %s size = %d; want %d", link, got[link], info.Size())
+	if activity := estimateDirActivity(ctx, root); activity.Err != nil || activity.Size != want {
+		t.Errorf("tree activity = %+v; want link lengths %d", activity, want)
+	}
+}
+
+func TestEstimateDirSizesRootSymlinkFollowsTarget(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	root := filepath.Join(home, ".gradle", "caches")
+	target := filepath.Join(home, "relocated-cache")
+	nested := filepath.Join(target, "nested")
+	for _, path := range []string{filepath.Dir(root), nested} {
+		if err := os.MkdirAll(path, 0o700); err != nil {
+			t.Fatal(err)
 		}
-		if activity := estimateDirActivity(ctx, link); activity.Err != nil || activity.Size != info.Size() {
-			t.Errorf("root link activity = %+v; want %d", activity, info.Size())
+	}
+	file := filepath.Join(nested, "payload")
+	const wantSize = int64(5000)
+	sparseSizeFile(t, file, wantSize)
+	if err := os.Symlink(target, root); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	linkInfo, err := os.Lstat(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Make the link older than the payload without platform-specific link
+	// timestamp setters or sleeps. Directory mtimes must not mask the payload.
+	recent := linkInfo.ModTime().Add(24 * time.Hour).Truncate(time.Second)
+	old := recent.Add(-30 * 24 * time.Hour)
+	for _, path := range []string{target, nested} {
+		if err := os.Chtimes(path, old, old); err != nil {
+			t.Fatal(err)
 		}
+	}
+	if err := os.Chtimes(file, recent, recent); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if got := estimateDirSizes(ctx, []string{root})[root]; got != wantSize {
+		t.Errorf("root symlink size = %d; want tree size %d", got, wantSize)
+	}
+	if activity := estimateDirActivity(ctx, root); activity.Err != nil || activity.Size != wantSize || !activity.NewestModTime.Equal(recent) {
+		t.Errorf("root symlink activity = %+v; want size %d and mtime %v", activity, wantSize, recent)
+	}
+	items, err := (&BuildCacheAdapter{}).Scan(ctx, types.ScanOptions{})
+	if err != nil || len(items) != 1 {
+		t.Fatalf("cache scan = %v, %v; want one relocated cache", items, err)
+	}
+	if got := items[0]; got.Path != root || got.Size != wantSize || !got.ModTime.Equal(recent) || !got.PathModTime.Equal(old) {
+		t.Errorf("cache scan = %+v; want tree size %d, activity %v, path mtime %v", got, wantSize, recent, old)
+	}
+	if got, err := CompleteTreeModTime(ctx, root); err != nil || !got.Equal(recent) {
+		t.Errorf("complete root activity = %v, %v; want %v", got, err, recent)
+	}
+	// Mutation preflight must observe activity newer than the scan snapshot.
+	newer := recent.Add(time.Hour)
+	if err := os.Chtimes(file, newer, newer); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := CompleteTreeModTime(ctx, root); err != nil || !got.Equal(newer) {
+		t.Errorf("rechecked root activity = %v, %v; want %v", got, err, newer)
+	}
+	if err := os.Rename(target, target+"-moved"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := CompleteTreeModTime(ctx, root); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("missing root target activity error = %v; want not-exist", err)
 	}
 }
 

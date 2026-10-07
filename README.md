@@ -51,8 +51,9 @@ by category
 ```
 
 Sizes are apparent bytes: file lengths, with sparse files counted at their
-logical length and hardlinks counted per path. Symlinks contribute only the
-link's own length (even at a target root); directory metadata is excluded.
+logical length and hardlinks counted per path. Root symlinks are followed;
+nested symlinks contribute only the link's own length. Directory metadata is
+excluded.
 Scan totals, strip estimates, and size thresholds use this same accounting.
 `physical_total_bytes` counts each outer owner once, rather than measuring
 allocated blocks or guaranteeing disk space reclaimed. Unix scans previously
