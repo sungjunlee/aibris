@@ -114,13 +114,17 @@ func cleanPlanForScanInventory(t *testing.T, result *types.ScanResult) cleanJSON
 	t.Cleanup(resetCleanFlags)
 	resetCleanFlags()
 	physical, _ := cleanAuditPhysicalComponents(result.Worktrees, nil)
+	source := scanSource{Kind: scanSourceLive, ObservedAt: time.Now()}
+	plan, err := unifiedCleanupPlanForClean(context.Background(), nil, result.Worktrees, cleanupPlanEvidence(result, source, time.Now()), types.PruneOptions{Age: time.Hour})
+	if err != nil {
+		t.Fatal(err)
+	}
 	document, err := cleanjson.BuildPlanFromCmd(
-		context.Background(),
 		result,
-		scanSource{Kind: scanSourceLive, ObservedAt: time.Now()},
+		source,
 		types.PruneOptions{Age: time.Hour},
 		nil,
-		result.Worktrees,
+		plan,
 		nil,
 		cleanAudit{Components: physical},
 		false,

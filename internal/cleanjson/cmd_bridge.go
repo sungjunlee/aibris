@@ -2,7 +2,6 @@
 package cleanjson
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -11,15 +10,14 @@ import (
 	"github.com/sungjunlee/aibris/internal/worktree"
 )
 
-// BuildPlanFromCmd builds a clean JSON plan from cmd-layer inputs.
-// This adapter bridges cmd types (which are aliases) to internal types.
+// BuildPlanFromCmd projects the invocation's already-built domain plan.
+// Candidate mapping and selection belong to the domain planner, not JSON.
 func BuildPlanFromCmd(
-	ctx context.Context,
 	result *types.ScanResult,
 	source cleaner.ScanSource,
 	opts types.PruneOptions,
 	guidedState *worktree.GuidedCleanState,
-	classicTargets []types.DebrisInfo,
+	plan cleaner.UnifiedCleanupPlan,
 	protections map[string]cleaner.CleanAuditReason,
 	audit cleaner.CleanAudit,
 	includePaths bool,
@@ -27,103 +25,9 @@ func BuildPlanFromCmd(
 	if result == nil {
 		return Plan{}, fmt.Errorf("nil cleanup scan result")
 	}
-	if err := refusePartialScan(result); err != nil {
-		return Plan{}, err
-	}
-	observedAt := source.ObservedAt
-	if observedAt.IsZero() {
-		observedAt = time.Now()
-	}
-	evidence := cleaner.CleanupPlanEvidence{
-		ObservedAt:     observedAt,
-		ProviderErrors: append([]types.ScanProviderError(nil), result.ProviderErrors...),
-	}
-	candidates := PlanCandidatesFromCmd(guidedState, classicTargets, opts)
-	plan, err := cleaner.BuildUnifiedCleanupPlan(ctx, candidates, evidence)
-	if err != nil {
-		return Plan{}, err
-	}
-	input := InputFromCmd(result, source, opts, guidedState, plan, evidence, audit, protections)
+	input := InputFromCmd(result, source, opts, guidedState, plan, audit, protections)
 	input.IncludePaths = includePaths
 	return Build(input)
-}
-
-// PlanCandidatesFromCmd adapts guided state and classic targets into plan candidates.
-func PlanCandidatesFromCmd(
-	guidedState *worktree.GuidedCleanState,
-	classicTargets []types.DebrisInfo,
-	opts types.PruneOptions,
-) []cleaner.CleanupPlanCandidate {
-	classicTargets = cleaner.NormalizeTargets(classicTargets)
-	candidates := make([]cleaner.CleanupPlanCandidate, 0, guidedCandidateCount(guidedState)+len(classicTargets))
-	if guidedState != nil {
-		candidates = append(candidates, guidedCleanupPlanCandidates(*guidedState)...)
-	}
-	candidates = append(candidates, cleaner.ClassicCleanupPlanCandidates(classicTargets, opts)...)
-	return candidates
-}
-
-func guidedCandidateCount(state *worktree.GuidedCleanState) int {
-	if state == nil {
-		return 0
-	}
-	return len(state.Rows)
-}
-
-// guidedCleanupPlanCandidates adapts the accepted guided selection into
-// policy-neutral plan candidates. Locked guided rows stay locked; toggled and
-// recommended rows become selectable; reviewable rows start unselected.
-func guidedCleanupPlanCandidates(state worktree.GuidedCleanState) []cleaner.CleanupPlanCandidate {
-	candidates := make([]cleaner.CleanupPlanCandidate, 0, len(state.Rows))
-	for _, row := range state.Rows {
-		selection := cleaner.CleanupPlanUnselected
-		if row.Policy == worktree.DecisionLocked {
-			selection = cleaner.CleanupPlanLocked
-		} else if row.Selected {
-			selection = cleaner.CleanupPlanSelected
-		}
-		reasons := make([]cleaner.CleanupPlanReason, 0, len(row.ReasonCodes)+1)
-		for reasonIndex, code := range row.ReasonCodes {
-			description := ""
-			if reasonIndex == 0 {
-				// Row.Reason is already the aggregated human explanation for
-				// this guided decision. Attach it once while retaining every
-				// stable machine-readable reason code.
-				description = row.Row.Reason
-			}
-			reasons = append(reasons, cleaner.CleanupPlanReason{
-				Code:        cleaner.CleanupPlanReasonCode(code),
-				Description: description,
-			})
-		}
-		if len(reasons) == 0 {
-			reasons = append(reasons, cleaner.CleanupPlanReason{
-				Code:        cleaner.CleanupPlanReasonWorktreePolicyDecision,
-				Description: row.Row.Reason,
-			})
-		}
-		candidates = append(candidates, cleaner.CleanupPlanCandidate{
-			RowKey:         "guided:" + row.Key,
-			Item:           row.Row.Item,
-			PolicyDecision: cleanupPlanPolicyDecisionForClass(row.Policy),
-			Selection:      selection,
-			Reasons:        reasons,
-		})
-	}
-	return candidates
-}
-
-func cleanupPlanPolicyDecisionForClass(class worktree.DecisionClass) cleaner.CleanupPlanPolicyDecision {
-	switch class {
-	case worktree.DecisionLocked:
-		return cleaner.CleanupPlanPolicyProtected
-	case worktree.DecisionRecommended:
-		return cleaner.CleanupPlanPolicyRecommended
-	case worktree.DecisionReviewable:
-		return cleaner.CleanupPlanPolicyReviewable
-	default:
-		return cleaner.CleanupPlanPolicySkipped
-	}
 }
 
 // SnapshotComponentsFromCmd builds snapshot components from cmd-layer inputs.
@@ -148,7 +52,6 @@ func InputFromCmd(
 	opts types.PruneOptions,
 	guidedState *worktree.GuidedCleanState,
 	plan cleaner.UnifiedCleanupPlan,
-	evidence cleaner.CleanupPlanEvidence,
 	audit cleaner.CleanAudit,
 	protections map[string]cleaner.CleanAuditReason,
 ) Input {
@@ -159,7 +62,7 @@ func InputFromCmd(
 		Guided:       GuidedPolicyFromWorktree(guidedState),
 		IncludePaths: false, // Will be set by caller
 		Plan:         UnifiedPlanFromCleaner(plan),
-		Evidence:     PlanEvidenceFromCleaner(evidence),
+		Evidence:     PlanEvidenceFromCleaner(plan.Evidence),
 		Audit:        AuditComponentsFromCleaner(audit.Components),
 		Inventory:    result.Worktrees,
 		Protections:  ProtectionsFromCleaner(protections),
