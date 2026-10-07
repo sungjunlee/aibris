@@ -25,9 +25,9 @@ func ExecuteWithContext(ctx context.Context, worktrees []types.DebrisInfo) (int6
 // removal. It must be read-only and return an error to refuse the mutation.
 type MutationBarrier func(context.Context, types.DebrisInfo) error
 
-// CleanupMutationOutcome reports an execution attempt made immediately after
-// the mutation barrier. Observers are informational and cannot affect cleanup
-// safety or execution.
+// CleanupMutationOutcome reports a pending operation before its final barrier
+// (MutationAttempted=false), then the actual attempt and observed result.
+// Observers never provide deletion authority; their effects are revalidated.
 type CleanupMutationOutcome struct {
 	Item                       types.DebrisInfo
 	MutationAttempted          bool
@@ -61,7 +61,7 @@ func ExecuteWithContextAndBarrierWithOutput(
 }
 
 // ExecuteWithContextAndBarrierWithOutputAndObserver reports each command or
-// path-removal attempt immediately after its mutation barrier succeeds.
+// path-removal operation before its final barrier and after its actual attempt.
 func ExecuteWithContextAndBarrierWithOutputAndObserver(
 	ctx context.Context,
 	worktrees []types.DebrisInfo,

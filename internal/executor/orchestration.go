@@ -221,8 +221,8 @@ func ExecutePreparedTargets(
 		result.Units = append(result.Units, receipt)
 		result.FreedBytes += receipt.FreedBytes
 		if err != nil {
-			if cleanupKind(target.Item) != types.CleanupCommand &&
-				errors.Is(err, context.Canceled) &&
+			if errors.Is(err, context.Canceled) &&
+				!receipt.MutationAttempted &&
 				receipt.State == ExecutionFailed &&
 				!CleanUnitHasMutation(receipt) {
 				receipt.State = ExecutionCancelled
