@@ -247,6 +247,20 @@ var decisionReasonCopy = map[DecisionReasonCode]string{
 	DecisionReasonMergeEvidenceUnknown:    "default-branch uniqueness could not be determined",
 }
 
+// SupportedReasonCodes returns the stable policy and Git recoverability codes
+// that guided cleanup can carry into its public JSON documents. The policy
+// description catalog owns the supported decision codes.
+func SupportedReasonCodes() []string {
+	codes := make([]string, 0, len(decisionReasonCopy)+2)
+	for code := range decisionReasonCopy {
+		codes = append(codes, string(code))
+	}
+	// Other Git evidence codes already have policy descriptions above.
+	codes = append(codes, string(GitReasonAttachedBranch), string(GitReasonDetachedHeadReachable))
+	sort.Strings(codes)
+	return codes
+}
+
 func DecisionReasonDescription(code DecisionReasonCode) string {
 	if text, ok := decisionReasonCopy[code]; ok {
 		return text
