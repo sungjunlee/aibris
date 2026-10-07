@@ -208,7 +208,7 @@ item list, not as a worktree-only list.
 | `project` | string | Project name if detectable, empty otherwise |
 | `source` | string | Worktree source such as `.codex`, `.somename`, `project-local`, or the registered `superpowers`; empty for non-worktree items. Superpowers rows use `tool=unknown`. |
 | `path` | string | Absolute filesystem path |
-| `size` | integer | Size in bytes |
+| `size` | integer | Apparent bytes: sum of non-directory entry lengths. Sparse files count logical length, hardlinks count per path independently per target, and symlinks count their own length without following targets (including at the root). Directory metadata is excluded; unreadable entries may leave a partial estimate. Not allocated blocks or guaranteed reclaimed space. |
 | `mod_time` | string | Last modification time in RFC 3339 format. For `build-cache`, `other-cache`, and `agent-state` rows this is the newest mtime found anywhere in the tree, not the path's own mtime. |
 | `status` | string | Worktree health (`active`, `orphaned`, `plain-dir`) or empty for non-worktree items. Only scanner-validated `active` and `orphaned` worktree rows can enter cleanup safety; `plain-dir`, empty, and unknown values are review-only. |
 | `classification` | string | Agent-state health (`live`, `orphaned`, `undetermined`), omitted for items outside `agent-state`. Cursor project-store entries derive this from all distinct absolute `workspacePath=` values in `worker.log` that are outside `~/.cursor`; any live path wins and `orphaned` requires every usable path to be proven absent. |
@@ -217,7 +217,7 @@ item list, not as a worktree-only list.
 | `cleanup_kind` | string | Cleanup strategy (`remove-path` or `command`) |
 | `cleanup_command` | array | Argv command used when `cleanup_kind` is `command`; empty for path removal |
 | `physical_target_id` | string | Document-local physical unit id (`target-1`, `target-2`, …), the same pattern as clean `physical_target_id`. Nested members under one outer owner share one id. These ids are not path hashes and are not stable across runs. |
-| `strippable_bytes` | integer | Bytes in regenerable subtrees (dependency directories and platform build output) inventoried at fixed known-relative positions inside a `worktree` unit. Omitted when zero. Reported separately from `size` so protected worktrees do not read as unrecoverable; only `clean --strip` removes them, and strip eligibility never authorizes deletion. |
+| `strippable_bytes` | integer | Apparent bytes under the same `size` accounting in regenerable subtrees (dependency directories and platform build output) inventoried at fixed known-relative positions inside a `worktree` unit. Omitted when zero. Reported separately from `size` so protected worktrees do not read as unrecoverable; only `clean --strip` removes them, and strip eligibility never authorizes deletion. |
 | `strippable_paths` | array | Absolute paths of those regenerable subtrees. Omitted when empty. |
 
 `risk` and `reason` are presentation fields derived from `category`, `status`,
@@ -256,7 +256,7 @@ protected.
 | `total_count` | integer | Total number of evidence-row debris items |
 | `total_size` | integer | Sum of evidence-row `size` values. Nested members that share one outer owner are each counted, so this can overstate physical bytes. |
 | `physical_unit_count` | integer | Number of physical mutation owners after the same alias/containment collapse clean uses (`NormalizeTargets`). N nested worktree members under one outer owner contribute 1. |
-| `physical_total_bytes` | integer | Sum of those physical owners' sizes, counted once each. Human scan headline and volume debris use this figure. |
+| `physical_total_bytes` | integer | Sum of those outer owners' apparent sizes, counted once each; physical means owner deduplication, not allocated or reclaimed bytes. Human scan headline and volume debris use this figure. |
 | `total_strippable_bytes` | integer | Sum of `strippable_bytes` across all items. Omitted when zero. Reported separately from `total_size`; it never changes deletion totals. |
 | `by_category` | object | Per-category evidence-row and physical counts and sizes |
 | `by_tool` | object | Per-tool evidence-row and physical counts and sizes |

@@ -133,6 +133,17 @@ lsof -u "$USER" -d cwd 2>/dev/null | awk 'NR>1 {print $NF}' | sort -u
 ### Step 2: 분석 및 제시
 
 aibris JSON과 Docker 출력을 파싱해 **크기 순으로 정렬**하여 사용자에게 보여준다.
+
+aibris의 `size`는 non-directory entry 길이를 합한 apparent bytes다. Sparse file은
+logical length, hardlink는 target별로 각 경로의 길이를 센다. Symlink는 target root를
+포함해 따라가지 않고 링크 자체 길이만 세며 directory metadata는 제외한다.
+Cache·worktree·strip·reclaim estimate·size threshold도 이 의미를 쓴다.
+`physical_total_bytes`의 physical은 outer owner 중복 제거이며 allocated/reclaimed
+bytes가 아니다. 읽지 못한 entry가 있으면 크기는 partial estimate일 수 있고,
+incomplete activity evidence는 safety 승인을 거부한다. 삭제 후 실제 확보 공간을
+보장하지 않는다. 기존 Unix `du` 수치와 비교하면 sparse/hardlink는 커지고 directory
+metadata가 많은 tree는 작아질 수 있다. 이전 scan cache는 live rescan으로 교체되며
+JSON field 이름은 유지된다.
 - worktree는 `source`, `project`, `status`로 그룹핑하고 `risk`, `reason`도 함께 본다
 - scan의 `active`는 상위 Git metadata가 연결되어 있다는 뜻이지 최근 사용 중이라는 뜻이 아니다. classic clean에서는 제외되므로 일반 정리 제안에서는 `orphaned`를 우선한다
 - 검증된 **active** worktree가 큰 비중을 차지하면 `aibris clean --dry-run` 경로를 우선 제안한다. 도구가 Codex가 아니어도 같다. 필터가 없고 검증된 active cleanup unit이 256 MB 이상이거나 3개 이상이면, 추천이 0개여도 기본 guided review가 열린다. 등록된 session-activity reader는 Codex만 있다. reader가 없는 도구는 그 이유만으로 자동 추천되지 않고, dirty/recent/retention 같은 다른 hard lock이 없으면 `reviewable` + `activity_source_not_registered`가 된다.
@@ -284,7 +295,7 @@ min-size=256MB`다. 판정 순서는 다음과 같다:
 scan의 `active`는 상위 gitdir 생존이지 최근 사용이나 머지 여부가 아니다.
 upstream 미설정/삭제는 설명 metadata일 뿐 단독 잠금 사유가 아니다. 로컬
 branch ref가 있거나 detached HEAD가 named local/remote ref에서 도달 가능하면
-committed state는 recoverable하다. multi-member unit은 물리 크기를 한 번만
+committed state는 recoverable하다. multi-member unit은 outer owner의 apparent bytes를 한 번만
 세되 모든 member가 hard safety를 통과해야 한다. uniqueness는 member 하나라도
 unique/`unknown`이면 유닛 전체를 추천에서 내린다.
 
