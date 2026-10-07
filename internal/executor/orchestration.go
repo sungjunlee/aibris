@@ -19,6 +19,7 @@ type PreparedExecutionTarget struct {
 	Item             types.DebrisInfo
 	Component        *cleaner.CleanupOverlapComponent
 	ActiveUnit       *worktree.WorktreeCleanupUnit
+	OrphanSnapshot   *worktree.OrphanedWorktreeSnapshot
 	TargetSnapshot   *cleaner.CleanupTargetSnapshot
 	PreparationError error
 	MutationSafety   *cleaner.CleanupMutationSafety
@@ -93,8 +94,17 @@ func PrepareExecutionWithOptions(
 		} else {
 			entry.MutationSafety = safety
 		}
-		// Git-aware execution follows Scan DebrisInfo.Status; gitdir is not
-		// re-parsed here to decide active/orphaned/plain-dir.
+		// Preserve the selected route; current evidence may refuse it, but
+		// never promotes cached orphan authority to active cleanup.
+		if domainTarget.Item.Category == types.CategoryWorktree && !worktree.IsActiveWorktreeTarget(domainTarget.Item) {
+			if domainTarget.Item.Status != types.WorktreeOrphaned {
+				entry.PreparationError = errors.Join(entry.PreparationError, fmt.Errorf("%w: selected worktree is not orphaned", worktree.ErrWorktreeEvidenceChanged))
+			} else {
+				snapshot, err := worktree.CaptureOrphanedWorktreeSnapshot(ctx, domainTarget.Item.Path)
+				entry.OrphanSnapshot = snapshot
+				entry.PreparationError = errors.Join(entry.PreparationError, err)
+			}
+		}
 		if worktree.IsActiveWorktreeTarget(domainTarget.Item) {
 			units, err := worktree.BuildWorktreeCleanupUnits(ctx, []types.DebrisInfo{domainTarget.Item})
 			switch {
@@ -196,6 +206,7 @@ func ExecutePreparedTargets(
 				target.Component,
 				target.MutationSafety,
 				target.TargetSnapshot,
+				target.OrphanSnapshot,
 				opts,
 			)
 		case target.ActiveUnit == nil:
@@ -249,13 +260,15 @@ func ExecutePreparedTargets(
 	return result, nil
 }
 
-// ExecutePathCleanupTarget executes cleanup for a non-worktree path target.
+// ExecutePathCleanupTarget executes path cleanup, including revalidation of
+// orphaned worktree owners that do not use Git-aware removal.
 func ExecutePathCleanupTarget(
 	ctx context.Context,
 	target types.DebrisInfo,
 	component *cleaner.CleanupOverlapComponent,
 	safety *cleaner.CleanupMutationSafety,
 	snapshot *cleaner.CleanupTargetSnapshot,
+	orphanSnapshot *worktree.OrphanedWorktreeSnapshot,
 	opts ExecutionOptions,
 ) (UnitExecutionReceipt, error) {
 	receipt := NewCleanUnitExecutionReceipt(target, component, safety, opts.ReceiptKeyFn)
@@ -274,7 +287,16 @@ func ExecutePathCleanupTarget(
 			if validationErr != nil {
 				return validationErr
 			}
-			return snapshot.Validate(ctx)
+			if err := snapshot.Validate(ctx); err != nil {
+				return err
+			}
+			if target.Category == types.CategoryWorktree {
+				if target.Status != types.WorktreeOrphaned {
+					return fmt.Errorf("%w: selected worktree is not orphaned", worktree.ErrWorktreeEvidenceChanged)
+				}
+				return orphanSnapshot.Validate(ctx)
+			}
+			return nil
 		},
 		opts.Output,
 		opts.ErrorOutput,

@@ -160,21 +160,33 @@ func executeWithContextOutput(
 				continue
 			}
 		}
-		if observer != nil {
-			observer(CleanupMutationOutcome{
-				Item:                       w,
-				MutationAttempted:          true,
-				CommandFallbackPathRemoval: commandFallbackPathRemoval,
-			})
-		}
+		mutationAttempted := false
 		freed, residual, err := observeReclamation(ctx, w.Path, func() error {
+			// Size measurement can walk a large checkout. Refresh orphan
+			// authority again after it, immediately before physical removal.
+			if w.Category == types.CategoryWorktree {
+				if err := runMutationBarrier(ctx, barrier, w); err != nil {
+					return err
+				}
+			}
+			mutationAttempted = true
+			if observer != nil {
+				observer(CleanupMutationOutcome{
+					Item:                       w,
+					MutationAttempted:          true,
+					CommandFallbackPathRemoval: commandFallbackPathRemoval,
+				})
+			}
 			return safedelete.RemoveAll(home, w.Path)
 		})
+		if !mutationAttempted {
+			freed = 0
+		}
 		total += freed
 		if observer != nil {
 			observer(CleanupMutationOutcome{
 				Item:                       w,
-				MutationAttempted:          true,
+				MutationAttempted:          mutationAttempted,
 				CommandFallbackPathRemoval: commandFallbackPathRemoval,
 				FreedBytes:                 freed,
 				ResidualBytes:              residual,
