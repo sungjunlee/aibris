@@ -197,24 +197,33 @@ func walkDirSequential(
 	err := walkDirectory(path, func(p string, d os.DirEntry, err error) error {
 		if err != nil {
 			activity.recordError(err)
-			return err
 		}
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+		if err != nil {
+			// Missing evidence refuses safety approval, but reporting should
+			// still collect readable siblings instead of abandoning the walk.
+			if d != nil && d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if d.IsDir() {
 			if trackModTime {
 				info, err := d.Info()
 				if err != nil {
-					return err
+					activity.recordError(err)
+				} else {
+					activity.recordModTime(info.ModTime())
 				}
-				activity.recordModTime(info.ModTime())
 			}
 			return nil
 		}
 		info, err := d.Info()
 		if err != nil {
-			return err
+			activity.recordError(err)
+			return nil
 		}
 		total.Add(info.Size())
 		if trackModTime {

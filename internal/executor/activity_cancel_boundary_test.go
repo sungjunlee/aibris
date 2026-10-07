@@ -70,44 +70,70 @@ func (w cancelOnRemovalWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// Cancel on the first context check after the target disappears, before
+// reclamation returns. This models cancellation during a successful removal
+// without relying on filesystem speed or cancelling from the final log line.
+type cancelOnDisappearanceContext struct {
+	context.Context
+	path   string
+	cancel context.CancelFunc
+}
+
+func (c cancelOnDisappearanceContext) Err() error {
+	if _, err := os.Lstat(c.path); os.IsNotExist(err) {
+		c.cancel()
+	}
+	return c.Context.Err()
+}
+
 func TestPreparedCancellationAfterCompletedMutationPreservesBatchReceipt(t *testing.T) {
-	home := t.TempDir()
-	testutil.SetHome(t, home)
-	var items []types.DebrisInfo
-	for _, name := range []string{"a", "b"} {
-		path := filepath.Join(home, name, "node_modules")
-		if err := os.MkdirAll(path, 0o700); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(path, "payload"), []byte("data"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		items = append(items, types.DebrisInfo{Path: path, Category: types.CategoryNodeModules, Tool: types.ToolNodeModules})
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	evidence := cleaner.OverlapSafetyEvidence{Complete: true}
-	runtime := cleaner.NewCleanupOverlapSafetyRuntime(evidence, func(context.Context) (cleaner.OverlapSafetyEvidence, error) { return evidence, nil }, nil)
-	selection, err := cleaner.ApplyCleanupOverlapSafety(context.Background(), runtime, items)
-	if err != nil {
-		t.Fatal(err)
-	}
-	prepared := PrepareExecutionWithSafety(context.Background(), selection, runtime)
-	receipt, err := ExecutePreparedTargets(ctx, prepared, ExecutionOptions{Output: cancelOnRemovalWriter{cancel}, ErrorOutput: io.Discard, ReceiptKeyFn: func(item types.DebrisInfo) string { return item.Path }}, nil)
-	if !errors.Is(err, context.Canceled) || len(receipt.Units) != 2 {
-		t.Fatalf("receipt=%+v err=%v", receipt, err)
-	}
-	first, second := receipt.Units[0], receipt.Units[1]
-	if first.State != ExecutionRemoved || !first.MutationAttempted || !first.PhysicalRemoved || first.FreedBytes != 4 || first.ResidualBytes != 0 || receipt.FreedBytes != 4 {
-		t.Errorf("completed mutation receipt=%+v", first)
-	}
-	if second.State != ExecutionCancelled || second.MutationAttempted || second.PhysicalRemoved || second.FreedBytes != 0 {
-		t.Errorf("remaining receipt=%+v", second)
-	}
-	if _, err := os.Stat(first.Target.Path); !os.IsNotExist(err) {
-		t.Errorf("first target still exists: %v", err)
-	}
-	if _, err := os.Stat(second.Target.Path); err != nil {
-		t.Errorf("second target lost: %v", err)
+	for _, phase := range []string{"before reclamation returns", "after removed log"} {
+		t.Run(phase, func(t *testing.T) {
+			home := t.TempDir()
+			testutil.SetHome(t, home)
+			var items []types.DebrisInfo
+			for _, name := range []string{"a", "b"} {
+				path := filepath.Join(home, name, "node_modules")
+				if err := os.MkdirAll(path, 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(path, "payload"), []byte("data"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				items = append(items, types.DebrisInfo{Path: path, Category: types.CategoryNodeModules, Tool: types.ToolNodeModules})
+			}
+			base, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			var ctx context.Context = base
+			var output io.Writer = cancelOnRemovalWriter{cancel}
+			if phase == "before reclamation returns" {
+				ctx = cancelOnDisappearanceContext{base, items[0].Path, cancel}
+				output = io.Discard
+			}
+			evidence := cleaner.OverlapSafetyEvidence{Complete: true}
+			runtime := cleaner.NewCleanupOverlapSafetyRuntime(evidence, func(context.Context) (cleaner.OverlapSafetyEvidence, error) { return evidence, nil }, nil)
+			selection, err := cleaner.ApplyCleanupOverlapSafety(context.Background(), runtime, items)
+			if err != nil {
+				t.Fatal(err)
+			}
+			prepared := PrepareExecutionWithSafety(context.Background(), selection, runtime)
+			receipt, err := ExecutePreparedTargets(ctx, prepared, ExecutionOptions{Output: output, ErrorOutput: io.Discard, ReceiptKeyFn: func(item types.DebrisInfo) string { return item.Path }}, nil)
+			if !errors.Is(err, context.Canceled) || len(receipt.Units) != 2 {
+				t.Fatalf("receipt=%+v err=%v", receipt, err)
+			}
+			first, second := receipt.Units[0], receipt.Units[1]
+			if first.State != ExecutionRemoved || !first.MutationAttempted || !first.PhysicalRemoved || first.FreedBytes != 4 || first.ResidualBytes != 0 || receipt.FreedBytes != 4 || first.Error != "" {
+				t.Errorf("completed mutation receipt=%+v", first)
+			}
+			if second.State != ExecutionCancelled || second.MutationAttempted || second.PhysicalRemoved || second.FreedBytes != 0 {
+				t.Errorf("remaining receipt=%+v", second)
+			}
+			if _, err := os.Stat(first.Target.Path); !os.IsNotExist(err) {
+				t.Errorf("first target still exists: %v", err)
+			}
+			if _, err := os.Stat(second.Target.Path); err != nil {
+				t.Errorf("second target lost: %v", err)
+			}
+		})
 	}
 }

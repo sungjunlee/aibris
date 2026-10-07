@@ -32,7 +32,11 @@ func observeReclamation(ctx context.Context, path string, mutate func() (bool, e
 		return 0, before, false, err
 	}
 	attempted, err := mutate()
-	err = errors.Join(err, ctx.Err())
+	// Cancellation cannot turn a successfully completed mutation into a
+	// partial failure. It still bounds residual measurement below.
+	if !attempted || err != nil {
+		err = errors.Join(err, ctx.Err())
+	}
 	if !attempted {
 		return 0, before, false, err
 	}

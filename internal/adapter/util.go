@@ -14,6 +14,8 @@ import (
 
 // EstimateDirSize measures a path with the same estimator scan uses, for
 // callers that must re-derive a size after the scan (e.g. strip execution).
+// It is report-only: unreadable entries are skipped while readable siblings
+// still contribute bytes. Use EstimateDirSizeWithError to detect incompleteness.
 func EstimateDirSize(ctx context.Context, path string) int64 {
 	return estimateDirSize(ctx, path)
 }
