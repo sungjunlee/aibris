@@ -29,10 +29,15 @@ func readRecordedCWDs(ctx context.Context, path string) (recordedCWDReadResult, 
 	reader := bufio.NewReader(file)
 	var extractor cwdMetadataExtractor
 	var result recordedCWDReadResult
-	cwdFound := false
+	var recordCWD string
 	lineNumber := 1
 	recordUnverifiable := func() {
-		if !extractor.unverifiableRecord(cwdFound) {
+		// A duplicate or unreadable key makes every cwd in this record
+		// ambiguous. Do not let an early value become ownership evidence.
+		if recordCWD != "" && !extractor.cwdAmbiguous {
+			result.cwds = append(result.cwds, recordCWD)
+		}
+		if !extractor.unverifiableRecord(recordCWD != "") {
 			return
 		}
 		result.unverifiableRecords++
@@ -46,16 +51,15 @@ func readRecordedCWDs(ctx context.Context, path string) (recordedCWDReadResult, 
 		}
 		fragment, readErr := reader.ReadSlice('\n')
 		if cwd := extractor.feed(fragment); cwd != "" {
-			if !cwdFound {
-				result.cwds = append(result.cwds, cwd)
-				cwdFound = true
+			if recordCWD == "" {
+				recordCWD = cwd
 			}
 		}
 		switch {
 		case readErr == nil:
 			recordUnverifiable()
 			extractor.reset()
-			cwdFound = false
+			recordCWD = ""
 			lineNumber++
 		case errors.Is(readErr, bufio.ErrBufferFull):
 			continue
@@ -117,6 +121,7 @@ type cwdMetadataExtractor struct {
 	keyMatched       bool
 	keyLength        int
 	cwdFieldSeen     bool
+	cwdAmbiguous     bool
 	cwdRaw           []byte
 	cwdTooLong       bool
 	literalRemaining string

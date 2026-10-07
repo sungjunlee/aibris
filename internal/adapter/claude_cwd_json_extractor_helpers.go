@@ -89,6 +89,12 @@ func (e *cwdMetadataExtractor) feedStringByte(b byte) string {
 		return ""
 	}
 	if b == '\\' {
+		if e.stringIsKey && len(e.containers) == 1 {
+			// Until an escaped top-level key can be identified, it could be
+			// another cwd. Refuse its record rather than choose an owner.
+			e.cwdAmbiguous = true
+			e.invalid = true
+		}
 		e.escaped = true
 		return ""
 	}
@@ -108,6 +114,10 @@ func (e *cwdMetadataExtractor) feedStringByte(b byte) string {
 		frame := &e.containers[len(e.containers)-1]
 		frame.keyIsCWD = e.keyMatched && e.keyLength == len("cwd")
 		if frame.keyIsCWD {
+			if e.cwdFieldSeen {
+				e.cwdAmbiguous = true
+				e.invalid = true
+			}
 			e.cwdFieldSeen = true
 		}
 		frame.state = jsonObjectColon
