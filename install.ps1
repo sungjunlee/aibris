@@ -131,6 +131,8 @@ function Install-Binary {
         [string]$Destination
     )
 
+    # Native file APIs use process paths, not PowerShell's current location.
+    $Destination = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Destination)
     Write-Log "Installing $script:Binary to $Destination"
 
     $destDir = Split-Path -Parent $Destination
@@ -138,7 +140,7 @@ function Install-Binary {
         New-Item -ItemType Directory -Path $destDir -Force | Out-Null
     }
 
-    # Stage-then-replace: if destination exists and is locked, preserve it
+    # Refuse a known lock early; replacement below must also handle later locks.
     if (Test-Path $Destination) {
         try {
             # Test if file is locked by trying to open it exclusively
@@ -152,7 +154,42 @@ function Install-Binary {
         }
     }
 
-    Copy-Item -Path $Source -Destination $Destination -Force
+    # Use a native rename on both Windows PowerShell 5.1 and PowerShell 7.
+    # File.Replace can remove the destination on some replacement failures.
+    if (-not ("AibrisInstallerRename" -as [type])) {
+        Add-Type -TypeDefinition @'
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+public static class AibrisInstallerRename {
+    [DllImport("kernel32.dll", EntryPoint = "MoveFileExW", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool MoveFileEx(string source, string destination, uint flags);
+
+    public static void Move(string source, string destination) {
+        // MOVEFILE_REPLACE_EXISTING only; capture the native error before
+        // returning to PowerShell, where another interop call may overwrite it.
+        if (!MoveFileEx(source, destination, 1)) {
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+    }
+}
+'@
+    }
+
+    # Copy failures touch only the unique stage beside the destination.
+    $staged = Join-Path $destDir (".$script:Binary-install." + [Guid]::NewGuid().ToString("N"))
+    try {
+        Copy-Item -Path $Source -Destination $staged -Force
+        # MOVEFILE_REPLACE_EXISTING only: never allow a cross-volume copy or
+        # defer replacement until reboot. A failed rename aborts the install.
+        [AibrisInstallerRename]::Move($staged, $Destination)
+    }
+    finally {
+        # Cleanup owns only the stage, never the destination or its parent.
+        if (Test-Path -LiteralPath $staged) {
+            Remove-Item -LiteralPath $staged -Force
+        }
+    }
     Write-Log "Installed $script:Binary to $Destination"
 }
 
