@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
@@ -96,8 +95,9 @@ func executeWithContextOutput(
 			}
 		}
 		commandFallbackPathRemoval := false
-		if cleanupKind(w) == types.CleanupCommand && len(w.CleanupCommand) > 0 {
-			if err := refuseStaleGoCache(w); err != nil {
+		commandIntent := cleanupKind(w) == types.CleanupCommand || len(w.CleanupCommand) > 0
+		if commandIntent {
+			if _, _, err := adapter.ResolveCleanupCommand(w); err != nil {
 				errs = append(errs, fmt.Errorf("running cleanup command for %s: %w", w.ID, err))
 				fmt.Fprintf(errorOutput, "error: %v\n", err)
 				continue
@@ -109,8 +109,14 @@ func executeWithContextOutput(
 				fmt.Fprintf(errorOutput, "error: %v\n", err)
 				continue
 			}
+			argv, env, err := authorizedCleanupCommand(home, w)
+			if err != nil {
+				errs = append(errs, err)
+				fmt.Fprintf(errorOutput, "error: %v\n", err)
+				continue
+			}
 			freed, residual, err := observeReclamation(ctx, w.Path, func() error {
-				return runCleanupCommand(ctx, w.CleanupCommand, cleanupCommandEnv(w), func() {
+				return runCleanupCommand(ctx, argv, env, func() {
 					if observer != nil {
 						observer(CleanupMutationOutcome{Item: w, MutationAttempted: true})
 					}
@@ -146,6 +152,13 @@ func executeWithContextOutput(
 			errs = append(errs, err)
 			fmt.Fprintf(errorOutput, "error: %v\n", err)
 			continue
+		}
+		if commandFallbackPathRemoval {
+			if _, _, err := authorizedCleanupCommand(home, w); err != nil {
+				errs = append(errs, err)
+				fmt.Fprintf(errorOutput, "error: %v\n", err)
+				continue
+			}
 		}
 		if observer != nil {
 			observer(CleanupMutationOutcome{
@@ -206,15 +219,15 @@ func cleanupKind(w types.DebrisInfo) types.CleanupKind {
 	return types.CleanupRemovePath
 }
 
-func refuseStaleGoCache(item types.DebrisInfo) error {
-	if !isGoCleanCache(item.CleanupCommand) {
-		return nil
+func authorizedCleanupCommand(home string, item types.DebrisInfo) ([]string, []string, error) {
+	argv, env, err := adapter.ResolveCleanupCommand(item)
+	if err != nil {
+		return nil, nil, err
 	}
-	return adapter.RefuseStaleGoCache(item.Path)
-}
-
-func isGoCleanCache(argv []string) bool {
-	return len(argv) == 3 && argv[0] == "go" && argv[1] == "clean" && argv[2] == "-cache"
+	if err := safedelete.Check(home, item.Path); err != nil {
+		return nil, nil, err
+	}
+	return argv, env, nil
 }
 
 func reportCommandCleaned(output io.Writer, w types.DebrisInfo, freed, residual int64) {
@@ -233,30 +246,6 @@ func reportCommandResidual(output io.Writer, w types.DebrisInfo, freed, residual
 	}
 	fmt.Fprintf(output, "failed: %s remaining %s (freed %s)\n",
 		w.ID, FormatSize(residual), FormatSize(freed))
-}
-
-// cleanupCommandEnv pins the cache location a cleanup command acts on to the
-// path that was scanned, measured, and passed the deletion gate. Without it,
-// an inherited npm_config_cache or UV_CACHE_DIR would point the command at a
-// directory nothing checked.
-func cleanupCommandEnv(item types.DebrisInfo) []string {
-	if len(item.CleanupCommand) == 0 || item.Path == "" {
-		return nil
-	}
-	switch item.CleanupCommand[0] {
-	case "go":
-		return []string{"GOCACHE=" + item.Path}
-	case "uv":
-		return []string{"UV_CACHE_DIR=" + item.Path}
-	case "brew":
-		return []string{"HOMEBREW_CACHE=" + item.Path}
-	case "npm":
-		// The scanned path is <cache>/_cacache; npm takes <cache>.
-		if filepath.Base(item.Path) == "_cacache" {
-			return []string{"npm_config_cache=" + filepath.Dir(item.Path)}
-		}
-	}
-	return nil
 }
 
 func runCleanupCommand(ctx context.Context, argv []string, env []string, beforeStart func()) error {

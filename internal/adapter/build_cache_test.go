@@ -236,11 +236,11 @@ func TestBuildCacheAdapter_HomebrewDerivedDataAndDartAnalysis(t *testing.T) {
 		if brew.Size <= 0 {
 			t.Errorf("homebrew Size = %d; want > 0", brew.Size)
 		}
-		if brew.CleanupKind != types.CleanupCommand {
-			t.Errorf("homebrew CleanupKind = %q; want command", brew.CleanupKind)
+		if brew.CleanupKind == types.CleanupCommand {
+			t.Errorf("homebrew CleanupKind = %q; want path removal", brew.CleanupKind)
 		}
-		if got := brew.CleanupCommand; len(got) != 3 || got[0] != "brew" || got[1] != "cleanup" || got[2] != "--prune=all" {
-			t.Errorf("homebrew CleanupCommand = %v; want [brew cleanup --prune=all]", got)
+		if got := brew.CleanupCommand; len(got) != 0 {
+			t.Errorf("homebrew CleanupCommand = %v; want path removal", got)
 		}
 		if _, ok := found["xcode-deriveddata"]; !ok {
 			t.Error("xcode-deriveddata not found")
@@ -296,8 +296,8 @@ func TestBuildCacheAdapter_MissingHomebrewDirAndMissingBrewBinary(t *testing.T) 
 	if !found {
 		t.Fatal("homebrew dir should be reported even when brew is not on PATH")
 	}
-	if len(brew.CleanupCommand) == 0 || brew.CleanupCommand[0] != "brew" {
-		t.Fatalf("homebrew must keep argv-only brew cleanup; got %v", brew.CleanupCommand)
+	if len(brew.CleanupCommand) != 0 {
+		t.Fatalf("homebrew must use gated path removal; got %v", brew.CleanupCommand)
 	}
 }
 

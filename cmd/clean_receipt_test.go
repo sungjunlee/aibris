@@ -455,10 +455,10 @@ func TestApplyCleanJSONExecutionReceiptUsesPreMutationIdentityAfterSymlinkedAnce
 		ID:             "fallback",
 		Tool:           types.ToolBuildCache,
 		Category:       types.CategoryBuildCache,
-		Path:           filepath.Join(aliasHome, ".cache", "fallback"),
+		Path:           filepath.Join(aliasHome, ".cache", "go-build"),
 		Size:           23,
 		CleanupKind:    types.CleanupCommand,
-		CleanupCommand: []string{"definitely-missing-aibris-cleaner"},
+		CleanupCommand: []string{"go", "clean", "-cache"},
 	}
 	if err := os.MkdirAll(target.Path, 0o755); err != nil {
 		t.Fatal(err)
@@ -466,6 +466,8 @@ func TestApplyCleanJSONExecutionReceiptUsesPreMutationIdentityAfterSymlinkedAnce
 	if err := os.WriteFile(filepath.Join(target.Path, "payload"), make([]byte, int(target.Size)), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	t.Setenv("GOCACHE", target.Path)
+	t.Setenv("PATH", t.TempDir())
 	targetIDKey := cleanJSONReceiptItemKey(target)
 	runtime := staticOverlapSafetyRuntime(nil, nil)
 	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{target})

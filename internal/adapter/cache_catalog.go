@@ -28,8 +28,11 @@ type cacheTarget struct {
 	// default location only.
 	verify func(path string) bool
 	// command, when set, is the tool's own cleanup command. It runs with its
-	// cache location pinned to the scanned path (see cleaner.cleanupCommandEnv).
+	// cache location pinned to its verified canonical target by commandEnv.
 	command []string
+	// pressureCommand is the existing volume-pressure variant, when supported.
+	pressureCommand []string
+	commandEnv      func(path string) []string
 }
 
 var cacheCatalog = []cacheTarget{
@@ -37,15 +40,19 @@ var cacheCatalog = []cacheTarget{
 		// effectiveGoCache validates GOCACHE itself.
 		path, _ := effectiveGoCache()
 		return path, false
-	}, command: []string{"go", "clean", "-cache"}},
+	}, command: []string{"go", "clean", "-cache"}, commandEnv: func(path string) []string {
+		return []string{"GOCACHE=" + path}
+	}},
 	{id: "xcode", tool: types.ToolBuildCache, locate: darwinOnly("Library", "Caches", "Xcode")},
 	{id: "xcode-deriveddata", tool: types.ToolBuildCache, locate: darwinOnly("Library", "Developer", "Xcode", "DerivedData")},
+	// brew cleanup also removes installed kegs outside this cache. Use gated
+	// path removal so mutation stays inside the previewed target.
 	{id: "homebrew", tool: types.ToolBuildCache, locate: func(home string) (string, bool) {
 		if runtime.GOOS != "darwin" {
 			return "", false
 		}
 		return filepath.Join(home, "Library", "Caches", "Homebrew"), false
-	}, command: []string{"brew", "cleanup", "--prune=all"}},
+	}},
 	{id: "cocoapods", tool: types.ToolBuildCache, locate: darwinOnly("Library", "Caches", "CocoaPods")},
 	{id: "gradle", tool: types.ToolBuildCache, locate: func(home string) (string, bool) {
 		return filepath.Join(home, ".gradle", "caches"), false
@@ -53,7 +60,14 @@ var cacheCatalog = []cacheTarget{
 	{id: "npm", tool: types.ToolBuildCache, locate: func(home string) (string, bool) {
 		root, overridden := npmCacheRoot(home)
 		return filepath.Join(root, "_cacache"), overridden
-	}, command: []string{"npm", "cache", "clean", "--force"}},
+	}, command: []string{"npm", "cache", "clean", "--force"}, commandEnv: func(path string) []string {
+		// npm takes the parent of the inventoried _cacache directory.
+		// A symlink to a differently named leaf cannot be expressed this way.
+		if filepath.Base(path) != "_cacache" {
+			return nil
+		}
+		return []string{"npm_config_cache=" + filepath.Dir(path)}
+	}},
 	{id: "npx", tool: types.ToolBuildCache, locate: func(home string) (string, bool) {
 		root, overridden := npmCacheRoot(home)
 		return filepath.Join(root, "_npx"), overridden
@@ -65,7 +79,9 @@ var cacheCatalog = []cacheTarget{
 		return filepath.Join(home, ".dartServer"), false
 	}},
 	{id: "pip", tool: types.ToolPipCache, locate: pipCacheDir},
-	{id: "uv", tool: types.ToolPipCache, locate: uvCacheDir, verify: hasCacheDirTag, command: []string{"uv", "cache", "clean"}},
+	{id: "uv", tool: types.ToolPipCache, locate: uvCacheDir, verify: hasCacheDirTag,
+		command: []string{"uv", "cache", "clean"}, pressureCommand: []string{"uv", "cache", "clean", "--force"},
+		commandEnv: func(path string) []string { return []string{"UV_CACHE_DIR=" + path} }},
 }
 
 // resolve returns the target's cache directory, or "" when it does not apply
