@@ -74,14 +74,18 @@ func EnrichActivity(ctx context.Context, units []WorktreeCleanupUnit, items []ty
 		unit.ActivityAvailable = false
 		rows := scannerRows[unit.TargetPath]
 		tool := worktreeActivityTool(rows, unit.Source)
-		unit.RegisteredActivityAvailable, unit.RegisteredActivitySource, unit.RegisteredActivityError = worktreeActivityAvailability(tool, unit.Source, activity)
+		unit.RegisteredActivityAvailable, unit.RegisteredActivitySource, unit.RegisteredActivityError = worktreeActivityAvailability(tool, unit.TargetPath, activity)
 
 		for memberIndex := range unit.Members {
 			member := &unit.Members[memberIndex]
 			fallback := memberFallbackActivity(member.WorktreePath, unit.TargetPath, rows)
-			identity := memberCodexIdentity(member.WorktreePath, rows)
-			if err := collectMemberActivity(ctx, member, fallback, identity, tool, unit.Source, activity, opts.Runner); err != nil {
+			if err := collectMemberActivity(ctx, member, fallback, tool, activity, opts.Runner); err != nil {
 				return err
+			}
+			if !member.RegisteredActivityAvailable {
+				unit.RegisteredActivityAvailable = false
+				unit.RegisteredActivitySource = member.RegisteredActivitySource
+				unit.RegisteredActivityError = member.RegisteredActivityError
 			}
 			if !member.ActivityAvailable {
 				continue
@@ -98,12 +102,12 @@ func EnrichActivity(ctx context.Context, units []WorktreeCleanupUnit, items []ty
 	return nil
 }
 
-func collectMemberActivity(ctx context.Context, member *GitWorktreeMember, fallback time.Time, identity activityIdentity, tool types.Tool, source string, activity codexactivity.Index, runner GitCommandRunner) error {
+func collectMemberActivity(ctx context.Context, member *GitWorktreeMember, fallback time.Time, tool types.Tool, activity codexactivity.Index, runner GitCommandRunner) error {
 	member.LastActivity = time.Time{}
 	member.ActivitySource = ""
 	member.ActivityAvailable = false
 	member.ActivityEvidence = nil
-	member.RegisteredActivityAvailable, member.RegisteredActivitySource, member.RegisteredActivityError = worktreeActivityAvailability(tool, source, activity)
+	member.RegisteredActivityAvailable, member.RegisteredActivitySource, member.RegisteredActivityError = worktreeActivityAvailability(tool, member.WorktreePath, activity)
 
 	session := WorktreeActivityEvidence{
 		Source:    WorktreeActivityCodexSession,
@@ -112,16 +116,8 @@ func collectMemberActivity(ctx context.Context, member *GitWorktreeMember, fallb
 	if !member.RegisteredActivityAvailable {
 		session.Error = member.RegisteredActivityError
 	} else {
-		if worktreeID, project, ok := codexactivity.WorktreeFromCWD(member.WorktreePath); ok {
-			identity = activityIdentity{worktreeID: worktreeID, project: project}
-		}
-		matching, found := activity.Members[codexactivity.MemberKey(identity.worktreeID, identity.project)]
-		if !found {
-			matching, found = activity.Worktrees[identity.worktreeID]
-		}
-		if found {
-			session.Timestamp = matching.LatestSession
-		}
+		matching, _ := activity.LookupMember(member.WorktreePath)
+		session.Timestamp = matching.LatestSession
 	}
 
 	reflog, err := headReflogActivity(ctx, member.WorktreePath, runner)
@@ -156,11 +152,11 @@ func collectMemberActivity(ctx context.Context, member *GitWorktreeMember, fallb
 // tool reports "not registered" — which is distinct from an outage: there is
 // no reader to fail, so the unit is judged on the tool-independent evidence
 // (HEAD reflog, scanner metadata) instead of being locked out of review.
-func worktreeActivityAvailability(tool types.Tool, source string, activity codexactivity.Index) (bool, string, string) {
+func worktreeActivityAvailability(tool types.Tool, path string, activity codexactivity.Index) (bool, string, string) {
 	if tool != types.ToolCodex {
 		return false, ActivitySourceNotRegistered, ActivityNotRegisteredReason
 	}
-	return codexActivityAvailability(source, activity)
+	return codexActivityAvailability(path, activity)
 }
 
 // worktreeActivityTool resolves the producing tool from the scanner rows that
@@ -178,14 +174,11 @@ func worktreeActivityTool(rows []types.DebrisInfo, source string) types.Tool {
 	return types.ToolUnknown
 }
 
-func codexActivityAvailability(source string, activity codexactivity.Index) (bool, string, string) {
-	if source != ".codex" {
-		return false, codexactivity.SourceUnavailable, fmt.Sprintf("codex activity unsupported for worktree source %q", source)
-	}
+func codexActivityAvailability(path string, activity codexactivity.Index) (bool, string, string) {
 	if activity.Err != nil {
 		return false, activity.Source, activity.Err.Error()
 	}
-	if !activity.Available {
+	if _, available := activity.LookupMember(path); !available {
 		return false, activity.Source, codexactivity.ErrUnavailable.Error()
 	}
 	return true, activity.Source, ""
@@ -224,11 +217,6 @@ func headReflogActivity(ctx context.Context, worktreePath string, runner GitComm
 	evidence.Available = true
 	evidence.Timestamp = time.Unix(seconds, 0).UTC()
 	return evidence, nil
-}
-
-type activityIdentity struct {
-	worktreeID string
-	project    string
 }
 
 func cleanupUnitActivityRows(items []types.DebrisInfo) map[string][]types.DebrisInfo {
@@ -274,23 +262,4 @@ func memberFallbackActivity(memberPath, targetPath string, rows []types.DebrisIn
 		return matching
 	}
 	return any
-}
-
-func memberCodexIdentity(memberPath string, rows []types.DebrisInfo) activityIdentity {
-	project := filepath.Base(memberPath)
-	var identities []activityIdentity
-	for _, row := range rows {
-		if row.Source != ".codex" || row.ID == "" || row.Project == "" {
-			continue
-		}
-		identity := activityIdentity{worktreeID: row.ID, project: row.Project}
-		if row.Project == project {
-			return identity
-		}
-		identities = append(identities, identity)
-	}
-	if len(identities) == 1 {
-		return identities[0]
-	}
-	return activityIdentity{}
 }

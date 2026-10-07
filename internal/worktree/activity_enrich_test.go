@@ -70,7 +70,7 @@ func TestEnrichWorktreeCleanupActivitySelectsMaximumTrustedSource(t *testing.T) 
 				Source:     ".codex",
 				Members:    []GitWorktreeMember{{WorktreePath: memberPath}},
 			}}
-			index := availableActivityIndex("activity-id", "project-a", tt.session)
+			index := availableActivityIndex(t, filepath.Dir(filepath.Dir(target)), "activity-id", "project-a", tt.session)
 			items := []types.DebrisInfo{{
 				Category: types.CategoryWorktree,
 				Path:     target,
@@ -156,7 +156,7 @@ func TestEnrichWorktreeCleanupActivityReviewsToolWithoutRegisteredSource(t *test
 		Members:    []GitWorktreeMember{{WorktreePath: memberPath}},
 	}}
 	items := []types.DebrisInfo{{Category: types.CategoryWorktree, Source: ".claude", Path: target, ModTime: now.Add(-2 * time.Hour)}}
-	index := availableActivityIndex("session", "project-a", now.Add(time.Hour))
+	index := availableActivityIndex(t, filepath.Dir(filepath.Dir(target)), "session", "project-a", now.Add(time.Hour))
 
 	err := EnrichActivity(context.Background(), units, items, ActivityOptions{
 		Index:  &index,
@@ -222,7 +222,7 @@ func TestRecentActivityWindowAppliesWithoutRegisteredSource(t *testing.T) {
 		Members:    []GitWorktreeMember{{WorktreePath: memberPath}},
 	}}
 	items := []types.DebrisInfo{{Category: types.CategoryWorktree, Source: ".claude", Path: target, ModTime: now.Add(-90 * 24 * time.Hour)}}
-	index := availableActivityIndex("session", "project-a", now)
+	index := availableActivityIndex(t, filepath.Dir(filepath.Dir(target)), "session", "project-a", now)
 
 	// Reflog says the checkout was touched one minute ago.
 	err := EnrichActivity(context.Background(), units, items, ActivityOptions{
@@ -256,7 +256,7 @@ func TestEnrichWorktreeCleanupActivityFallsBackToWorktreeSession(t *testing.T) {
 	root := t.TempDir()
 	target := filepath.Join(root, ".codex", "worktrees", "activity-id")
 	units := []WorktreeCleanupUnit{{TargetPath: target, Source: ".codex", Members: []GitWorktreeMember{{WorktreePath: target}}}}
-	index := availableActivityIndex("activity-id", "project-a", base.Add(2*time.Hour))
+	index := availableActivityIndex(t, filepath.Dir(filepath.Dir(target)), "activity-id", "project-a", base.Add(2*time.Hour))
 	items := []types.DebrisInfo{{
 		ID:       "activity-id",
 		Source:   ".codex",
@@ -453,7 +453,15 @@ func TestBuildWorktreeCleanupUnitsWithActivityRejectsCanceledContext(t *testing.
 	}
 }
 
-func availableActivityIndex(worktreeID, project string, timestamp time.Time) codexactivity.Index {
+func availableActivityIndex(t *testing.T, home, worktreeID, project string, timestamp time.Time) codexactivity.Index {
+	t.Helper()
+	if err := os.MkdirAll(home, 0755); err != nil {
+		t.Fatal(err)
+	}
+	home, err := filepath.EvalSymlinks(home)
+	if err != nil {
+		t.Fatal(err)
+	}
 	activity := codexactivity.Worktree{
 		WorktreeID:    worktreeID,
 		Project:       project,
@@ -463,8 +471,9 @@ func availableActivityIndex(worktreeID, project string, timestamp time.Time) cod
 	return codexactivity.Index{
 		Available: true,
 		Source:    codexactivity.SourceCache,
-		Worktrees: map[string]codexactivity.Worktree{worktreeID: activity},
-		Members:   map[string]codexactivity.Worktree{codexactivity.MemberKey(worktreeID, project): activity},
+		Sources:   map[string]codexactivity.SourceCoverage{home: {Available: true}},
+		Worktrees: map[string]codexactivity.Worktree{codexactivity.WorktreeKey(home, worktreeID): activity},
+		Members:   map[string]codexactivity.Worktree{codexactivity.MemberKey(home, worktreeID, project): activity},
 	}
 }
 
