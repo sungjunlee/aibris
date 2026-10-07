@@ -12,8 +12,10 @@ func buildCleanupPhysicalComponents(
 	targets []CleanupPhysicalTarget,
 ) []CleanupPhysicalComponent {
 	ordered := make([]int, len(targets))
+	targetByKey := make(map[string]*CleanupPhysicalTarget, len(targets))
 	for i := range targets {
 		ordered[i] = i
+		targetByKey[targets[i].Key] = &targets[i]
 	}
 	sort.Slice(ordered, func(i, j int) bool {
 		left := targets[ordered[i]].Key
@@ -27,6 +29,7 @@ func buildCleanupPhysicalComponents(
 	})
 
 	componentByOwner := make(map[string]*CleanupPhysicalComponent)
+	targetsByOwner := make(map[string][]*CleanupPhysicalTarget)
 	for _, targetIndex := range ordered {
 		target := &targets[targetIndex]
 		ownerKey := target.Key
@@ -48,6 +51,7 @@ func buildCleanupPhysicalComponents(
 			}
 		}
 		target.OwnerKey = ownerKey
+		targetsByOwner[ownerKey] = append(targetsByOwner[ownerKey], target)
 		component := componentByOwner[ownerKey]
 		if component == nil {
 			component = &CleanupPhysicalComponent{
@@ -64,24 +68,39 @@ func buildCleanupPhysicalComponents(
 		component.Selection = aggregateCleanupPlanComponentSelection(component.Selection, target.PolicySelection)
 	}
 
+	// Preserve discovery order so the first matching representative row owns
+	// the bytes. A synthesized representative may match no row; in that case
+	// projection below falls back to the owner's first discovery row.
+	rowsByOwner := make(map[string][]int, len(componentByOwner))
+	ownerRowKeyByOwner := make(map[string]string, len(componentByOwner))
+	for i := range rows {
+		target := targetByKey[rows[i].TargetKey]
+		if target == nil {
+			continue
+		}
+		rowsByOwner[target.OwnerKey] = append(rowsByOwner[target.OwnerKey], i)
+		if target.Key == target.OwnerKey && ownerRowKeyByOwner[target.OwnerKey] == "" &&
+			TargetStableKey(rows[i].Item) == TargetStableKey(target.Item) {
+			ownerRowKeyByOwner[target.OwnerKey] = rows[i].Key
+		}
+	}
+
 	components := make([]CleanupPhysicalComponent, 0, len(componentByOwner))
 	for _, component := range componentByOwner {
 		sort.Strings(component.TargetKeys)
 		sort.Strings(component.RowKeys)
-		for i := range targets {
-			if targets[i].OwnerKey == component.Key {
-				targets[i].Selection = component.Selection
-			}
+		componentTargets := targetsByOwner[component.Key]
+		for _, target := range componentTargets {
+			target.Selection = component.Selection
 		}
-		for i := range rows {
-			target := cleanupPhysicalTargetByKey(targets, rows[i].TargetKey)
-			if target == nil || target.OwnerKey != component.Key {
-				continue
-			}
+		ownerRowKey := ownerRowKeyByOwner[component.Key]
+		ownerTarget := targetByKey[component.OwnerTargetKey]
+		if ownerRowKey == "" && ownerTarget != nil && len(ownerTarget.RowKeys) > 0 {
+			ownerRowKey = ownerTarget.RowKeys[0]
+		}
+		for _, i := range rowsByOwner[component.Key] {
 			rows[i].OwnerKey = component.Key
 			rows[i].Selection = component.Selection
-			ownerTarget := cleanupPhysicalTargetByKey(targets, component.OwnerTargetKey)
-			ownerRowKey := cleanupPlanOwnerRowKey(rows, ownerTarget)
 			switch {
 			case rows[i].Key == ownerRowKey:
 				rows[i].Relation = CleanupPlanRelationOwner
@@ -97,8 +116,7 @@ func buildCleanupPhysicalComponents(
 				description := "overlaps a hard-locked cleanup target"
 				if cleanupPlanRowContainsLockedTarget(
 					rows[i].CanonicalPath,
-					targets,
-					component.Key,
+					componentTargets,
 				) {
 					code = CleanupPlanReasonContainsLockedTarget
 					description = "contains a hard-locked cleanup target"
@@ -130,45 +148,12 @@ func aggregateCleanupPlanComponentSelection(
 	return CleanupPlanUnselected
 }
 
-func cleanupPhysicalTargetByKey(
-	targets []CleanupPhysicalTarget,
-	key string,
-) *CleanupPhysicalTarget {
-	for i := range targets {
-		if targets[i].Key == key {
-			return &targets[i]
-		}
-	}
-	return nil
-}
-
-func cleanupPlanOwnerRowKey(
-	rows []CleanupPlanRow,
-	target *CleanupPhysicalTarget,
-) string {
-	if target == nil {
-		return ""
-	}
-	for _, row := range rows {
-		if row.TargetKey == target.Key &&
-			TargetStableKey(row.Item) == TargetStableKey(target.Item) {
-			return row.Key
-		}
-	}
-	if len(target.RowKeys) > 0 {
-		return target.RowKeys[0]
-	}
-	return ""
-}
-
 func cleanupPlanRowContainsLockedTarget(
 	rowPath string,
-	targets []CleanupPhysicalTarget,
-	ownerKey string,
+	targets []*CleanupPhysicalTarget,
 ) bool {
 	for _, target := range targets {
-		if target.OwnerKey == ownerKey &&
-			target.PolicySelection == CleanupPlanLocked &&
+		if target.PolicySelection == CleanupPlanLocked &&
 			PathContains(rowPath, target.Key) {
 			return true
 		}
