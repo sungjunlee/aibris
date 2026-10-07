@@ -17,6 +17,8 @@ import (
 
 	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/codexactivity"
+	"github.com/sungjunlee/aibris/internal/codexhome"
 	"github.com/sungjunlee/aibris/internal/retention"
 	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/testutil"
@@ -424,13 +426,28 @@ func saveFreshCodexActivityCacheFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Now()
+	home, err := codexhome.Home()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(home, 0755); err != nil {
+		t.Fatal(err)
+	}
+	home, err = filepath.EvalSymlinks(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	roots := []string{filepath.Join(home, "archived_sessions"), filepath.Join(home, "sessions")}
 	sessionPath := filepath.Join(filepath.Dir(path), "unrelated.jsonl")
 	if err := saveCodexActivityCache(path, codexActivityCache{
 		SchemaVersion: codexActivityCacheSchemaVersion,
 		CreatedAt:     now,
+		SessionRoots:  roots,
+		Sources:       map[string]codexactivity.SourceCoverage{home: {Roots: roots, Available: true}},
 		Files: map[string]codexActivityFileRecord{
 			sessionPath: {
 				Path:       sessionPath,
+				Home:       home,
 				ModTime:    now,
 				Size:       128,
 				Valid:      true,
