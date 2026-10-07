@@ -14,16 +14,21 @@ import (
 )
 
 // dirActivity reports the total file bytes and the newest modification time
-// observed anywhere in a tree.
+// observed anywhere in a tree. Err is non-nil if any activity evidence is
+// missing; Size and NewestModTime remain partial, report-only observations.
 type dirActivity struct {
 	Size          int64
 	NewestModTime time.Time
+	Err           error
 }
 
+var walkDirectory = filepath.WalkDir
+
 type dirActivityAccumulator struct {
-	modTimeMu        sync.Mutex
+	mu               sync.Mutex
 	newestModTime    time.Time
 	hasReadableEntry bool
+	err              error
 }
 
 // estimateDirSize returns the total file size in bytes for the given path.
@@ -42,15 +47,15 @@ func estimateDirActivity(ctx context.Context, path string) dirActivity {
 
 func estimateDirActivityWithOptions(ctx context.Context, path string, trackModTime bool) dirActivity {
 	if err := ctx.Err(); err != nil {
-		return dirActivity{}
+		return dirActivity{Err: err}
 	}
 
 	info, err := os.Stat(path)
 	if err != nil {
-		return dirActivity{}
+		return dirActivity{Err: err}
 	}
 	if !info.IsDir() {
-		activity := dirActivity{Size: info.Size()}
+		activity := dirActivity{Size: info.Size(), Err: ctx.Err()}
 		if trackModTime {
 			activity.NewestModTime = info.ModTime()
 		}
@@ -59,7 +64,7 @@ func estimateDirActivityWithOptions(ctx context.Context, path string, trackModTi
 
 	entries, err := os.ReadDir(path)
 	if err != nil {
-		return dirActivity{}
+		return dirActivity{Err: err}
 	}
 
 	// Collect subdirectories to be walked in parallel.
@@ -67,11 +72,17 @@ func estimateDirActivityWithOptions(ctx context.Context, path string, trackModTi
 	var filesSize int64
 	activity := &dirActivityAccumulator{}
 	for _, e := range entries {
+		if err := ctx.Err(); err != nil {
+			activity.recordError(err)
+			break
+		}
 		if e.IsDir() {
 			subdirs = append(subdirs, filepath.Join(path, e.Name()))
 		} else {
 			info, err := e.Info()
-			if err == nil {
+			if err != nil {
+				activity.recordError(err)
+			} else {
 				filesSize += info.Size()
 				if trackModTime {
 					activity.recordModTime(info.ModTime())
@@ -89,12 +100,17 @@ func estimateDirActivityWithOptions(ctx context.Context, path string, trackModTi
 	sem := make(chan struct{}, workers)
 	var wg sync.WaitGroup
 
+schedule:
 	for _, subdir := range subdirs {
 		if ctx.Err() != nil {
 			break
 		}
+		select {
+		case sem <- struct{}{}: // acquire
+		case <-ctx.Done():
+			break schedule
+		}
 		wg.Add(1)
-		sem <- struct{}{} // acquire
 		go func(dir string) {
 			defer func() {
 				<-sem // release
@@ -105,7 +121,8 @@ func estimateDirActivityWithOptions(ctx context.Context, path string, trackModTi
 	}
 
 	wg.Wait()
-	result := dirActivity{Size: total.Load()}
+	activity.recordError(ctx.Err())
+	result := dirActivity{Size: total.Load(), Err: activity.err}
 	if trackModTime {
 		result.NewestModTime = activity.latestModTime(info.ModTime())
 	}
@@ -177,12 +194,10 @@ func walkDirSequential(
 	activity *dirActivityAccumulator,
 	trackModTime bool,
 ) {
-	filepath.WalkDir(path, func(p string, d os.DirEntry, err error) error {
+	err := walkDirectory(path, func(p string, d os.DirEntry, err error) error {
 		if err != nil {
-			if os.IsNotExist(err) {
-				return nil
-			}
-			return filepath.SkipDir
+			activity.recordError(err)
+			return err
 		}
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -190,26 +205,40 @@ func walkDirSequential(
 		if d.IsDir() {
 			if trackModTime {
 				info, err := d.Info()
-				if err == nil {
-					activity.recordModTime(info.ModTime())
+				if err != nil {
+					return err
 				}
+				activity.recordModTime(info.ModTime())
 			}
 			return nil
 		}
 		info, err := d.Info()
-		if err == nil {
-			total.Add(info.Size())
-			if trackModTime {
-				activity.recordModTime(info.ModTime())
-			}
+		if err != nil {
+			return err
+		}
+		total.Add(info.Size())
+		if trackModTime {
+			activity.recordModTime(info.ModTime())
 		}
 		return nil
 	})
+	activity.recordError(err)
+}
+
+func (a *dirActivityAccumulator) recordError(err error) {
+	if err == nil {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.err == nil {
+		a.err = err
+	}
 }
 
 func (a *dirActivityAccumulator) recordModTime(modTime time.Time) {
-	a.modTimeMu.Lock()
-	defer a.modTimeMu.Unlock()
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	if !a.hasReadableEntry || modTime.After(a.newestModTime) {
 		a.newestModTime = modTime
 	}
@@ -217,8 +246,8 @@ func (a *dirActivityAccumulator) recordModTime(modTime time.Time) {
 }
 
 func (a *dirActivityAccumulator) latestModTime(rootModTime time.Time) time.Time {
-	a.modTimeMu.Lock()
-	defer a.modTimeMu.Unlock()
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	if !a.hasReadableEntry {
 		return time.Time{}
 	}

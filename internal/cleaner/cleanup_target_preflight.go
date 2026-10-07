@@ -30,6 +30,8 @@ func (e cleanupTargetMinimumAgeError) Unwrap() error {
 	return ErrCleanupTargetYoungerThanMinimumAge
 }
 
+var completeTreeModTime = adapter.CompleteTreeModTime
+
 type CleanupTargetSnapshot struct {
 	path       string
 	info       os.FileInfo
@@ -156,28 +158,47 @@ func CaptureCleanupTargetSnapshot(
 // which in interactive mode happens before the first y/N prompt — an unbounded
 // window during which a cache can go live again.
 func (s CleanupTargetSnapshot) Validate(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	current, err := s.validateMetadata()
+	if err != nil {
+		return err
+	}
+	activity, err := s.liveActivity(ctx, current)
+	if err != nil {
+		return fmt.Errorf("cleanup target activity evidence incomplete for %q: %w", s.path, err)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := s.validateAge(activity, time.Now()); err != nil {
+		return fmt.Errorf("cleanup target changed since cleanup selection: %w", err)
+	}
+	_, err = s.validateMetadata()
+	return err
+}
+
+func (s CleanupTargetSnapshot) validateMetadata() (os.FileInfo, error) {
 	current, err := os.Lstat(s.path)
 	if err != nil {
-		return fmt.Errorf("cleanup target changed since cleanup selection: %q: %w", s.path, err)
+		return nil, fmt.Errorf("cleanup target changed since cleanup selection: %q: %w", s.path, err)
 	}
 	if s.info.Mode().Type() != current.Mode().Type() {
-		return fmt.Errorf("cleanup target changed since cleanup selection: path type changed for %q", s.path)
+		return nil, fmt.Errorf("cleanup target changed since cleanup selection: path type changed for %q", s.path)
 	}
 	if !os.SameFile(s.info, current) {
-		return fmt.Errorf("cleanup target changed since cleanup selection: path identity changed for %q", s.path)
+		return nil, fmt.Errorf("cleanup target changed since cleanup selection: path identity changed for %q", s.path)
 	}
 	if !s.info.ModTime().Equal(current.ModTime()) {
-		return fmt.Errorf(
+		return nil, fmt.Errorf(
 			"cleanup target changed since cleanup selection: mtime changed for %q from %s to %s",
 			s.path,
 			s.info.ModTime().Format(time.RFC3339Nano),
 			current.ModTime().Format(time.RFC3339Nano),
 		)
 	}
-	if err := s.validateAge(s.liveActivity(ctx, current), time.Now()); err != nil {
-		return fmt.Errorf("cleanup target changed since cleanup selection: %w", err)
-	}
-	return nil
+	return current, nil
 }
 
 // refreshAfterMutation advances only the observed metadata baseline after a
@@ -214,21 +235,21 @@ func (s CleanupTargetSnapshot) recordedActivity(info os.FileInfo) time.Time {
 	return modTime
 }
 
-// liveActivity re-derives the activity signal for a target whose ModTime comes
-// from inside the tree: the path's own mtime alone would let a cache that is
-// still being written to underneath pass as idle. Taking the latest of the
-// three signals keeps this fail-closed — a walk that is cut short, hits an
-// unreadable subtree, or returns the zero time can only fall back to what is
-// already known, never below it.
-func (s CleanupTargetSnapshot) liveActivity(ctx context.Context, info os.FileInfo) time.Time {
+// liveActivity requires a complete walk before the known timestamp can be
+// used to approve deletion. A lower bound cannot prove that a tree is idle.
+func (s CleanupTargetSnapshot) liveActivity(ctx context.Context, info os.FileInfo) (time.Time, error) {
 	activity := s.recordedActivity(info)
 	if !s.activityDerived || s.minimumAge <= 0 {
-		return activity
+		return activity, nil
 	}
-	if fresh := adapter.NewestTreeModTime(ctx, s.path); fresh.After(activity) {
-		return fresh
+	fresh, err := completeTreeModTime(ctx, s.path)
+	if err != nil {
+		return time.Time{}, err
 	}
-	return activity
+	if fresh.After(activity) {
+		activity = fresh
+	}
+	return activity, nil
 }
 
 func (s CleanupTargetSnapshot) validateAge(activity, observedAt time.Time) error {
