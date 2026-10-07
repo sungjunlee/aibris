@@ -62,7 +62,8 @@ func (r *guidedCleanExecutionReceipt) observeInteractiveSkip(outcome interactive
 			Item:      outcome.Target.Item,
 			Component: outcome.Target.Component,
 		},
-		Declined: outcome.Declined,
+		Declined:          outcome.Declined,
+		AfterConfirmation: outcome.AfterConfirmation,
 	})
 }
 

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -228,5 +229,88 @@ func TestAPFSSnapshotCancellationStopsNewPasses(t *testing.T) {
 	err := runAPFSSnapshotAction(ctx, false, true)
 	if !errors.Is(err, context.Canceled) || passes != 1 {
 		t.Fatalf("APFS cancellation = %v, passes %d; want cancelled after one pass", err, passes)
+	}
+}
+
+func TestUnifiedCleanValidationCancellationDisposesPending(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	targets := confirmationTestTargets(t, home, 2)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	receipt, err := executeUnifiedPreparedCleanTargets(ctx, UnifiedCleanupPlan{}, targets)
+	if !errors.Is(err, context.Canceled) || len(receipt.Units) != len(targets) {
+		t.Fatalf("receipt=%+v error=%v", receipt, err)
+	}
+	for _, unit := range receipt.Units {
+		if unit.State != cleanExecutionCancelled || unit.PhysicalRemoved || unit.FreedBytes != 0 {
+			t.Fatalf("pending cancelled unit = %+v", unit)
+		}
+		if _, err := os.Stat(unit.Target.Path); err != nil {
+			t.Fatalf("cancelled unified validation mutated target: %v", err)
+		}
+	}
+}
+
+func TestGuidedValidationCancellationReason(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	targets := confirmationTestTargets(t, home, 2)
+	var items []types.DebrisInfo
+	for _, target := range targets {
+		items = append(items, target.Item)
+	}
+	opts := types.PruneOptions{Age: time.Hour}
+	source := scanSource{Kind: scanSourceLive}
+	plan, err := BuildUnifiedCleanupPlan(t.Context(), ClassicCleanupPlanCandidates(items, opts), CleanupPlanEvidence{ObservedAt: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	audit := buildPhysicalCleanAudit(items, nil, items, opts, 0, source, nil)
+	pending, err := newGuidedCleanExecutionReceipt(source, opts, nil, plan, audit, items, nil, targets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	execution, err := interactiveCleanWithValidationAndObserver(ctx, strings.NewReader("y\n"), io.Discard, targets, func(context.Context) error { cancel(); return ctx.Err() }, pending.observeInteractiveSkip)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+	receipt, err := pending.finish(execution, err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if receipt.Totals.Cancelled != len(targets) {
+		t.Fatalf("cancelled receipt accounting = %+v", receipt.Totals)
+	}
+	for _, target := range receipt.PhysicalTargets {
+		if target.Requested && (!slices.Contains(target.ReasonCodes, "cancelled_after_confirmation") || slices.Contains(target.ReasonCodes, "confirmation_cancelled")) {
+			t.Fatalf("approved cancellation reason = %+v", target)
+		}
+	}
+}
+
+func TestStripCancellationAccountsPendingTargets(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	prepared := confirmationTestTargets(t, home, 2)
+	var items []types.DebrisInfo
+	for _, target := range prepared {
+		items = append(items, target.Item)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	outcomes := executeStripTargetsWithProgress(ctx, items, home)
+	if len(outcomes) != len(items) {
+		t.Fatalf("cancelled strip outcomes=%d; want %d", len(outcomes), len(items))
+	}
+	for _, outcome := range outcomes {
+		if outcome.Error != context.Canceled.Error() || outcome.Freed != 0 {
+			t.Fatalf("cancelled strip outcome=%+v", outcome)
+		}
+		if _, err := os.Stat(outcome.Item.Path); err != nil {
+			t.Fatalf("cancelled strip mutated target: %v", err)
+		}
 	}
 }

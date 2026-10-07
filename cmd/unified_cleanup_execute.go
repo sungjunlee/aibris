@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -43,7 +44,14 @@ func executeUnifiedPreparedCleanTargets(
 		func(ctx context.Context, t []executor.PreparedExecutionTarget) (executor.ExecutionReceipt, error) {
 			return executePreparedCleanTargets(ctx, t, defaultActiveWorktreeExecutionOptions())
 		},
-		failedPreparedCleanUnitReceipt,
+		func(target preparedCleanTarget, err error) cleanUnitExecutionReceipt {
+			receipt := failedPreparedCleanUnitReceipt(target, err)
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				receipt.State = cleanExecutionCancelled
+				receipt.ResidualBytes = target.Item.Size
+			}
+			return receipt
+		},
 	)
 }
 

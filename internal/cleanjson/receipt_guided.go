@@ -104,14 +104,16 @@ func NewGuidedExecutionReceipt(
 
 // InteractiveSkipOutcome represents the outcome of an interactive skip.
 type InteractiveSkipOutcome struct {
-	Target   PreparedTarget
-	Declined bool
+	Target            PreparedTarget
+	Declined          bool
+	AfterConfirmation bool
 }
 
 // ObserveInteractiveSkip records a prepared target the guided confirmation
-// loop left without an execution unit, using the vocabulary the JSON
+// loop left without mutation, using the vocabulary the JSON
 // interactive route already publishes: declining a target is a normal
-// non-requested skip, and a confirmation that never arrived cancels a request.
+// non-requested skip; cancellation reasons distinguish an unanswered prompt
+// from validation cancelled after approval.
 func (r *GuidedExecutionReceipt) ObserveInteractiveSkip(outcome InteractiveSkipOutcome) {
 	id := r.targetIDs[RowIdentityKey(outcome.Target.Item)]
 	if outcome.Declined {
@@ -125,11 +127,15 @@ func (r *GuidedExecutionReceipt) ObserveInteractiveSkip(outcome InteractiveSkipO
 		}
 		return
 	}
+	code := "confirmation_cancelled"
+	if outcome.AfterConfirmation {
+		code = "cancelled_after_confirmation"
+	}
 	for i := range r.receipt.PhysicalTargets {
 		if r.receipt.PhysicalTargets[i].ID == id {
 			r.receipt.PhysicalTargets[i].State = ReceiptStatusCancelled
 			r.receipt.PhysicalTargets[i].Requested = true
-			r.receipt.PhysicalTargets[i].ReasonCodes = append(r.receipt.PhysicalTargets[i].ReasonCodes, "confirmation_cancelled")
+			r.receipt.PhysicalTargets[i].ReasonCodes = append(r.receipt.PhysicalTargets[i].ReasonCodes, code)
 			break
 		}
 	}

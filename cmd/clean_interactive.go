@@ -18,14 +18,15 @@ func interactiveClean(ctx context.Context, targets []preparedCleanTarget) (clean
 	return interactiveCleanWithValidation(ctx, targets, nil)
 }
 
-// interactiveCleanSkipOutcome reports a prepared target the confirmation loop
-// left without execution. Declined is true when the operator answered
-// the prompt and refused, and false when the confirmation stream ended before
-// an answer arrived. Observers are informational: they cannot affect cleanup
-// safety, execution, or the printed confirmation.
+// interactiveCleanSkipOutcome reports a target left without mutation.
+// Declined records an explicit refusal; otherwise the request was cancelled.
+// AfterConfirmation identifies cancellation during validation after an approval.
+// Observers are informational: they cannot affect cleanup safety, execution,
+// or the printed confirmation.
 type interactiveCleanSkipOutcome struct {
-	Target   preparedCleanTarget
-	Declined bool
+	Target            preparedCleanTarget
+	Declined          bool
+	AfterConfirmation bool
 }
 
 type interactiveCleanSkipObserver func(interactiveCleanSkipOutcome)
@@ -70,9 +71,11 @@ func interactiveCleanWithValidationAndObserver(
 	var result cleanExecutionReceipt
 	var errs []error
 	scanner := bufio.NewScanner(input)
-	cancelRemaining := func(remaining []preparedCleanTarget, err error) (cleanExecutionReceipt, error) {
-		reportUnansweredCleanTargets(observer, remaining)
+	cancelRemaining := func(remaining []preparedCleanTarget, err error, afterConfirmation bool) (cleanExecutionReceipt, error) {
 		for _, target := range remaining {
+			if observer != nil {
+				observer(interactiveCleanSkipOutcome{Target: target, AfterConfirmation: afterConfirmation})
+			}
 			unit := executor.CancelledPreparedCleanUnitReceipt(target.Item, target.Component, err, cleanJSONReceiptItemKey)
 			unit.ResidualBytes = target.Item.Size
 			result.Units = append(result.Units, unit)
@@ -81,7 +84,7 @@ func interactiveCleanWithValidationAndObserver(
 	}
 	for i, target := range targets {
 		if err := ctx.Err(); err != nil {
-			return cancelRemaining(targets[i:], err)
+			return cancelRemaining(targets[i:], err, false)
 		}
 		w := target.Item
 		if !cleaner.IsSafeTarget(home, w) {
@@ -97,7 +100,7 @@ func interactiveCleanWithValidationAndObserver(
 		line, ok, inputErr := confirminput.Scan(ctx, scanner)
 		if inputErr != nil {
 			if ctx.Err() != nil {
-				return cancelRemaining(targets[i:], ctx.Err())
+				return cancelRemaining(targets[i:], ctx.Err(), false)
 			}
 			reportUnansweredCleanTargets(observer, targets[i:])
 			return result, errors.Join(append(errs, inputErr)...)
@@ -111,7 +114,7 @@ func interactiveCleanWithValidationAndObserver(
 			if validate != nil {
 				if err := validate(ctx); err != nil {
 					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-						return cancelRemaining(targets[i:], err)
+						return cancelRemaining(targets[i:], err, true)
 					}
 					for _, remaining := range targets[i:] {
 						result.Units = append(result.Units, failedPreparedCleanUnitReceipt(remaining, err))

@@ -21,7 +21,7 @@ func TestCleanConfirmationSignals(t *testing.T) {
 		t.Skip("Windows does not support sending POSIX SIGINT/SIGTERM to a child; context cancellation is tested separately")
 	}
 	binary := buildCLIContractBinary(t)
-	for _, route := range []string{"final", "per-item", "guided", "unified", "guided-final", "guided-partial"} {
+	for _, route := range []string{"final", "per-item", "guided", "unified", "guided-final", "guided-partial", "strip"} {
 		for _, signal := range []os.Signal{os.Interrupt, syscall.SIGTERM} {
 			t.Run(fmt.Sprintf("%s/%s", route, signal), func(t *testing.T) {
 				resetCleanFlags()
@@ -31,6 +31,15 @@ func TestCleanConfirmationSignals(t *testing.T) {
 				var answers []guidedCleanPromptAnswer
 				paths := []string{}
 				receiptPath := ""
+				if route == "strip" {
+					unit := createCleanCodexGitWorktree(t, home, "strip-signal")
+					writeGitFixtureFile(t, unit, "package.json", "{}\n")
+					writeGitFixtureFile(t, unit, ".gitignore", "node_modules/\n")
+					modules := filepath.Join(unit, "node_modules")
+					writeJSONReceiptFixture(t, modules, "sentinel")
+					paths = append(paths, modules)
+					args = append(args, "--strip")
+				}
 				if strings.HasPrefix(route, "guided") || route == "unified" {
 					count := 1
 					if route == "guided-partial" {
@@ -98,7 +107,7 @@ func TestCleanConfirmationSignals(t *testing.T) {
 				if removed != wantRemoved {
 					t.Fatalf("removed %d targets; want %d; output=%s", removed, wantRemoved, output)
 				}
-				if route == "final" || route == "per-item" || route == "unified" {
+				if route == "final" || route == "per-item" || route == "unified" || route == "strip" {
 					payload, err := os.ReadFile(filepath.Join(paths[len(paths)-1], "payload"))
 					if err != nil || string(payload) != "sentinel" {
 						t.Fatalf("pending sentinel changed: %q, %v", payload, err)
