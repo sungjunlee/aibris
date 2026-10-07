@@ -66,7 +66,7 @@ func runAPFSSnapshotAction(ctx context.Context, dryRun, force bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return thinAndReportAPFSSnapshots(count)
+	return thinAndReportAPFSSnapshots(ctx, count)
 }
 
 func printAPFSSnapshotPlan(count int) {
@@ -82,7 +82,7 @@ func confirmAPFSSnapshotThin(ctx context.Context, input io.Reader, output io.Wri
 	return ok && strings.EqualFold(strings.TrimSpace(answer), "y"), err
 }
 
-func thinAndReportAPFSSnapshots(startCount int) error {
+func thinAndReportAPFSSnapshots(ctx context.Context, startCount int) error {
 	prevCount := startCount
 	prevReport, prevErr := inspectHomeCapacityFn()
 	prevFree, prevFreeOK := apfsHomeVolumeFree(prevReport, prevErr)
@@ -92,6 +92,9 @@ func thinAndReportAPFSSnapshots(startCount int) error {
 	var report *volume.Report
 	var volumeErr error
 	for pass := 0; pass < apfsSnapshotMaxThinPasses; pass++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := thinLocalAPFSSnapshots(); err != nil {
 			return err
 		}

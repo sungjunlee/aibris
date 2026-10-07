@@ -12,6 +12,7 @@ import (
 
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
+	"github.com/sungjunlee/aibris/internal/volume"
 )
 
 func TestCleanFinalConfirmationsInput(t *testing.T) {
@@ -208,5 +209,24 @@ func TestInteractiveCleanValidationCancellationDisposesPending(t *testing.T) {
 		if _, err := os.Stat(unit.Target.Path); err != nil {
 			t.Fatalf("cancelled validation mutated target: %v", err)
 		}
+	}
+}
+
+func TestAPFSSnapshotCancellationStopsNewPasses(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	previousList, previousThin, previousInspect := listLocalAPFSSnapshots, thinLocalAPFSSnapshots, inspectHomeCapacityFn
+	t.Cleanup(func() {
+		listLocalAPFSSnapshots, thinLocalAPFSSnapshots, inspectHomeCapacityFn = previousList, previousThin, previousInspect
+	})
+	remaining, passes := 2, 0
+	listLocalAPFSSnapshots = func() (int, error) { return remaining, nil }
+	thinLocalAPFSSnapshots = func() error { passes++; remaining--; cancel(); return nil }
+	inspectHomeCapacityFn = func() (*volume.Report, error) { return nil, errors.New("fixture volume unavailable") }
+	err := runAPFSSnapshotAction(ctx, false, true)
+	if !errors.Is(err, context.Canceled) || passes != 1 {
+		t.Fatalf("APFS cancellation = %v, passes %d; want cancelled after one pass", err, passes)
 	}
 }
