@@ -14,8 +14,19 @@ import (
 
 // EstimateDirSize measures a path with the same estimator scan uses, for
 // callers that must re-derive a size after the scan (e.g. strip execution).
+// It is report-only: unreadable entries are skipped while readable siblings
+// still contribute bytes. Use EstimateDirSizeWithError to detect incompleteness.
 func EstimateDirSize(ctx context.Context, path string) int64 {
 	return estimateDirSize(ctx, path)
+}
+
+// EstimateDirSizeWithError retains partial byte observations but reports any
+// missing evidence. Reporting callers may ignore the error; reclamation uses
+// it to distinguish comparable approximate observations from a complete
+// baseline followed by an incomplete residual walk.
+func EstimateDirSizeWithError(ctx context.Context, path string) (int64, error) {
+	activity := estimateDirActivityWithOptions(ctx, path, false)
+	return activity.Size, activity.Err
 }
 
 // NewestTreeModTime reports the newest modification time observed anywhere in
@@ -23,12 +34,18 @@ func EstimateDirSize(ctx context.Context, path string) int64 {
 // the same signal cache adapters record as ModTime, for callers that must
 // re-derive it after the scan.
 //
-// The walk skips a subtree it cannot read, so an unreadable directory hides
-// any newer mtime beneath it and the result can be older than the tree really
-// is. Callers must therefore treat this as a lower bound and combine it with
-// whatever activity they already recorded, never replace that record with it.
+// This is a report-only lower bound when traversal is incomplete. Deletion
+// approval must use CompleteTreeModTime instead.
 func NewestTreeModTime(ctx context.Context, path string) time.Time {
 	return estimateDirActivity(ctx, path).NewestModTime
+}
+
+// CompleteTreeModTime returns activity evidence only when every entry was
+// observed. Any stat, traversal or cancellation error refuses the observation;
+// callers must not approve deletion using the partial timestamp on error.
+func CompleteTreeModTime(ctx context.Context, path string) (time.Time, error) {
+	activity := estimateDirActivity(ctx, path)
+	return activity.NewestModTime, activity.Err
 }
 
 func detectProjectName(path string) string {

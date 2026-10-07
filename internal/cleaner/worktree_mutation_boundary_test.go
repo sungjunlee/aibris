@@ -33,15 +33,15 @@ func TestOrphanedWorktreeRechecksAfterPreMutationMeasurement(t *testing.T) {
 	restored := false
 	// Restore external Git evidence after the actual pre-removal size walk.
 	// This seam accepts either a repeated barrier or one placed after sizing.
-	observedSize = func(ctx context.Context, path string) int64 {
-		size := measure(ctx, path)
+	observedSize = func(ctx context.Context, path string) (int64, error) {
+		size, err := measure(ctx, path)
 		if !restored {
 			restored = true
 			if err := os.MkdirAll(gitdir, 0o755); err != nil {
 				t.Fatal(err)
 			}
 		}
-		return size
+		return size, err
 	}
 	attempted := false
 	freed, err := ExecuteWithContextAndBarrierWithOutputAndObserver(ctx, []types.DebrisInfo{{

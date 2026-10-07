@@ -104,22 +104,21 @@ func executeWithContextOutput(
 			}
 			fmt.Fprintf(output, "running %d/%d: %s (%s) via %s ...\n",
 				i+1, len(worktrees), debrisName(w), w.Category, strings.Join(w.CleanupCommand, " "))
-			if err := runMutationBarrier(ctx, barrier, w); err != nil {
-				errs = append(errs, err)
-				fmt.Fprintf(errorOutput, "error: %v\n", err)
-				continue
-			}
-			argv, env, err := authorizedCleanupCommand(home, w)
-			if err != nil {
-				errs = append(errs, err)
-				fmt.Fprintf(errorOutput, "error: %v\n", err)
-				continue
-			}
-			freed, residual, err := observeReclamation(ctx, w.Path, func() error {
-				return runCleanupCommand(ctx, argv, env, func() {
+
+			freed, residual, attempted, err := observeReclamation(ctx, w.Path, func() (bool, error) {
+				argv, env, err := authorizedCleanupCommand(home, w)
+				if err != nil {
+					return false, err
+				}
+				return runCleanupCommand(ctx, argv, env, func() error {
 					if observer != nil {
-						observer(CleanupMutationOutcome{Item: w, MutationAttempted: true})
+						observer(CleanupMutationOutcome{Item: w})
 					}
+					if err := runMutationBarrier(ctx, barrier, w); err != nil {
+						return err
+					}
+					_, _, err := authorizedCleanupCommand(home, w)
+					return err
 				})
 			})
 			if err == nil {
@@ -127,7 +126,7 @@ func executeWithContextOutput(
 				reportCommandCleaned(output, w, freed, residual)
 				if observer != nil {
 					observer(CleanupMutationOutcome{
-						Item: w, MutationAttempted: true, FreedBytes: freed, ResidualBytes: residual,
+						Item: w, MutationAttempted: attempted, FreedBytes: freed, ResidualBytes: residual,
 					})
 				}
 				continue
@@ -136,7 +135,7 @@ func executeWithContextOutput(
 				reportCommandResidual(output, w, freed, residual)
 				if observer != nil {
 					observer(CleanupMutationOutcome{
-						Item: w, MutationAttempted: true, FreedBytes: freed, ResidualBytes: residual,
+						Item: w, MutationAttempted: attempted, FreedBytes: freed, ResidualBytes: residual,
 					})
 				}
 				errs = append(errs, fmt.Errorf("running cleanup command for %s: %w", w.ID, err))
@@ -148,45 +147,29 @@ func executeWithContextOutput(
 		}
 		fmt.Fprintf(output, "removing %d/%d: %s (%s) ...\n",
 			i+1, len(worktrees), debrisName(w), w.Category)
-		if err := runMutationBarrier(ctx, barrier, w); err != nil {
-			errs = append(errs, err)
-			fmt.Fprintf(errorOutput, "error: %v\n", err)
-			continue
-		}
-		if commandFallbackPathRemoval {
-			if _, _, err := authorizedCleanupCommand(home, w); err != nil {
-				errs = append(errs, err)
-				fmt.Fprintf(errorOutput, "error: %v\n", err)
-				continue
+
+		freed, residual, attempted, err := observeReclamation(ctx, w.Path, func() (bool, error) {
+			if observer != nil {
+				observer(CleanupMutationOutcome{Item: w, CommandFallbackPathRemoval: commandFallbackPathRemoval})
 			}
-		}
-		mutationAttempted := false
-		freed, residual, err := observeReclamation(ctx, w.Path, func() error {
-			// Size measurement can walk a large checkout. Refresh orphan
-			// authority again after it, immediately before physical removal.
-			if w.Category == types.CategoryWorktree {
-				if err := runMutationBarrier(ctx, barrier, w); err != nil {
-					return err
+			if err := runMutationBarrier(ctx, barrier, w); err != nil {
+				return false, err
+			}
+			if commandFallbackPathRemoval {
+				if _, _, err := authorizedCleanupCommand(home, w); err != nil {
+					return false, err
 				}
 			}
-			mutationAttempted = true
-			if observer != nil {
-				observer(CleanupMutationOutcome{
-					Item:                       w,
-					MutationAttempted:          true,
-					CommandFallbackPathRemoval: commandFallbackPathRemoval,
-				})
+			if err := ctx.Err(); err != nil {
+				return false, err
 			}
-			return safedelete.RemoveAll(home, w.Path)
+			return true, safedelete.RemoveAll(home, w.Path)
 		})
-		if !mutationAttempted {
-			freed = 0
-		}
 		total += freed
 		if observer != nil {
 			observer(CleanupMutationOutcome{
 				Item:                       w,
-				MutationAttempted:          mutationAttempted,
+				MutationAttempted:          attempted,
 				CommandFallbackPathRemoval: commandFallbackPathRemoval,
 				FreedBytes:                 freed,
 				ResidualBytes:              residual,
@@ -260,30 +243,37 @@ func reportCommandResidual(output io.Writer, w types.DebrisInfo, freed, residual
 		w.ID, FormatSize(residual), FormatSize(freed))
 }
 
-func runCleanupCommand(ctx context.Context, argv []string, env []string, beforeStart func()) error {
+func runCleanupCommand(ctx context.Context, argv []string, env []string, beforeStart func() error) (bool, error) {
 	if len(argv) == 0 {
-		return nil
+		return false, nil
 	}
-	bin, err := lookPath(argv[0])
-	if err != nil {
-		return errCleanupCommandNotFound
+	bin, lookupErr := lookPath(argv[0])
+	var cmd *exec.Cmd
+	if lookupErr == nil {
+		cmd = commandContext(ctx, bin, argv[1:]...)
 	}
-	cmd := commandContext(ctx, bin, argv[1:]...)
-	if len(env) > 0 {
+	if cmd != nil && len(env) > 0 {
 		cmd.Env = append(os.Environ(), env...)
 	}
-	if beforeStart != nil {
-		beforeStart()
+	if err := beforeStart(); err != nil {
+		return false, err
+	}
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	if lookupErr != nil {
+		return false, errCleanupCommandNotFound
 	}
 	output, err := cmd.CombinedOutput()
+	attempted := cmd.Process != nil
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return ctxErr
+			return attempted, ctxErr
 		}
 		if len(output) > 0 {
-			return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(output)))
+			return attempted, fmt.Errorf("%w: %s", err, strings.TrimSpace(string(output)))
 		}
-		return err
+		return attempted, err
 	}
-	return nil
+	return attempted, nil
 }
