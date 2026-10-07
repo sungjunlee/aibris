@@ -162,7 +162,7 @@ func (r *GuidedExecutionReceipt) Finish(
 				continue
 			}
 			target := &r.receipt.PhysicalTargets[i]
-			target.State = unit.State
+			target.State = string(unit.State)
 			target.Requested = unit.State == "removed" ||
 				unit.State == "partial" ||
 				unit.State == "failed" ||

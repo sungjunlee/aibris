@@ -46,35 +46,12 @@ func executeCleanJSONReceipt(
 	force bool,
 	interactive bool,
 ) (cleanJSONReceipt, error) {
-	// Convert prepared targets to cleanjson format for receipt mapping only
-	// The actual execution uses the original prepared targets with all fields
-	preparedTargets := make([]cleanjson.PreparedTarget, len(prepared))
-	for i, p := range prepared {
-		preparedTargets[i] = cleanjson.PreparedTarget{
-			Item:      p.Item,
-			Component: p.Component,
-		}
-	}
-
-	// Convert components to cleanjson format
-	jsonComponents := make([]cleanjson.SnapshotComponent, len(components))
-	for i, c := range components {
-		jsonComponents[i] = cleanjson.SnapshotComponent(c)
-	}
-
-	// Build a map from Item identity to prepared target for lookup during execution
-	preparedMap := make(map[string]preparedCleanTarget)
-	for _, p := range prepared {
-		key := cleanJSONReceiptItemKey(p.Item)
-		preparedMap[key] = p
-	}
-
 	return cleanjson.ExecuteCleanJSONReceipt(
 		ctx,
 		document,
-		jsonComponents,
+		components,
 		plan.SelectedPhysicalTargets,
-		preparedTargets,
+		prepared,
 		cleanIncludePaths,
 		force,
 		interactive,
@@ -82,44 +59,15 @@ func executeCleanJSONReceipt(
 			return validateUnifiedCleanupPlanForMutation(ctx, plan, now)
 		},
 		func(ctx context.Context, targets []cleanjson.PreparedTarget) (cleanjson.ExecutionReceipt, error) {
-			// Map the targets to original prepared targets with all fields
-			cmdTargets := make([]preparedCleanTarget, 0, len(targets))
-			for _, t := range targets {
-				key := cleanJSONReceiptItemKey(t.Item)
-				if p, ok := preparedMap[key]; ok {
-					cmdTargets = append(cmdTargets, p)
-				} else {
-					// Fallback: create a minimal target without TargetSnapshot
-					// This shouldn't happen in normal operation
-					cmdTargets = append(cmdTargets, preparedCleanTarget{
-						Item:      t.Item,
-						Component: t.Component.(*cleanupOverlapComponent),
-					})
-				}
-			}
 			opts := activeWorktreeExecutionOptions{
 				Output:      io.Discard,
 				ErrorOutput: io.Discard,
 			}
-			execution, err := executePreparedCleanTargets(
+			return executePreparedCleanTargets(
 				ctx,
-				cmdTargets,
+				targets,
 				opts,
 			)
-			// Convert execution receipt to cleanjson format
-			units := make([]cleanjson.ExecutionUnit, len(execution.Units))
-			for i, u := range execution.Units {
-				units[i] = cleanjson.ExecutionUnit{
-					ReceiptTargetKey:           u.ReceiptTargetKey,
-					State:                      string(u.State),
-					PhysicalRemoved:            u.PhysicalRemoved,
-					FreedBytes:                 u.FreedBytes,
-					ResidualBytes:              u.ResidualBytes,
-					CommandFallbackPathRemoval: u.CommandFallbackPathRemoval,
-					FailureCause:               u.FailureCause,
-				}
-			}
-			return cleanjson.ExecutionReceipt{Units: units}, err
 		},
 		listLocalAPFSSnapshots,
 		func(err error) bool {
