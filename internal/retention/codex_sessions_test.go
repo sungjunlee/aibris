@@ -149,7 +149,8 @@ func TestCodexSessionsSilentlySkipsUnsupportedEntries(t *testing.T) {
 	testutil.SetHome(t, home)
 	provider := testCodexProvider()
 
-	day := filepath.Join(home, ".codex", "sessions", "2026", "04", "05")
+	leaf := writeRetentionSession(t, home, "2026", "04", "05", "normal", validMetadata(liveCWD(t, home, "live")), "")
+	day := filepath.Dir(leaf)
 	if err := os.MkdirAll(day, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -164,8 +165,53 @@ func TestCodexSessionsSilentlySkipsUnsupportedEntries(t *testing.T) {
 	}
 
 	projection := scanRetention(t, provider, home)
-	if len(projection.Buckets) != 0 || projection.Partial {
-		t.Fatalf("projection = %+v; symlink/non-rollout/nested entries must be skipped silently", projection)
+	bucket := onlyBucket(t, projection)
+	if bucket.UnitCount != 1 || bucket.ApparentBytes != fileSize(t, leaf) || projection.Partial || len(projection.ProviderErrors) != 0 {
+		t.Fatalf("projection = %+v; only the normal sibling must be inventoried", projection)
+	}
+}
+
+func TestCodexSessionsUnsupportedEntriesKeepNormalSiblings(t *testing.T) {
+	for _, depth := range []struct {
+		name    string
+		parents []string
+	}{
+		{"sessions-root", nil},
+		{"year", []string{"2026"}},
+		{"month", []string{"2026", "04"}},
+	} {
+		for _, directory := range []bool{false, true} {
+			kind := "file"
+			if directory {
+				kind = "directory"
+			}
+			t.Run(depth.name+"/"+kind, func(t *testing.T) {
+				home := t.TempDir()
+				testutil.SetHome(t, home)
+				leaf := writeRetentionSession(t, home, "2026", "04", "05", "normal", validMetadata(liveCWD(t, home, "live")), "")
+				parts := append([]string{home, ".codex", "sessions"}, depth.parents...)
+				odd := filepath.Join(append(parts, "000-note")...)
+				if directory {
+					// A valid-looking rollout below an unsupported directory must
+					// remain pruned, while its later normal sibling is visited.
+					remaining := []string{"2026", "04", "05"}[len(depth.parents):]
+					pruned := filepath.Join(append([]string{odd}, remaining...)...)
+					if err := os.MkdirAll(pruned, 0755); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(filepath.Join(pruned, "rollout-pruned.jsonl"), []byte(validMetadata(home)+"\n"), 0600); err != nil {
+						t.Fatal(err)
+					}
+				} else if err := os.WriteFile(odd, []byte("unsupported"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				projection := scanRetention(t, testCodexProvider(), home)
+				bucket := onlyBucket(t, projection)
+				if bucket.UnitCount != 1 || bucket.MemberCount != 1 || bucket.ApparentBytes != fileSize(t, leaf) || projection.Partial || len(projection.ProviderErrors) != 0 {
+					t.Fatalf("projection = %+v; want only the normal sibling, complete", projection)
+				}
+			})
+		}
 	}
 }
 
@@ -174,7 +220,7 @@ func TestCodexSessionsHonorsSelectedRootsAndMissingRootIsCompleteEmpty(t *testin
 	testutil.SetHome(t, home)
 	provider := testCodexProvider()
 
-	projection, err := provider.Scan(context.Background(), types.ScanOptions{Roots: []string{filepath.Join(home, "elsewhere")}})
+	projection, err := provider.Scan(context.Background(), types.ScanOptions{Roots: []string{filepath.Join(home, "elsewhere")}, ExplicitRoots: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,6 +292,61 @@ func TestCodexSessionsInventoriesCodexHomeOutsideDefaultRoots(t *testing.T) {
 	}
 	if projection.Partial {
 		t.Fatalf("projection = %+v; want complete", projection)
+	}
+}
+
+func TestCodexSessionsExplicitRootsDoNotExpandPopulatedStore(t *testing.T) {
+	for _, external := range []bool{false, true} {
+		name := "default-codex-home"
+		if external {
+			name = "external-codex-home"
+		}
+		t.Run(name, func(t *testing.T) {
+			home := t.TempDir()
+			testutil.SetHome(t, home)
+			storeHome := home
+			if external {
+				storeHome = t.TempDir()
+			}
+			writeRetentionSession(t, storeHome, "2026", "01", "02", "present", validMetadata(home), "")
+			if external {
+				t.Setenv("CODEX_HOME", filepath.Join(storeHome, ".codex"))
+			}
+			child := liveCWD(t, home, "unrelated")
+			wantExplicitHome := 1
+			if external {
+				wantExplicitHome = 0
+			}
+			for _, test := range []struct {
+				name      string
+				root      string
+				explicit  bool
+				wantUnits int
+			}{
+				{"default", home, false, 1},
+				{"explicit-home", home, true, wantExplicitHome},
+				{"explicit-child", child, true, 0},
+				{"explicit-store", filepath.Join(storeHome, ".codex"), true, 1},
+			} {
+				t.Run(test.name, func(t *testing.T) {
+					want := test.wantUnits
+					projection, err := testCodexProvider().Scan(context.Background(), types.ScanOptions{Roots: []string{test.root}, ExplicitRoots: test.explicit})
+					if err != nil {
+						t.Fatal(err)
+					}
+					if projection.Partial || len(projection.ProviderErrors) != 0 {
+						t.Fatalf("projection = %+v; want complete", projection)
+					}
+					if want == 0 {
+						if len(projection.Buckets) != 0 {
+							t.Fatalf("projection = %+v; explicit root must exclude populated store", projection)
+						}
+					} else if bucket := onlyBucket(t, projection); bucket.UnitCount != want {
+						t.Fatalf("bucket = %+v; want %d units", bucket, want)
+					}
+				})
+			}
+		})
 	}
 }
 
