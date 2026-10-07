@@ -18,12 +18,17 @@ make build
 
 ```bash
 make check       # gofmt, go mod tidy -diff, vet, staticcheck, govulncheck, shellcheck
-make test        # go test ./...
-make test-race   # go test -race ./...
+make test        # root and tools/perfharness module tests
+make test-race   # both modules with the race detector
 make dist        # goreleaser snapshot build
 ```
 
-`make check` takes about ten seconds and is what CI's check job runs.
+`make check` is what CI's check job runs. Its vet/staticcheck checks and
+`make test` cover both the root module and `tools/perfharness`; Linux/macOS CI
+runs both modules with the race detector and vet/staticcheck. Windows CI runs
+the complete `internal/safedelete`, `internal/pathidentity`, and
+`internal/testutil` packages in an isolated profile. Symlink fixtures report a
+skip reason if the runner lacks symlink privilege.
 
 ## Architecture
 
