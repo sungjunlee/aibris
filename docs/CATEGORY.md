@@ -115,6 +115,36 @@ manufacture producer cooperation locally. If the signal never exists, affected
 tmp units remain ineligible and affected protected stores remain
 non-executable and inventory-only indefinitely.
 
+### Codex tmp implementation scope (Issue #600)
+
+Decision at the `a34ae5b` audit base: **keep the unregistered implementation
+as an executable contract experiment**, not a supported cleanup feature.
+The default adapter registry contains no tmp provider; production scanner and
+clean command paths do not construct or call it. Only adapter tests supply
+synthetic admitted layouts and cooperative exclusion. Public scanner/CLI
+tests separately preserve the current behavior: tmp content in either the
+default or relocated Codex home produces no cleanup candidate, even with
+`--risky` and `--force`.
+
+Keep the existing layout, snapshot, platform identity, and fence code together
+with its hermetic tests. They exercise unknown descendants and symlink targets,
+incomplete writer coverage, tmp-root rejection, and creation, mutation, rename,
+and fence-loss refusal at the deletion boundary. Removing or shrinking this
+code would discard these executable safety examples without changing a user
+path; documenting their limited role is the smaller maintenance change.
+
+The in-process cooperative exclusion model is a test model, not an upstream
+lock or proof that real Codex writers cooperate. Retention does not approve a
+producer layout or make this implementation ready for registration. Revisit
+adoption only when upstream documents a versioned layout/identity contract
+and an observable lock, lease, shutdown, or pause/fencing protocol honored by
+**all** GUI, CLI, apply-patch, supervisor, and helper writers throughout
+enumeration and deletion. Verify that evidence for every supported
+release/channel with fixtures and platform race tests against the contract
+below. Until then, keep tmp undiscovered, unselectable, and ineligible; never
+delete the whole tmp root or bypass exclusion. No replacement protocol or
+maintenance framework is introduced by this decision.
+
 ### L2 tmp ownership and race-safety contract
 
 Before a tmp provider can be registered, each supported Codex release/channel
