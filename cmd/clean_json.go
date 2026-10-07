@@ -97,13 +97,22 @@ func runCleanJSON(cmd *cobra.Command) {
 		auditProtections,
 		logicalInputs,
 	)
-	document, err := cleanjson.BuildPlanFromCmd(
+	plan, err := unifiedCleanupPlanForClean(
 		ctx,
+		guidedStatePtr,
+		overlapSelection.Targets,
+		cleanupPlanEvidence(result, source, time.Now()),
+		opts,
+	)
+	if err != nil {
+		failCleanJSON("cleanup plan preparation failed")
+	}
+	document, err := cleanjson.BuildPlanFromCmd(
 		result,
 		source,
 		opts,
 		guidedStatePtr,
-		overlapSelection.Targets,
+		plan,
 		auditProtections,
 		audit,
 		cleanIncludePaths,
@@ -119,16 +128,6 @@ func runCleanJSON(cmd *cobra.Command) {
 		return
 	}
 
-	plan, err := unifiedCleanupPlanForClean(
-		ctx,
-		guidedStatePtr,
-		overlapSelection.Targets,
-		cleanupPlanEvidence(result, source, time.Now()),
-		opts,
-	)
-	if err != nil {
-		failCleanJSON("cleanup plan preparation failed")
-	}
 	selected := plan.SelectedPhysicalTargets()
 	if guidedStatePtr != nil {
 		logicalInputs = applyGuidedPolicyReasons(logicalInputs, *guidedStatePtr)

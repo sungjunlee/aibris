@@ -23,19 +23,7 @@ import (
 
 // Helper to convert cmd execution receipt to cleanjson format for tests
 func toCleanJSONExecutionReceipt(receipt cleanExecutionReceipt) cleanjson.ExecutionReceipt {
-	units := make([]cleanjson.ExecutionUnit, len(receipt.Units))
-	for i, u := range receipt.Units {
-		units[i] = cleanjson.ExecutionUnit{
-			ReceiptTargetKey:           u.ReceiptTargetKey,
-			State:                      string(u.State),
-			PhysicalRemoved:            u.PhysicalRemoved,
-			FreedBytes:                 u.FreedBytes,
-			ResidualBytes:              u.ResidualBytes,
-			CommandFallbackPathRemoval: u.CommandFallbackPathRemoval,
-			FailureCause:               u.FailureCause,
-		}
-	}
-	return cleanjson.ExecutionReceipt{Units: units}
+	return receipt
 }
 
 func TestCleanJSONReceiptSuccessIsVersionedRedactedAndPhysicallyAccounted(t *testing.T) {
@@ -431,7 +419,7 @@ func TestApplyCleanJSONExecutionReceiptUsesCapturedTargetIDsAfterDeletion(t *tes
 	item := types.DebrisInfo{ID: "deleted", Path: filepath.Join(t.TempDir(), "gone")}
 	receipt := cleanJSONReceipt{PhysicalTargets: []cleanJSONReceiptPhysicalTarget{{ID: "target-1", State: cleanJSONReceiptPending}}}
 	err := cleanjson.ApplyCleanJSONExecutionReceipt(&receipt, map[string]string{cleanJSONReceiptItemKey(item): "target-1"}, cleanjson.ExecutionReceipt{
-		Units: []cleanjson.ExecutionUnit{{ReceiptTargetKey: cleanJSONReceiptItemKey(item), State: string(cleanExecutionRemoved), PhysicalRemoved: true, FreedBytes: 10}},
+		Units: []cleanjson.ExecutionUnit{{ReceiptTargetKey: cleanJSONReceiptItemKey(item), State: cleanExecutionRemoved, PhysicalRemoved: true, FreedBytes: 10}},
 	}, func(err error) bool {
 		return errors.Is(err, cleaner.ErrCleanupTargetYoungerThanMinimumAge)
 	})
@@ -507,7 +495,7 @@ func TestApplyCleanJSONExecutionReceiptRecordsCommandFallbackPathRemoval(t *test
 	err := cleanjson.ApplyCleanJSONExecutionReceipt(&receipt, map[string]string{cleanJSONReceiptItemKey(item): "target-1"}, cleanjson.ExecutionReceipt{
 		Units: []cleanjson.ExecutionUnit{{
 			ReceiptTargetKey:           cleanJSONReceiptItemKey(item),
-			State:                      string(cleanExecutionRemoved),
+			State:                      cleanExecutionRemoved,
 			PhysicalRemoved:            true,
 			FreedBytes:                 10,
 			CommandFallbackPathRemoval: true,
@@ -547,7 +535,7 @@ func TestApplyCleanJSONExecutionReceiptIDMissFailsReceiptInvariant(t *testing.T)
 	item := types.DebrisInfo{ID: "unknown", Path: filepath.Join(t.TempDir(), "unknown")}
 	receipt := cleanJSONReceipt{PhysicalTargets: []cleanJSONReceiptPhysicalTarget{{ID: "target-1", State: cleanJSONReceiptPending}}}
 	applyErr := cleanjson.ApplyCleanJSONExecutionReceipt(&receipt, nil, cleanjson.ExecutionReceipt{
-		Units: []cleanjson.ExecutionUnit{{ReceiptTargetKey: cleanJSONReceiptItemKey(item), State: string(cleanExecutionRemoved), PhysicalRemoved: true, FreedBytes: 10}},
+		Units: []cleanjson.ExecutionUnit{{ReceiptTargetKey: cleanJSONReceiptItemKey(item), State: cleanExecutionRemoved, PhysicalRemoved: true, FreedBytes: 10}},
 	}, func(err error) bool {
 		return errors.Is(err, cleaner.ErrCleanupTargetYoungerThanMinimumAge)
 	})

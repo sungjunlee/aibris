@@ -73,13 +73,16 @@ func TestCleanJSONRouteProjectsRealOverlapRefusalAsProtected(t *testing.T) {
 		protections,
 		inputs,
 	)
+	plan, err := unifiedCleanupPlanForClean(context.Background(), nil, nil, cleanupPlanEvidence(&types.ScanResult{}, source, time.Now()), types.PruneOptions{Age: time.Hour})
+	if err != nil {
+		t.Fatal(err)
+	}
 	document, err := cleanjson.BuildPlanFromCmd(
-		context.Background(),
 		&types.ScanResult{Worktrees: []types.DebrisInfo{target, entry}},
 		source,
 		types.PruneOptions{Age: time.Hour},
 		nil,
-		nil,
+		plan,
 		protections,
 		audit,
 		false,

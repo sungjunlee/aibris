@@ -1,4 +1,4 @@
-package executor
+package executor_test
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/cleanjson"
+	"github.com/sungjunlee/aibris/internal/executor"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -47,13 +48,13 @@ func TestPreparedCancellationBeforeMutationMatchesReceipt(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			prepared := PrepareExecutionWithSafety(context.Background(), selection, runtime)
-			receipt, err := ExecutePreparedTargets(ctx, prepared, ExecutionOptions{ReceiptKeyFn: func(item types.DebrisInfo) string { return item.Path }}, nil)
+			prepared := executor.PrepareExecutionWithSafety(context.Background(), selection, runtime)
+			receipt, err := executor.ExecutePreparedTargets(ctx, prepared, executor.ExecutionOptions{ReceiptKeyFn: func(item types.DebrisInfo) string { return item.Path }}, nil)
 			if !errors.Is(err, context.Canceled) || len(receipt.Units) != 1 {
 				t.Fatalf("receipt=%+v err=%v", receipt, err)
 			}
 			unit := receipt.Units[0]
-			if unit.State != ExecutionCancelled || unit.MutationAttempted || unit.PhysicalRemoved || unit.FreedBytes != 0 || receipt.FreedBytes != 0 || unit.ResidualBytes != 4 {
+			if unit.State != executor.ExecutionCancelled || unit.MutationAttempted || unit.PhysicalRemoved || unit.FreedBytes != 0 || receipt.FreedBytes != 0 || unit.ResidualBytes != 4 {
 				t.Errorf("pre-mutation cancellation receipt mismatches retained target: %+v", unit)
 			}
 			if _, err := os.Stat(filepath.Join(path, "keep")); err != nil {
@@ -118,16 +119,16 @@ func TestPreparedCancellationAfterCompletedMutationPreservesBatchReceipt(t *test
 			if err != nil {
 				t.Fatal(err)
 			}
-			prepared := PrepareExecutionWithSafety(context.Background(), selection, runtime)
-			receipt, err := ExecutePreparedTargets(ctx, prepared, ExecutionOptions{Output: output, ErrorOutput: io.Discard, ReceiptKeyFn: func(item types.DebrisInfo) string { return item.Path }}, nil)
+			prepared := executor.PrepareExecutionWithSafety(context.Background(), selection, runtime)
+			receipt, err := executor.ExecutePreparedTargets(ctx, prepared, executor.ExecutionOptions{Output: output, ErrorOutput: io.Discard, ReceiptKeyFn: func(item types.DebrisInfo) string { return item.Path }}, nil)
 			if !errors.Is(err, context.Canceled) || len(receipt.Units) != 2 {
 				t.Fatalf("receipt=%+v err=%v", receipt, err)
 			}
 			first, second := receipt.Units[0], receipt.Units[1]
-			if first.State != ExecutionRemoved || !first.MutationAttempted || !first.PhysicalRemoved || first.FreedBytes != 4 || first.ResidualBytes != 0 || receipt.FreedBytes != 4 || first.Error != "" {
+			if first.State != executor.ExecutionRemoved || !first.MutationAttempted || !first.PhysicalRemoved || first.FreedBytes != 4 || first.ResidualBytes != 0 || receipt.FreedBytes != 4 || first.Error != "" {
 				t.Errorf("completed mutation receipt=%+v", first)
 			}
-			if second.State != ExecutionCancelled || second.MutationAttempted || second.PhysicalRemoved || second.FreedBytes != 0 {
+			if second.State != executor.ExecutionCancelled || second.MutationAttempted || second.PhysicalRemoved || second.FreedBytes != 0 {
 				t.Errorf("remaining receipt=%+v", second)
 			}
 			if _, err := os.Stat(first.Target.Path); !os.IsNotExist(err) {
@@ -176,14 +177,14 @@ func TestPreparedPartialRemovalWithUnreadableSiblingPreservesReceipt(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	prepared := PrepareExecutionWithSafety(ctx, selection, runtime)
-	receipt, err := ExecutePreparedTargets(ctx, prepared, ExecutionOptions{Output: io.Discard, ErrorOutput: io.Discard, ReceiptKeyFn: func(item types.DebrisInfo) string { return item.Path }}, nil)
+	prepared := executor.PrepareExecutionWithSafety(ctx, selection, runtime)
+	receipt, err := executor.ExecutePreparedTargets(ctx, prepared, executor.ExecutionOptions{Output: io.Discard, ErrorOutput: io.Discard, ReceiptKeyFn: func(item types.DebrisInfo) string { return item.Path }}, nil)
 	if !errors.Is(err, os.ErrPermission) || len(receipt.Units) != 1 {
 		t.Fatalf("receipt=%+v err=%v; want one unit and a permission error", receipt, err)
 	}
 	unit := receipt.Units[0]
 	// The unreadable bytes are absent from both approximate measurements.
-	if unit.State != ExecutionPartial || !unit.MutationAttempted || unit.PhysicalRemoved || unit.FreedBytes != 1000 || unit.ResidualBytes != 0 || receipt.FreedBytes != 1000 || !errors.Is(unit.FailureCause, os.ErrPermission) {
+	if unit.State != executor.ExecutionPartial || !unit.MutationAttempted || unit.PhysicalRemoved || unit.FreedBytes != 1000 || unit.ResidualBytes != 0 || receipt.FreedBytes != 1000 || !errors.Is(unit.FailureCause, os.ErrPermission) {
 		t.Errorf("partial removal receipt=%+v batch freed=%d", unit, receipt.FreedBytes)
 	}
 	if reasons := cleanjson.CleanJSONReceiptStateReasons(string(unit.State), unit.PhysicalRemoved, unit.FreedBytes, unit.CommandFallbackPathRemoval, unit.FailureCause, func(err error) bool { return errors.Is(err, cleaner.ErrCleanupTargetYoungerThanMinimumAge) }); !slices.Contains(reasons, "partial_failure") {
