@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -282,6 +283,13 @@ func TestHomebrewInstallContract(t *testing.T) {
 }
 
 func TestHomebrewReleaseContract(t *testing.T) {
+	workflow := readWorkflowContract(t, ".github/workflows/release.yml")
+	publish := workflow.Jobs["goreleaser"]
+	if !slices.Contains(jobNeeds(t, publish), "verify") {
+		t.Error("release and tap publication must depend on verification")
+	}
+	assertRequiredJob(t, "goreleaser", publish)
+	releaseStageIndexes(t, publish)
 	goreleaser := readRepoFile(t, ".goreleaser.yaml")
 	if strings.Contains(goreleaser, "homebrew_casks:") {
 		t.Error("GoReleaser must publish a Formula via brews, not a cask block")
@@ -333,12 +341,17 @@ func TestHomebrewSecurityAuditContract(t *testing.T) {
 }
 
 func TestHomebrewPourWorkflowContract(t *testing.T) {
+	workflow := readWorkflowContract(t, ".github/workflows/release.yml")
+	pour := workflow.Jobs["brew-pour"]
+	if !slices.Contains(jobNeeds(t, pour), "goreleaser") || !slices.Contains(jobNeeds(t, pour), "verify") {
+		t.Error("Homebrew pour must depend on both verification and publication")
+	}
+	assertRequiredJob(t, "brew-pour", pour)
 	releaseWorkflow := readRepoFile(t, filepath.Join(".github", "workflows", "release.yml"))
 	for _, required := range []string{
 		"HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}",
 		"macos-latest",
 		"pour-homebrew-formula.sh",
-		"needs: goreleaser",
 	} {
 		if !strings.Contains(releaseWorkflow, required) {
 			t.Errorf("release workflow Homebrew pour contract is missing %q", required)
@@ -356,6 +369,7 @@ func TestHomebrewPourWorkflowContract(t *testing.T) {
 }
 
 func TestReleaseSupplyChainContract(t *testing.T) {
+	assertReleaseVerificationGraph(t)
 	goreleaser := readRepoFile(t, ".goreleaser.yaml")
 	for _, required := range []string{
 		"sboms:",
@@ -388,18 +402,6 @@ func TestReleaseSupplyChainContract(t *testing.T) {
 	}
 	if strings.Contains(releaseWorkflow, "continue-on-error:") {
 		t.Error("release workflow must fail closed: a failed SBOM/attestation step must fail the release")
-	}
-
-	// Attestations must happen after artifacts exist and inside the goreleaser
-	// job, before brew-pour may treat the release as trusted.
-	goreleaserStep := strings.Index(releaseWorkflow, "goreleaser/goreleaser-action")
-	attestStep := strings.Index(releaseWorkflow, "actions/attest-build-provenance")
-	publishStep := strings.Index(releaseWorkflow, "gh release edit")
-	brewPourJob := strings.Index(releaseWorkflow, "brew-pour:")
-	tapStep := strings.Index(releaseWorkflow, "publish-homebrew-formula.sh")
-	if goreleaserStep < 0 || attestStep < 0 || publishStep < 0 || tapStep < 0 || brewPourJob < 0 ||
-		!(goreleaserStep < attestStep && attestStep < publishStep && publishStep < tapStep && tapStep < brewPourJob) {
-		t.Error("attest, publish, then tap must run after goreleaser creates a draft and before brew-pour")
 	}
 
 	install := readRepoFile(t, filepath.Join("docs", "INSTALL.md"))
