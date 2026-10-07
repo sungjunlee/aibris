@@ -438,6 +438,88 @@ func TestCleanJSONCLIContractGuidedDefaultsDoNotPrompt(t *testing.T) {
 	}
 }
 
+// Exercise the domain policy through the CLI plan, then the receipt projection.
+func TestCleanJSONCLIContractPreservesUnregisteredActivityReason(t *testing.T) {
+	binary := buildCLIContractBinary(t)
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	oldest := time.Now().Add(-10 * 24 * time.Hour)
+	items := make([]types.DebrisInfo, 0, 4)
+	for i, id := range []string{"readerless-newer-1", "readerless-newer-2", "readerless-newer-3", "readerless-oldest"} {
+		path := createCleanCodexGitWorktree(t, home, id)
+		activity := oldest.Add(time.Duration(3-i) * 24 * time.Hour)
+		if err := os.Chtimes(path, activity, activity); err != nil {
+			t.Fatal(err)
+		}
+		items = append(items, types.DebrisInfo{
+			Tool: types.ToolClaude, Category: types.CategoryWorktree,
+			ID: id, Path: path, Project: "readerless-project",
+			Size: 512 * 1024 * 1024, ModTime: activity, Status: types.WorktreeActive,
+		})
+	}
+	// Clean Git evidence and old mtimes leave only the missing reader reason
+	// on the fourth unit, outside the three retained repository members.
+	runGitFixture(t, filepath.Join(home, "repositories", "repo"), "reflog", "expire", "--expire=now", "--all")
+	saveCleanCacheFixture(t, home, items)
+	stdout, stderr, err := runCleanJSONProcess(t, binary, home, "clean", "--guide", "--dry-run", "--json")
+	if err != nil || stderr != "" {
+		t.Fatalf("guided JSON: err=%v stderr=%q stdout=%s", err, stderr, stdout)
+	}
+	var document cleanjson.Plan
+	if err := json.Unmarshal([]byte(stdout), &document); err != nil {
+		t.Fatal(err)
+	}
+	checkRows := func(label string, rows []cleanjson.Row) {
+		t.Helper()
+		count := 0
+		for _, row := range rows {
+			if slices.Contains(row.ReasonCodes, "retained_per_repository") {
+				continue
+			}
+			count++
+			if row.PolicyDecision != cleanjson.PolicyReviewable || row.Decision != cleanjson.DecisionReviewable ||
+				!slices.Contains(row.ReasonCodes, "activity_source_not_registered") || slices.Contains(row.ReasonCodes, "policy_decision") {
+				t.Errorf("%s row = %+v; want reviewable with activity_source_not_registered", label, row)
+			}
+		}
+		if count != 1 {
+			t.Errorf("%s non-retained rows = %d; want 1", label, count)
+		}
+	}
+	checkRows("plan", document.Rows)
+	encoded, err := json.Marshal(cleanjson.NewReceipt(document, false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var receipt cleanjson.Receipt
+	if err := json.Unmarshal(encoded, &receipt); err != nil {
+		t.Fatal(err)
+	}
+	checkRows("receipt plan", receipt.Plan.Rows)
+	count := 0
+	for _, target := range receipt.PhysicalTargets {
+		if slices.Contains(target.ReasonCodes, "retained_per_repository") {
+			continue
+		}
+		count++
+		if target.Decision != cleanjson.DecisionReviewable || target.Requested ||
+			!slices.Contains(target.ReasonCodes, "activity_source_not_registered") || slices.Contains(target.ReasonCodes, "policy_decision") {
+			t.Errorf("receipt target = %+v; want non-requested reviewable with activity_source_not_registered", target)
+		}
+	}
+	if count != 1 || document.Totals.Selected != 0 {
+		t.Errorf("receipt non-retained targets=%d plan selected=%d; want 1 and 0", count, document.Totals.Selected)
+	}
+	if strings.Contains(stdout, home) || strings.Contains(string(encoded), home) || strings.Contains(stdout, "readerless-project") {
+		t.Fatal("plan or receipt leaked fixture metadata")
+	}
+	for _, item := range items {
+		if _, err := os.Stat(filepath.Join(item.Path, ".git")); err != nil {
+			t.Fatalf("dry-run changed worktree: %v", err)
+		}
+	}
+}
+
 func TestCleanJSONCLIContractExecutionRejectsExplicitGuideBeforeScan(t *testing.T) {
 	binary := buildCLIContractBinary(t)
 	home := t.TempDir()
