@@ -50,6 +50,16 @@ by category
   node_modules     2    20.0 KB
 ```
 
+Sizes are apparent bytes: file lengths, with sparse files counted at their
+logical length and hardlinks counted per path. Root symlinks are followed;
+nested symlinks contribute only the link's own length. Directory metadata is
+excluded.
+Scan totals, strip estimates, and size thresholds use this same accounting.
+`physical_total_bytes` counts each outer owner once, rather than measuring
+allocated blocks or guaranteeing disk space reclaimed. Unix scans previously
+using `du` can show larger sparse/hardlink sizes and smaller metadata-heavy
+trees; old scan caches are rejected and rebuilt. JSON field names stay the same.
+
 `clean --dry-run` lists every target with its size, path, and the reason it
 was chosen, plus everything it kept and why. Drop `--dry-run` to run the same
 plan; aibris asks `Proceed? [y/N]` before deleting anything.

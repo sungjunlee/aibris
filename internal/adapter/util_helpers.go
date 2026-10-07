@@ -3,18 +3,14 @@ package adapter
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
-	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 )
 
-// dirActivity reports the total file bytes and the newest modification time
-// observed anywhere in a tree. Err is non-nil if any activity evidence is
+// dirActivity reports apparent bytes (the DebrisInfo.Size contract) and the
+// newest modification time observed anywhere in a tree. Err is non-nil if any activity evidence is
 // missing; Size and NewestModTime remain partial, report-only observations.
 type dirActivity struct {
 	Size          int64
@@ -31,8 +27,10 @@ type dirActivityAccumulator struct {
 	err              error
 }
 
-// estimateDirSize returns the total file size in bytes for the given path.
-// For regular files it returns the file's size directly.
+// estimateDirSize returns apparent bytes under the DebrisInfo.Size contract:
+// directories contribute no bytes and hardlinks count per path. Root symlinks
+// are followed; nested symlinks contribute their own length without following
+// their targets. Unreadable entries leave a partial report-only size.
 // For directories it uses a worker pool that walks top-level subdirectories
 // in parallel, with each worker traversing its assigned subtree sequentially
 // (no recursive goroutine spawning). This avoids the goroutine explosion that
@@ -50,6 +48,8 @@ func estimateDirActivityWithOptions(ctx context.Context, path string, trackModTi
 		return dirActivity{Err: err}
 	}
 
+	// Cache discovery accepts directory symlinks. Observe the same root target
+	// so size and safety-critical activity evidence describe its contents.
 	info, err := os.Stat(path)
 	if err != nil {
 		return dirActivity{Err: err}
@@ -129,15 +129,13 @@ schedule:
 	return result
 }
 
+// estimateDirSizes measures each target independently with the same walker.
+// du is intentionally not used: portable du flags cannot match apparent bytes
+// with per-path hardlink counting and no directory metadata bytes.
 func estimateDirSizes(ctx context.Context, paths []string) map[string]int64 {
 	sizes := make(map[string]int64, len(paths))
 	if len(paths) == 0 || ctx.Err() != nil {
 		return sizes
-	}
-	if runtime.GOOS != "windows" {
-		if duSizes, ok := estimateDirSizesWithDU(ctx, paths); ok {
-			return duSizes
-		}
 	}
 	for _, path := range paths {
 		if ctx.Err() != nil {
@@ -146,42 +144,6 @@ func estimateDirSizes(ctx context.Context, paths []string) map[string]int64 {
 		sizes[path] = estimateDirSize(ctx, path)
 	}
 	return sizes
-}
-
-func estimateDirSizesWithDU(ctx context.Context, paths []string) (map[string]int64, bool) {
-	if _, err := exec.LookPath("du"); err != nil {
-		return nil, false
-	}
-	args := append([]string{"-sk"}, paths...)
-	output, err := exec.CommandContext(ctx, "du", args...).Output()
-	if err != nil {
-		return nil, false
-	}
-	sizes := make(map[string]int64, len(paths))
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-	for _, line := range lines {
-		sizeField, pathField, ok := strings.Cut(line, "\t")
-		if !ok {
-			fields := strings.Fields(line)
-			if len(fields) < 2 {
-				return nil, false
-			}
-			sizeField = fields[0]
-			pathField = strings.TrimSpace(strings.TrimPrefix(line, sizeField))
-		}
-		if pathField == "" {
-			return nil, false
-		}
-		kb, err := strconv.ParseInt(sizeField, 10, 64)
-		if err != nil {
-			return nil, false
-		}
-		sizes[pathField] = kb * 1024
-	}
-	if len(sizes) != len(paths) {
-		return nil, false
-	}
-	return sizes, true
 }
 
 // walkDirSequential walks a directory tree sequentially within a single
