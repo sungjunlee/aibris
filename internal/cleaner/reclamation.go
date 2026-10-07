@@ -6,7 +6,7 @@ import (
 	"github.com/sungjunlee/aibris/internal/adapter"
 )
 
-func observedSize(ctx context.Context, path string) int64 {
+var observedSize = func(ctx context.Context, path string) int64 {
 	return adapter.EstimateDirSize(ctx, path)
 }
 
