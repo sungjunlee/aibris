@@ -256,6 +256,8 @@ var supportedReasonCodes = func() map[string]struct{} {
 		"removed":                          {},
 		"partial_failure":                  {},
 		"execution_failed":                 {},
+		"cleanup_recipe_changed":           {},
+		"worktree_evidence_changed":        {},
 		"cancelled":                        {},
 		"physical_owner_present":           {},
 		"no_bytes_reclaimed":               {},

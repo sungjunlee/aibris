@@ -681,6 +681,17 @@ and path-free; external command output is never copied into JSON. A
 cleanup command reached its safe path-removal fallback. `no_bytes_reclaimed`
 records a successful command that did not shrink the container.
 
+The mutation-boundary refusal codes are also in the supported reason catalog:
+
+| Code | Meaning |
+| ---- | ------- |
+| `cleanup_recipe_changed` | The current cleanup recipe differs from the prepared recipe; execution is refused before mutation. |
+| `worktree_evidence_changed` | Current worktree Git evidence differs from the prepared evidence; execution is refused before mutation. |
+
+These codes preserve the specific refusal instead of using `execution_failed`.
+Re-scan and review a new plan before retrying; `--force` does not bypass the
+revalidation.
+
 Every receipt carries a path-free top-level `post_clean` object. Its `volume`
 uses the same shape as the scan document's `volume` (omitted when volume
 inspection is unavailable), so agents can see post-cleanup pressure on the

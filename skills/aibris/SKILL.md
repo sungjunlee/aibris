@@ -256,6 +256,16 @@ aibris clean --no-guide --json --include-paths --root ~/path/to/project --catego
 aibris clean --no-guide --json --include-paths --force --root ~/path/to/project --category node_modules --age 7d
 ```
 
+JSON receipt의 mutation-boundary refusal reason code는 다음과 같다.
+두 code 모두 supported reason catalog에 포함되며 `execution_failed`와
+구분한다. 새로 scan하고 plan을 검토한 뒤 재시도한다. `--force`로
+revalidation을 건너뛸 수 없다.
+
+| Code | 의미 |
+| ---- | ---- |
+| `cleanup_recipe_changed` | 현재 cleanup recipe가 준비된 recipe와 달라 mutation 전에 실행을 거부했다. |
+| `worktree_evidence_changed` | 현재 worktree Git evidence가 준비된 evidence와 달라 mutation 전에 실행을 거부했다. |
+
 JSON receipt의 `post_clean.snapshot_thinning_recommended`가 true이면
 정리가 APFS snapshot을 이미 줄인 것이 아니다. 사용자에게 물은 뒤
 별도 명령으로만 진행한다:
