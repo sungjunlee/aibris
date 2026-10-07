@@ -122,7 +122,7 @@ func runCleanCommand(cmd *cobra.Command) {
 	var guidedStatePtr *guidedCleanState
 	if experience == cleanExperienceGuided {
 		guidedState.Reason = reason
-		final, aborted, err := promptGuidedCleanStateForFiles(os.Stdin, os.Stdout, guidedState)
+		final, aborted, err := promptGuidedCleanStateForFiles(ctx, os.Stdin, os.Stdout, guidedState)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
@@ -198,7 +198,12 @@ func runCleanCommand(cmd *cobra.Command) {
 
 	if !opts.Force {
 		printCleanPlanWithComponents(targets, overlapSelection.Components, cleanPlanModeDelete)
-		if !confirmCleanExecution() {
+		approved, err := confirmCleanExecution(ctx, os.Stdin, os.Stdout)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		if !approved {
 			return
 		}
 	}

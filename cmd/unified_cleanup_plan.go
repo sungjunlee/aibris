@@ -123,8 +123,8 @@ func cleanupPlanPolicyDecisionForClass(class DecisionClass) CleanupPlanPolicyDec
 	}
 }
 
-func promptUnifiedCleanupReview(input io.Reader, output io.Writer, plan UnifiedCleanupPlan, mode cleanupReviewMode, width int) (UnifiedCleanupPlan, bool, error) {
-	return cleaner.PromptUnifiedCleanupReview(input, output, plan, mode, width)
+func promptUnifiedCleanupReview(ctx context.Context, input io.Reader, output io.Writer, plan UnifiedCleanupPlan, mode cleanupReviewMode, width int) (UnifiedCleanupPlan, bool, error) {
+	return cleaner.PromptUnifiedCleanupReview(ctx, input, output, plan, mode, width)
 }
 
 func renderUnifiedCleanupReview(output io.Writer, plan UnifiedCleanupPlan, status string, mode cleanupReviewMode, width int) {

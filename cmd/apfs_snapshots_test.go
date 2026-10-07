@@ -81,7 +81,7 @@ func TestRunAPFSSnapshotActionDryRunListsOnceWithoutThinning(t *testing.T) {
 		return nil
 	}
 	output := captureOutput(func() {
-		if err := runAPFSSnapshotAction(true, true); err != nil {
+		if err := runAPFSSnapshotAction(t.Context(), true, true); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -121,7 +121,7 @@ func TestRunAPFSSnapshotActionForceRepeatsUntilRemainingZero(t *testing.T) {
 		}, nil
 	}
 	output := captureOutput(func() {
-		if err := runAPFSSnapshotAction(false, true); err != nil {
+		if err := runAPFSSnapshotAction(t.Context(), false, true); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -166,7 +166,7 @@ func TestRunAPFSSnapshotActionForceRepeatsWhenFreeSpaceGrows(t *testing.T) {
 		}, nil
 	}
 	output := captureOutput(func() {
-		if err := runAPFSSnapshotAction(false, true); err != nil {
+		if err := runAPFSSnapshotAction(t.Context(), false, true); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -207,7 +207,7 @@ func TestRunAPFSSnapshotActionForceStopsWhenFreeSpaceStopsChanging(t *testing.T)
 		}, nil
 	}
 	output := captureOutput(func() {
-		if err := runAPFSSnapshotAction(false, true); err != nil {
+		if err := runAPFSSnapshotAction(t.Context(), false, true); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -237,7 +237,7 @@ func TestRunAPFSSnapshotActionForceStopsWhenCountAndFreeUnchanged(t *testing.T) 
 		}, nil
 	}
 	output := captureOutput(func() {
-		if err := runAPFSSnapshotAction(false, true); err != nil {
+		if err := runAPFSSnapshotAction(t.Context(), false, true); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -274,7 +274,7 @@ func TestRunAPFSSnapshotActionStopsWhenRemainingListFails(t *testing.T) {
 		}, nil
 	}
 	stdout, stderr := captureStdStreams(func() {
-		if err := runAPFSSnapshotAction(false, true); err != nil {
+		if err := runAPFSSnapshotAction(t.Context(), false, true); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -332,7 +332,7 @@ func TestRunAPFSSnapshotActionUnavailableOffDarwin(t *testing.T) {
 	if runtime.GOOS == "darwin" {
 		t.Skip("darwin uses the injected tmutil path")
 	}
-	if err := runAPFSSnapshotAction(true, true); err == nil || !strings.Contains(err.Error(), "only available on macOS") {
+	if err := runAPFSSnapshotAction(t.Context(), true, true); err == nil || !strings.Contains(err.Error(), "only available on macOS") {
 		t.Fatalf("non-macOS = %v; want unavailable", err)
 	}
 }

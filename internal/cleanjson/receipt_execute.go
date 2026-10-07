@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/confirminput"
 	"github.com/sungjunlee/aibris/internal/scanreport"
 	"github.com/sungjunlee/aibris/internal/types"
 	"github.com/sungjunlee/aibris/internal/worktree"
@@ -421,31 +422,8 @@ func scanInput(ctx context.Context, scanner *bufio.Scanner) (line string, ok, ca
 	if scanner == nil {
 		return "", false, true
 	}
-	result := make(chan struct {
-		line string
-		ok   bool
-	}, 1)
-	go func() {
-		if scanner.Scan() {
-			result <- struct {
-				line string
-				ok   bool
-			}{line: scanner.Text(), ok: true}
-			return
-		}
-		result <- struct {
-			line string
-			ok   bool
-		}{ok: false}
-	}()
-	select {
-	case <-ctx.Done():
-		// A scanner read may still be running in the goroutine; callers must
-		// return after cancelled=true and never reuse this scanner.
-		return "", false, true
-	case value := <-result:
-		return value.line, value.ok, false
-	}
+	line, ok, _ = confirminput.Scan(ctx, scanner)
+	return line, ok, ctx.Err() != nil
 }
 
 func markPreparedReceiptTargets(

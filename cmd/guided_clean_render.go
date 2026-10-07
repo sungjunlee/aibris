@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/confirminput"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -24,19 +26,19 @@ const (
 
 // promptGuidedCleanStateForFiles returns the accepted selection state so the
 // unified cleanup plan can reuse the same policy decisions and toggles.
-func promptGuidedCleanStateForFiles(input *os.File, output *os.File, state guidedCleanState) (guidedCleanState, bool, error) {
+func promptGuidedCleanStateForFiles(ctx context.Context, input *os.File, output *os.File, state guidedCleanState) (guidedCleanState, bool, error) {
 	if isTerminal(input) && isTerminal(output) {
-		return promptGuidedCleanStateWithMode(input, output, state, guidedCleanPromptTTY)
+		return promptGuidedCleanStateWithMode(ctx, input, output, state, guidedCleanPromptTTY)
 	}
-	return promptGuidedCleanStateWithMode(input, output, state, guidedCleanPromptText)
+	return promptGuidedCleanStateWithMode(ctx, input, output, state, guidedCleanPromptText)
 }
 
-func promptGuidedClean(input io.Reader, output io.Writer, state guidedCleanState) ([]types.DebrisInfo, bool, error) {
-	return promptGuidedCleanWithMode(input, output, state, guidedCleanPromptText)
+func promptGuidedClean(ctx context.Context, input io.Reader, output io.Writer, state guidedCleanState) ([]types.DebrisInfo, bool, error) {
+	return promptGuidedCleanWithMode(ctx, input, output, state, guidedCleanPromptText)
 }
 
-func promptGuidedCleanWithMode(input io.Reader, output io.Writer, state guidedCleanState, mode guidedCleanPromptMode) ([]types.DebrisInfo, bool, error) {
-	final, aborted, err := promptGuidedCleanStateWithMode(input, output, state, mode)
+func promptGuidedCleanWithMode(ctx context.Context, input io.Reader, output io.Writer, state guidedCleanState, mode guidedCleanPromptMode) ([]types.DebrisInfo, bool, error) {
+	final, aborted, err := promptGuidedCleanStateWithMode(ctx, input, output, state, mode)
 	if err != nil || aborted {
 		return nil, aborted, err
 	}
@@ -46,19 +48,20 @@ func promptGuidedCleanWithMode(input io.Reader, output io.Writer, state guidedCl
 // promptGuidedCleanStateWithMode returns the accepted selection state so the
 // unified cleanup plan can reuse the same policy decisions and toggles across
 // every category instead of a separate guided-then-classic handoff.
-func promptGuidedCleanStateWithMode(input io.Reader, output io.Writer, state guidedCleanState, mode guidedCleanPromptMode) (guidedCleanState, bool, error) {
+func promptGuidedCleanStateWithMode(ctx context.Context, input io.Reader, output io.Writer, state guidedCleanState, mode guidedCleanPromptMode) (guidedCleanState, bool, error) {
 	scanner := bufio.NewScanner(input)
 	status := ""
 	for {
 		renderGuidedClean(output, state, status, mode)
 		status = ""
-		if !scanner.Scan() {
-			if err := scanner.Err(); err != nil {
-				return guidedCleanState{}, false, err
-			}
+		line, ok, err := confirminput.Scan(ctx, scanner)
+		if err != nil {
+			return state, false, err
+		}
+		if !ok {
 			return state, false, nil
 		}
-		line := strings.TrimSpace(scanner.Text())
+		line = strings.TrimSpace(line)
 		if line == "" {
 			return state, false, nil
 		}
