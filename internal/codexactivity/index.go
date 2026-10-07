@@ -1,12 +1,9 @@
 package codexactivity
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -15,11 +12,12 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/codexhome"
+	"github.com/sungjunlee/aibris/internal/codexsession"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
 const (
-	CacheSchemaVersion = 2
+	CacheSchemaVersion = 3
 	Freshness          = 15 * time.Minute
 
 	SourceCache       = "cache"
@@ -240,7 +238,7 @@ func findSessionFiles(ctx context.Context, roots []string) ([]sessionFileInfo, e
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".jsonl") {
+			if !entry.Type().IsRegular() || !strings.EqualFold(filepath.Ext(entry.Name()), ".jsonl") {
 				return nil
 			}
 			info, err := entry.Info()
@@ -261,6 +259,9 @@ func findSessionFiles(ctx context.Context, roots []string) ([]sessionFileInfo, e
 }
 
 func appendSessionFileInfo(files []sessionFileInfo, seen map[string]bool, path string, info fs.FileInfo) []sessionFileInfo {
+	if !info.Mode().IsRegular() {
+		return files
+	}
 	cleanPath := filepath.Clean(path)
 	if seen[cleanPath] {
 		return files
@@ -273,58 +274,49 @@ func appendSessionFileInfo(files []sessionFileInfo, seen map[string]bool, path s
 	})
 }
 
-func readSessionFileRecord(file sessionFileInfo) (FileRecord, error) {
-	record := FileRecord{
-		Path:    file.path,
-		Home:    file.home,
-		ModTime: file.modTime,
-		Size:    file.size,
+func readSessionFileRecord(ctx context.Context, file sessionFileInfo) (FileRecord, error) {
+	record := FileRecord{Path: file.path, Home: file.home, ModTime: file.modTime, Size: file.size}
+	if err := ctx.Err(); err != nil {
+		return record, err
+	}
+	before, err := os.Lstat(file.path)
+	if err != nil {
+		return record, err
+	}
+	if !before.Mode().IsRegular() {
+		return record, nil
 	}
 	f, err := os.Open(file.path)
 	if err != nil {
 		return record, err
 	}
-	defer f.Close()
-
-	reader := bufio.NewReader(f)
-	line, err := reader.ReadString('\n')
-	if err != nil && !errors.Is(err, io.EOF) {
+	defer func() { _ = f.Close() }()
+	opened, err := f.Stat()
+	if err != nil {
 		return record, err
 	}
-	line = strings.TrimSpace(line)
-	if line == "" {
-		return record, nil
-	}
-
-	var meta struct {
-		Timestamp string `json:"timestamp"`
-		Type      string `json:"type"`
-		Payload   struct {
-			CWD       string `json:"cwd"`
-			SessionID string `json:"session_id"`
-			ID        string `json:"id"`
-			ThreadID  string `json:"thread_id"`
-		} `json:"payload"`
-	}
-	if err := json.Unmarshal([]byte(line), &meta); err != nil {
-		return record, nil
-	}
-	if meta.Type != "session_meta" {
-		return record, nil
-	}
-	sessionID := firstNonEmpty(meta.Payload.SessionID, meta.Payload.ID, meta.Payload.ThreadID)
-	if sessionID == "" || meta.Timestamp == "" || meta.Payload.CWD == "" {
-		return record, nil
-	}
-	timestamp, err := time.Parse(time.RFC3339Nano, meta.Timestamp)
+	after, err := os.Lstat(file.path)
 	if err != nil {
-		return record, nil
+		return record, err
 	}
-	worktreeID, project, ok := WorktreeFromCWD(meta.Payload.CWD, file.home)
+	if !opened.Mode().IsRegular() || !after.Mode().IsRegular() || !os.SameFile(before, opened) || !os.SameFile(opened, after) {
+		return record, fmt.Errorf("%w: session leaf changed while opening", ErrUnavailable)
+	}
+	metadata, err := codexsession.ReadFirstMetadataFrom(ctx, f)
+	if err != nil {
+		return record, err
+	}
+	if !metadata.HasActivityFields() {
+		return record, &codexsession.ParseError{Kind: codexsession.ErrorInvalidField}
+	}
+	timestamp, err := time.Parse(time.RFC3339Nano, metadata.Timestamp)
+	if err != nil {
+		return record, &codexsession.ParseError{Kind: codexsession.ErrorInvalidField}
+	}
+	worktreeID, project, ok := WorktreeFromCWD(metadata.CWD, file.home)
 	if !ok {
 		return record, nil
 	}
-
 	record.Valid = true
 	record.WorktreeID = worktreeID
 	record.Project = project
@@ -369,13 +361,4 @@ func isCodexActivityWorktreeRoot(name string) bool {
 		name == "worktrees" ||
 		strings.HasPrefix(name, "worktree-") ||
 		strings.HasPrefix(name, "worktrees-")
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if value != "" {
-			return value
-		}
-	}
-	return ""
 }

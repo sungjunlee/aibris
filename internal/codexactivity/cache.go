@@ -119,7 +119,7 @@ func Refresh(ctx context.Context, opts IndexOptions, previous Cache, previousOK 
 					continue
 				}
 			}
-			record, err := readSessionFileRecord(file)
+			record, err := readSessionFileRecord(ctx, file)
 			if err != nil {
 				coverage.Available = false
 				break
