@@ -27,7 +27,7 @@ func guidedIdentityFixture(t *testing.T) (UnifiedCleanupPlan, []types.DebrisInfo
 }
 
 func TestGuidedReceiptProductionRejectsPreparedIdentity(t *testing.T) {
-	for _, name := range []string{"duplicate", "duplicate physical identity", "duplicate physical component", "missing"} {
+	for _, name := range []string{"duplicate", "duplicate physical identity", "duplicate physical component", "missing", "missing bound key"} {
 		t.Run(name, func(t *testing.T) {
 			plan, items, prepared := guidedIdentityFixture(t)
 			switch name {
@@ -36,11 +36,15 @@ func TestGuidedReceiptProductionRejectsPreparedIdentity(t *testing.T) {
 			case "duplicate physical identity":
 				other := prepared[0]
 				other.Item.ID = "other-logical-row"
+				other.ReceiptTargetKey = cleanJSONReceiptItemKey(other.Item)
 				prepared = append(prepared, other)
 			case "duplicate physical component":
 				plan.Components = append(plan.Components, plan.Components[0])
 			case "missing":
 				prepared[0].Item.Path = filepath.Join(t.TempDir(), "unplanned", "node_modules")
+				prepared[0].ReceiptTargetKey = cleanJSONReceiptItemKey(prepared[0].Item)
+			case "missing bound key":
+				prepared[0].ReceiptTargetKey = ""
 			}
 			_, err := newGuidedCleanExecutionReceipt(scanSource{Kind: scanSourceLive}, types.PruneOptions{}, nil, plan, cleanAudit{}, items, nil, prepared)
 			if err == nil || !strings.Contains(err.Error(), "execution receipt invariant") {
@@ -82,7 +86,7 @@ func TestGuidedReceiptProductionRejectsExecutionIdentity(t *testing.T) {
 			case "skip and execution":
 				pending.observeInteractiveSkip(skip)
 			case "unknown skip":
-				skip.Target.Item.ID = "unknown"
+				skip.Target.ReceiptTargetKey = "unknown"
 				pending.observeInteractiveSkip(skip)
 			}
 			receipt, err := pending.finish(execution, executionErr)
@@ -137,6 +141,36 @@ func TestGuidedReceiptProductionDoesNotEmitInvalidIdentity(t *testing.T) {
 			contents, err := os.ReadFile(sink)
 			if err != nil || string(contents) != original {
 				t.Fatalf("invalid receipt overwrote sink: contents=%q error=%v", contents, err)
+			}
+		})
+	}
+}
+
+func TestPreparedExecutionRejectsInvalidIdentityBeforeMutation(t *testing.T) {
+	for _, mode := range []string{"missing", "duplicate"} {
+		t.Run(mode, func(t *testing.T) {
+			home := t.TempDir()
+			testutil.SetHome(t, home)
+			items := []types.DebrisInfo{
+				{Path: filepath.Join(home, "a", "node_modules"), Category: types.CategoryNodeModules, Tool: types.ToolNodeModules, Size: 8},
+				{Path: filepath.Join(home, "b", "node_modules"), Category: types.CategoryNodeModules, Tool: types.ToolNodeModules, Size: 8},
+			}
+			for _, item := range items {
+				writeJSONReceiptFixture(t, item.Path, "payload!")
+			}
+			_, _, _, prepared := preparedReceiptFixture(t, items, staticOverlapSafetyRuntime(nil, nil))
+			prepared[1].ReceiptTargetKey = ""
+			if mode == "duplicate" {
+				prepared[1].ReceiptTargetKey = prepared[0].ReceiptTargetKey
+			}
+			execution, err := executePreparedCleanTargets(context.Background(), prepared, quietActiveWorktreeExecutionOptions())
+			if err == nil || !strings.Contains(err.Error(), "execution receipt invariant") || len(execution.Units) != 0 {
+				t.Fatalf("invalid prepared identity accepted: %+v, %v", execution, err)
+			}
+			for _, item := range items {
+				if _, err := os.Lstat(item.Path); err != nil {
+					t.Fatalf("invalid prepared identity allowed mutation: %v", err)
+				}
 			}
 		})
 	}

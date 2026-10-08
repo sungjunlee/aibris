@@ -1,9 +1,6 @@
 package cmd
 
 import (
-	"context"
-
-	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/executor"
 	"github.com/sungjunlee/aibris/internal/types"
 	"github.com/sungjunlee/aibris/internal/worktree"
@@ -34,7 +31,7 @@ func failedPreparedCleanUnitReceipt(
 	target preparedCleanTarget,
 	err error,
 ) cleanUnitExecutionReceipt {
-	return executor.FailedPreparedCleanUnitReceipt(target.Item, target.Component, err, cleanJSONReceiptItemKey)
+	return executor.FailedPreparedCleanUnitReceipt(target, err)
 }
 
 func isActiveWorktreeTarget(target types.DebrisInfo) bool {
@@ -43,17 +40,4 @@ func isActiveWorktreeTarget(target types.DebrisInfo) bool {
 
 func pathDoesNotExist(path string) bool {
 	return worktree.PathDoesNotExist(path)
-}
-
-func executeActiveWorktreeUnit(
-	ctx context.Context,
-	target types.DebrisInfo,
-	component *cleanupOverlapComponent,
-	selected worktree.WorktreeCleanupUnit,
-	safety *cleanupMutationSafety,
-	snapshot *cleaner.CleanupTargetSnapshot,
-	opts activeWorktreeExecutionOptions,
-) (cleanUnitExecutionReceipt, error) {
-	opts.ReceiptKeyFn = cleanJSONReceiptItemKey
-	return executor.ExecuteActiveWorktreeUnit(ctx, target, component, selected, safety, snapshot, opts)
 }

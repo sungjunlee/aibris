@@ -40,7 +40,7 @@ func TestGuidedReceiptWireCompatibility(t *testing.T) {
 				components = append(components, SnapshotComponent{Key: key, Owner: item, Decision: DecisionSelected, AccountingBytes: 8, Rows: []SnapshotRow{{Item: item, Relation: RelationOwner, PolicyDecision: PolicyEligible, Decision: DecisionSelected, ReasonCodes: []string{"classic_eligible"}}}})
 				plan.Components = append(plan.Components, PlanComponent{Key: key, CanonicalPath: key, Owner: item, Selection: string(cleaner.CleanupPlanSelected)})
 				if i < 5 {
-					prepared = append(prepared, PreparedTarget{Item: item})
+					prepared = append(prepared, PreparedTarget{Item: item, ReceiptTargetKey: RowIdentityKey(item)})
 				}
 			}
 			pending, err := NewGuidedExecutionReceipt(Source{Kind: SourceLive}, types.PruneOptions{Age: 7 * 24 * time.Hour}, &GuidedPolicy{MinIdleAge: 24 * time.Hour}, PlanEvidence{ObservedAt: time.Date(2026, 10, 8, 0, 0, 0, 0, time.UTC)}, components, prepared, plan, includePaths)

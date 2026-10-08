@@ -16,7 +16,9 @@ import (
 
 // PreparedExecutionTarget holds all evidence needed to execute one cleanup target with safety.
 type PreparedExecutionTarget struct {
-	Item             types.DebrisInfo
+	Item types.DebrisInfo
+	// ReceiptTargetKey is bound before confirmation and never recomputed during execution.
+	ReceiptTargetKey string
 	Component        *cleaner.CleanupOverlapComponent
 	ActiveUnit       *worktree.WorktreeCleanupUnit
 	OrphanSnapshot   *worktree.OrphanedWorktreeSnapshot
@@ -33,7 +35,6 @@ type ExecutionOptions struct {
 	UserHomeDir    func() (string, error)
 	Output         io.Writer
 	ErrorOutput    io.Writer
-	ReceiptKeyFn   func(types.DebrisInfo) string
 }
 
 // DefaultExecutionOptions returns the default execution options.
@@ -78,6 +79,7 @@ func PrepareExecutionWithOptions(
 	for _, domainTarget := range domainPrepared {
 		entry := PreparedExecutionTarget{
 			Item:             domainTarget.Item,
+			ReceiptTargetKey: TargetIdentityKey(domainTarget.Item),
 			TargetSnapshot:   domainTarget.Snapshot,
 			PreparationError: domainTarget.PreparationError,
 		}
@@ -166,14 +168,19 @@ func ExecutePreparedTargets(
 
 	var result ExecutionReceipt
 	var errs []error
+	keys := make(map[string]bool, len(targets))
+	for _, target := range targets {
+		if target.ReceiptTargetKey == "" || keys[target.ReceiptTargetKey] {
+			return ExecutionReceipt{}, fmt.Errorf("execution receipt invariant: missing or duplicate prepared target identity %q", target.ReceiptTargetKey)
+		}
+		keys[target.ReceiptTargetKey] = true
+	}
 	for i, target := range targets {
 		if err := ctx.Err(); err != nil {
 			for _, remaining := range targets[i:] {
 				receipt := CancelledPreparedCleanUnitReceipt(
-					remaining.Item,
-					remaining.Component,
+					remaining,
 					fmt.Errorf("cleanup cancelled before component execution: %w", err),
-					opts.ReceiptKeyFn,
 				)
 				result.Units = append(result.Units, receipt)
 			}
@@ -185,48 +192,26 @@ func ExecutePreparedTargets(
 		switch {
 		case target.PreparationError != nil:
 			receipt = FailedPreparedCleanUnitReceipt(
-				target.Item,
-				target.Component,
+				target,
 				fmt.Errorf("preparing cleanup target: %w", target.PreparationError),
-				opts.ReceiptKeyFn,
 			)
 			err = errors.New(receipt.Error)
 		case target.MutationSafety == nil:
 			receipt = FailedPreparedCleanUnitReceipt(
-				target.Item,
-				target.Component,
+				target,
 				errors.New("overlap safety evidence unavailable"),
-				opts.ReceiptKeyFn,
 			)
 			err = errors.New(receipt.Error)
 		case !worktree.IsActiveWorktreeTarget(target.Item):
-			receipt, err = ExecutePathCleanupTarget(
-				ctx,
-				target.Item,
-				target.Component,
-				target.MutationSafety,
-				target.TargetSnapshot,
-				target.OrphanSnapshot,
-				opts,
-			)
+			receipt, err = ExecutePathCleanupTarget(ctx, target, opts)
 		case target.ActiveUnit == nil:
 			receipt = FailedPreparedCleanUnitReceipt(
-				target.Item,
-				target.Component,
+				target,
 				errors.New("active worktree evidence unavailable"),
-				opts.ReceiptKeyFn,
 			)
 			err = errors.New(receipt.Error)
 		default:
-			receipt, err = ExecuteActiveWorktreeUnit(
-				ctx,
-				target.Item,
-				target.Component,
-				*target.ActiveUnit,
-				target.MutationSafety,
-				target.TargetSnapshot,
-				opts,
-			)
+			receipt, err = ExecuteActiveWorktreeUnit(ctx, target, opts)
 		}
 
 		result.Units = append(result.Units, receipt)
@@ -243,10 +228,8 @@ func ExecutePreparedTargets(
 			if errors.Is(err, context.Canceled) {
 				for _, remaining := range targets[i+1:] {
 					cancelled := CancelledPreparedCleanUnitReceipt(
-						remaining.Item,
-						remaining.Component,
+						remaining,
 						fmt.Errorf("cleanup cancelled before component execution: %w", err),
-						opts.ReceiptKeyFn,
 					)
 					result.Units = append(result.Units, cancelled)
 				}
@@ -264,14 +247,12 @@ func ExecutePreparedTargets(
 // orphaned worktree owners that do not use Git-aware removal.
 func ExecutePathCleanupTarget(
 	ctx context.Context,
-	target types.DebrisInfo,
-	component *cleaner.CleanupOverlapComponent,
-	safety *cleaner.CleanupMutationSafety,
-	snapshot *cleaner.CleanupTargetSnapshot,
-	orphanSnapshot *worktree.OrphanedWorktreeSnapshot,
+	prepared PreparedExecutionTarget,
 	opts ExecutionOptions,
 ) (UnitExecutionReceipt, error) {
-	receipt := NewCleanUnitExecutionReceipt(target, component, safety, opts.ReceiptKeyFn)
+	target, component, safety := prepared.Item, prepared.Component, prepared.MutationSafety
+	snapshot, orphanSnapshot := prepared.TargetSnapshot, prepared.OrphanSnapshot
+	receipt := NewCleanUnitExecutionReceipt(prepared)
 	var validation cleaner.OverlapSafetyValidation
 	validated := false
 	freed, err := cleaner.ExecuteWithContextAndBarrierWithOutputAndObserver(
@@ -358,14 +339,12 @@ func ExecutePathCleanupTarget(
 // ExecuteActiveWorktreeUnit executes cleanup for an active worktree target.
 func ExecuteActiveWorktreeUnit(
 	ctx context.Context,
-	target types.DebrisInfo,
-	component *cleaner.CleanupOverlapComponent,
-	selected worktree.WorktreeCleanupUnit,
-	safety *cleaner.CleanupMutationSafety,
-	snapshot *cleaner.CleanupTargetSnapshot,
+	preparedTarget PreparedExecutionTarget,
 	opts ExecutionOptions,
 ) (UnitExecutionReceipt, error) {
-	receipt := NewCleanUnitExecutionReceipt(target, component, safety, opts.ReceiptKeyFn)
+	target, safety, snapshot := preparedTarget.Item, preparedTarget.MutationSafety, preparedTarget.TargetSnapshot
+	selected := *preparedTarget.ActiveUnit
+	receipt := NewCleanUnitExecutionReceipt(preparedTarget)
 	for _, member := range selected.Members {
 		receipt.Members = append(receipt.Members, MemberExecutionReceipt{WorktreePath: member.WorktreePath})
 	}

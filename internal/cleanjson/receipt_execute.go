@@ -348,7 +348,7 @@ func executeInteractiveReceipt(
 ) (Receipt, error) {
 	var executionErr error
 	for i, target := range prepared {
-		id := targetIDs[receiptItemKey(target.Item)]
+		id := targetIDs[target.ReceiptTargetKey]
 		if err := ctx.Err(); err != nil {
 			markReceiptTarget(&receipt, id, ReceiptStatusCancelled, true, "cancelled_during_confirmation")
 			markPreparedReceiptTargets(&receipt, prepared[i+1:], targetIDs, ReceiptStatusCancelled, true, "cancelled_during_confirmation")
@@ -431,7 +431,7 @@ func markPreparedReceiptTargets(
 	code string,
 ) {
 	for _, target := range prepared {
-		id := targetIDs[receiptItemKey(target.Item)]
+		id := targetIDs[target.ReceiptTargetKey]
 		markReceiptTarget(receipt, id, state, requested, code)
 	}
 }
@@ -480,7 +480,10 @@ func bindReceiptPreparedTargets(components []SnapshotComponent, prepared []Prepa
 	keys := make(map[string]bool, len(prepared))
 	indexes := make(map[int]bool, len(prepared))
 	for _, target := range prepared {
-		key := receiptItemKey(target.Item)
+		key := target.ReceiptTargetKey
+		if key == "" || key != receiptItemKey(target.Item) {
+			return nil, fmt.Errorf("execution receipt invariant: missing or changed prepared target identity %q", key)
+		}
 		index, ok := receiptTargetIndexForItem(components, target.Item)
 		if !ok {
 			return nil, fmt.Errorf("execution receipt invariant: no physical target ID for prepared target %q", key)
@@ -527,13 +530,13 @@ func orderReceiptPreparedTargets(
 		orders[key] = order
 	}
 	for _, target := range ordered {
-		key := receiptItemKey(target.Item)
+		key := target.ReceiptTargetKey
 		if _, ok := orders[key]; !ok {
 			return nil, fmt.Errorf("execution receipt invariant: no physical target ID for prepared target %q", key)
 		}
 	}
 	sort.SliceStable(ordered, func(i, j int) bool {
-		return orders[receiptItemKey(ordered[i].Item)] < orders[receiptItemKey(ordered[j].Item)]
+		return orders[ordered[i].ReceiptTargetKey] < orders[ordered[j].ReceiptTargetKey]
 	})
 	return ordered, nil
 }

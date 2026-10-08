@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/executor"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -95,13 +96,14 @@ type InteractiveSkipOutcome struct {
 // non-requested skip; cancellation reasons distinguish an unanswered prompt
 // from validation cancelled after approval.
 func (r *GuidedExecutionReceipt) ObserveInteractiveSkip(outcome InteractiveSkipOutcome) {
-	index, err := r.preparedIndex(receiptItemKey(outcome.Target.Item))
+	index, err := r.preparedIndex(outcome.Target.ReceiptTargetKey)
 	if err != nil {
 		r.identityErr = errors.Join(r.identityErr, err)
 		return
 	}
 	if r.dispositions[index] != "" {
 		r.identityErr = errors.Join(r.identityErr, fmt.Errorf("execution receipt invariant: duplicate guided disposition for target %q", r.prepared[index].Key))
+		markGuidedIdentityFailure(&r.receipt.PhysicalTargets[r.prepared[index].Index])
 		return
 	}
 	target := &r.receipt.PhysicalTargets[r.prepared[index].Index]
@@ -134,55 +136,81 @@ func (r *GuidedExecutionReceipt) preparedIndex(key string) (int, error) {
 	return 0, fmt.Errorf("execution receipt invariant: missing pre-execution target ID for target %q", key)
 }
 
-// Finish validates the complete guided outcome set before projecting results.
-// An identity failure returns no document, so it cannot under-report execution.
+// Finish projects every known outcome, even when a later identity error is
+// discovered. After mutation a receipt is evidence, so an invariant failure
+// must not erase it; affected targets fail explicitly and the error is returned.
 func (r *GuidedExecutionReceipt) Finish(
 	execution ExecutionReceipt,
 	executionErr error,
 	listSnapshots func() (int, error),
 ) (Receipt, error) {
-	if r.identityErr != nil {
-		return Receipt{}, errors.Join(executionErr, r.identityErr)
-	}
+	identityErr := r.identityErr
+	mutated := false
 	seen := make([]bool, len(r.prepared))
-	indexes := make([]int, len(execution.Units))
-	for i, unit := range execution.Units {
+	invalid := make([]bool, len(r.prepared))
+	for _, unit := range execution.Units {
+		mutated = mutated || unit.MutationAttempted || executor.CleanUnitHasMutation(unit)
 		index, err := r.preparedIndex(unit.ReceiptTargetKey)
 		if err != nil {
-			return Receipt{}, errors.Join(executionErr, err)
+			identityErr = errors.Join(identityErr, err)
+			continue
 		}
-		// The confirmation loop also emits a cancelled unit after observing
-		// cancellation. That unit supplies byte accounting for the same
-		// disposition; a decline or a second unit is never an execution result.
+		// A cancelled unit supplies byte accounting for the same cancellation
+		// disposition. A decline or a second unit is never an execution result.
 		disposition := r.dispositions[index]
 		matchingCancellation := disposition == ReceiptStatusCancelled && string(unit.State) == ReceiptStatusCancelled &&
 			!unit.MutationAttempted && !unit.PhysicalRemoved && unit.FreedBytes == 0
 		if seen[index] || disposition != "" && !matchingCancellation {
-			return Receipt{}, errors.Join(executionErr, fmt.Errorf("execution receipt invariant: duplicate guided outcome for target %q", unit.ReceiptTargetKey))
+			identityErr = errors.Join(identityErr, fmt.Errorf("execution receipt invariant: duplicate guided outcome for target %q", unit.ReceiptTargetKey))
+			invalid[index] = true
+		}
+		target := &r.receipt.PhysicalTargets[r.prepared[index].Index]
+		if !seen[index] {
+			target.State = string(unit.State)
+			target.Requested = unit.State == "removed" || unit.State == "partial" || unit.State == "failed" || unit.State == "cancelled"
+			target.PhysicalRemoved = unit.PhysicalRemoved
+			target.FreedBytes = max(unit.FreedBytes, 0)
+			target.ResidualBytes = residualBytesJSON(unit)
+		} else {
+			// Retain known mutations without double-counting duplicate outcomes.
+			target.PhysicalRemoved = target.PhysicalRemoved || unit.PhysicalRemoved
+			target.FreedBytes = max(target.FreedBytes, unit.FreedBytes)
+			if target.PhysicalRemoved {
+				target.ResidualBytes = nil
+			} else if target.ResidualBytes != nil {
+				*target.ResidualBytes = max(*target.ResidualBytes, unit.ResidualBytes)
+			}
 		}
 		seen[index] = true
-		indexes[i] = index
 	}
 	for i, target := range r.prepared {
 		if !seen[i] && r.dispositions[i] == "" {
-			return Receipt{}, errors.Join(executionErr, fmt.Errorf("execution receipt invariant: no guided outcome for prepared target %q", target.Key))
+			identityErr = errors.Join(identityErr, fmt.Errorf("execution receipt invariant: no guided outcome for prepared target %q", target.Key))
+		}
+		if invalid[i] {
+			markGuidedIdentityFailure(&r.receipt.PhysicalTargets[target.Index])
 		}
 	}
-	for i, unit := range execution.Units {
-		target := &r.receipt.PhysicalTargets[r.prepared[indexes[i]].Index]
-		target.State = string(unit.State)
-		target.Requested = unit.State == "removed" ||
-			unit.State == "partial" ||
-			unit.State == "failed" ||
-			unit.State == "cancelled"
-		target.PhysicalRemoved = unit.PhysicalRemoved
-		target.FreedBytes = unit.FreedBytes
-		if target.FreedBytes < 0 {
-			target.FreedBytes = 0
-		}
-		target.ResidualBytes = residualBytesJSON(unit)
+	if identityErr != nil && !mutated {
+		return Receipt{}, errors.Join(executionErr, identityErr)
 	}
-	return finalizeReceipt(r.receipt, listSnapshots)
+	receipt, finalizeErr := finalizeReceipt(r.receipt, listSnapshots)
+	if identityErr != nil && receipt.Status == ReceiptStatusSucceeded {
+		// An unknown extra outcome has no target that can safely be attributed.
+		// Keep recorded outcomes and still make the document report failure.
+		receipt.Status = ReceiptStatusPartialFailure
+	}
+	if identityErr != nil {
+		return receipt, errors.Join(executionErr, identityErr, finalizeErr)
+	}
+	// Valid guided receipts keep the caller responsible for execution errors.
+	return receipt, finalizeErr
+}
+
+func markGuidedIdentityFailure(target *ReceiptPhysicalTarget) {
+	target.State = ReceiptStatusFailed
+	target.Requested = true
+	target.ReasonCodes = uniqueReasonCodes(append(target.ReasonCodes, "execution_identity_invalid"))
 }
 
 // WriteGuidedExecutionReceipt finalizes and stores the guided execution

@@ -757,10 +757,14 @@ deletion. Guided receipts bind typed prepared targets to document-local IDs
 before mutation, using the same binding as JSON execution. Duplicate prepared
 identities, missing or unknown execution identities, duplicate outcomes, or a
 prepared target with neither an execution outcome nor an interactive disposition
-are explicit invariant errors. An identity error discovered after cleanup
-prevents receipt emission and leaves an existing receipt file untouched; it
-does not undo cleanup. Valid receipts keep schema version 1, the existing reason
-codes, and the same path redaction. Receipt status and exit status agree as
+are explicit invariant errors. Execution and interactive dispositions carry
+these captured identities without resolving target paths again. An identity
+error detected before any mutation may prevent receipt emission. After mutation,
+known outcomes are preserved in the receipt and the run exits non-zero. Missing
+outcomes fail as `execution_not_recorded`; conflicting outcomes fail as
+`execution_identity_invalid`, retaining known physical removal and byte
+accounting without counting duplicates twice. Valid receipts keep schema
+version 1, the existing reason codes, and the same path redaction. Receipt status and exit status agree as
 they do on the `--json` route: only a `succeeded` status exits zero. The one exception is the sink
 itself — a failure to write the file after a successful cleanup is reported on
 stderr and exits non-zero even though the document it could not store says

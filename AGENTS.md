@@ -123,7 +123,8 @@ These hold for every change. Breaking one is a bug even if tests pass.
   cannot authorize removal. Prepared typed evidence stays attached to the
   selected target through execution and receipt projection. Guided and JSON
   receipts share typed prepared-target identity binding; missing or duplicate
-  guided outcome identities are invariant errors and prevent receipt emission.
+  guided outcome identities are invariant errors. Errors found after mutation
+  preserve known outcomes in a failed receipt rather than suppressing it.
 - **Never trust inventory for authority.** A path from a scan or cache is a
   claim; execution re-derives whether it may be removed (see strip).
 - **Preview and confirm.** `--dry-run` never mutates. A real `clean` prompts;

@@ -936,7 +936,7 @@ func receiptExecutionReasonCodes(t *testing.T, home string) map[string]struct{} 
 				item := types.DebrisInfo{Path: filepath.Join(home, fmt.Sprintf("cache-%d", i))}
 				items = append(items, item)
 				components = append(components, SnapshotComponent{Key: mustPathKey(t, item.Path), Owner: item})
-				prepared = append(prepared, PreparedTarget{Item: item})
+				prepared = append(prepared, PreparedTarget{Item: item, ReceiptTargetKey: RowIdentityKey(item)})
 				document.PhysicalTargets = append(document.PhysicalTargets, PhysicalTarget{ID: fmt.Sprintf("target-%d", i), Decision: DecisionSelected})
 			}
 			if scenario.omitPrepared {

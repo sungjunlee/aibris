@@ -274,6 +274,7 @@ var supportedReasonCodes = func() map[string]struct{} {
 		"invalid_confirmation":             {},
 		"not_confirmed":                    {},
 		"execution_not_recorded":           {},
+		"execution_identity_invalid":       {},
 		"execution_state":                  {},
 	}
 	for _, code := range worktree.SupportedReasonCodes() {

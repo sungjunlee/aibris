@@ -43,7 +43,7 @@ func TestReceiptInvariantNoPreparedTargetID(t *testing.T) {
 
 	// Prepared target for path2 which has no component
 	prepared := []PreparedTarget{
-		{Item: types.DebrisInfo{Path: path2, ID: "orphan", Size: 50}},
+		{Item: types.DebrisInfo{Path: path2, ID: "orphan", Size: 50}, ReceiptTargetKey: RowIdentityKey(types.DebrisInfo{Path: path2, ID: "orphan", Size: 50})},
 	}
 
 	_, err := receiptTargetIDsForPrepared(components, prepared)
@@ -252,7 +252,7 @@ func TestReceiptTargetSetMismatchRefusesExecution(t *testing.T) {
 	selectedPhysicalTargets := func() []types.DebrisInfo {
 		return []types.DebrisInfo{item1, item2}
 	}
-	prepared := []PreparedTarget{{Item: item1}}
+	prepared := []PreparedTarget{{Item: item1, ReceiptTargetKey: RowIdentityKey(item1)}}
 
 	document := Plan{
 		PhysicalTargets: []PhysicalTarget{
@@ -327,7 +327,7 @@ func TestReceiptMinimumAgeErrorPreservesRetryability(t *testing.T) {
 		return err != nil && strings.Contains(err.Error(), "minimum age")
 	}
 
-	prepared := []PreparedTarget{{Item: item}}
+	prepared := []PreparedTarget{{Item: item, ReceiptTargetKey: RowIdentityKey(item)}}
 	targetIDs, err := receiptTargetIDsForPrepared(components, prepared)
 	if err != nil {
 		t.Fatal(err)
@@ -387,7 +387,7 @@ func TestReceiptPhysicalOwnerPresentWithZeroFreedBytes(t *testing.T) {
 		PhysicalTargets: []PhysicalTarget{{ID: "target-1", Decision: DecisionSelected, Bytes: 100}},
 	}
 
-	prepared := []PreparedTarget{{Item: item}}
+	prepared := []PreparedTarget{{Item: item, ReceiptTargetKey: RowIdentityKey(item)}}
 	targetIDs, err := receiptTargetIDsForPrepared(components, prepared)
 	if err != nil {
 		t.Fatal(err)

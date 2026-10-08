@@ -123,10 +123,10 @@ func SetActiveReceiptPhysicalState(receipt *UnitExecutionReceipt, selected workt
 }
 
 // FailedCleanUnitReceipt creates a failed receipt for a cleanup unit.
-func FailedCleanUnitReceipt(target types.DebrisInfo, members []worktree.GitWorktreeMember, err error, receiptKeyFn func(types.DebrisInfo) string) UnitExecutionReceipt {
+func FailedCleanUnitReceipt(target types.DebrisInfo, members []worktree.GitWorktreeMember, err error, receiptTargetKey string) UnitExecutionReceipt {
 	receipt := UnitExecutionReceipt{
 		Target:           target,
-		ReceiptTargetKey: receiptKeyFn(target),
+		ReceiptTargetKey: receiptTargetKey,
 		State:            ExecutionFailed,
 		Error:            err.Error(),
 	}
@@ -137,15 +137,11 @@ func FailedCleanUnitReceipt(target types.DebrisInfo, members []worktree.GitWorkt
 }
 
 // FailedPreparedCleanUnitReceipt creates a failed receipt for a prepared cleanup target.
-func FailedPreparedCleanUnitReceipt(
-	item types.DebrisInfo,
-	component *cleaner.CleanupOverlapComponent,
-	err error,
-	receiptKeyFn func(types.DebrisInfo) string,
-) UnitExecutionReceipt {
+func FailedPreparedCleanUnitReceipt(target PreparedExecutionTarget, err error) UnitExecutionReceipt {
+	item, component := target.Item, target.Component
 	receipt := UnitExecutionReceipt{
 		Target:           item,
-		ReceiptTargetKey: receiptKeyFn(item),
+		ReceiptTargetKey: target.ReceiptTargetKey,
 		Component:        component,
 		State:            ExecutionFailed,
 		BlockingPath:     item.Path,
@@ -167,27 +163,18 @@ func FailedPreparedCleanUnitReceipt(
 }
 
 // CancelledPreparedCleanUnitReceipt creates a cancelled receipt for a prepared cleanup target.
-func CancelledPreparedCleanUnitReceipt(
-	item types.DebrisInfo,
-	component *cleaner.CleanupOverlapComponent,
-	err error,
-	receiptKeyFn func(types.DebrisInfo) string,
-) UnitExecutionReceipt {
-	receipt := FailedPreparedCleanUnitReceipt(item, component, err, receiptKeyFn)
+func CancelledPreparedCleanUnitReceipt(target PreparedExecutionTarget, err error) UnitExecutionReceipt {
+	receipt := FailedPreparedCleanUnitReceipt(target, err)
 	receipt.State = ExecutionCancelled
 	return receipt
 }
 
 // NewCleanUnitExecutionReceipt creates a new execution receipt for a cleanup unit.
-func NewCleanUnitExecutionReceipt(
-	target types.DebrisInfo,
-	component *cleaner.CleanupOverlapComponent,
-	safety *cleaner.CleanupMutationSafety,
-	receiptKeyFn func(types.DebrisInfo) string,
-) UnitExecutionReceipt {
+func NewCleanUnitExecutionReceipt(prepared PreparedExecutionTarget) UnitExecutionReceipt {
+	target, component, safety := prepared.Item, prepared.Component, prepared.MutationSafety
 	receipt := UnitExecutionReceipt{
 		Target:           target,
-		ReceiptTargetKey: receiptKeyFn(target),
+		ReceiptTargetKey: prepared.ReceiptTargetKey,
 		Component:        component,
 		State:            ExecutionFailed,
 	}

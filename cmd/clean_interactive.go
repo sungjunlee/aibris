@@ -75,7 +75,7 @@ func interactiveCleanWithValidationAndObserver(
 			if observer != nil {
 				observer(interactiveCleanSkipOutcome{Target: target, AfterConfirmation: afterConfirmation})
 			}
-			unit := executor.CancelledPreparedCleanUnitReceipt(target.Item, target.Component, err, cleanJSONReceiptItemKey)
+			unit := executor.CancelledPreparedCleanUnitReceipt(target, err)
 			unit.ResidualBytes = target.Item.Size
 			result.Units = append(result.Units, unit)
 		}
