@@ -589,10 +589,10 @@ func TestPublicDocumentationHistoryBoundaries(t *testing.T) {
 	}
 	roadmap := readRepoFile(t, "docs/ROADMAP.md")
 	current := documentationSection(t, roadmap, "Current unreleased work")
-	for _, token := range []string{"#585", "#587", "#590", "#593", "#595", "CHANGELOG.md"} {
-		if !strings.Contains(current, token) {
-			t.Errorf("unreleased work must distinguish integrated change %q from tagged releases", token)
-		}
+	// The section changes every release; pin only that it names its date
+	// boundary and defers tagged history to the changelog.
+	if !regexp.MustCompile(`As of \d{4}-\d{2}-\d{2}`).MatchString(current) || !strings.Contains(current, "CHANGELOG.md") {
+		t.Error("unreleased work must state its date boundary and link tagged history in CHANGELOG.md")
 	}
 	shipped := documentationSection(t, roadmap, "Shipped")
 	if strings.Contains(shipped, "Unreleased on `main` since the tag:") {

@@ -9,30 +9,32 @@ are cut only after the relevant behavior is dogfooded and explicitly approved.
 
 ## Current unreleased work
 
-As of 2026-10-07, the latest tagged release is v0.13.0 (2026-10-06). The
-following changes are implemented in this audit integration checkout after
-that release; they are not claims about the v0.13.0 binary. Tagged history is
-recorded in [CHANGELOG.md](../CHANGELOG.md). Current behavior is specified in
-[SPEC.md](SPEC.md), [JSON_SCHEMA.md](JSON_SCHEMA.md),
-[INSTALL.md](INSTALL.md), and [WINDOWS.md](WINDOWS.md).
+As of 2026-10-08, the latest tagged release is v0.14.0 (2026-10-08), which
+remediated the 2026-10-07 engineering audit. No changes are integrated after
+that tag yet. Tagged history is recorded in [CHANGELOG.md](../CHANGELOG.md);
+current behavior is specified in [SPEC.md](SPEC.md),
+[JSON_SCHEMA.md](JSON_SCHEMA.md), [INSTALL.md](INSTALL.md), and
+[WINDOWS.md](WINDOWS.md).
 
-- Mutation safety: fresh orphaned-worktree Git evidence (#585), unambiguous
-  Claude recorded-cwd proof (#586), live catalog command authority and
-  cache-only Homebrew removal (#587), complete activity evidence and final
-  cancellation barriers (#589), and cancellable confirmation accounting (#594).
-- Execution and JSON: one domain plan with typed prepared evidence (#590),
-  indexed plan projection (#591), and preserved receipt reason codes (#596).
-- Inventory: home-scoped Codex activity and shared bounded session metadata
-  (#592), explicit-root retention boundaries (#597), consistent apparent-size
-  accounting (#598), and an unregistered Codex tmp contract experiment (#600).
-- Tooling and distribution: run-owned perfharness temporary directories (#588),
-  same-SHA release verification for both modules and native safety (#593), and
-  real installer failure fixtures plus staged binary replacement (#595).
+Next 0.x work:
 
-Release availability must be checked against a tag's notes; integration does
-not set a release date.
+- Audit follow-ups: Windows command-test coverage (#602), typed identity for
+  guided receipts (#603), perfharness module coupling (#604), npm/go cleanup
+  scope (#605), piped prompt input (#606), and root help coverage (#607).
+- Coverage for more AI agent stores, each backed by an orphan proof or a
+  rebuildable-cache contract (`docs/CATEGORY.md`).
+- Separate the owning tool from the provider in `--tool` and JSON
+  (`owner`, `target_id`) under the 0.x deprecation policy.
 
 ## Shipped
+
+### 0.14.0 Audit Remediation
+
+Published 2026-10-08. Re-verified worktree, agent-state, and activity evidence
+at the mutation boundary, catalog-derived cleanup commands with cache-only
+Homebrew removal, cancellable confirmations, one apparent-byte `size`, a single
+typed execution plan, and publication gated on verification of the tagged
+commit.
 
 ### 0.13.0 Safety Gate and Coverage
 
