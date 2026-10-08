@@ -9,9 +9,10 @@
 - Receipt reason codes `cleanup_recipe_changed` and
   `worktree_evidence_changed`. They sit in the single supported reason-code
   catalog, alongside `activity_source_not_registered` (#596).
-- Native Windows CI runs the whole `internal/safedelete` package, the
-  PowerShell installer tests against the production `install.ps1`, and the
-  perfharness module (#593, #595).
+- Native Windows CI runs the full `internal/safedelete`,
+  `internal/pathidentity`, and `internal/testutil` packages (#593). The
+  PowerShell installer tests call the production `install.ps1` instead of
+  inline copies of its guards (#595).
 
 ### Changed
 
@@ -26,8 +27,9 @@
 - Review, JSON projection, and execution share one domain plan per run with
   typed prepared evidence; a missing prepared target is an explicit error
   before any mutation (#590).
-- Building the unified cleanup plan no longer scales cubically. With 2,000
-  independent targets it went from about 24 s to about 3 s (#591).
+- Building the unified cleanup plan no longer scales cubically. On one
+  machine, `BenchmarkUnifiedCleanupPlan` with 2,000 independent targets went
+  from about 24 s to about 3 s (#591).
 - Codex worktree activity reads every configured Codex home. An unreadable
   home is not treated as "no activity", and the activity cache records which
   homes it read (#592).
@@ -43,13 +45,17 @@
 - A cached scan's orphaned worktree whose parent repository, marker, or members
   changed is refused at the mutation boundary, including during confirmation
   (#585).
-- Duplicate or escaped `cwd` keys in Claude session metadata leave the store
-  `undetermined` instead of hiding a live owner (#586).
+- Claude session metadata reads an escaped spelling of the `cwd` key as
+  `cwd`, so a live owner recorded that way is no longer missed. A record with
+  a duplicate `cwd` key is not ownership evidence; unless another record
+  proves a live owner, the store stays `undetermined` (#586).
 - perfharness removes only the run directory it created, never the `-workdir`
   parent. Built binaries get `.exe` on Windows (#588).
 - Incomplete activity evidence refuses age-based deletion. Cancellation after
-  the final barrier no longer reaches the removal. Partial removals keep
-  accurate reclaimed and residual bytes (#589).
+  the final barrier no longer reaches the removal. Partial removals still
+  report reclaimed and residual bytes. A post-removal measurement that is cut
+  short by cancellation or its deadline, or is less complete than the
+  pre-removal one, credits no bytes (#589).
 - Every clean confirmation (final, per-item, guided, unified, APFS) returns on
   cancellation and reports pending targets as cancelled (#594).
 - The installers keep the existing binary on every failure path. The Unix
