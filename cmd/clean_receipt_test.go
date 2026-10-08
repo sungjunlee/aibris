@@ -282,19 +282,19 @@ func TestCleanJSONReceiptPartialExecutionAccountsOnlyVerifiedOwners(t *testing.T
 	}
 	binary := buildCLIContractBinary(t)
 	home := t.TempDir()
-	goCache := testutil.GoBuildCache(home)
+	goCache := testutil.UVCache(home)
 	modules := filepath.Join(home, "workspace", "partial-project", "node_modules")
 	writeJSONReceiptFixture(t, goCache, "go cache")
 	writeJSONReceiptFixture(t, modules, "modules")
 	binDir := t.TempDir()
-	writeJSONReceiptExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\nexit 7\n")
+	writeJSONReceiptExecutable(t, filepath.Join(binDir, "uv"), "#!/bin/sh\nexit 7\n")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	stdout, stderr, err := runCleanJSONProcess(
 		t,
 		binary,
 		home,
-		"clean", "--json", "--force", "--no-guide", "--age=1h", "--category=build-cache,node_modules",
+		"clean", "--json", "--force", "--no-guide", "--age=1h", "--category=other-cache,node_modules",
 	)
 	if err == nil {
 		t.Fatalf("partial JSON cleanup unexpectedly succeeded: stdout=%s stderr=%s", stdout, stderr)
@@ -329,17 +329,17 @@ func TestCleanJSONReceiptCommandSuccessDoesNotInventFreedBytes(t *testing.T) {
 	}
 	binary := buildCLIContractBinary(t)
 	home := t.TempDir()
-	goCache := testutil.GoBuildCache(home)
+	goCache := testutil.UVCache(home)
 	writeJSONReceiptFixture(t, goCache, "command leaves owner")
 	binDir := t.TempDir()
-	writeJSONReceiptExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\nexit 0\n")
+	writeJSONReceiptExecutable(t, filepath.Join(binDir, "uv"), "#!/bin/sh\nexit 0\n")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	stdout, stderr, err := runCleanJSONProcess(
 		t,
 		binary,
 		home,
-		"clean", "--json", "--force", "--no-guide", "--age=1h", "--category=build-cache",
+		"clean", "--json", "--force", "--no-guide", "--age=1h", "--category=other-cache",
 	)
 	if err != nil || stderr != "" {
 		t.Fatalf("command JSON cleanup = err %v stderr %q stdout %s", err, stderr, stdout)
@@ -378,7 +378,7 @@ func TestCleanJSONReceiptCommandCreditsObservedShrink(t *testing.T) {
 	}
 	binary := buildCLIContractBinary(t)
 	home := t.TempDir()
-	goCache := testutil.GoBuildCache(home)
+	goCache := testutil.UVCache(home)
 	payload := []byte("observed-shrink-payload")
 	if err := os.MkdirAll(goCache, 0o755); err != nil {
 		t.Fatal(err)
@@ -388,14 +388,14 @@ func TestCleanJSONReceiptCommandCreditsObservedShrink(t *testing.T) {
 	}
 	chtimesTree(t, goCache, time.Now().Add(-48*time.Hour))
 	binDir := t.TempDir()
-	writeJSONReceiptExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\nrm -f \""+filepath.Join(goCache, "payload")+"\"\nexit 0\n")
+	writeJSONReceiptExecutable(t, filepath.Join(binDir, "uv"), "#!/bin/sh\nrm -f \""+filepath.Join(goCache, "payload")+"\"\nexit 0\n")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	stdout, stderr, err := runCleanJSONProcess(
 		t,
 		binary,
 		home,
-		"clean", "--json", "--force", "--no-guide", "--age=1h", "--category=build-cache",
+		"clean", "--json", "--force", "--no-guide", "--age=1h", "--category=other-cache",
 	)
 	if err != nil || stderr != "" {
 		t.Fatalf("command JSON cleanup = err %v stderr %q stdout %s", err, stderr, stdout)
@@ -443,12 +443,12 @@ func TestApplyCleanJSONExecutionReceiptUsesPreMutationIdentityAfterSymlinkedAnce
 	testutil.SetHome(t, realHome)
 	target := types.DebrisInfo{
 		ID:             "fallback",
-		Tool:           types.ToolBuildCache,
-		Category:       types.CategoryBuildCache,
-		Path:           filepath.Join(aliasHome, ".cache", "go-build"),
+		Tool:           types.ToolPipCache,
+		Category:       types.CategoryOtherCache,
+		Path:           testutil.UVCache(aliasHome),
 		Size:           23,
 		CleanupKind:    types.CleanupCommand,
-		CleanupCommand: []string{"go", "clean", "-cache"},
+		CleanupCommand: []string{"uv", "cache", "clean"},
 	}
 	if err := os.MkdirAll(target.Path, 0o755); err != nil {
 		t.Fatal(err)
@@ -456,7 +456,7 @@ func TestApplyCleanJSONExecutionReceiptUsesPreMutationIdentityAfterSymlinkedAnce
 	if err := os.WriteFile(filepath.Join(target.Path, "payload"), make([]byte, int(target.Size)), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("GOCACHE", target.Path)
+
 	t.Setenv("PATH", t.TempDir())
 	targetIDKey := cleanJSONReceiptItemKey(target)
 	runtime := staticOverlapSafetyRuntime(nil, nil)

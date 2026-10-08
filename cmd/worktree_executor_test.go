@@ -110,7 +110,7 @@ func TestExecutePreparedCommandCancellationAfterStartRemainsFailed(t *testing.T)
 	}
 	home := t.TempDir()
 	testutil.SetHome(t, home)
-	targetPath := filepath.Join(home, ".cache", "command-cancelled")
+	targetPath := testutil.UVCache(home)
 	if err := os.MkdirAll(targetPath, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -120,18 +120,18 @@ func TestExecutePreparedCommandCancellationAfterStartRemainsFailed(t *testing.T)
 	}
 	marker := filepath.Join(home, "command-started")
 	binDir := t.TempDir()
-	command := filepath.Join(binDir, "go")
+	command := filepath.Join(binDir, "uv")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	writeJSONReceiptExecutable(t, command, "#!/bin/sh\ntouch \""+marker+"\"\nsleep 5\n")
-	t.Setenv("GOCACHE", targetPath)
+
 	target := types.DebrisInfo{
 		ID:             "command-cancelled",
-		Tool:           types.ToolBuildCache,
-		Category:       types.CategoryBuildCache,
+		Tool:           types.ToolPipCache,
+		Category:       types.CategoryOtherCache,
 		Path:           targetPath,
 		Size:           int64(len(payload)),
 		CleanupKind:    types.CleanupCommand,
-		CleanupCommand: []string{"go", "clean", "-cache"},
+		CleanupCommand: []string{"uv", "cache", "clean"},
 	}
 	runtime := staticOverlapSafetyRuntime(nil, nil)
 	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{target})
@@ -171,7 +171,7 @@ func TestExecutePreparedCommandRemovingOwnerThenFailingIsPartial(t *testing.T) {
 	}
 	home := t.TempDir()
 	testutil.SetHome(t, home)
-	targetPath := filepath.Join(home, ".cache", "command-removes-owner")
+	targetPath := testutil.UVCache(home)
 	if err := os.MkdirAll(targetPath, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -180,18 +180,18 @@ func TestExecutePreparedCommandRemovingOwnerThenFailingIsPartial(t *testing.T) {
 		t.Fatal(err)
 	}
 	binDir := t.TempDir()
-	command := filepath.Join(binDir, "go")
+	command := filepath.Join(binDir, "uv")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	writeJSONReceiptExecutable(t, command, "#!/bin/sh\nrm -rf \""+targetPath+"\"\nexit 7\n")
-	t.Setenv("GOCACHE", targetPath)
+
 	target := types.DebrisInfo{
 		ID:             "command-removes-owner",
-		Tool:           types.ToolBuildCache,
-		Category:       types.CategoryBuildCache,
+		Tool:           types.ToolPipCache,
+		Category:       types.CategoryOtherCache,
 		Path:           targetPath,
 		Size:           int64(len(payload)),
 		CleanupKind:    types.CleanupCommand,
-		CleanupCommand: []string{"go", "clean", "-cache"},
+		CleanupCommand: []string{"uv", "cache", "clean"},
 	}
 	runtime := staticOverlapSafetyRuntime(nil, nil)
 	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{target})
@@ -271,7 +271,7 @@ func TestExecutePreparedCommandRemovingOwnerThenCancelledIsPartial(t *testing.T)
 	}
 	home := t.TempDir()
 	testutil.SetHome(t, home)
-	targetPath := filepath.Join(home, ".cache", "command-removes-then-cancels")
+	targetPath := testutil.UVCache(home)
 	if err := os.MkdirAll(targetPath, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -281,18 +281,18 @@ func TestExecutePreparedCommandRemovingOwnerThenCancelledIsPartial(t *testing.T)
 	}
 	marker := filepath.Join(home, "command-owner-removed")
 	binDir := t.TempDir()
-	command := filepath.Join(binDir, "go")
+	command := filepath.Join(binDir, "uv")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	writeJSONReceiptExecutable(t, command, "#!/bin/sh\nrm -rf \""+targetPath+"\"\ntouch \""+marker+"\"\nsleep 5\n")
-	t.Setenv("GOCACHE", targetPath)
+
 	target := types.DebrisInfo{
 		ID:             "command-removes-then-cancels",
-		Tool:           types.ToolBuildCache,
-		Category:       types.CategoryBuildCache,
+		Tool:           types.ToolPipCache,
+		Category:       types.CategoryOtherCache,
 		Path:           targetPath,
 		Size:           int64(len(payload)),
 		CleanupKind:    types.CleanupCommand,
-		CleanupCommand: []string{"go", "clean", "-cache"},
+		CleanupCommand: []string{"uv", "cache", "clean"},
 	}
 	runtime := staticOverlapSafetyRuntime(nil, nil)
 	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{target})
@@ -327,20 +327,19 @@ func TestExecutePreparedCommandRemovingOwnerThenCancelledIsPartial(t *testing.T)
 func TestExecutePreparedMissingCommandRecordsFallbackPathRemoval(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
-	targetPath := filepath.Join(home, ".cache", "command-fallback")
+	targetPath := testutil.UVCache(home)
 	if err := os.MkdirAll(targetPath, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("GOCACHE", targetPath)
 	t.Setenv("PATH", t.TempDir())
 	target := types.DebrisInfo{
 		ID:             "command-fallback",
-		Tool:           types.ToolBuildCache,
-		Category:       types.CategoryBuildCache,
+		Tool:           types.ToolPipCache,
+		Category:       types.CategoryOtherCache,
 		Path:           targetPath,
 		Size:           19,
 		CleanupKind:    types.CleanupCommand,
-		CleanupCommand: []string{"go", "clean", "-cache"},
+		CleanupCommand: []string{"uv", "cache", "clean"},
 	}
 	runtime := staticOverlapSafetyRuntime(nil, nil)
 	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{target})

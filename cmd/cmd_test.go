@@ -1961,7 +1961,7 @@ func TestCleanCmd_CleanupFailureExitsNonZero(t *testing.T) {
 		resetCleanFlags()
 		home := t.TempDir()
 		testutil.SetHome(t, home)
-		cache := testutil.GoBuildCache(home)
+		cache := testutil.UVCache(home)
 		if err := os.MkdirAll(cache, 0755); err != nil {
 			t.Fatal(err)
 		}
@@ -1974,11 +1974,11 @@ func TestCleanCmd_CleanupFailureExitsNonZero(t *testing.T) {
 		if err := os.MkdirAll(fakeBin, 0755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(fakeBin, "go"), []byte("#!/bin/sh\nexit 23\n"), 0755); err != nil {
+		if err := os.WriteFile(filepath.Join(fakeBin, "uv"), []byte("#!/bin/sh\nexit 23\n"), 0755); err != nil {
 			t.Fatal(err)
 		}
 		t.Setenv("PATH", fakeBin)
-		rootCmd.SetArgs([]string{"clean", "--force", "--age=1h", "--category=build-cache"})
+		rootCmd.SetArgs([]string{"clean", "--force", "--age=1h", "--category=other-cache"})
 		rootCmd.Execute()
 		return
 	}

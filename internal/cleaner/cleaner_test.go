@@ -63,6 +63,7 @@ func TestIsSafePath(t *testing.T) {
 
 func TestIsSafeTarget_GoBuildCacheUnderHome(t *testing.T) {
 	home := t.TempDir()
+	testutil.SetHome(t, home)
 	item := types.DebrisInfo{
 		Tool:           types.ToolBuildCache,
 		Category:       types.CategoryBuildCache,
@@ -75,8 +76,9 @@ func TestIsSafeTarget_GoBuildCacheUnderHome(t *testing.T) {
 		path string
 		want bool
 	}{
-		{"windows local", filepath.Join(home, "AppData", "Local", "go-build"), true},
-		{"custom name under home", filepath.Join(home, "gocache"), true},
+		{"unconfigured path", filepath.Join(home, "AppData", "Local", "go-build"), false},
+		{"unmarked custom path", filepath.Join(home, "gocache"), false},
+		{"default", testutil.GoBuildCache(home), true},
 		{"outside home", filepath.Join(t.TempDir(), "gocache"), false},
 	}
 	for _, tt := range tests {
@@ -1312,116 +1314,32 @@ func TestExecute_Multiple(t *testing.T) {
 	}
 }
 
-func TestExecute_GoCleanCacheRefusesStaleGOCACHE(t *testing.T) {
+func TestExecute_GoCacheOverrideRevalidatesREADMEAtBarrier(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
-	planned := testutil.GoBuildCache(home)
-	if err := os.MkdirAll(planned, 0755); err != nil {
+	path := filepath.Join(home, ".cache", "custom-go")
+	if err := os.MkdirAll(path, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(planned, "file"), []byte("data"), 0644); err != nil {
+	readme := filepath.Join(path, "README")
+	if err := os.WriteFile(readme, []byte("This directory holds cached build artifacts from the Go build system."), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	live := filepath.Join(home, ".cache", "other-gocache")
-	if err := os.MkdirAll(live, 0755); err != nil {
-		t.Fatal(err)
+	t.Setenv("GOCACHE", path)
+	t.Setenv("PATH", t.TempDir())
+	items, err := (&adapter.BuildCacheAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil || len(items) != 1 {
+		t.Fatalf("scan = %+v, %v", items, err)
 	}
-	t.Setenv("GOCACHE", live)
-	binDir := t.TempDir()
-	marker := filepath.Join(home, "command-ran")
-	writeExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\ntouch \""+marker+"\"\nexit 0\n")
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	total, err := Execute([]types.DebrisInfo{{
-		ID:             "go-build",
-		Tool:           types.ToolBuildCache,
-		Category:       types.CategoryBuildCache,
-		Path:           planned,
-		Size:           4,
-		CleanupKind:    types.CleanupCommand,
-		CleanupCommand: []string{"go", "clean", "-cache"},
-	}})
-	if err == nil {
-		t.Fatal("expected stale GOCACHE refusal")
+	barrier := func(context.Context, types.DebrisInfo) error {
+		return os.WriteFile(readme, []byte("no longer a cache"), 0o644)
 	}
-	if !strings.Contains(err.Error(), "no longer matches") {
-		t.Fatalf("err = %v; want no longer matches", err)
+	total, err := ExecuteWithContextAndBarrier(context.Background(), items, barrier)
+	if !errors.Is(err, ErrCleanupRecipeChanged) || total != 0 {
+		t.Errorf("signature drift = %d, %v", total, err)
 	}
-	if total != 0 {
-		t.Fatalf("total = %d; want 0", total)
-	}
-	if _, err := os.Stat(planned); err != nil {
-		t.Errorf("planned path should remain; stat err = %v", err)
-	}
-	if _, err := os.Stat(marker); !os.IsNotExist(err) {
-		t.Error("go clean -cache must not run when GOCACHE drifted")
-	}
-}
-
-func TestExecute_GoCleanCacheAllowsHomeCustomGOCACHE(t *testing.T) {
-	home := t.TempDir()
-	testutil.SetHome(t, home)
-	planned := filepath.Join(home, "gocache")
-	if err := os.MkdirAll(planned, 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(planned, "file"), []byte("data"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("GOCACHE", planned)
-	binDir := t.TempDir()
-	writeExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\nrm -f \""+filepath.Join(planned, "file")+"\"\nexit 0\n")
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	total, err := Execute([]types.DebrisInfo{{
-		ID:             "go-build",
-		Tool:           types.ToolBuildCache,
-		Category:       types.CategoryBuildCache,
-		Path:           planned,
-		Size:           4,
-		CleanupKind:    types.CleanupCommand,
-		CleanupCommand: []string{"go", "clean", "-cache"},
-	}})
-	if err != nil {
-		t.Fatalf("custom GOCACHE under home refused: %v", err)
-	}
-	if total != 4 {
-		t.Fatalf("total = %d; want 4", total)
-	}
-}
-
-func TestExecute_GoCleanCacheRunsWhenGOCACHEMatches(t *testing.T) {
-	home := t.TempDir()
-	testutil.SetHome(t, home)
-	planned := testutil.GoBuildCache(home)
-	if err := os.MkdirAll(planned, 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(planned, "file"), []byte("data"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("GOCACHE", planned)
-	binDir := t.TempDir()
-	writeExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\nrm -f \""+filepath.Join(planned, "file")+"\"\nexit 0\n")
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	total, err := Execute([]types.DebrisInfo{{
-		ID:             "go-build",
-		Tool:           types.ToolBuildCache,
-		Category:       types.CategoryBuildCache,
-		Path:           planned,
-		Size:           4,
-		CleanupKind:    types.CleanupCommand,
-		CleanupCommand: []string{"go", "clean", "-cache"},
-	}})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if total != 4 {
-		t.Fatalf("total = %d; want 4", total)
-	}
-	if _, err := os.Stat(planned); err != nil {
-		t.Errorf("command cleanup should not remove path; stat err = %v", err)
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("refused target changed: %v", err)
 	}
 }
 
@@ -1585,21 +1503,21 @@ func TestExecute_CommandCleanupSuccess(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	binDir := t.TempDir()
-	writeExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\nrm -f \""+filepath.Join(testutil.GoBuildCache(home), "file")+"\"\nexit 0\n")
+	writeExecutable(t, filepath.Join(binDir, "uv"), "#!/bin/sh\nrm -f \""+filepath.Join(testutil.UVCache(home), "file")+"\"\nexit 0\n")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	path := testutil.GoBuildCache(home)
+	path := testutil.UVCache(home)
 	os.MkdirAll(path, 0755)
 	os.WriteFile(filepath.Join(path, "file"), []byte("data"), 0644)
 
 	output := captureStdout(func() {
 		total, err := Execute([]types.DebrisInfo{{
-			ID:             "go-build",
-			Tool:           types.ToolBuildCache,
-			Category:       types.CategoryBuildCache,
+			ID:             "uv",
+			Tool:           types.ToolPipCache,
+			Category:       types.CategoryOtherCache,
 			Path:           path,
 			Size:           4,
 			CleanupKind:    types.CleanupCommand,
-			CleanupCommand: []string{"go", "clean", "-cache"},
+			CleanupCommand: []string{"uv", "cache", "clean"},
 		}})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -1609,7 +1527,7 @@ func TestExecute_CommandCleanupSuccess(t *testing.T) {
 		}
 	})
 
-	if !strings.Contains(output, "cleaned: go-build") {
+	if !strings.Contains(output, "cleaned: uv") {
 		t.Errorf("output missing cleaned; got: %s", output)
 	}
 	if _, err := os.Stat(path); err != nil {
@@ -1649,19 +1567,19 @@ func TestExecute_CommandFailureDoesNotFallback(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	binDir := t.TempDir()
-	writeExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\necho nope\nexit 2\n")
+	writeExecutable(t, filepath.Join(binDir, "uv"), "#!/bin/sh\necho nope\nexit 2\n")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	path := testutil.GoBuildCache(home)
+	path := testutil.UVCache(home)
 	os.MkdirAll(path, 0755)
 
 	total, err := Execute([]types.DebrisInfo{{
-		ID:             "go-build",
-		Tool:           types.ToolBuildCache,
-		Category:       types.CategoryBuildCache,
+		ID:             "uv",
+		Tool:           types.ToolPipCache,
+		Category:       types.CategoryOtherCache,
 		Path:           path,
 		Size:           4,
 		CleanupKind:    types.CleanupCommand,
-		CleanupCommand: []string{"go", "clean", "-cache"},
+		CleanupCommand: []string{"uv", "cache", "clean"},
 	}})
 	if err == nil {
 		t.Fatal("expected command failure error")
@@ -1715,21 +1633,21 @@ func TestExecute_CommandCancellation(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	binDir := t.TempDir()
-	writeExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\nsleep 2\n")
+	writeExecutable(t, filepath.Join(binDir, "uv"), "#!/bin/sh\nsleep 2\n")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	path := testutil.GoBuildCache(home)
+	path := testutil.UVCache(home)
 	os.MkdirAll(path, 0755)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
 	total, err := ExecuteWithContext(ctx, []types.DebrisInfo{{
-		ID:             "go-build",
-		Tool:           types.ToolBuildCache,
-		Category:       types.CategoryBuildCache,
+		ID:             "uv",
+		Tool:           types.ToolPipCache,
+		Category:       types.CategoryOtherCache,
 		Path:           path,
 		Size:           4,
 		CleanupKind:    types.CleanupCommand,
-		CleanupCommand: []string{"go", "clean", "-cache"},
+		CleanupCommand: []string{"uv", "cache", "clean"},
 	}})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v; want context.Canceled", err)

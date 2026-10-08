@@ -15,6 +15,14 @@
 - Go cache cleanup pins `GOCACHE`, `GOTOOLCHAIN=local`, `GO111MODULE=off`,
   and `GOWORK=off` and runs in the verified cache, avoiding toolchain
   selection/downloads and module/workspace access. npm `_cacache` cleanup
+- Go cache cleanup removes only the verified directory through the deletion
+  gate without running `go`, preventing telemetry writes/uploads and
+  toolchain/module access. Removal includes fuzz and cache metadata. GOCACHE
+  overrides require Go's regular README signature and are rechecked before
+  removal. Old Go command inventories refuse with `cleanup_recipe_changed`
+  and require a fresh scan (#610).
+
+- npm `_cacache` cleanup
   uses gated path removal instead of `npm cache clean --force`. Cached
   inventories with the old npm command refuse as `cleanup_recipe_changed`
   and require a fresh scan. Catalog cache path removal, including Homebrew,

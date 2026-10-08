@@ -225,7 +225,7 @@ func TestExecuteRechecksCommandPreparationDrift(t *testing.T) {
 		t.Run(drift, func(t *testing.T) {
 			home := t.TempDir()
 			testutil.SetHome(t, home)
-			path := testutil.GoBuildCache(home)
+			path := testutil.UVCache(home)
 			if err := os.MkdirAll(path, 0o700); err != nil {
 				t.Fatal(err)
 			}
@@ -239,7 +239,7 @@ func TestExecuteRechecksCommandPreparationDrift(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			item := types.DebrisInfo{Path: path, Category: types.CategoryBuildCache, Tool: types.ToolBuildCache, ID: "go-build", ModTime: old, PathModTime: old, CleanupKind: types.CleanupCommand, CleanupCommand: []string{"go", "clean", "-cache"}}
+			item := types.DebrisInfo{Path: path, Category: types.CategoryOtherCache, Tool: types.ToolPipCache, ID: "uv", ModTime: old, PathModTime: old, CleanupKind: types.CleanupCommand, CleanupCommand: []string{"uv", "cache", "clean"}}
 			snapshot, err := CaptureCleanupTargetSnapshot(item, types.PruneOptions{Age: 24 * time.Hour})
 			if err != nil {
 				t.Fatal(err)

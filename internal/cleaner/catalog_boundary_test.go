@@ -19,7 +19,7 @@ func TestExecuteRevalidatesCommandAndFallbackAuthorityAtBarrier(t *testing.T) {
 			t.Run(route+"/"+drift, func(t *testing.T) {
 				home := t.TempDir()
 				testutil.SetHome(t, home)
-				path := testutil.GoBuildCache(home)
+				path := testutil.UVCache(home)
 				if err := os.MkdirAll(path, 0o755); err != nil {
 					t.Fatal(err)
 				}
@@ -32,11 +32,11 @@ func TestExecuteRevalidatesCommandAndFallbackAuthorityAtBarrier(t *testing.T) {
 					if runtime.GOOS == "windows" {
 						t.Skip("shell executable fixture is Unix-specific")
 					}
-					writeExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\nprintf changed > '"+outside+"'\n")
+					writeExecutable(t, filepath.Join(binDir, "uv"), "#!/bin/sh\nprintf changed > '"+outside+"'\n")
 				}
 				t.Setenv("PATH", binDir)
-				item := types.DebrisInfo{ID: "go-build", Tool: types.ToolBuildCache, Category: types.CategoryBuildCache, Path: path,
-					CleanupKind: types.CleanupCommand, CleanupCommand: []string{"go", "clean", "-cache"}}
+				item := types.DebrisInfo{ID: "uv", Tool: types.ToolPipCache, Category: types.CategoryOtherCache, Path: path,
+					CleanupKind: types.CleanupCommand, CleanupCommand: []string{"uv", "cache", "clean"}}
 				calls := 0
 				barrier := func(context.Context, types.DebrisInfo) error {
 					calls++
@@ -44,7 +44,7 @@ func TestExecuteRevalidatesCommandAndFallbackAuthorityAtBarrier(t *testing.T) {
 						return nil
 					}
 					if drift == "catalog target" {
-						t.Setenv("GOCACHE", filepath.Dir(outside))
+						t.Setenv("UV_CACHE_DIR", filepath.Dir(outside))
 					} else if err := os.Mkdir(filepath.Join(path, ".git"), 0o755); err != nil {
 						t.Fatal(err)
 					}
@@ -84,7 +84,7 @@ func TestExecuteCommandFailurePreservesOutsideSentinel(t *testing.T) {
 	}
 	home := t.TempDir()
 	testutil.SetHome(t, home)
-	path := testutil.GoBuildCache(home)
+	path := testutil.UVCache(home)
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -96,10 +96,10 @@ func TestExecuteCommandFailurePreservesOutsideSentinel(t *testing.T) {
 		t.Fatal(err)
 	}
 	binDir := t.TempDir()
-	writeExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\nexit 7\n")
+	writeExecutable(t, filepath.Join(binDir, "uv"), "#!/bin/sh\nexit 7\n")
 	t.Setenv("PATH", binDir)
-	item := types.DebrisInfo{ID: "go-build", Tool: types.ToolBuildCache, Category: types.CategoryBuildCache, Path: path,
-		CleanupKind: types.CleanupCommand, CleanupCommand: []string{"go", "clean", "-cache"}}
+	item := types.DebrisInfo{ID: "uv", Tool: types.ToolPipCache, Category: types.CategoryOtherCache, Path: path,
+		CleanupKind: types.CleanupCommand, CleanupCommand: []string{"uv", "cache", "clean"}}
 	if total, err := Execute([]types.DebrisInfo{item}); err == nil || total != 0 {
 		t.Fatalf("failure = total %d err %v", total, err)
 	}

@@ -527,7 +527,8 @@ func TestCLIContractCancellation(t *testing.T) {
 
 func TestCLIContractCleanupFailure(t *testing.T) {
 	home := t.TempDir()
-	cache := testutil.GoBuildCache(home)
+	testutil.SetHome(t, home)
+	cache := testutil.UVCache(home)
 	if err := os.MkdirAll(cache, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -547,12 +548,12 @@ func TestCLIContractCleanupFailure(t *testing.T) {
 	if err := os.MkdirAll(fakeBin, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(fakeBin, "go"), []byte("#!/bin/sh\nexit 23\n"), 0755); err != nil {
+	if err := os.WriteFile(filepath.Join(fakeBin, "uv"), []byte("#!/bin/sh\nexit 23\n"), 0755); err != nil {
 		t.Fatal(err)
 	}
 
 	result := runCLIContract(t, home, map[string]string{"PATH": fakeBin},
-		"clean", "--force", "--no-guide", "--age=1h", "--category=build-cache")
+		"clean", "--force", "--no-guide", "--age=1h", "--category=other-cache")
 	if result.ExitCode == 0 {
 		t.Fatalf("cleanup failure exited 0\nstdout:\n%s\nstderr:\n%s", result.Stdout, result.Stderr)
 	}

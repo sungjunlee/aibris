@@ -8,8 +8,7 @@ import (
 )
 
 // RefuseStaleGoCache reports an error when the live GOCACHE path no longer
-// matches the path recorded at scan time. `go clean -cache` would otherwise
-// mutate a different directory than the planned item.
+// matches the verified path recorded at scan time, including its signature.
 func RefuseStaleGoCache(planned string) error {
 	live, ok := effectiveGoCache()
 	if !ok {
@@ -22,17 +21,28 @@ func RefuseStaleGoCache(planned string) error {
 }
 
 func effectiveGoCache() (string, bool) {
+	path, overridden := goCacheLocation()
+	if path == "" || (overridden && !hasGoCacheREADME(path)) {
+		return "", false
+	}
+	return path, true
+}
+
+// goCacheLocation distinguishes explicit GOCACHE settings from the default.
+func goCacheLocation() (string, bool) {
 	if env := os.Getenv("GOCACHE"); env != "" {
-		return validGoCachePath(env)
+		path, _ := validGoCachePath(env)
+		return path, true
 	}
 	if env, ok := goEnvFileGoCache(); ok {
-		return validGoCachePath(env)
+		path, _ := validGoCachePath(env)
+		return path, true
 	}
 	dir, err := os.UserCacheDir()
 	if err != nil || dir == "" {
 		return "", false
 	}
-	return filepath.Join(dir, "go-build"), true
+	return filepath.Join(dir, "go-build"), false
 }
 
 func validGoCachePath(env string) (string, bool) {
@@ -98,4 +108,18 @@ func sameCachePath(a, b string) bool {
 		return false
 	}
 	return filepath.Clean(ra) == filepath.Clean(rb)
+}
+
+// goCacheREADMESignature is the first line of cacheREADME in Go's cache:
+// https://go.dev/src/cmd/go/internal/cache/default.go
+const goCacheREADMESignature = "This directory holds cached build artifacts from the Go build system."
+
+func hasGoCacheREADME(dir string) bool {
+	readme := filepath.Join(dir, "README")
+	info, err := os.Lstat(readme)
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	data, err := os.ReadFile(readme)
+	return err == nil && strings.HasPrefix(string(data), goCacheREADMESignature)
 }

@@ -469,7 +469,8 @@ aibris clean --category node_modules
 - `--dry-run` 없이 실행하면 confirm 필요. `--force`는 confirm만 생략하며 locked row를 풀거나 `git worktree remove --force`로 전달되지 않는다
 - classic에서는 active worktree가 기본 제외된다. `--include-active-worktrees`로 포함해도 Git hard safety 검사를 통과해야 한다
 - active worktree는 실행 직전 모든 member의 repository/HEAD/dirty/ref를 재검사하고 Git-aware removal로 제거한다. branch ref와 parent `git worktree` metadata를 검증하며 실패 시 raw recursive deletion으로 fallback하지 않는다
-- `go-build`, `uv` 캐시는 가능하면 공식 command(`go clean -cache`, `uv cache clean`)로 정리함. Go는 검증된 cache 안에서 `GOCACHE`를 고정하고 `GOTOOLCHAIN=local`, `GO111MODULE=off`, `GOWORK=off`로 실행해 toolchain 선택·다운로드와 module/workspace 파일 접근을 막음
+- `uv` cache는 공식 command(`uv cache clean`)로 정리함. `go-build`는 검증된 GOCACHE 디렉터리를 gated path removal로 정리하며 `go`를 실행하지 않아 Go telemetry·toolchain·module 접근을 일으키지 않음. `fuzz`, `README`, `trim.txt`도 함께 제거하며 Go가 다음 사용 시 cache 디렉터리와 README를 다시 만듦
+- 환경 또는 GOENV file의 GOCACHE override는 Go README signature가 있는 regular non-symlink README가 필요함. 없으면 scan/allowlist에서 제외하며 실행 직전에 다시 검증함. 이전 `go clean -cache` inventory는 `cleanup_recipe_changed`로 거부되므로 fresh scan 필요
 - npm `_cacache`와 Homebrew cache는 gated path removal로 정리함. catalog cache leaf가 symlink면 대상 bytes가 남으므로 삭제를 거부하고 JSON receipt에 `cache_leaf_symlink`를 기록함
 - 이전 `npm cache clean --force` recipe가 남은 cached inventory는 `cleanup_recipe_changed`로 거부함. fresh scan 후 다시 preview해야 함
 - command가 없으면 기존 safe path 삭제로 fallback하지만, command가 실행 후 실패하면 조용히 fallback하지 않음

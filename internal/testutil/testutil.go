@@ -57,3 +57,12 @@ func GoBuildCache(home string) string {
 	}
 	return filepath.Join(home, ".cache", "go-build")
 }
+
+// UVCache is uv's default cache inside a home isolated by SetHome.
+// Windows appends uv/cache to LOCALAPPDATA; Unix appends uv to XDG_CACHE_HOME.
+func UVCache(home string) string {
+	if runtime.GOOS == "windows" {
+		return filepath.Join(home, ".cache", "uv", "cache")
+	}
+	return filepath.Join(home, ".cache", "uv")
+}

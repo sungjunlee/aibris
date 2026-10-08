@@ -220,6 +220,10 @@ item list, not as a worktree-only list.
 | `strippable_bytes` | integer | Apparent bytes under the same `size` accounting in regenerable subtrees (dependency directories and platform build output) inventoried at fixed known-relative positions inside a `worktree` unit. Omitted when zero. Reported separately from `size` so protected worktrees do not read as unrecoverable; only `clean --strip` removes them, and strip eligibility never authorizes deletion. |
 | `strippable_paths` | array | Absolute paths of those regenerable subtrees. Omitted when empty. |
 
+Go cache scan/plan items use `cleanup_kind: "remove-path"` and an empty
+`cleanup_command`. Execution refuses cached inventories carrying `go clean -cache` with `cleanup_recipe_changed`; a fresh scan is required. The public
+schema stays at version 1; no fields are removed.
+
 `risk` and `reason` are presentation fields derived from `category`, `status`,
 and `classification`; they are intended for human and AI-assisted cleanup
 decisions.

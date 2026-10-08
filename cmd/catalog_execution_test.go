@@ -9,7 +9,7 @@ import (
 	"github.com/sungjunlee/aibris/internal/testutil"
 )
 
-func TestCleanCatalogCommandFreshAndCached(t *testing.T) {
+func TestCleanGoCachePathRemovalFreshAndCached(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell executable fixture is Unix-specific")
 	}
@@ -20,18 +20,14 @@ func TestCleanCatalogCommandFreshAndCached(t *testing.T) {
 			testutil.SetHome(t, home)
 			path := testutil.GoBuildCache(home)
 			writeJSONReceiptFixture(t, path, "cache payload")
-			canonical, err := filepath.EvalSymlinks(path)
-			if err != nil {
-				t.Fatal(err)
-			}
+
 			outside := filepath.Join(t.TempDir(), "sentinel")
 			if err := os.WriteFile(outside, []byte("keep"), 0o644); err != nil {
 				t.Fatal(err)
 			}
 			binDir := t.TempDir()
-			writeJSONReceiptExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\n"+
-				"if [ \"$GOCACHE\" != '"+canonical+"' ] || [ \"$*\" != 'clean -cache' ]; then\n"+
-				"  printf changed > '"+outside+"'\n  exit 7\nfi\n/bin/rm -f \"$GOCACHE/payload\"\n")
+			marker := filepath.Join(home, "go-invoked")
+			writeJSONReceiptExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\nprintf invoked > '"+marker+"'\n")
 			t.Setenv("PATH", binDir)
 			if source == "cached" {
 				if stdout, stderr, err := runCleanJSONProcess(t, binary, home, "scan", "--json", "--root", home); err != nil {
@@ -63,7 +59,13 @@ func TestCleanCatalogCommandFreshAndCached(t *testing.T) {
 				t.Errorf("execution source = %v; want %s", evidence["source"], source)
 			}
 			if document["status"] != "succeeded" || jsonReceiptInt64(jsonReceiptObject(t, document, "totals"), "freed_bytes") != int64(len("cache payload")) {
-				t.Errorf("valid command accounting: %s", stdout)
+				t.Errorf("Go path removal accounting: %s", stdout)
+			}
+			if _, err := os.Stat(marker); !os.IsNotExist(err) {
+				t.Errorf("Go executable ran: %v", err)
+			}
+			if _, err := os.Stat(path); !os.IsNotExist(err) {
+				t.Errorf("cache root remains: %v", err)
 			}
 			if data, err := os.ReadFile(outside); err != nil || string(data) != "keep" {
 				t.Errorf("outside sentinel changed: %q %v", data, err)

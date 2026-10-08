@@ -210,17 +210,19 @@ provider reports `codex` for every tool).
 
 Cache locations come from `internal/adapter/cache_catalog.go` and follow
 each tool's platform defaults. An override variable is honored only when the
-directory it names marks itself as a cache with a valid `CACHEDIR.TAG` (today
-`UV_CACHE_DIR`); otherwise an override could make an ordinary directory a
-cleanup target. Adding a
-rebuildable cache is one catalog entry; the cleanup allowlist accepts every
+directory it names marks itself as a cache with a valid `CACHEDIR.TAG`
+(`UV_CACHE_DIR`) or Go's regular, non-symlink README signature (`GOCACHE` from
+the environment or GOENV file); otherwise an override could make an ordinary
+directory a cleanup target. Adding a rebuildable cache is one catalog entry; the cleanup allowlist accepts every
 path the catalog resolves to. Never add a cache whose wholesale removal can
 break installed projects (stores that projects link into). Cleanup commands
 are re-derived from the live catalog (tool, category, canonical target, argv,
 and pinned cache environment); recipe drift refuses execution and fallback.
 A missing authorized executable may fall back only to gated removal of the
-scanned path. Homebrew cleanup uses gated removal of the verified cache path,
-without a package-manager cleanup command.
+scanned path. Go and Homebrew cleanup use gated removal of the verified cache
+path,
+without a package-manager cleanup command. Go removal includes fuzz and cache
+metadata; its override signature and live path are rechecked before mutation.
 
 ## Code rules
 

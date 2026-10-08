@@ -348,22 +348,28 @@ Supported command-backed cleanup:
 
 | Item | Command |
 | ------ | --------- |
-| `go-build` | `go clean -cache` |
 | `uv` | `uv cache clean` (`uv cache clean --force` under `--pressure` or a critical home volume) |
 
 If the command is missing, aibris falls back to safe path removal. If the
 command runs and fails, aibris reports the error and does not remove the path.
-`go clean -cache` is also refused when the live `$GOCACHE` path no longer
-matches the path recorded at scan time.
 
-`go clean -cache` runs in the verified cache with `GOCACHE` pinned to it and
-`GOTOOLCHAIN=local`, `GO111MODULE=off`, and `GOWORK=off`, so it does not select
-or download a toolchain or consult module/workspace files.
-The npm `_cacache` and Homebrew caches use gated path removal instead of a
-package-manager command. Catalog cache path removal refuses a symlink leaf
-because removing the link would leave the measured cache bytes behind. Cached
-inventories carrying the former `npm cache clean --force` recipe are refused
-as `cleanup_recipe_changed`; run a fresh scan before retrying.
+Go cache cleanup uses gated removal of the verified GOCACHE directory without
+running `go`, so cleanup cannot cause Go telemetry counter writes or uploads,
+select/download a toolchain, or access module/workspace files. This also removes
+`GOCACHE/fuzz`, `README`, and `trim.txt`; the reported size includes all of them.
+Go [recreates the directory and README on next use](https://go.dev/src/cmd/go/internal/cache/default.go).
+Explicit GOCACHE settings from the environment or GOENV file require a regular,
+non-symlink `README` beginning with
+`This directory holds cached build artifacts from the Go build system.`
+(Go's `cacheREADME` in that source). Failed checks silently omit the target;
+the default `os.UserCacheDir()/go-build` retains its existing behavior.
+The live path and override signature are rechecked at the mutation boundary.
+
+The npm `_cacache` and Homebrew caches also use gated path removal.
+Catalog cache path removal refuses a symlink leaf because removing the link
+would leave the measured cache bytes behind. Cached inventories carrying the
+former Go or npm command recipe are refused as `cleanup_recipe_changed`; run a
+fresh scan before retrying.
 
 Age values accept human units such as `7d`, `2w`, `1mo`, and `1y`. Use `mo` for
 months; bare `m` keeps the Go duration meaning of minutes.
