@@ -364,7 +364,9 @@ Default guided Codex worktree cleanup:
   resolved homes, requiring complete coverage of every home. Orca's multi-tool
   containers retain `tool=unknown`, but guided review locks them with
   `recent_activity` for a recent Codex session, or `activity_evidence_unavailable`
-  when any required home is unavailable or unqueried. Active Orca worktrees
+  when any required home is unavailable or unqueried. A resolved home without
+  a session store (for example, no `~/.codex/sessions` because the Codex CLI
+  was never run directly) counts as unavailable. Active Orca worktrees
   also keep that unavailable-evidence lock when the Orca home is not discovered
   (including non-macOS platforms or missing, invalid, or unavailable layout).
   Session-root symlinks that split a home's roots across activity source keys

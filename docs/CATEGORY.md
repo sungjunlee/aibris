@@ -84,7 +84,8 @@ any unavailable or unqueried home locks it with `activity_evidence_unavailable`.
 Session-root symlinks that split a home's source coverage also keep that lock.
 Active Orca worktrees keep that unavailable-evidence lock when the Orca home
 is not discovered, including on non-macOS platforms or after a failed layout
-check.
+check, and when any resolved home has no session store (for example, no
+`~/.codex/sessions` because the Codex CLI was never run directly).
 
 ## Protected Retention Is Not a Category
 
