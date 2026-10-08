@@ -110,7 +110,7 @@ func executeWithContextOutput(
 				if err != nil {
 					return false, err
 				}
-				return runCleanupCommand(ctx, argv, env, func() error {
+				return runCleanupCommand(ctx, argv, env, w.Path, func() error {
 					if observer != nil {
 						observer(CleanupMutationOutcome{Item: w})
 					}
@@ -243,7 +243,7 @@ func reportCommandResidual(output io.Writer, w types.DebrisInfo, freed, residual
 		w.ID, FormatSize(residual), FormatSize(freed))
 }
 
-func runCleanupCommand(ctx context.Context, argv []string, env []string, beforeStart func() error) (bool, error) {
+func runCleanupCommand(ctx context.Context, argv []string, env []string, dir string, beforeStart func() error) (bool, error) {
 	if len(argv) == 0 {
 		return false, nil
 	}
@@ -251,6 +251,11 @@ func runCleanupCommand(ctx context.Context, argv []string, env []string, beforeS
 	var cmd *exec.Cmd
 	if lookupErr == nil {
 		cmd = commandContext(ctx, bin, argv[1:]...)
+		if argv[0] == "go" {
+			// The catalog-authorized Go command keeps the cache root. Other
+			// commands (uv) remove it, which cannot be their cwd on Windows.
+			cmd.Dir = dir
+		}
 	}
 	if cmd != nil && len(env) > 0 {
 		cmd.Env = append(os.Environ(), env...)

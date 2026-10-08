@@ -45,7 +45,7 @@ func TestResolveCleanupCommandUsesLiveCatalog(t *testing.T) {
 func TestResolveCleanupCommandPinsCanonicalCatalogTarget(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
-	for _, id := range []string{"go-build", "npm", "uv"} {
+	for _, id := range []string{"go-build", "uv"} {
 		t.Run(id, func(t *testing.T) {
 			target := catalogTarget(t, id)
 			path := target.resolve(home)
@@ -67,9 +67,7 @@ func TestResolveCleanupCommandPinsCanonicalCatalogTarget(t *testing.T) {
 			var wantEnv []string
 			switch id {
 			case "go-build":
-				wantEnv = []string{"GOCACHE=" + canonical}
-			case "npm":
-				wantEnv = []string{"npm_config_cache=" + filepath.Dir(canonical)}
+				wantEnv = []string{"GOCACHE=" + canonical, "GOTOOLCHAIN=local", "GO111MODULE=off", "GOWORK=off"}
 			case "uv":
 				wantEnv = []string{"UV_CACHE_DIR=" + canonical}
 				item.CleanupCommand = []string{"uv", "cache", "clean", "--force"}
@@ -84,11 +82,16 @@ func TestResolveCleanupCommandPinsCanonicalCatalogTarget(t *testing.T) {
 			if target.command[0] == "tampered" {
 				t.Fatal("returned argv aliases live authority")
 			}
+			env[0] = "tampered"
+			_, freshEnv, err := ResolveCleanupCommand(item)
+			if err != nil || !slices.Equal(freshEnv, wantEnv) {
+				t.Fatalf("fresh catalog env = %v, %v; want %v", freshEnv, err, wantEnv)
+			}
 		})
 	}
 }
 
-func TestResolveCleanupCommandRefusesUnexpressibleNpmTarget(t *testing.T) {
+func TestResolveCleanupCommandRefusesOldNpmRecipe(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	path := catalogTarget(t, "npm").resolve(home)
@@ -101,7 +104,12 @@ func TestResolveCleanupCommandRefusesUnexpressibleNpmTarget(t *testing.T) {
 	if err != nil || len(items) != 1 {
 		t.Fatalf("scan = %+v %v", items, err)
 	}
+	if items[0].CleanupKind == types.CleanupCommand || len(items[0].CleanupCommand) != 0 {
+		t.Fatalf("npm must use path removal, including symlink targets: %+v", items[0])
+	}
+	items[0].CleanupKind = types.CleanupCommand
+	items[0].CleanupCommand = []string{"npm", "cache", "clean", "--force"}
 	if _, _, err := ResolveCleanupCommand(items[0]); !errors.Is(err, ErrCleanupRecipeChanged) {
-		t.Fatalf("npm target cannot be pinned using its parent: %v", err)
+		t.Fatalf("old npm command must refuse: %v", err)
 	}
 }

@@ -134,11 +134,11 @@ func TestBuildCacheAdapter_Npm(t *testing.T) {
 			if r.Size <= 0 {
 				t.Errorf("npm Size = %d; want > 0", r.Size)
 			}
-			if r.CleanupKind != types.CleanupCommand {
-				t.Errorf("npm CleanupKind = %q; want command", r.CleanupKind)
+			if r.CleanupKind != "" && r.CleanupKind != types.CleanupRemovePath {
+				t.Errorf("npm CleanupKind = %q; want path removal", r.CleanupKind)
 			}
-			if got := r.CleanupCommand; len(got) != 4 || got[0] != "npm" || got[1] != "cache" || got[2] != "clean" || got[3] != "--force" {
-				t.Errorf("npm CleanupCommand = %v; want [npm cache clean --force]", got)
+			if len(r.CleanupCommand) != 0 {
+				t.Errorf("npm CleanupCommand = %v; want no package manager command", r.CleanupCommand)
 			}
 		}
 	}
