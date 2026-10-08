@@ -700,9 +700,9 @@ The mutation-boundary refusal codes are also in the supported reason catalog:
 | `cache_leaf_symlink` | A catalog path-removal cache has a symlink leaf: plan `policy_decision` and `decision` are `skipped`, its bytes are excluded from `selected_bytes`, and execution rechecks/refuses it because link removal would leave the measured referent bytes behind. The uv command route is unchanged. |
 | `worktree_evidence_changed` | Current worktree Git evidence differs from the prepared evidence; execution is refused before mutation. |
 
-`cache_leaf_symlink` is used in plans as well as execution receipts. This is
-an additive use of an existing reason code and disposition; `schema_version`
-remains 1. Skipped cache bytes remain in physical/skipped totals, rather than
+`cache_leaf_symlink` (added in 0.14.1) is used in plans as well as execution
+receipts. It is an additive reason code with the existing `skipped`
+disposition; `schema_version` remains 1. Skipped cache bytes remain in physical/skipped totals, rather than
 being credited as selectable or reclaimed bytes.
 
 `cleanup_recipe_changed` also covers removed recipes and mismatched tool,

@@ -29,10 +29,10 @@
   target. Both checks repeat right before removal. Cached inventories with the
   old Go command refuse as `cleanup_recipe_changed` and require a fresh scan
   (#605, #610).
-- Cleanup previews skip symlinked catalog path-route cache leaves (Go, npm,
-  Homebrew) and exclude their bytes from the selected total, with an
-  explanation in human output and `cache_leaf_symlink` in JSON, matching what
-  execution does. The uv command route is unchanged (#611).
+- Cleanup previews skip every catalog path-route cache whose leaf is a
+  symlink and exclude its bytes from the selected total, with an explanation
+  in human output and `cache_leaf_symlink` in JSON, matching what execution
+  does. The uv command route is unchanged (#611).
 - Root `--help` lists Grok among agent-state providers; the list now comes
   from the provider registry (#607).
 
