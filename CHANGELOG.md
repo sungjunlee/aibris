@@ -26,8 +26,9 @@
   `log.txt`, `fuzz`, two-hex-digit directories) or Finder's `.DS_Store`; a
   `GOCACHE` override from the environment or the `GOENV` file must also carry
   Go's `README` signature. A directory with any other top-level entry is not a
-  target. Both checks repeat right before removal. Cached inventories with the old Go command refuse as
-  `cleanup_recipe_changed` and require a fresh scan (#605, #610).
+  target. Both checks repeat right before removal. Cached inventories with the
+  old Go command refuse as `cleanup_recipe_changed` and require a fresh scan
+  (#605, #610).
 - Cleanup previews skip symlinked catalog path-route cache leaves (Go, npm,
   Homebrew) and exclude their bytes from the selected total, with an
   explanation in human output and `cache_leaf_symlink` in JSON, matching what
