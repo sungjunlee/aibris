@@ -88,3 +88,57 @@ func TestGuidedReceiptWireCompatibility(t *testing.T) {
 		})
 	}
 }
+
+func TestGuidedReceiptIdentityErrorAfterMutationIsPartialFailure(t *testing.T) {
+	newPending := func(t *testing.T) (GuidedExecutionReceipt, PreparedTarget) {
+		t.Helper()
+		home := t.TempDir()
+		testutil.SetHome(t, home)
+		item := types.DebrisInfo{Path: filepath.Join(home, "app", "node_modules"), ID: "only", Project: "app", Category: types.CategoryNodeModules, Tool: types.ToolNodeModules, Size: 8}
+		if err := os.MkdirAll(item.Path, 0700); err != nil {
+			t.Fatal(err)
+		}
+		key, ok := cleaner.TargetPathKey(item.Path)
+		if !ok {
+			t.Fatal("fixture path has no identity")
+		}
+		components := []SnapshotComponent{{Key: key, Owner: item, Decision: DecisionSelected, AccountingBytes: 8, Rows: []SnapshotRow{{Item: item, Relation: RelationOwner, PolicyDecision: PolicyEligible, Decision: DecisionSelected, ReasonCodes: []string{"classic_eligible"}}}}}
+		plan := UnifiedPlan{Components: []PlanComponent{{Key: key, CanonicalPath: key, Owner: item, Selection: string(cleaner.CleanupPlanSelected)}}}
+		prepared := PreparedTarget{Item: item, ReceiptTargetKey: RowIdentityKey(item)}
+		pending, err := NewGuidedExecutionReceipt(Source{Kind: SourceLive}, types.PruneOptions{Age: 7 * 24 * time.Hour}, &GuidedPolicy{MinIdleAge: 24 * time.Hour}, PlanEvidence{ObservedAt: time.Date(2026, 10, 8, 0, 0, 0, 0, time.UTC)}, components, []PreparedTarget{prepared}, plan, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return pending, prepared
+	}
+	snapshots := func() (int, error) { return 0, nil }
+
+	t.Run("duplicate outcome after removal", func(t *testing.T) {
+		pending, prepared := newPending(t)
+		removed := ExecutionUnit{ReceiptTargetKey: prepared.ReceiptTargetKey, State: "removed", PhysicalRemoved: true, FreedBytes: 8}
+		receipt, err := pending.Finish(ExecutionReceipt{Units: []ExecutionUnit{removed, removed}, FreedBytes: 8}, nil, snapshots)
+		if err == nil {
+			t.Fatal("duplicate outcome must return an invariant error")
+		}
+		if receipt.Status != ReceiptStatusPartialFailure {
+			t.Fatalf("status = %q, want %q", receipt.Status, ReceiptStatusPartialFailure)
+		}
+		if target := receipt.PhysicalTargets[0]; !target.PhysicalRemoved || target.FreedBytes != 8 {
+			t.Fatalf("removal not retained: %+v", target)
+		}
+	})
+
+	t.Run("missing unit with reclaimed bytes", func(t *testing.T) {
+		pending, _ := newPending(t)
+		receipt, err := pending.Finish(ExecutionReceipt{FreedBytes: 8}, nil, snapshots)
+		if err == nil {
+			t.Fatal("missing outcome must return an invariant error")
+		}
+		if receipt.SchemaVersion == 0 {
+			t.Fatal("receipt dropped although bytes were reclaimed")
+		}
+		if receipt.Status != ReceiptStatusPartialFailure {
+			t.Fatalf("status = %q, want %q", receipt.Status, ReceiptStatusPartialFailure)
+		}
+	})
+}

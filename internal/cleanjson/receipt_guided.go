@@ -145,7 +145,9 @@ func (r *GuidedExecutionReceipt) Finish(
 	listSnapshots func() (int, error),
 ) (Receipt, error) {
 	identityErr := r.identityErr
-	mutated := false
+	// Aggregate reclaimed bytes prove mutation even when the unit that made it
+	// is missing, which is exactly the invariant failure handled here.
+	mutated := execution.FreedBytes > 0
 	seen := make([]bool, len(r.prepared))
 	invalid := make([]bool, len(r.prepared))
 	for _, unit := range execution.Units {
@@ -195,9 +197,10 @@ func (r *GuidedExecutionReceipt) Finish(
 		return Receipt{}, errors.Join(executionErr, identityErr)
 	}
 	receipt, finalizeErr := finalizeReceipt(r.receipt, listSnapshots)
-	if identityErr != nil && receipt.Status == ReceiptStatusSucceeded {
+	if identityErr != nil && (receipt.Status == ReceiptStatusSucceeded || mutated) {
 		// An unknown extra outcome has no target that can safely be attributed.
 		// Keep recorded outcomes and still make the document report failure.
+		// After mutation, failed and cancelled would deny the progress made.
 		receipt.Status = ReceiptStatusPartialFailure
 	}
 	if identityErr != nil {
