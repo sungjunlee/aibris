@@ -9,24 +9,33 @@ are cut only after the relevant behavior is dogfooded and explicitly approved.
 
 ## Current unreleased work
 
-As of 2026-10-08, the latest tagged release is v0.14.0 (2026-10-08), which
-remediated the 2026-10-07 engineering audit. No changes are integrated after
-that tag yet. Tagged history is recorded in [CHANGELOG.md](../CHANGELOG.md);
-current behavior is specified in [SPEC.md](SPEC.md),
-[JSON_SCHEMA.md](JSON_SCHEMA.md), [INSTALL.md](INSTALL.md), and
-[WINDOWS.md](WINDOWS.md).
+As of 2026-10-08, the latest tagged release is v0.14.1 (2026-10-08), a patch
+that keeps cache cleanup inside the previewed target and makes piped answers
+and guided receipts reliable. No changes are integrated after that tag yet.
+Tagged history is recorded in [CHANGELOG.md](../CHANGELOG.md); current
+behavior is specified in [SPEC.md](SPEC.md), [JSON_SCHEMA.md](JSON_SCHEMA.md),
+[INSTALL.md](INSTALL.md), and [WINDOWS.md](WINDOWS.md).
 
 Next 0.x work:
 
-- Audit follow-ups: Windows command-test coverage (#602), typed identity for
-  guided receipts (#603), perfharness module coupling (#604), npm/go cleanup
-  scope (#605), piped prompt input (#606), and root help coverage (#607).
+- Orca support: discover Orca-managed worktrees and Orca's Codex home as
+  activity evidence (#613).
+- Windows follow-ups: cleaner command-test coverage (#602) and junction cache
+  leaves (#611).
+- perfharness module coupling (#604).
 - Coverage for more AI agent stores, each backed by an orphan proof or a
   rebuildable-cache contract (`docs/CATEGORY.md`).
 - Separate the owning tool from the provider in `--tool` and JSON
   (`owner`, `target_id`) under the 0.x deprecation policy.
 
 ## Shipped
+
+### 0.14.1 Cleanup Scope Fixes
+
+Published 2026-10-08. Go and npm caches removed through the deletion gate
+without running their tools, a Go-only layout check that keeps shared
+directories safe, previews that match execution for symlinked caches, one
+stdin reader per clean run, and guided receipts that keep their evidence.
 
 ### 0.14.0 Audit Remediation
 
