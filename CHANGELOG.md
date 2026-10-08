@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.15.0] - 2026-10-09
 
 ### Added
 
@@ -12,10 +12,9 @@
   `sessions/` directory is missing or a dangling symlink) or an undiscovered
   Orca home keeps active worktrees protected. All resolved homes (primary,
   `$AIBRIS_CODEX_HOMES`, and verified Orca) contribute read-only retention
-  aggregates. Homes, containers,
-  and their ancestors are deletion-protected; explicit roots stay bounded.
-  Skipped Orca symlink targets cannot reappear through convention fallback
-  (#613).
+  aggregates. Homes, containers, and their ancestors are deletion-protected;
+  explicit roots stay bounded. Skipped Orca symlink targets cannot reappear
+  through convention fallback (#613).
 
 ## [0.14.1] - 2026-10-08
 
