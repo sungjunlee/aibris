@@ -220,6 +220,10 @@ item list, not as a worktree-only list.
 | `strippable_bytes` | integer | Apparent bytes under the same `size` accounting in regenerable subtrees (dependency directories and platform build output) inventoried at fixed known-relative positions inside a `worktree` unit. Omitted when zero. Reported separately from `size` so protected worktrees do not read as unrecoverable; only `clean --strip` removes them, and strip eligibility never authorizes deletion. |
 | `strippable_paths` | array | Absolute paths of those regenerable subtrees. Omitted when empty. |
 
+Go cache scan/plan items use `cleanup_kind: "remove-path"` and an empty
+`cleanup_command`. Execution refuses cached inventories carrying `go clean -cache` with `cleanup_recipe_changed`; a fresh scan is required. The public
+schema stays at version 1; no fields are removed.
+
 `risk` and `reason` are presentation fields derived from `category`, `status`,
 and `classification`; they are intended for human and AI-assisted cleanup
 decisions.
@@ -693,8 +697,13 @@ The mutation-boundary refusal codes are also in the supported reason catalog:
 | Code | Meaning |
 | ---- | ------- |
 | `cleanup_recipe_changed` | The current cleanup recipe differs from the prepared recipe; execution is refused before mutation. |
-| `cache_leaf_symlink` | Cache path removal found a symlink leaf; execution is refused because removing the link would leave the measured target bytes behind. |
+| `cache_leaf_symlink` | A catalog path-removal cache has a symlink leaf: plan `policy_decision` and `decision` are `skipped`, its bytes are excluded from `selected_bytes`, and execution rechecks/refuses it because link removal would leave the measured referent bytes behind. The uv command route is unchanged. |
 | `worktree_evidence_changed` | Current worktree Git evidence differs from the prepared evidence; execution is refused before mutation. |
+
+`cache_leaf_symlink` is used in plans as well as execution receipts. This is
+an additive use of an existing reason code and disposition; `schema_version`
+remains 1. Skipped cache bytes remain in physical/skipped totals, rather than
+being credited as selectable or reclaimed bytes.
 
 `cleanup_recipe_changed` also covers removed recipes and mismatched tool,
 category, canonical target, or argv. It does not trigger a path-removal fallback.

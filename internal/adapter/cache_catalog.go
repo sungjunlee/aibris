@@ -17,14 +17,14 @@ type cacheTarget struct {
 	id   string
 	tool types.Tool // provider that reports it; also its JSON "tool"
 	// locate returns the cache directory for the current environment, or ""
-	// when the cache does not apply here, and whether an override variable
+	// when the cache does not apply here, and whether an override setting
 	// chose it. It must honor the tool's own overrides so scan and cleanup see
 	// the directory the tool uses.
 	locate func(home string) (path string, overridden bool)
-	// verify must accept a directory chosen by an override variable before it
+	// verify must accept a directory chosen by an override setting before it
 	// is scanned or allowlisted; otherwise an override could turn an ordinary
 	// directory into a cleanup target. Only caches that mark themselves
-	// unambiguously (a CACHEDIR.TAG) honor overrides; the rest use their
+	// (Go README plus layout or CACHEDIR.TAG) honor overrides; the rest use their
 	// default location only.
 	verify func(path string) bool
 	// command, when set, is the tool's own cleanup command. It runs with its
@@ -36,15 +36,15 @@ type cacheTarget struct {
 }
 
 var cacheCatalog = []cacheTarget{
+	// Go commands can write telemetry outside GOCACHE. Remove only the verified
+	// Go-only layout; explicit settings also need Go's cache README signature.
 	{id: "go-build", tool: types.ToolBuildCache, locate: func(string) (string, bool) {
-		// effectiveGoCache validates GOCACHE itself.
-		path, _ := effectiveGoCache()
-		return path, false
-	}, command: []string{"go", "clean", "-cache"}, commandEnv: func(path string) []string {
-		// Never select/download a toolchain or consult module/workspace files,
-		// even if the cache or an ancestor happens to contain a go.mod.
-		return []string{"GOCACHE=" + path, "GOTOOLCHAIN=local", "GO111MODULE=off", "GOWORK=off"}
-	}},
+		path, overridden := goCacheLocation()
+		if !hasGoCacheLayout(path) {
+			return "", overridden
+		}
+		return path, overridden
+	}, verify: hasGoCacheREADME},
 	{id: "xcode", tool: types.ToolBuildCache, locate: darwinOnly("Library", "Caches", "Xcode")},
 	{id: "xcode-deriveddata", tool: types.ToolBuildCache, locate: darwinOnly("Library", "Developer", "Xcode", "DerivedData")},
 	// brew cleanup also removes installed kegs outside this cache. Use gated

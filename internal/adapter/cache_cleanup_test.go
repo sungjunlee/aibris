@@ -17,8 +17,8 @@ func TestResolveCleanupCommandUsesLiveCatalog(t *testing.T) {
 		t.Run(change, func(t *testing.T) {
 			home := t.TempDir()
 			testutil.SetHome(t, home)
-			mkdirs(t, testutil.GoBuildCache(home))
-			items, err := (&BuildCacheAdapter{}).Scan(context.Background(), types.ScanOptions{})
+			mkdirs(t, testutil.UVCache(home))
+			items, err := (&PipCacheAdapter{}).Scan(context.Background(), types.ScanOptions{})
 			if err != nil || len(items) != 1 {
 				t.Fatalf("scan = %+v %v", items, err)
 			}
@@ -26,11 +26,11 @@ func TestResolveCleanupCommandUsesLiveCatalog(t *testing.T) {
 			cacheCatalog = slices.Clone(original)
 			t.Cleanup(func() { cacheCatalog = original })
 			for i := range cacheCatalog {
-				if cacheCatalog[i].id == "go-build" {
+				if cacheCatalog[i].id == "uv" {
 					if change == "removed" {
 						cacheCatalog = slices.Delete(cacheCatalog, i, i+1)
 					} else {
-						cacheCatalog[i].command = []string{"go", "clean", "-cache", "--new-recipe"}
+						cacheCatalog[i].command = []string{"uv", "cache", "clean", "--new-recipe"}
 					}
 					break
 				}
@@ -45,7 +45,7 @@ func TestResolveCleanupCommandUsesLiveCatalog(t *testing.T) {
 func TestResolveCleanupCommandPinsCanonicalCatalogTarget(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
-	for _, id := range []string{"go-build", "uv"} {
+	for _, id := range []string{"uv"} {
 		t.Run(id, func(t *testing.T) {
 			target := catalogTarget(t, id)
 			path := target.resolve(home)
@@ -66,8 +66,6 @@ func TestResolveCleanupCommandPinsCanonicalCatalogTarget(t *testing.T) {
 			}
 			var wantEnv []string
 			switch id {
-			case "go-build":
-				wantEnv = []string{"GOCACHE=" + canonical, "GOTOOLCHAIN=local", "GO111MODULE=off", "GOWORK=off"}
 			case "uv":
 				wantEnv = []string{"UV_CACHE_DIR=" + canonical}
 				item.CleanupCommand = []string{"uv", "cache", "clean", "--force"}

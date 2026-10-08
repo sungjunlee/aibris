@@ -348,22 +348,46 @@ Supported command-backed cleanup:
 
 | Item | Command |
 | ------ | --------- |
-| `go-build` | `go clean -cache` |
 | `uv` | `uv cache clean` (`uv cache clean --force` under `--pressure` or a critical home volume) |
 
 If the command is missing, aibris falls back to safe path removal. If the
 command runs and fails, aibris reports the error and does not remove the path.
-`go clean -cache` is also refused when the live `$GOCACHE` path no longer
-matches the path recorded at scan time.
 
-`go clean -cache` runs in the verified cache with `GOCACHE` pinned to it and
-`GOTOOLCHAIN=local`, `GO111MODULE=off`, and `GOWORK=off`, so it does not select
-or download a toolchain or consult module/workspace files.
-The npm `_cacache` and Homebrew caches use gated path removal instead of a
-package-manager command. Catalog cache path removal refuses a symlink leaf
-because removing the link would leave the measured cache bytes behind. Cached
-inventories carrying the former `npm cache clean --force` recipe are refused
-as `cleanup_recipe_changed`; run a fresh scan before retrying.
+Go cache cleanup uses gated removal of the verified GOCACHE directory without
+running `go`, so cleanup cannot cause Go telemetry counter writes or uploads,
+select/download a toolchain, or access module/workspace files. This also removes
+`GOCACHE/fuzz`, `README`, and `trim.txt`; the reported size includes all of them.
+Go [recreates the directory and README on next use](https://go.dev/src/cmd/go/internal/cache/default.go).
+Unlike `go clean -cache`, which keeps the top directory, this removes the
+directory itself; Go recreates it with default permissions, so custom
+permissions or ACLs on the cache root are not preserved.
+Explicit GOCACHE settings from the environment or GOENV file require a regular,
+non-symlink `README` beginning with
+`This directory holds cached build artifacts from the Go build system.`
+(Go's `cacheREADME` in that source). Failed checks silently omit the target;
+the default `os.UserCacheDir()/go-build` needs no signature and also uses
+whole-directory removal. Both default and override paths require a Go-only
+layout at the top level: regular files `README`, `trim.txt`, `testexpire.txt`,
+`log.txt`, and Finder's `.DS_Store`; a `fuzz` directory; and directories
+matching `^[0-9a-f]{2}$`.
+The allowed entries follow Go's
+[cache implementation](https://go.dev/src/cmd/go/internal/cache/cache.go) and
+[clean implementation](https://go.dev/src/cmd/go/internal/clean/clean.go).
+Other entries, symlinks, wrong file types, and unreadable layouts silently omit
+the directory from scan and the cleanup allowlist, including under cache-age
+relaxation. The layout check reads only one directory level. The live path,
+override signature, and layout are rechecked at the mutation boundary; a
+foreign entry added after scan refuses removal.
+
+The npm `_cacache` and Homebrew caches also use gated path removal.
+Catalog cache path removal skips a symlink leaf, excluding its referent size
+from selected bytes. Human dry-run audits explain why it is skipped; JSON plans
+keep the `cache_leaf_symlink` reason code. Removing the link would leave those
+measured bytes behind. Execution
+still rechecks the leaf and refuses symlinks introduced after planning. Ordinary
+directories and the uv command route retain their policy. Cached inventories carrying the
+former Go or npm command recipe are refused as `cleanup_recipe_changed`; run a
+fresh scan before retrying.
 
 Age values accept human units such as `7d`, `2w`, `1mo`, and `1y`. Use `mo` for
 months; bare `m` keeps the Go duration meaning of minutes.

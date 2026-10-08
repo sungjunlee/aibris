@@ -29,8 +29,8 @@ func TestPreparedCancellationBeforeMutationMatchesReceipt(t *testing.T) {
 			path := filepath.Join(home, "project", "node_modules")
 			item := types.DebrisInfo{Path: path, Category: types.CategoryNodeModules, Tool: types.ToolNodeModules}
 			if command {
-				path = testutil.GoBuildCache(home)
-				item = types.DebrisInfo{Path: path, Category: types.CategoryBuildCache, Tool: types.ToolBuildCache, ID: "go-build", CleanupKind: types.CleanupCommand, CleanupCommand: []string{"go", "clean", "-cache"}}
+				path = testutil.UVCache(home)
+				item = types.DebrisInfo{Path: path, Category: types.CategoryOtherCache, Tool: types.ToolPipCache, ID: "uv", CleanupKind: types.CleanupCommand, CleanupCommand: []string{"uv", "cache", "clean"}}
 			}
 			if err := os.MkdirAll(path, 0o700); err != nil {
 				t.Fatal(err)

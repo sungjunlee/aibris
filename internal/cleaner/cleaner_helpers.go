@@ -39,7 +39,11 @@ func IsSafeTarget(home string, item types.DebrisInfo) bool {
 		_, ok := safeHomeRel(home, item.Path)
 		return ok
 	}
-	if goBuildCacheTarget(item) || catalogCacheTarget(item) || agentStateStoreEntry(item) {
+	if goBuildCacheTarget(item) {
+		_, ok := safeHomeRel(home, item.Path)
+		return ok && catalogCacheTarget(item)
+	}
+	if catalogCacheTarget(item) || agentStateStoreEntry(item) {
 		_, ok := safeHomeRel(home, item.Path)
 		return ok
 	}

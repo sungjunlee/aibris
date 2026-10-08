@@ -14,51 +14,64 @@ import (
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
-func TestGoCleanupCommandScope(t *testing.T) {
+func TestGoCleanupOnlyRemovesPreviewedCache(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("Unix shell executable fixture; Windows requires a .cmd/.bat or test binary")
+		t.Skip("Unix shell executable fixture")
 	}
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	path := testutil.GoBuildCache(home)
-	project := filepath.Join(home, "project")
-	for _, dir := range []string{path, project} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+	for _, name := range []string{"00/artifact", "fuzz/corpus", "README", "trim.txt"} {
+		file := filepath.Join(path, name)
+		if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		// Module mode must stay disabled even if a module is in the cache
-		// itself or one of its ancestors, not just the invoking project.
-		if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.test/project\ngo 1.99\ntoolchain go1.99.0\n"), 0o644); err != nil {
+		if err := os.WriteFile(file, []byte("cache data"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
-	t.Chdir(project)
-	t.Setenv("GOTOOLCHAIN", "auto")
-	t.Setenv("GO111MODULE", "on")
-	t.Setenv("GOWORK", filepath.Join(project, "go.work"))
+	outside := filepath.Join(home, "outside")
+	if err := os.WriteFile(outside, []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(home, "go-invoked")
 	binDir := t.TempDir()
-	writeExecutable(t, filepath.Join(binDir, "go"), `#!/bin/sh
-printf '%s\n' "$@" "$GOCACHE" "$GOTOOLCHAIN" "$GO111MODULE" "$GOWORK" "$PWD" > "$GOCACHE/command-record"
-`)
+	writeExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\nprintf invoked > '"+marker+"'\n")
 	t.Setenv("PATH", binDir)
 	items, err := (&adapter.BuildCacheAdapter{}).Scan(context.Background(), types.ScanOptions{Roots: []string{path}})
 	if err != nil || len(items) != 1 {
 		t.Fatalf("scan = %+v, %v", items, err)
 	}
-	if _, err := Execute(items); err != nil {
+	total, err := Execute(items)
+	if err != nil || total != items[0].Size {
+		t.Errorf("cleanup = %d, %v; want %d", total, err, items[0].Size)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("cache including fuzz/README/trim.txt remains: %v", err)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Errorf("Go subprocess ran: %v", err)
+	}
+	if data, err := os.ReadFile(outside); err != nil || string(data) != "keep" {
+		t.Errorf("outside target changed: %q, %v", data, err)
+	}
+}
+
+func TestOldGoCommandInventoryRefuses(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	path := testutil.GoBuildCache(home)
+	if err := os.MkdirAll(path, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	canonical, err := filepath.EvalSymlinks(path)
-	if err != nil {
-		t.Fatal(err)
+	t.Setenv("PATH", t.TempDir())
+	item := types.DebrisInfo{ID: "go-build", Tool: types.ToolBuildCache, Category: types.CategoryBuildCache, Path: path,
+		CleanupKind: types.CleanupCommand, CleanupCommand: []string{"go", "clean", "-cache"}}
+	if total, err := Execute([]types.DebrisInfo{item}); !errors.Is(err, ErrCleanupRecipeChanged) || total != 0 {
+		t.Errorf("old Go recipe = %d, %v; want changed recipe refusal", total, err)
 	}
-	data, err := os.ReadFile(filepath.Join(path, "command-record"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := strings.Join([]string{"clean", "-cache", canonical, "local", "off", "off", canonical, ""}, "\n")
-	if string(data) != want {
-		t.Fatalf("Go command argv/env/cwd = %q; want %q", data, want)
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("refused cache changed: %v", err)
 	}
 }
 

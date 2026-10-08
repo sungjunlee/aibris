@@ -66,8 +66,8 @@ func TestCleanJSONReceiptRejectsDuplicatePreparedEvidenceBeforeMutation(t *testi
 func TestCleanJSONReceiptProductionCommandFallback(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
-	item := types.DebrisInfo{Path: testutil.GoBuildCache(home), Category: types.CategoryBuildCache, Tool: types.ToolBuildCache, ID: "go-build", Size: 8,
-		CleanupKind: types.CleanupCommand, CleanupCommand: []string{"go", "clean", "-cache"}}
+	item := types.DebrisInfo{Path: testutil.UVCache(home), Category: types.CategoryOtherCache, Tool: types.ToolPipCache, ID: "uv", Size: 8,
+		CleanupKind: types.CleanupCommand, CleanupCommand: []string{"uv", "cache", "clean"}}
 	writeJSONReceiptFixture(t, item.Path, "payload!")
 	// An empty PATH guarantees that no real package-manager cleanup can run.
 	t.Setenv("PATH", t.TempDir())

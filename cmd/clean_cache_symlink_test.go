@@ -16,7 +16,7 @@ import (
 )
 
 func TestCleanJSONReceiptRefusesSymlinkedCacheLeaf(t *testing.T) {
-	for _, cache := range []string{"npm", "homebrew"} {
+	for _, cache := range []string{"npm", "go-build", "homebrew"} {
 		t.Run(cache, func(t *testing.T) {
 			if cache == "homebrew" && runtime.GOOS != "darwin" {
 				t.Skip("Homebrew catalog entry is macOS-only")
@@ -32,9 +32,19 @@ func TestCleanJSONReceiptRefusesSymlinkedCacheLeaf(t *testing.T) {
 			if cache == "homebrew" {
 				path = filepath.Join(home, "Library", "Caches", "Homebrew")
 			}
+			if cache == "go-build" {
+				path = testutil.GoBuildCache(home)
+			}
 			elsewhere := filepath.Join(home, "elsewhere", filepath.Base(path))
 			payload := strings.Repeat("x", 5000)
 			writeJSONReceiptFixture(t, elsewhere, payload)
+			payloadName := "payload"
+			if cache == "go-build" {
+				payloadName = "log.txt"
+				if err := os.Rename(filepath.Join(elsewhere, "payload"), filepath.Join(elsewhere, payloadName)); err != nil {
+					t.Fatal(err)
+				}
+			}
 			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 				t.Fatal(err)
 			}
@@ -45,6 +55,8 @@ func TestCleanJSONReceiptRefusesSymlinkedCacheLeaf(t *testing.T) {
 			if err != nil || len(items) != 1 || items[0].Size != 5000 {
 				t.Fatalf("scan = %+v, %v", items, err)
 			}
+			// Deliberately supply a selected inventory claim to exercise the
+			// execution authority independently of preview eligibility.
 			plan, document, components, prepared := preparedReceiptFixture(t, items, staticOverlapSafetyRuntime(nil, nil))
 			receipt, err := executeCleanJSONReceipt(context.Background(), confirminput.NewReader(strings.NewReader("")), document, components, plan, prepared, true, false)
 			if err == nil || !strings.Contains(err.Error(), "cache leaf is a symlink") || receipt.Status != cleanJSONReceiptFailed ||
@@ -65,7 +77,7 @@ func TestCleanJSONReceiptRefusesSymlinkedCacheLeaf(t *testing.T) {
 			if info, err := os.Lstat(path); err != nil || info.Mode()&os.ModeSymlink == 0 {
 				t.Errorf("refused link changed: %v", err)
 			}
-			if data, err := os.ReadFile(filepath.Join(elsewhere, "payload")); err != nil || string(data) != payload {
+			if data, err := os.ReadFile(filepath.Join(elsewhere, payloadName)); err != nil || string(data) != payload {
 				t.Errorf("target payload changed: %d bytes, %v", len(data), err)
 			}
 		})
