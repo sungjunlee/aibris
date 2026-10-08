@@ -267,6 +267,8 @@ Command-backed cleanup:
   or process environment pinning is needed when the tool is not started.
   Removal includes `fuzz`, `README`, and `trim.txt`, matching the scanned size.
   Go [recreates the cache directory and README on next use](https://go.dev/src/cmd/go/internal/cache/default.go).
+  The cache root itself is removed (unlike `go clean -cache`), so custom
+  permissions or ACLs on it are not preserved when Go recreates it.
   An environment or GOENV-file GOCACHE is accepted only with a regular,
   non-symlink `README` whose content starts with
   `This directory holds cached build artifacts from the Go build system.`

@@ -358,6 +358,9 @@ running `go`, so cleanup cannot cause Go telemetry counter writes or uploads,
 select/download a toolchain, or access module/workspace files. This also removes
 `GOCACHE/fuzz`, `README`, and `trim.txt`; the reported size includes all of them.
 Go [recreates the directory and README on next use](https://go.dev/src/cmd/go/internal/cache/default.go).
+Unlike `go clean -cache`, which keeps the top directory, this removes the
+directory itself; Go recreates it with default permissions, so custom
+permissions or ACLs on the cache root are not preserved.
 Explicit GOCACHE settings from the environment or GOENV file require a regular,
 non-symlink `README` beginning with
 `This directory holds cached build artifacts from the Go build system.`
