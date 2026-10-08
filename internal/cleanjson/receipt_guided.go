@@ -145,13 +145,20 @@ func (r *GuidedExecutionReceipt) Finish(
 	listSnapshots func() (int, error),
 ) (Receipt, error) {
 	identityErr := r.identityErr
-	// Aggregate reclaimed bytes prove mutation even when the unit that made it
-	// is missing, which is exactly the invariant failure handled here.
-	mutated := execution.FreedBytes > 0
+	// mutated means a removal was attempted, so the receipt is evidence that
+	// must be emitted. progressed means something was actually reclaimed;
+	// only then does the receipt contract allow partial_failure. Aggregate
+	// reclaimed bytes prove progress even when the unit that made it is
+	// missing, which is exactly the invariant failure handled here.
+	progressed := execution.FreedBytes > 0
+	mutated := progressed
 	seen := make([]bool, len(r.prepared))
 	invalid := make([]bool, len(r.prepared))
 	for _, unit := range execution.Units {
-		mutated = mutated || unit.MutationAttempted || executor.CleanUnitHasMutation(unit)
+		unitProgressed := executor.CleanUnitHasMutation(unit) || unit.FreedBytes > 0 ||
+			unit.State == "removed" || unit.State == "partial"
+		progressed = progressed || unitProgressed
+		mutated = mutated || unit.MutationAttempted || unitProgressed
 		index, err := r.preparedIndex(unit.ReceiptTargetKey)
 		if err != nil {
 			identityErr = errors.Join(identityErr, err)
@@ -197,10 +204,10 @@ func (r *GuidedExecutionReceipt) Finish(
 		return Receipt{}, errors.Join(executionErr, identityErr)
 	}
 	receipt, finalizeErr := finalizeReceipt(r.receipt, listSnapshots)
-	if identityErr != nil && (receipt.Status == ReceiptStatusSucceeded || mutated) {
+	if identityErr != nil && (receipt.Status == ReceiptStatusSucceeded || progressed) {
 		// An unknown extra outcome has no target that can safely be attributed.
 		// Keep recorded outcomes and still make the document report failure.
-		// After mutation, failed and cancelled would deny the progress made.
+		// After progress, failed and cancelled would deny what was reclaimed.
 		receipt.Status = ReceiptStatusPartialFailure
 	}
 	if identityErr != nil {

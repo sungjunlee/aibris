@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -139,6 +140,36 @@ func TestGuidedReceiptIdentityErrorAfterMutationIsPartialFailure(t *testing.T) {
 		}
 		if receipt.Status != ReceiptStatusPartialFailure {
 			t.Fatalf("status = %q, want %q", receipt.Status, ReceiptStatusPartialFailure)
+		}
+		target := receipt.PhysicalTargets[0]
+		if target.State != ReceiptStatusFailed || target.FreedBytes != 0 || !slices.Contains(target.ReasonCodes, "execution_not_recorded") {
+			t.Fatalf("unrecorded target = %+v; aggregate bytes must not be attributed", target)
+		}
+	})
+
+	t.Run("duplicate attempted failure without progress", func(t *testing.T) {
+		pending, prepared := newPending(t)
+		attempted := ExecutionUnit{ReceiptTargetKey: prepared.ReceiptTargetKey, State: "failed", MutationAttempted: true, ResidualBytes: 8}
+		receipt, err := pending.Finish(ExecutionReceipt{Units: []ExecutionUnit{attempted, attempted}}, nil, snapshots)
+		if err == nil {
+			t.Fatal("duplicate outcome must return an invariant error")
+		}
+		if receipt.SchemaVersion == 0 {
+			t.Fatal("receipt dropped although removal was attempted")
+		}
+		if receipt.Status != ReceiptStatusFailed {
+			t.Fatalf("status = %q, want %q: nothing was reclaimed", receipt.Status, ReceiptStatusFailed)
+		}
+	})
+
+	t.Run("missing unit without mutation", func(t *testing.T) {
+		pending, _ := newPending(t)
+		receipt, err := pending.Finish(ExecutionReceipt{}, nil, snapshots)
+		if err == nil {
+			t.Fatal("missing outcome must return an invariant error")
+		}
+		if receipt.SchemaVersion != 0 {
+			t.Fatalf("receipt emitted without any mutation: %+v", receipt)
 		}
 	})
 }
