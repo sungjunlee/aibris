@@ -120,15 +120,18 @@ need() {
 }
 
 run_install_command() {
+  # Return the command's own status explicitly: inside an EXIT trap, a bare
+  # `return` reports the status that triggered the trap (bash 4.4+), which
+  # would abort cleanup under `set -e` before temporary files are removed.
   if [[ -w "$INSTALL_DIR" ]]; then
     "$@"
-    return
+    return $?
   fi
   if [[ "$INSTALL_DIR_EXPLICIT" -eq 1 ]]; then
     need sudo
     log "Using sudo to install into ${INSTALL_DIR}" >&2
     sudo "$@"
-    return
+    return $?
   fi
 
   err "${INSTALL_DIR} is not writable"
