@@ -72,6 +72,11 @@ time of writing.
   PR #310. First: #305. Do not start a sprint until admitted. No hashed JSON
   IDs, no APFS auto-thin, no node_modules pressure age relax.
 
+- 2026-10-07 audit remediation (PR #601, Epics #581-#584) is merged. Open
+  follow-ups: #602-#607. #582 stays open until a real `v*` tag exercises the
+  same-SHA release gate (verification -> draft -> attestation -> publish ->
+  tap).
+
 ## Release Posture
 
 - The project intentionally remains in the 0.x series until the maintainer is
