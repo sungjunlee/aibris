@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/confirminput"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -123,7 +124,7 @@ func cleanupPlanPolicyDecisionForClass(class DecisionClass) CleanupPlanPolicyDec
 	}
 }
 
-func promptUnifiedCleanupReview(ctx context.Context, input io.Reader, output io.Writer, plan UnifiedCleanupPlan, mode cleanupReviewMode, width int) (UnifiedCleanupPlan, bool, error) {
+func promptUnifiedCleanupReview(ctx context.Context, input *confirminput.Reader, output io.Writer, plan UnifiedCleanupPlan, mode cleanupReviewMode, width int) (UnifiedCleanupPlan, bool, error) {
 	return cleaner.PromptUnifiedCleanupReview(ctx, input, output, plan, mode, width)
 }
 

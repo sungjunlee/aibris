@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/confirminput"
 	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/types"
 	"github.com/sungjunlee/aibris/internal/worktree"
@@ -19,7 +20,7 @@ import (
 // retention). Strip eligibility is a separate disposition from deletion
 // eligibility: it never deletes a unit, never touches the checkout, and can
 // only reduce what a later deletion frees.
-func runStripClean() {
+func runStripClean(input *confirminput.Reader) {
 	age, err := parseAge(cleanAge)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "invalid age '%s': expected duration like 7d, 2w, 1mo, 1y, or 24h\n", cleanAge)
@@ -98,7 +99,7 @@ func runStripClean() {
 		return
 	}
 	if !opts.Force {
-		approved, err := confirmCleanExecution(ctx, os.Stdin, os.Stdout)
+		approved, err := confirmCleanExecution(ctx, input, os.Stdout)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)

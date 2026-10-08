@@ -13,6 +13,7 @@ import (
 
 	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/confirminput"
 	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
@@ -1005,7 +1006,7 @@ func TestExecuteOverlapSafetyCancellationAndInteractiveConfirmationStayPreMutati
 		os.Stdin = input
 		defer func() { os.Stdin = previousStdin }()
 
-		receipt, err := interactiveClean(context.Background(), prepared)
+		receipt, err := interactiveClean(context.Background(), confirminput.NewReader(os.Stdin), prepared)
 		if err == nil || receipt.FreedBytes != 0 {
 			t.Fatalf("error=%v, freed=%d; want post-confirmation refresh refusal", err, receipt.FreedBytes)
 		}

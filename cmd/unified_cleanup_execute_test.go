@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/confirminput"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -87,7 +88,7 @@ func TestInteractiveCleanWithValidationRunsAfterApprovalAndStopsMutation(t *test
 
 	validationErr := errors.New("expired after prompt")
 	validationCalls := 0
-	receipt, err := interactiveCleanWithValidation(context.Background(), targets, func(context.Context) error {
+	receipt, err := interactiveCleanWithValidation(context.Background(), confirminput.NewReader(os.Stdin), targets, func(context.Context) error {
 		validationCalls++
 		return validationErr
 	})

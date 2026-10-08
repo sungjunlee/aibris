@@ -6,10 +6,12 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleanjson"
+	"github.com/sungjunlee/aibris/internal/confirminput"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -140,7 +142,7 @@ func TestCleanDomainPlanMixedFixtureParity(t *testing.T) {
 				_, err = executeUnifiedPreparedCleanTargets(ctx, plan, prepared)
 			case "json":
 				var receipt cleanJSONReceipt
-				receipt, err = executeCleanJSONReceipt(ctx, document, components, plan, prepared, true, false)
+				receipt, err = executeCleanJSONReceipt(ctx, confirminput.NewReader(strings.NewReader("")), document, components, plan, prepared, true, false)
 				if receipt.Totals.Requested != 2 || receipt.Totals.Removed != 2 || receipt.Totals.Protected != 1 {
 					t.Fatalf("JSON execution accounting: %+v", receipt)
 				}

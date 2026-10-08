@@ -4,18 +4,38 @@ package confirminput
 import (
 	"bufio"
 	"context"
+	"io"
 )
 
-// Scan gives one goroutine exclusive ownership of scanner until its read ends.
-// Calls must be sequential. On cancellation the caller must abandon the scanner
-// and its reader: a generic Reader cannot be interrupted, so the goroutine may
-// remain blocked until input, EOF, a read error, or process exit. The reader's
-// owner may close it to release the read; Scan never closes caller-owned stdin.
-// The buffered result lets the goroutine exit even after the caller returns.
-func Scan(ctx context.Context, scanner *bufio.Scanner) (line string, ok bool, err error) {
+// Reader preserves buffered lines across sequential confirmation prompts.
+// Create one per command run and pass it to every prompt that reads that input.
+// After cancellation it permanently refuses further reads, even with a fresh
+// context. A generic io.Reader cannot be interrupted: the outstanding goroutine
+// may remain blocked until input, EOF, a read error, or process exit. The run
+// must stop on cancellation; it cannot resume prompting on the same input.
+// The input's owner may close it to release the read; Scan never closes stdin.
+type Reader struct {
+	scanner   *bufio.Scanner
+	cancelErr error
+}
+
+func NewReader(input io.Reader) *Reader {
+	return &Reader{scanner: bufio.NewScanner(input)}
+}
+
+// Scan gives one goroutine exclusive ownership of the scanner until its read
+// ends. Calls must be sequential. The buffered result lets the goroutine exit
+// even after a cancelled caller returns; cancelErr prevents a subsequent prompt
+// from racing that goroutine or having its answer stolen by the abandoned read.
+func Scan(ctx context.Context, input *Reader) (line string, ok bool, err error) {
+	if input.cancelErr != nil {
+		return "", false, input.cancelErr
+	}
 	if err := ctx.Err(); err != nil {
+		input.cancelErr = err
 		return "", false, err
 	}
+	scanner := input.scanner
 	type scanResult struct {
 		line string
 		ok   bool
@@ -28,10 +48,12 @@ func Scan(ctx context.Context, scanner *bufio.Scanner) (line string, ok bool, er
 	}()
 	select {
 	case <-ctx.Done():
-		return "", false, ctx.Err()
+		input.cancelErr = ctx.Err()
+		return "", false, input.cancelErr
 	case value := <-result:
 		// Cancellation wins over input that becomes ready at the same boundary.
 		if err := ctx.Err(); err != nil {
+			input.cancelErr = err
 			return "", false, err
 		}
 		return value.line, value.ok, value.err

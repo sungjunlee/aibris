@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/confirminput"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 	"github.com/sungjunlee/aibris/internal/volume"
@@ -19,11 +20,11 @@ import (
 func TestCleanFinalConfirmationsInput(t *testing.T) {
 	for _, prompt := range []struct {
 		name string
-		read func(context.Context, io.Reader, io.Writer) (bool, error)
+		read func(context.Context, *confirminput.Reader, io.Writer) (bool, error)
 	}{{"clean", confirmCleanExecution}, {"APFS", confirmAPFSSnapshotThin}} {
 		for _, input := range []string{"y\n", "Y\n", "n\n", "", "maybe\n", "y extra\n"} {
 			t.Run(prompt.name+"/"+input, func(t *testing.T) {
-				approved, err := prompt.read(t.Context(), strings.NewReader(input), io.Discard)
+				approved, err := prompt.read(t.Context(), confirminput.NewReader(strings.NewReader(input)), io.Discard)
 				want := input == "y\n" || input == "Y\n"
 				if err != nil || approved != want {
 					t.Fatalf("confirmation = %t, %v; want %t", approved, err, want)
@@ -39,23 +40,23 @@ func TestCleanConfirmationsContextCancellation(t *testing.T) {
 	targets := confirmationTestTargets(t, home, 2)
 	prompts := map[string]func(context.Context, io.Reader) error{
 		"final": func(ctx context.Context, input io.Reader) error {
-			_, err := confirmCleanExecution(ctx, input, io.Discard)
+			_, err := confirmCleanExecution(ctx, confirminput.NewReader(input), io.Discard)
 			return err
 		},
 		"APFS": func(ctx context.Context, input io.Reader) error {
-			_, err := confirmAPFSSnapshotThin(ctx, input, io.Discard)
+			_, err := confirmAPFSSnapshotThin(ctx, confirminput.NewReader(input), io.Discard)
 			return err
 		},
 		"guided": func(ctx context.Context, input io.Reader) error {
-			_, _, err := promptGuidedClean(ctx, input, io.Discard, guidedCleanState{})
+			_, _, err := promptGuidedClean(ctx, confirminput.NewReader(input), io.Discard, guidedCleanState{})
 			return err
 		},
 		"unified": func(ctx context.Context, input io.Reader) error {
-			_, _, err := promptUnifiedCleanupReview(ctx, input, io.Discard, UnifiedCleanupPlan{}, cleanupReviewText, 0)
+			_, _, err := promptUnifiedCleanupReview(ctx, confirminput.NewReader(input), io.Discard, UnifiedCleanupPlan{}, cleanupReviewText, 0)
 			return err
 		},
 		"per-item": func(ctx context.Context, input io.Reader) error {
-			receipt, err := interactiveCleanWithValidationAndObserver(ctx, input, io.Discard, targets, nil, nil)
+			receipt, err := interactiveCleanWithValidationAndObserver(ctx, confirminput.NewReader(input), io.Discard, targets, nil, nil)
 			if len(receipt.Units) != len(targets) {
 				return errors.New("pending cancellation units missing")
 			}
@@ -123,7 +124,7 @@ func TestCleanConfirmationInputDuringCancellationPreservesTargets(t *testing.T) 
 	targets := confirmationTestTargets(t, home, 2)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	receipt, err := interactiveCleanWithValidationAndObserver(ctx, confirmationCancellingReader{cancel}, io.Discard, targets, nil, nil)
+	receipt, err := interactiveCleanWithValidationAndObserver(ctx, confirminput.NewReader(confirmationCancellingReader{cancel}), io.Discard, targets, nil, nil)
 	if !errors.Is(err, context.Canceled) || len(receipt.Units) != len(targets) {
 		t.Fatalf("receipt=%+v error=%v", receipt, err)
 	}
@@ -141,7 +142,7 @@ func TestInteractiveCleanConfirmationInput(t *testing.T) {
 			testutil.SetHome(t, home)
 			targets := confirmationTestTargets(t, home, 1)
 			var outcomes []interactiveCleanSkipOutcome
-			receipt, err := interactiveCleanWithValidationAndObserver(t.Context(), strings.NewReader(input), io.Discard, targets, nil, func(outcome interactiveCleanSkipOutcome) { outcomes = append(outcomes, outcome) })
+			receipt, err := interactiveCleanWithValidationAndObserver(t.Context(), confirminput.NewReader(strings.NewReader(input)), io.Discard, targets, nil, func(outcome interactiveCleanSkipOutcome) { outcomes = append(outcomes, outcome) })
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -180,11 +181,11 @@ func confirmationTestTargets(t *testing.T, home string, count int) []preparedCle
 func TestCleanReviewInput(t *testing.T) {
 	for _, input := range []string{"", "\n", "y\n\n", "n\n\n", "invalid\n\n", "q\n"} {
 		t.Run(input, func(t *testing.T) {
-			_, aborted, err := promptGuidedClean(t.Context(), strings.NewReader(input), io.Discard, guidedCleanState{})
+			_, aborted, err := promptGuidedClean(t.Context(), confirminput.NewReader(strings.NewReader(input)), io.Discard, guidedCleanState{})
 			if err != nil || aborted != (input == "q\n") {
 				t.Fatalf("guided review = aborted %t, error %v", aborted, err)
 			}
-			_, aborted, err = promptUnifiedCleanupReview(t.Context(), strings.NewReader(input), io.Discard, UnifiedCleanupPlan{}, cleanupReviewText, 0)
+			_, aborted, err = promptUnifiedCleanupReview(t.Context(), confirminput.NewReader(strings.NewReader(input)), io.Discard, UnifiedCleanupPlan{}, cleanupReviewText, 0)
 			if err != nil || aborted != (input == "q\n") {
 				t.Fatalf("unified review = aborted %t, error %v", aborted, err)
 			}
@@ -199,7 +200,7 @@ func TestInteractiveCleanValidationCancellationDisposesPending(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	var outcomes []interactiveCleanSkipOutcome
-	receipt, err := interactiveCleanWithValidationAndObserver(ctx, strings.NewReader("y\n"), io.Discard, targets, func(context.Context) error { cancel(); return ctx.Err() }, func(outcome interactiveCleanSkipOutcome) { outcomes = append(outcomes, outcome) })
+	receipt, err := interactiveCleanWithValidationAndObserver(ctx, confirminput.NewReader(strings.NewReader("y\n")), io.Discard, targets, func(context.Context) error { cancel(); return ctx.Err() }, func(outcome interactiveCleanSkipOutcome) { outcomes = append(outcomes, outcome) })
 	if !errors.Is(err, context.Canceled) || len(receipt.Units) != len(targets) || len(outcomes) != len(targets) {
 		t.Fatalf("receipt=%+v outcomes=%+v error=%v", receipt, outcomes, err)
 	}
@@ -226,7 +227,7 @@ func TestAPFSSnapshotCancellationStopsNewPasses(t *testing.T) {
 	listLocalAPFSSnapshots = func() (int, error) { return remaining, nil }
 	thinLocalAPFSSnapshots = func() error { passes++; remaining--; cancel(); return nil }
 	inspectHomeCapacityFn = func() (*volume.Report, error) { return nil, errors.New("fixture volume unavailable") }
-	err := runAPFSSnapshotAction(ctx, false, true)
+	err := runAPFSSnapshotAction(ctx, confirminput.NewReader(strings.NewReader("")), false, true)
 	if !errors.Is(err, context.Canceled) || passes != 1 {
 		t.Fatalf("APFS cancellation = %v, passes %d; want cancelled after one pass", err, passes)
 	}
@@ -273,7 +274,7 @@ func TestGuidedValidationCancellationReason(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	execution, err := interactiveCleanWithValidationAndObserver(ctx, strings.NewReader("y\n"), io.Discard, targets, func(context.Context) error { cancel(); return ctx.Err() }, pending.observeInteractiveSkip)
+	execution, err := interactiveCleanWithValidationAndObserver(ctx, confirminput.NewReader(strings.NewReader("y\n")), io.Discard, targets, func(context.Context) error { cancel(); return ctx.Err() }, pending.observeInteractiveSkip)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}

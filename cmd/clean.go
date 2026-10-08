@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -117,9 +116,9 @@ func init() {
 		"Write a machine-readable execution receipt to this path",
 	)
 }
-func confirmCleanExecution(ctx context.Context, input io.Reader, output io.Writer) (bool, error) {
+func confirmCleanExecution(ctx context.Context, input *confirminput.Reader, output io.Writer) (bool, error) {
 	fmt.Fprint(output, "Proceed? [y/N]: ")
-	response, ok, err := confirminput.Scan(ctx, bufio.NewScanner(input))
+	response, ok, err := confirminput.Scan(ctx, input)
 	if err != nil {
 		return false, err
 	}

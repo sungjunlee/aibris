@@ -12,10 +12,11 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/cleanjson"
+	"github.com/sungjunlee/aibris/internal/confirminput"
 	"github.com/sungjunlee/aibris/internal/scanner"
 )
 
-func runCleanJSON(cmd *cobra.Command) {
+func runCleanJSON(cmd *cobra.Command, input *confirminput.Reader) {
 	if !cleanDryRun && cleanGuide {
 		failCleanJSON("non-dry-run --json cannot use --guide")
 	}
@@ -155,6 +156,7 @@ func runCleanJSON(cmd *cobra.Command) {
 	)
 	receipt, executionErr := executeCleanJSONReceipt(
 		ctx,
+		input,
 		document,
 		components,
 		plan,

@@ -19,6 +19,7 @@ import (
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/codexactivity"
 	"github.com/sungjunlee/aibris/internal/codexhome"
+	"github.com/sungjunlee/aibris/internal/confirminput"
 	"github.com/sungjunlee/aibris/internal/retention"
 	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/testutil"
@@ -1933,7 +1934,7 @@ func TestInteractiveCleanReturnsRejectedTargetError(t *testing.T) {
 	safeTarget := prepareCleanExecutionWithSafety(context.Background(), selection, runtime)[0]
 	defer withStdin(t, "y\n")()
 
-	receipt, err := interactiveClean(context.Background(), []preparedCleanTarget{unsafeTarget, safeTarget})
+	receipt, err := interactiveClean(context.Background(), confirminput.NewReader(os.Stdin), []preparedCleanTarget{unsafeTarget, safeTarget})
 	if err == nil || !strings.Contains(err.Error(), "unsafe path") {
 		t.Fatalf("interactiveClean() error = %v, want unsafe path rejection", err)
 	}
