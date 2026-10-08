@@ -12,6 +12,8 @@
   and require a fresh scan. Catalog cache path removal, including Homebrew,
   refuses symlink leaves with `cache_leaf_symlink` rather than crediting bytes left
   in the target (#605).
+- Root `--help` lists Grok among agent-state providers; the list now comes
+  from the provider registry (#607).
 
 ## [0.14.0] - 2026-10-08
 
