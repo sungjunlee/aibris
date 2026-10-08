@@ -559,7 +559,10 @@ deduplicated, and collapsed when one root is nested inside another.
 - All prompts in one `clean` run share one stdin line reader, including guided
   and unified review, final and per-item confirmation, JSON, strip, and APFS
   routes. Piped answers are consumed in order without losing buffered lines
-  between prompts. TTY rendering and each prompt's EOF behavior are unchanged.
+  between prompts. TTY rendering is unchanged, and each prompt still treats EOF
+  as before. EOF is sticky for the run: once stdin ends (for example Ctrl-D
+  at a review prompt), every later prompt also sees EOF, so a final
+  confirmation receives no answer and nothing is deleted.
   SIGINT, SIGTERM, or context cancellation returns promptly and stops the run.
   A cancelled reader permanently refuses further reads, including with a new
   context. A generic blocking input read may last until input, EOF, a read error,
