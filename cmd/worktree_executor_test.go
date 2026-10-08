@@ -13,6 +13,7 @@ import (
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/cleanjson"
+	"github.com/sungjunlee/aibris/internal/executor"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -37,10 +38,11 @@ func preparedExecutorTarget(
 		t.Fatal(err)
 	}
 	return preparedCleanTarget{
-		Item:           item,
-		ActiveUnit:     &selected,
-		MutationSafety: safety,
-		TargetSnapshot: snapshot,
+		Item:             item,
+		ReceiptTargetKey: cleanJSONReceiptItemKey(item),
+		ActiveUnit:       &selected,
+		MutationSafety:   safety,
+		TargetSnapshot:   snapshot,
 	}
 }
 
@@ -380,15 +382,8 @@ func TestExecuteActiveWorktreePreflightCancellationRecordsComponentBlocker(t *te
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	receipt, err := executeActiveWorktreeUnit(
-		ctx,
-		item,
-		component,
-		selected,
-		nil,
-		nil,
-		defaultActiveWorktreeExecutionOptions(),
-	)
+	prepared := preparedCleanTarget{Item: item, ReceiptTargetKey: cleanJSONReceiptItemKey(item), Component: component, ActiveUnit: &selected}
+	receipt, err := executor.ExecuteActiveWorktreeUnit(ctx, prepared, defaultActiveWorktreeExecutionOptions())
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("executeActiveWorktreeUnit() error = %v; want context cancellation", err)
 	}

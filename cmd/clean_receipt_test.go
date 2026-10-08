@@ -211,7 +211,7 @@ func TestCleanJSONReceiptBatchConfirmationContextCancellationUsesStableReason(t 
 		cleanJSONPlan{PhysicalTargets: []cleanJSONPhysicalTarget{{ID: "target-1", Decision: cleanJSONDecisionSelected, Bytes: target.Size}}},
 		[]cleanJSONSnapshotComponent{{Key: key, Owner: target}},
 		UnifiedCleanupPlan{Components: []CleanupPhysicalComponent{{Owner: target, Selection: CleanupPlanSelected}}},
-		[]preparedCleanTarget{{Item: target}}, false, false,
+		[]preparedCleanTarget{{Item: target, ReceiptTargetKey: cleanJSONReceiptItemKey(target)}}, false, false,
 	)
 	if !errors.Is(executionErr, context.Canceled) || receipt.Status != cleanJSONReceiptCancelled ||
 		!slices.Contains(receipt.PhysicalTargets[0].ReasonCodes, "cancelled_during_confirmation") {
@@ -516,7 +516,7 @@ func TestApplyCleanJSONExecutionReceiptRecordsCommandFallbackPathRemoval(t *test
 func TestOrderCleanJSONReceiptPreparedTargetsUsesPlanTargetOrderWithoutMutatingInput(t *testing.T) {
 	first := types.DebrisInfo{ID: "first", Path: filepath.Join(t.TempDir(), "first")}
 	second := types.DebrisInfo{ID: "second", Path: filepath.Join(t.TempDir(), "second")}
-	prepared := []preparedCleanTarget{{Item: second}, {Item: first}}
+	prepared := []preparedCleanTarget{{Item: second, ReceiptTargetKey: cleanJSONReceiptItemKey(second)}, {Item: first, ReceiptTargetKey: cleanJSONReceiptItemKey(first)}}
 	ids := map[string]string{
 		cleanJSONReceiptItemKey(first):  "target-1",
 		cleanJSONReceiptItemKey(second): "target-2",
@@ -598,7 +598,7 @@ func TestExecuteCleanJSONReceiptRejectsSelectedPreparedSetMismatchBeforeInteract
 	receipt, err := executeCleanJSONReceipt(
 		context.Background(),
 		confirminput.NewReader(os.Stdin), document, components, plan,
-		[]preparedCleanTarget{{Item: second}}, false, true,
+		[]preparedCleanTarget{{Item: second, ReceiptTargetKey: cleanJSONReceiptItemKey(second)}}, false, true,
 	)
 	if err == nil || !strings.Contains(err.Error(), "selected and prepared physical target IDs differ") {
 		t.Fatalf("set mismatch error = %v", err)

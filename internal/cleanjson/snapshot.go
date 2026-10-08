@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/executor"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -181,20 +182,7 @@ func planComponentForPath(path string, components []PlanComponent) (int, bool) {
 // cleaned raw spelling remains a safe, deterministic fallback. Receipt
 // execution uses it to match prepared targets; it is not a wire field.
 func RowIdentityKey(item types.DebrisInfo) string {
-	pathKey := strings.TrimSpace(item.Path)
-	if canonical, ok := cleaner.TargetPathKey(item.Path); ok {
-		pathKey = canonical
-	} else if pathKey != "" {
-		pathKey = cleaner.TargetRawPathKey(pathKey)
-	} else {
-		pathKey = "<empty-path>"
-	}
-	return strings.Join([]string{
-		string(item.Category),
-		string(item.Tool),
-		item.ID,
-		pathKey,
-	}, "\x00")
+	return executor.TargetIdentityKey(item)
 }
 
 func itemKey(item types.DebrisInfo) string {

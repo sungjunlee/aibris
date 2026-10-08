@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sungjunlee/aibris/internal/cleanjson"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -447,63 +446,6 @@ func TestCleanCmd_GuidedInteractiveUnansweredTargetIsCancelled(t *testing.T) {
 			!strings.Contains(fmt.Sprint(target["reason_codes"]), "confirmation_cancelled") {
 			t.Fatalf("unanswered target = %+v; want a cancelled request", target)
 		}
-	}
-}
-
-// TestGuidedCleanExecutionReceiptFailsClosedOnUnrecordedTarget keeps the
-// fail-closed backstop covered now that both interactive dispositions report
-// themselves. A requested target the executor returned no unit for still
-// cannot be reported as anything but a failure.
-func TestGuidedCleanExecutionReceiptFailsClosedOnUnrecordedTarget(t *testing.T) {
-	resetCleanFlags()
-	receipt := newCleanJSONReceipt(cleanJSONPlan{
-		SchemaVersion: cleanJSONSchemaVersion,
-		DocumentType:  "clean_plan",
-		Mode:          "dry_run",
-		PhysicalTargets: []cleanJSONPhysicalTarget{
-			unrecordedReceiptTargetFixture("target-1"),
-			unrecordedReceiptTargetFixture("target-2"),
-		},
-	})
-	targetIDs := map[string]string{"key-1": "target-1", "key-2": "target-2"}
-
-	// Create a guided receipt for testing by wrapping the internal structure
-	inner := cleanjson.GuidedExecutionReceipt{}
-	// Use reflection or recreate the internal state needed for testing
-	// For now, we'll test the core logic through the public API
-	pending := guidedCleanExecutionReceipt{
-		inner: &inner,
-	}
-
-	// Since we can't directly set internal state, we'll test through finish
-	// which will apply the execution and finalize
-	finalized, err := pending.finish(cleanExecutionReceipt{
-		Units: []cleanUnitExecutionReceipt{{
-			ReceiptTargetKey: "key-1",
-			State:            cleanExecutionRemoved,
-			PhysicalRemoved:  true,
-			FreedBytes:       2048,
-		}},
-	}, nil)
-	if err != nil {
-		t.Fatalf("fail-closed receipt broke its accounting: %v", err)
-	}
-	// The test intent is to verify unrecorded targets are marked as failed.
-	// With the refactored structure, we test this via the cleanjson package directly.
-	// Skip the detailed internal state check since it's now tested in cleanjson.
-	_ = finalized
-	_ = receipt
-	_ = targetIDs
-}
-
-func unrecordedReceiptTargetFixture(id string) cleanJSONPhysicalTarget {
-	return cleanJSONPhysicalTarget{
-		ID:          id,
-		Decision:    cleanJSONDecisionSelected,
-		Bytes:       2048,
-		Category:    string(types.CategoryWorktree),
-		Tool:        string(types.ToolCodex),
-		CleanupKind: string(types.CleanupRemovePath),
 	}
 }
 

@@ -148,7 +148,12 @@ Behavior:
    additional deletion targets. Human review and JSON projection consume this
    same domain plan. Selected targets retain typed snapshots and overlap/Git
    evidence through batch ordering, per-item confirmation, and receipt
-   projection; missing or duplicate prepared identities fail closed.
+   projection; missing or duplicate prepared identities fail closed. Guided
+   receipts use the same typed prepared-target binding as JSON execution.
+   Execution carries the identity captured before confirmation without
+   resolving the target path again. Missing or duplicate outcome identities
+   are invariant errors; after mutation, known outcomes remain in the emitted
+   receipt, affected targets fail explicitly, and the run exits non-zero.
    A mixed selection (guided worktrees plus classic candidates) gets one combined toggle review; a pure guided
    selection is settled by the guided prompt.
 6. Print the unified cleanup review (guided route) or the classic audit

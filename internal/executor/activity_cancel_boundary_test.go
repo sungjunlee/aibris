@@ -49,7 +49,7 @@ func TestPreparedCancellationBeforeMutationMatchesReceipt(t *testing.T) {
 				t.Fatal(err)
 			}
 			prepared := executor.PrepareExecutionWithSafety(context.Background(), selection, runtime)
-			receipt, err := executor.ExecutePreparedTargets(ctx, prepared, executor.ExecutionOptions{ReceiptKeyFn: func(item types.DebrisInfo) string { return item.Path }}, nil)
+			receipt, err := executor.ExecutePreparedTargets(ctx, prepared, executor.ExecutionOptions{}, nil)
 			if !errors.Is(err, context.Canceled) || len(receipt.Units) != 1 {
 				t.Fatalf("receipt=%+v err=%v", receipt, err)
 			}
@@ -120,7 +120,7 @@ func TestPreparedCancellationAfterCompletedMutationPreservesBatchReceipt(t *test
 				t.Fatal(err)
 			}
 			prepared := executor.PrepareExecutionWithSafety(context.Background(), selection, runtime)
-			receipt, err := executor.ExecutePreparedTargets(ctx, prepared, executor.ExecutionOptions{Output: output, ErrorOutput: io.Discard, ReceiptKeyFn: func(item types.DebrisInfo) string { return item.Path }}, nil)
+			receipt, err := executor.ExecutePreparedTargets(ctx, prepared, executor.ExecutionOptions{Output: output, ErrorOutput: io.Discard}, nil)
 			if !errors.Is(err, context.Canceled) || len(receipt.Units) != 2 {
 				t.Fatalf("receipt=%+v err=%v", receipt, err)
 			}
@@ -178,7 +178,7 @@ func TestPreparedPartialRemovalWithUnreadableSiblingPreservesReceipt(t *testing.
 		t.Fatal(err)
 	}
 	prepared := executor.PrepareExecutionWithSafety(ctx, selection, runtime)
-	receipt, err := executor.ExecutePreparedTargets(ctx, prepared, executor.ExecutionOptions{Output: io.Discard, ErrorOutput: io.Discard, ReceiptKeyFn: func(item types.DebrisInfo) string { return item.Path }}, nil)
+	receipt, err := executor.ExecutePreparedTargets(ctx, prepared, executor.ExecutionOptions{Output: io.Discard, ErrorOutput: io.Discard}, nil)
 	if !errors.Is(err, os.ErrPermission) || len(receipt.Units) != 1 {
 		t.Fatalf("receipt=%+v err=%v; want one unit and a permission error", receipt, err)
 	}

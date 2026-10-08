@@ -1,10 +1,12 @@
 package cleanjson
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/executor"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -13,8 +15,10 @@ import (
 // file. Identities are captured before mutation: a removed path can no longer
 // be canonicalized back to its plan target.
 type GuidedExecutionReceipt struct {
-	receipt   Receipt
-	targetIDs map[string]string
+	receipt      Receipt
+	prepared     []receiptPreparedTarget
+	dispositions []string
+	identityErr  error
 }
 
 // NewGuidedExecutionReceipt renders the receipt from the plan the guided
@@ -40,65 +44,42 @@ func NewGuidedExecutionReceipt(
 	}, components)
 	receipt := NewReceipt(document, pathsIncluded)
 
-	// Build targetIDs map
-	targetIDs := make(map[string]string)
-	for _, target := range prepared {
-		key := RowIdentityKey(target.Item)
-		for i, component := range components {
-			componentPath, ok := cleaner.TargetPathKey(component.Key)
-			targetPath, pathOk := cleaner.TargetPathKey(target.Item.Path)
-			if ok && pathOk && componentPath == targetPath {
-				targetIDs[key] = fmt.Sprintf("target-%d", i+1)
-				break
-			}
-		}
+	bound, err := bindReceiptPreparedTargets(components, prepared)
+	if err != nil {
+		return GuidedExecutionReceipt{}, err
 	}
 
-	// Mark refused targets from the plan's selected physical targets
-	selectedTargets := make([]types.DebrisInfo, 0)
+	// Mark selected targets refused by overlap safety before preparation.
 	for _, component := range plan.Components {
-		if component.Selection == string(cleaner.CleanupPlanSelected) || component.Selection == string(cleaner.CleanupPlanLocked) {
-			selectedTargets = append(selectedTargets, component.Owner)
+		if component.Selection != string(cleaner.CleanupPlanSelected) && component.Selection != string(cleaner.CleanupPlanLocked) {
+			continue
 		}
-	}
-
-	for _, target := range selectedTargets {
-		id := ""
-		for i, component := range components {
-			componentPath, ok := cleaner.TargetPathKey(component.Key)
-			targetPath, pathOk := cleaner.TargetPathKey(target.Path)
-			if ok && pathOk && componentPath == targetPath {
-				id = fmt.Sprintf("target-%d", i+1)
-				break
-			}
-		}
-		if id == "" {
+		target := component.Owner
+		index, ok := receiptTargetIndexForItem(components, target)
+		if !ok {
 			return GuidedExecutionReceipt{}, fmt.Errorf(
 				"execution receipt invariant: no physical target ID for selected target %q",
 				RowIdentityKey(target),
 			)
 		}
 		found := false
-		for _, tid := range targetIDs {
-			if tid == id {
+		for _, target := range bound {
+			if target.Index == index {
 				found = true
 				break
 			}
 		}
 		if !found {
-			for i := range receipt.PhysicalTargets {
-				if receipt.PhysicalTargets[i].ID == id {
-					receipt.PhysicalTargets[i].State = ReceiptStatusFailed
-					receipt.PhysicalTargets[i].Requested = true
-					receipt.PhysicalTargets[i].ReasonCodes = append(receipt.PhysicalTargets[i].ReasonCodes, "safety_refused")
-					break
-				}
-			}
+			target := &receipt.PhysicalTargets[index]
+			target.State = ReceiptStatusFailed
+			target.Requested = true
+			target.ReasonCodes = append(target.ReasonCodes, "safety_refused")
 		}
 	}
 	return GuidedExecutionReceipt{
-		receipt:   receipt,
-		targetIDs: targetIDs,
+		receipt:      receipt,
+		prepared:     bound,
+		dispositions: make([]string, len(bound)),
 	}, nil
 }
 
@@ -115,75 +96,131 @@ type InteractiveSkipOutcome struct {
 // non-requested skip; cancellation reasons distinguish an unanswered prompt
 // from validation cancelled after approval.
 func (r *GuidedExecutionReceipt) ObserveInteractiveSkip(outcome InteractiveSkipOutcome) {
-	id := r.targetIDs[RowIdentityKey(outcome.Target.Item)]
-	if outcome.Declined {
-		for i := range r.receipt.PhysicalTargets {
-			if r.receipt.PhysicalTargets[i].ID == id {
-				r.receipt.PhysicalTargets[i].State = ReceiptStatusSkipped
-				r.receipt.PhysicalTargets[i].Requested = false
-				r.receipt.PhysicalTargets[i].ReasonCodes = append(r.receipt.PhysicalTargets[i].ReasonCodes, "not_confirmed")
-				break
-			}
-		}
+	index, err := r.preparedIndex(outcome.Target.ReceiptTargetKey)
+	if err != nil {
+		r.identityErr = errors.Join(r.identityErr, err)
 		return
 	}
+	if r.dispositions[index] != "" {
+		r.identityErr = errors.Join(r.identityErr, fmt.Errorf("execution receipt invariant: duplicate guided disposition for target %q", r.prepared[index].Key))
+		markGuidedIdentityFailure(&r.receipt.PhysicalTargets[r.prepared[index].Index])
+		return
+	}
+	target := &r.receipt.PhysicalTargets[r.prepared[index].Index]
+	if outcome.Declined {
+		r.dispositions[index] = ReceiptStatusSkipped
+		target.State = ReceiptStatusSkipped
+		target.Requested = false
+		target.ReasonCodes = append(target.ReasonCodes, "not_confirmed")
+		return
+	}
+	r.dispositions[index] = ReceiptStatusCancelled
 	code := "confirmation_cancelled"
 	if outcome.AfterConfirmation {
 		code = "cancelled_after_confirmation"
 	}
-	for i := range r.receipt.PhysicalTargets {
-		if r.receipt.PhysicalTargets[i].ID == id {
-			r.receipt.PhysicalTargets[i].State = ReceiptStatusCancelled
-			r.receipt.PhysicalTargets[i].Requested = true
-			r.receipt.PhysicalTargets[i].ReasonCodes = append(r.receipt.PhysicalTargets[i].ReasonCodes, code)
-			break
-		}
-	}
+	target.State = ReceiptStatusCancelled
+	target.Requested = true
+	target.ReasonCodes = append(target.ReasonCodes, code)
 }
 
-// Finish finalizes the guided execution receipt with execution results.
+func (r *GuidedExecutionReceipt) preparedIndex(key string) (int, error) {
+	if key == "" {
+		return 0, fmt.Errorf("execution receipt invariant: executed target is missing its pre-execution identity")
+	}
+	for i, target := range r.prepared {
+		if target.Key == key {
+			return i, nil
+		}
+	}
+	return 0, fmt.Errorf("execution receipt invariant: missing pre-execution target ID for target %q", key)
+}
+
+// Finish projects every known outcome, even when a later identity error is
+// discovered. After mutation a receipt is evidence, so an invariant failure
+// must not erase it; affected targets fail explicitly and the error is returned.
 func (r *GuidedExecutionReceipt) Finish(
 	execution ExecutionReceipt,
 	executionErr error,
 	listSnapshots func() (int, error),
 ) (Receipt, error) {
-	// Apply execution results to receipt
+	identityErr := r.identityErr
+	// mutated means a removal was attempted, so the receipt is evidence that
+	// must be emitted. progressed means something was actually reclaimed;
+	// only then does the receipt contract allow partial_failure. Aggregate
+	// reclaimed bytes prove progress even when the unit that made it is
+	// missing, which is exactly the invariant failure handled here.
+	progressed := execution.FreedBytes > 0
+	mutated := progressed
+	seen := make([]bool, len(r.prepared))
+	invalid := make([]bool, len(r.prepared))
 	for _, unit := range execution.Units {
-		key := unit.ReceiptTargetKey
-		if key == "" {
+		unitProgressed := executor.CleanUnitHasMutation(unit) || unit.FreedBytes > 0 ||
+			unit.State == "removed" || unit.State == "partial"
+		progressed = progressed || unitProgressed
+		mutated = mutated || unit.MutationAttempted || unitProgressed
+		index, err := r.preparedIndex(unit.ReceiptTargetKey)
+		if err != nil {
+			identityErr = errors.Join(identityErr, err)
 			continue
 		}
-		id := r.targetIDs[key]
-		if id == "" {
-			continue
+		// A cancelled unit supplies byte accounting for the same cancellation
+		// disposition. A decline or a second unit is never an execution result.
+		disposition := r.dispositions[index]
+		matchingCancellation := disposition == ReceiptStatusCancelled && string(unit.State) == ReceiptStatusCancelled &&
+			!unit.MutationAttempted && !unit.PhysicalRemoved && unit.FreedBytes == 0
+		if seen[index] || disposition != "" && !matchingCancellation {
+			identityErr = errors.Join(identityErr, fmt.Errorf("execution receipt invariant: duplicate guided outcome for target %q", unit.ReceiptTargetKey))
+			invalid[index] = true
 		}
-		for i := range r.receipt.PhysicalTargets {
-			if r.receipt.PhysicalTargets[i].ID != id {
-				continue
-			}
-			target := &r.receipt.PhysicalTargets[i]
+		target := &r.receipt.PhysicalTargets[r.prepared[index].Index]
+		if !seen[index] {
 			target.State = string(unit.State)
-			target.Requested = unit.State == "removed" ||
-				unit.State == "partial" ||
-				unit.State == "failed" ||
-				unit.State == "cancelled"
+			target.Requested = unit.State == "removed" || unit.State == "partial" || unit.State == "failed" || unit.State == "cancelled"
 			target.PhysicalRemoved = unit.PhysicalRemoved
-			target.FreedBytes = unit.FreedBytes
-			if target.FreedBytes < 0 {
-				target.FreedBytes = 0
-			}
-			if unit.PhysicalRemoved {
+			target.FreedBytes = max(unit.FreedBytes, 0)
+			target.ResidualBytes = residualBytesJSON(unit)
+		} else {
+			// Retain known mutations without double-counting duplicate outcomes.
+			target.PhysicalRemoved = target.PhysicalRemoved || unit.PhysicalRemoved
+			target.FreedBytes = max(target.FreedBytes, unit.FreedBytes)
+			if target.PhysicalRemoved {
 				target.ResidualBytes = nil
-			} else {
-				residual := unit.ResidualBytes
-				target.ResidualBytes = &residual
+			} else if target.ResidualBytes != nil {
+				*target.ResidualBytes = max(*target.ResidualBytes, unit.ResidualBytes)
 			}
-			break
+		}
+		seen[index] = true
+	}
+	for i, target := range r.prepared {
+		if !seen[i] && r.dispositions[i] == "" {
+			identityErr = errors.Join(identityErr, fmt.Errorf("execution receipt invariant: no guided outcome for prepared target %q", target.Key))
+		}
+		if invalid[i] {
+			markGuidedIdentityFailure(&r.receipt.PhysicalTargets[target.Index])
 		}
 	}
+	if identityErr != nil && !mutated {
+		return Receipt{}, errors.Join(executionErr, identityErr)
+	}
+	receipt, finalizeErr := finalizeReceipt(r.receipt, listSnapshots)
+	if identityErr != nil && (receipt.Status == ReceiptStatusSucceeded || progressed) {
+		// An unknown extra outcome has no target that can safely be attributed.
+		// Keep recorded outcomes and still make the document report failure.
+		// After progress, failed and cancelled would deny what was reclaimed.
+		receipt.Status = ReceiptStatusPartialFailure
+	}
+	if identityErr != nil {
+		return receipt, errors.Join(executionErr, identityErr, finalizeErr)
+	}
+	// Valid guided receipts keep the caller responsible for execution errors.
+	return receipt, finalizeErr
+}
 
-	// Finalize and return the receipt
-	return finalizeReceipt(r.receipt, listSnapshots)
+func markGuidedIdentityFailure(target *ReceiptPhysicalTarget) {
+	target.State = ReceiptStatusFailed
+	target.Requested = true
+	target.ReasonCodes = uniqueReasonCodes(append(target.ReasonCodes, "execution_identity_invalid"))
 }
 
 // WriteGuidedExecutionReceipt finalizes and stores the guided execution
@@ -200,6 +237,10 @@ func WriteGuidedExecutionReceipt(
 		return
 	}
 	receipt, finishErr := pending.Finish(execution, executionErr, listSnapshots)
+	if receipt.SchemaVersion == 0 && finishErr != nil {
+		fmt.Fprintf(os.Stderr, "error: the cleanup already ran; preparing the receipt file failed: %v\n", finishErr)
+		os.Exit(1)
+	}
 	if err := WriteOwnerOnlyJSON(receiptPath, receipt); err != nil {
 		fmt.Fprintf(os.Stderr, "error: the cleanup already ran; writing the receipt file failed: %v\n", err)
 		os.Exit(1)

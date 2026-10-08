@@ -47,6 +47,5 @@ func executePreparedCleanTargets(
 	targets []preparedCleanTarget,
 	opts executor.ExecutionOptions,
 ) (cleanExecutionReceipt, error) {
-	opts.ReceiptKeyFn = cleanJSONReceiptItemKey
 	return executor.ExecutePreparedTargets(ctx, targets, opts, invalidateLastScanCache)
 }
