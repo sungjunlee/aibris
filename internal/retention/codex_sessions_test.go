@@ -245,7 +245,7 @@ func TestCodexSessionsRootHonorsCodexHomeEnv(t *testing.T) {
 	}
 	t.Setenv("CODEX_HOME", codexHome)
 
-	root, err := codexSessionsRoot()
+	roots, err := codexSessionsRoots()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -253,8 +253,8 @@ func TestCodexSessionsRootHonorsCodexHomeEnv(t *testing.T) {
 	if resolved, resolveErr := filepath.EvalSymlinks(codexHome); resolveErr == nil {
 		wantHome = resolved
 	}
-	if want := filepath.Join(wantHome, "sessions"); root != want {
-		t.Fatalf("codexSessionsRoot() = %q; want %q", root, want)
+	if want := filepath.Join(wantHome, "sessions"); len(roots) != 1 || roots[0] != want {
+		t.Fatalf("codexSessionsRoots() = %q; want [%q]", roots, want)
 	}
 }
 

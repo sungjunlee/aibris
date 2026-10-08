@@ -206,7 +206,7 @@ item list, not as a worktree-only list.
 | `category` | string | Debris category (`worktree`, `node_modules`, `build-cache`, `other-cache`, `agent-state`, `ai-logs`). Cursor entries under `~/.cursor/projects` use `agent-state`, not `ai-logs`. |
 | `id` | string | Unique identifier (hash, directory name, or cache key) |
 | `project` | string | Project name if detectable, empty otherwise |
-| `source` | string | Worktree source such as `.codex`, `.somename`, `project-local`, or the registered `superpowers`; empty for non-worktree items. Superpowers rows use `tool=unknown`. |
+| `source` | string | Worktree source such as `.codex`, `.somename`, `project-local`, or the registered `superpowers` and `orca`; empty for non-worktree items. Superpowers and Orca rows use `tool=unknown`. Orca `<repo>/<worktree>` rows have independent owner paths. |
 | `path` | string | Absolute filesystem path |
 | `size` | integer | Apparent bytes: sum of non-directory entry lengths. Sparse files count logical length. Regular hardlinks count once per (device, inode) within each target when Unix `FileInfo.Sys()` exposes `syscall.Stat_t`; Windows and unavailable identity count per path. Different targets are measured independently. Root symlinks are followed; nested symlinks count their own length without following targets. Directory metadata is excluded; unreadable entries may leave a partial estimate. Not allocated blocks or guaranteed reclaimed space. |
 | `mod_time` | string | Last modification time in RFC 3339 format. For `build-cache`, `other-cache`, and `agent-state` rows this is the newest mtime found anywhere in the tree, not the path's own mtime. |
@@ -344,9 +344,16 @@ duration, error). They never contain file paths, item paths, or file content.
 
 An explicit `--root` is a hard boundary for this projection too: an excluded
 Codex sessions store is not added back implicitly. Default-home scans may add
-the resolved primary Codex home; additional homes do not expand this retention
-store contract. Traversal stays inside that store, skips non-regular leaves
+all resolved Codex homes: the primary home, `$AIBRIS_CODEX_HOMES`, and the
+layout-verified Orca macOS home. Canonical home aliases count once, and their
+sessions merge into the existing `(store_id, bucket_id)` aggregates without
+exposing home or member paths. Traversal stays inside each sessions store, skips non-regular leaves
 without skipping their ordinary siblings, and never follows directory symlinks.
+
+Orca discovery adds items and aggregate counts only; the public JSON shape and
+`schema_version: 1` are unchanged. Extra-home log IDs keep the existing numeric
+suffix convention. Internal scan and activity caches are revised to reject
+inventories created before Orca discovery.
 
 The top-level `retention` object is always present. It is non-additive
 physical accounting: one aggregate row exists per `(store_id, bucket_id)`,

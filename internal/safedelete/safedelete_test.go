@@ -6,10 +6,13 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/sungjunlee/aibris/internal/testutil"
 )
 
 func TestCheckAllowsCleanupTargetsBelowProtectedLocations(t *testing.T) {
 	home := t.TempDir()
+	testutil.SetHome(t, home)
 	for _, rel := range []string{
 		"Library/Caches/Homebrew",
 		"Library/Developer/Xcode/DerivedData",
@@ -32,6 +35,7 @@ func TestCheckAllowsCleanupTargetsBelowProtectedLocations(t *testing.T) {
 
 func TestCheckRefusesProtectedLocationsAndTheirAncestors(t *testing.T) {
 	home := t.TempDir()
+	testutil.SetHome(t, home)
 	for _, rel := range []string{
 		"Documents",
 		"Library",
@@ -57,6 +61,7 @@ func TestCheckRefusesProtectedLocationsAndTheirAncestors(t *testing.T) {
 
 func TestCheckRefusesHomeAndPathsOutsideIt(t *testing.T) {
 	home := t.TempDir()
+	testutil.SetHome(t, home)
 	outside := t.TempDir()
 	for _, path := range []string{home, outside, filepath.Dir(home), "relative/path"} {
 		if err := Check(home, path); !errors.Is(err, ErrRefused) {
@@ -70,6 +75,7 @@ func TestCheckRefusesHomeAndPathsOutsideIt(t *testing.T) {
 
 func TestCheckResolvesSymlinksBeforeJudging(t *testing.T) {
 	home := t.TempDir()
+	testutil.SetHome(t, home)
 	outside := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(home, "Documents"), 0o755); err != nil {
 		t.Fatal(err)
@@ -93,6 +99,7 @@ func TestCheckFoldsCaseOnCaseInsensitivePlatforms(t *testing.T) {
 		t.Skip("case-sensitive platform")
 	}
 	home := t.TempDir()
+	testutil.SetHome(t, home)
 	if err := Check(home, filepath.Join(home, "library")); !errors.Is(err, ErrRefused) {
 		t.Errorf("Check(library) = %v; want refusal", err)
 	}
@@ -100,6 +107,7 @@ func TestCheckFoldsCaseOnCaseInsensitivePlatforms(t *testing.T) {
 
 func TestCheckRefusesPrimaryGitRepository(t *testing.T) {
 	home := t.TempDir()
+	testutil.SetHome(t, home)
 	repo := filepath.Join(home, "work", "repo")
 	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
 		t.Fatal(err)
@@ -121,6 +129,7 @@ func TestCheckRefusesPrimaryGitRepository(t *testing.T) {
 
 func TestRemoveAllRemovesOnlyWhatCheckAllows(t *testing.T) {
 	home := t.TempDir()
+	testutil.SetHome(t, home)
 	target := filepath.Join(home, "work", "node_modules")
 	if err := os.MkdirAll(filepath.Join(target, "dep"), 0o755); err != nil {
 		t.Fatal(err)
@@ -145,6 +154,7 @@ func TestRemoveAllRemovesOnlyWhatCheckAllows(t *testing.T) {
 
 func TestCheckRefusesUncleanPathsAndGitMetadata(t *testing.T) {
 	home := t.TempDir()
+	testutil.SetHome(t, home)
 	for _, path := range []string{
 		home + string(filepath.Separator) + "work" + string(filepath.Separator) + ".." +
 			string(filepath.Separator) + "Documents",
@@ -159,6 +169,7 @@ func TestCheckRefusesUncleanPathsAndGitMetadata(t *testing.T) {
 
 func TestCheckProtectsRelocatedAgentHomes(t *testing.T) {
 	home := t.TempDir()
+	testutil.SetHome(t, home)
 	codexHome := filepath.Join(home, "agents", "codex")
 	extra := filepath.Join(home, "sandboxes", "codex-two")
 	claudeHome := filepath.Join(home, "agents", "claude")
@@ -192,6 +203,7 @@ func TestCheckProtectsRelocatedAgentHomes(t *testing.T) {
 
 func TestCheckRefusesPathsThroughASymlinkedGitDirectory(t *testing.T) {
 	home := t.TempDir()
+	testutil.SetHome(t, home)
 	store := filepath.Join(home, "git-store")
 	if err := os.MkdirAll(filepath.Join(store, "objects"), 0o755); err != nil {
 		t.Fatal(err)

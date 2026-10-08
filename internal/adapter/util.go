@@ -144,7 +144,7 @@ func isDefaultHomeScan(roots []string) bool {
 }
 
 // UncoveredCodexHomeWarning returns one path-free diagnostic when explicit
-// scan roots do not cover a configured Codex home. Default $HOME scans return
+// scan roots do not cover a resolved Codex home. Default $HOME scans return
 // no warning because those homes are still appended.
 func UncoveredCodexHomeWarning(opts types.ScanOptions) (string, error) {
 	if !explicitScan(opts, opts.Roots) {
@@ -158,7 +158,7 @@ func UncoveredCodexHomeWarning(opts types.ScanOptions) (string, error) {
 }
 
 // appendUncoveredCodexHomes returns roots extended with every Codex home
-// (CODEX_HOME plus any AIBRIS_CODEX_HOMES entries) that is not already under
+// (primary, configured extras, and the verified Orca macOS home) not already under
 // one of them. Scan roots default to $HOME while the Codex CLI honors
 // CODEX_HOME, so a default scan must still cover an overridden home or its
 // store would be silently filtered away.

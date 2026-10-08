@@ -2,6 +2,15 @@
 
 ## [0.14.1] - 2026-10-08
 
+### Added
+
+- Discover Orca's default `~/orca/workspaces/<repo>` containers, classifying
+  each worktree as its own mutation owner. On macOS, a layout-verified Orca
+  Codex home supplies worktrees, recent-session activity (including Orca
+  workspace CWDs), read-only retention, and `--risky` logs. All resolved Codex
+  homes now contribute retention aggregates. Homes, containers, and their
+  ancestors are deletion-protected; explicit roots stay bounded (#613).
+
 ### Fixed
 
 - All clean prompts share one stdin line reader per run, preserving piped

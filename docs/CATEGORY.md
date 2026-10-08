@@ -55,6 +55,26 @@ snapshot rather than an age-based deletion path.
 Unknown or future categories should stay risky until they have explicit safety
 rules.
 
+Worktree discovery's finite registry contains `<resolved Codex home>/worktrees`,
+`~/.relay/worktrees`, `~/.gstack/worktrees`,
+`~/.config/superpowers/worktrees`, and each immediate directory
+`~/orca/workspaces/<repo>`. Orca reads only that workspace directory's children,
+skipping symlinks, non-directories, and Git checkouts with their own `.git`.
+Each `<repo>/<worktree>` is independently classified and is its own mutation
+owner. Orca rows carry `source=orca`, `tool=unknown`; the containers and their
+ancestors are protected whole targets.
+
+Resolved Codex homes include `$CODEX_HOME` (default `~/.codex`),
+`$AIBRIS_CODEX_HOMES`, and, on macOS, the verified default
+`~/Library/Application Support/orca/codex-runtime-home/home`. Auto-discovery
+requires a regular non-symlink `config.toml` plus a non-symlink `sessions/`
+directory. A layout mismatch is ignored silently; `auth.json` is never read.
+This home contributes worktrees, activity (including Orca workspace CWDs),
+read-only sessions retention, and `ai-logs` requiring `--risky`. Homes and
+their ancestors remain protected, and explicit `--root` never widens to an
+excluded home. Custom Orca locations and other platforms' Orca Codex homes
+remain outside this default registry.
+
 ## Protected Retention Is Not a Category
 
 The canonical [protected-content retention contract](PROTECTED_RETENTION.md)

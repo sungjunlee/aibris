@@ -1080,7 +1080,7 @@ func TestBlockedAliasKeyUsesCanonicalIdentity(t *testing.T) {
 		t.Skipf("symlink not supported: %v", err)
 	}
 
-	containers, err := registeredWorktreeContainers(canonicalExistingPath(home))
+	containers, err := registeredWorktreeContainers(canonicalExistingPath(home), []string{home})
 	if err != nil {
 		t.Fatal(err)
 	}

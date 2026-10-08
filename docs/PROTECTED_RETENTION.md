@@ -12,13 +12,17 @@ merging this document; reviving it requires a new contract leaf.
 
 ## Stores, units, and bounded evidence
 
-Each store owns exactly one bounded root. A provider may inspect only the
+Each store instance owns exactly one bounded root. A provider may inspect only the
 versioned metadata envelope and filesystem metadata needed to recognize
 complete units; it may not broadly walk the surrounding tool home.
 
 | Store ID | Exact bounded root | Bounded retention unit | Trusted primary timestamp |
 | --- | --- | --- | --- |
-| `codex-sessions` | `$CODEX_HOME/sessions` (default `~/.codex/sessions` when `CODEX_HOME` is unset) | One recognized fixed Codex session regular-file leaf. The leaf is both the unit anchor and its only content member unless a later producer-versioned layout explicitly registers bounded metadata companions. | The fixed session file's `Lstat.ModTime`. Date-shaped ancestors and timestamps found later in the transcript do not participate. |
+| `codex-sessions` | `<resolved Codex home>/sessions` in the primary home (`$CODEX_HOME`, default `~/.codex`), `$AIBRIS_CODEX_HOMES`, and the layout-verified Orca macOS home | One recognized fixed Codex session regular-file leaf. The leaf is both the unit anchor and its only content member unless a later producer-versioned layout explicitly registers bounded metadata companions. | The fixed session file's `Lstat.ModTime`. Date-shaped ancestors and timestamps found later in the transcript do not participate. |
+
+Home aliases are inventoried once; counts from different homes merge into the
+same `(store_id, bucket_id)` rows. Explicit `--root` bounds every instance.
+Orca's home layout and discovery rules are defined in [SPEC.md](SPEC.md).
 
 Additional stores (`cursor-chats`, `claude-projects`, `gstack-projects`,
 `relay-runs`, `codex-generated-images`) remain future provider work under the

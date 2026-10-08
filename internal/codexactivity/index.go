@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -17,7 +18,7 @@ import (
 )
 
 const (
-	CacheSchemaVersion = 3
+	CacheSchemaVersion = 4 // recognize Orca workspace CWDs in Orca's Codex home
 	Freshness          = 15 * time.Minute
 
 	SourceCache       = "cache"
@@ -325,7 +326,25 @@ func readSessionFileRecord(ctx context.Context, file sessionFileInfo) (FileRecor
 }
 
 func WorktreeFromCWD(cwd, home string) (string, string, bool) {
-	rel, err := filepath.Rel(canonicalPath(home), canonicalPath(cwd))
+	home = canonicalPath(home)
+	if runtime.GOOS == "darwin" {
+		// Derive the workspace root from the indexed source, without repeatedly
+		// probing the Orca layout for every session record and member lookup.
+		userHome := home
+		for range 5 {
+			userHome = filepath.Dir(userHome)
+		}
+		if home == filepath.Join(userHome, "Library", "Application Support", "orca", "codex-runtime-home", "home") {
+			root := canonicalPath(filepath.Join(userHome, "orca", "workspaces"))
+			rel, err := filepath.Rel(root, canonicalPath(cwd))
+			parts := pathParts(rel)
+			if err == nil && len(parts) >= 2 && parts[0] != ".." && !filepath.IsAbs(rel) {
+				// Nested CWDs lock the whole <repo>/<worktree> owner.
+				return filepath.Join(parts[0], parts[1]), parts[0], true
+			}
+		}
+	}
+	rel, err := filepath.Rel(home, canonicalPath(cwd))
 	if err != nil {
 		return "", "", false
 	}

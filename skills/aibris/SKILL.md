@@ -376,9 +376,21 @@ aibris scan --root ~/.codex --json  # 특정 HOME 하위 경로만 스캔
 기본 스캔 root는 `$HOME`이다. `--root`는 여러 번 지정할 수 있고, 반드시
 `$HOME` 아래로 해석되어야 한다. `/`, `/tmp`, symlink escape는 거부된다.
 명시적 `--root`는 hard boundary다. 기본 `$HOME` 스캔만 `$CODEX_HOME` /
-`$AIBRIS_CODEX_HOMES`를 덮는다. 지정한 root가 Codex home을 포함하지
+`$AIBRIS_CODEX_HOMES`와 macOS에서 layout이 확인된 Orca Codex home
+(`~/Library/Application Support/orca/codex-runtime-home/home`)을 덮는다.
+발견 조건은 symlink가 아닌 regular `config.toml`과 symlink가 아닌
+`sessions/` directory다. `auth.json`은 읽지 않는다. 지정한 root가 Codex home을 포함하지
 않으면 경고 한 줄만 내고 범위를 넓히지 않는다. `--root`가 valid
 worktree outer owner이면 그 unit 하나만 발견한다.
+
+Orca 기본 worktree 위치는 `~/orca/workspaces/<repo>/<worktree>`다.
+각 immediate `<repo>` directory를 registered container로 읽고, symlink,
+non-directory, 자체 `.git`이 있는 checkout은 건너뛴다. 각 `<worktree>`가
+독립 mutation owner이며 `source=orca`, `tool=unknown`으로 보고된다.
+Guided review는 Orca Codex session의 최근 cwd도 activity lock에 반영한다.
+모든 resolved home의 sessions retention은 read-only inventory이고,
+`logs_2.sqlite`와 `archived_sessions/` cleanup에는 계속 `--risky`가 필요하다.
+Orca home과 container 및 그 ancestors는 whole target으로 삭제할 수 없다.
 
 ### clean
 

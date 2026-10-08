@@ -9,6 +9,7 @@ package codexhome
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -45,8 +46,31 @@ func ExtraHomes() []string {
 	return homes
 }
 
-// Homes returns the primary Codex home followed by any configured extra
-// homes, deduplicated.
+// OrcaHome returns Orca's verified macOS default Codex home, or an empty
+// string when absent or unrecognized. Only layout metadata is inspected;
+// config contents and auth.json are never read.
+func OrcaHome() string {
+	if runtime.GOOS != "darwin" {
+		return ""
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	path := filepath.Join(home, "Library", "Application Support", "orca", "codex-runtime-home", "home")
+	config, err := os.Lstat(filepath.Join(path, "config.toml"))
+	if err != nil || !config.Mode().IsRegular() {
+		return ""
+	}
+	sessions, err := os.Lstat(filepath.Join(path, "sessions"))
+	if err != nil || !sessions.IsDir() || sessions.Mode()&os.ModeSymlink != 0 {
+		return ""
+	}
+	return path
+}
+
+// Homes returns the primary Codex home followed by configured extras and
+// Orca's verified macOS home, deduplicated in that order.
 func Homes() ([]string, error) {
 	primary, err := Home()
 	if err != nil {
@@ -60,6 +84,20 @@ func Homes() ([]string, error) {
 		}
 		seen[extra] = true
 		homes = append(homes, extra)
+	}
+	if orca := OrcaHome(); orca != "" {
+		orcaInfo, err := os.Stat(orca)
+		if err != nil {
+			return homes, nil
+		}
+		for _, home := range homes {
+			// Configured aliases keep their spelling and position. Discovery
+			// must not add a second copy of the same physical home.
+			if info, err := os.Stat(home); err == nil && os.SameFile(info, orcaInfo) {
+				return homes, nil
+			}
+		}
+		homes = append(homes, orca)
 	}
 	return homes, nil
 }
