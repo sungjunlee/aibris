@@ -126,7 +126,8 @@ These hold for every change. Breaking one is a bug even if tests pass.
   claim; execution re-derives whether it may be removed (see strip).
 - **Preview and confirm.** `--dry-run` never mutates. A real `clean` prompts;
   `--force` skips only the prompt, never a safety check. `--interactive`
-  confirms per item.
+  confirms per item. All prompts share the run's stdin line reader, created in
+  `cmd`; cancellation stops the run and permanently disables that reader.
 - **Defaults:** classic `--age` is `7d` (caches on a home volume over 95% full
   relax it); AI logs need `--risky`; active worktrees need explicit selection;
   orphaned agent state ignores `--age` and waits for `--agent-state-grace`

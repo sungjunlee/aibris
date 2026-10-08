@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/confirminput"
 	"github.com/sungjunlee/aibris/internal/executor"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -12,6 +13,7 @@ import (
 // It wraps the lower-level ExecuteReceipt with cmd-layer type conversions.
 func ExecuteCleanJSONReceipt(
 	ctx context.Context,
+	input *confirminput.Reader,
 	document Plan,
 	components []SnapshotComponent,
 	selectedPhysicalTargets func() []types.DebrisInfo,
@@ -26,6 +28,7 @@ func ExecuteCleanJSONReceipt(
 ) (Receipt, error) {
 	return ExecuteReceipt(
 		ctx,
+		input,
 		document,
 		components,
 		selectedPhysicalTargets,

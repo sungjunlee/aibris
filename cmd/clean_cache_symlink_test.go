@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
+	"github.com/sungjunlee/aibris/internal/confirminput"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -45,7 +46,7 @@ func TestCleanJSONReceiptRefusesSymlinkedCacheLeaf(t *testing.T) {
 				t.Fatalf("scan = %+v, %v", items, err)
 			}
 			plan, document, components, prepared := preparedReceiptFixture(t, items, staticOverlapSafetyRuntime(nil, nil))
-			receipt, err := executeCleanJSONReceipt(context.Background(), document, components, plan, prepared, true, false)
+			receipt, err := executeCleanJSONReceipt(context.Background(), confirminput.NewReader(strings.NewReader("")), document, components, plan, prepared, true, false)
 			if err == nil || !strings.Contains(err.Error(), "cache leaf is a symlink") || receipt.Status != cleanJSONReceiptFailed ||
 				receipt.Totals.Requested != 1 || receipt.Totals.Failed != 1 || receipt.Totals.FreedBytes != 0 {
 				t.Errorf("refusal receipt=%+v error=%v", receipt, err)

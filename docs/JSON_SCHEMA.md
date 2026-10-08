@@ -406,7 +406,8 @@ contract as the plan.
 
 `--force --json` attempts the complete selected set without a confirmation
 read. `--interactive --json` reads one silent line per selected physical target
-in embedded `plan.physical_targets` order:
+in embedded `plan.physical_targets` order, using the run's shared stdin reader
+so buffered piped answers survive between confirmations:
 `y`/`yes` executes that target, `n`/`no` records it as non-requested
 `skipped`, and invalid or missing input cancels that target and the remaining
 requests. If deletion-time safety changes the selected physical-target set,

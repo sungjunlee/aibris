@@ -1,7 +1,6 @@
 package cleaner
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -33,14 +32,13 @@ type numberedCleanupPlanRow struct {
 // PromptUnifiedCleanupReview lets text and TTY frontends mutate the same plan
 // state. Rendering is deliberately separate from execution; #115 wires the
 // accepted selection through preflight, confirmation, and receipts.
-func PromptUnifiedCleanupReview(ctx context.Context, input io.Reader, output io.Writer, plan UnifiedCleanupPlan, mode CleanupReviewMode, width int) (UnifiedCleanupPlan, bool, error) {
-	scanner := bufio.NewScanner(input)
+func PromptUnifiedCleanupReview(ctx context.Context, input *confirminput.Reader, output io.Writer, plan UnifiedCleanupPlan, mode CleanupReviewMode, width int) (UnifiedCleanupPlan, bool, error) {
 	status := ""
 	for {
 		RenderUnifiedCleanupReview(output, plan, status, mode, width)
 		fmt.Fprint(output, "\nEnter numbers to toggle, Enter to preview, q to abort: ")
 		status = ""
-		line, ok, err := confirminput.Scan(ctx, scanner)
+		line, ok, err := confirminput.Scan(ctx, input)
 		if err != nil {
 			return plan, false, err
 		}

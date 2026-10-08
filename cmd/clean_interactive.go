@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -14,8 +13,8 @@ import (
 	"github.com/sungjunlee/aibris/internal/executor"
 )
 
-func interactiveClean(ctx context.Context, targets []preparedCleanTarget) (cleanExecutionReceipt, error) {
-	return interactiveCleanWithValidation(ctx, targets, nil)
+func interactiveClean(ctx context.Context, input *confirminput.Reader, targets []preparedCleanTarget) (cleanExecutionReceipt, error) {
+	return interactiveCleanWithValidation(ctx, input, targets, nil)
 }
 
 // interactiveCleanSkipOutcome reports a target left without mutation.
@@ -33,10 +32,11 @@ type interactiveCleanSkipObserver func(interactiveCleanSkipOutcome)
 
 func interactiveCleanWithValidation(
 	ctx context.Context,
+	input *confirminput.Reader,
 	targets []preparedCleanTarget,
 	validate func(context.Context) error,
 ) (cleanExecutionReceipt, error) {
-	return interactiveCleanWithValidationAndObserver(ctx, os.Stdin, os.Stdout, targets, validate, nil)
+	return interactiveCleanWithValidationAndObserver(ctx, input, os.Stdout, targets, validate, nil)
 }
 
 // reportUnansweredCleanTargets hands the targets whose confirmation never
@@ -56,7 +56,7 @@ func reportUnansweredCleanTargets(
 
 func interactiveCleanWithValidationAndObserver(
 	ctx context.Context,
-	input io.Reader,
+	input *confirminput.Reader,
 	output io.Writer,
 	targets []preparedCleanTarget,
 	validate func(context.Context) error,
@@ -70,7 +70,6 @@ func interactiveCleanWithValidationAndObserver(
 
 	var result cleanExecutionReceipt
 	var errs []error
-	scanner := bufio.NewScanner(input)
 	cancelRemaining := func(remaining []preparedCleanTarget, err error, afterConfirmation bool) (cleanExecutionReceipt, error) {
 		for _, target := range remaining {
 			if observer != nil {
@@ -97,7 +96,7 @@ func interactiveCleanWithValidationAndObserver(
 		fmt.Fprintln(output)
 		printCleanTargetTo(output, w, displayHome)
 		fmt.Fprint(output, "Remove? [y/N]: ")
-		line, ok, inputErr := confirminput.Scan(ctx, scanner)
+		line, ok, inputErr := confirminput.Scan(ctx, input)
 		if inputErr != nil {
 			if ctx.Err() != nil {
 				return cancelRemaining(targets[i:], ctx.Err(), false)

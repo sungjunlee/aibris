@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sungjunlee/aibris/internal/confirminput"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -68,12 +69,12 @@ protected
 func TestPromptUnifiedCleanupReviewTTYAndTextShareSelectionState(t *testing.T) {
 	plan := cleanupReviewTestPlan(t)
 	var textOutput strings.Builder
-	textPlan, aborted, err := PromptUnifiedCleanupReview(context.Background(), strings.NewReader("1 2\n\n"), &textOutput, plan, CleanupReviewText, CleanupReviewWideWidth)
+	textPlan, aborted, err := PromptUnifiedCleanupReview(context.Background(), confirminput.NewReader(strings.NewReader("1 2\n\n")), &textOutput, plan, CleanupReviewText, CleanupReviewWideWidth)
 	if err != nil || aborted {
 		t.Fatalf("text prompt = aborted %t, error %v", aborted, err)
 	}
 	var ttyOutput strings.Builder
-	ttyPlan, aborted, err := PromptUnifiedCleanupReview(context.Background(), strings.NewReader("1 2\n\n"), &ttyOutput, plan, CleanupReviewTTY, CleanupReviewWideWidth)
+	ttyPlan, aborted, err := PromptUnifiedCleanupReview(context.Background(), confirminput.NewReader(strings.NewReader("1 2\n\n")), &ttyOutput, plan, CleanupReviewTTY, CleanupReviewWideWidth)
 	if err != nil || aborted {
 		t.Fatalf("TTY prompt = aborted %t, error %v", aborted, err)
 	}
@@ -96,7 +97,7 @@ func TestPromptUnifiedCleanupReviewTTYAndTextShareSelectionState(t *testing.T) {
 func TestPromptUnifiedCleanupReviewAbortAndLockedRows(t *testing.T) {
 	plan := cleanupReviewTestPlan(t)
 	var output strings.Builder
-	got, aborted, err := PromptUnifiedCleanupReview(context.Background(), strings.NewReader("3\nq\n"), &output, plan, CleanupReviewText, CleanupReviewWideWidth)
+	got, aborted, err := PromptUnifiedCleanupReview(context.Background(), confirminput.NewReader(strings.NewReader("3\nq\n")), &output, plan, CleanupReviewText, CleanupReviewWideWidth)
 	if err != nil || !aborted {
 		t.Fatalf("prompt = aborted %t, error %v", aborted, err)
 	}

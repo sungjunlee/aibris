@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/confirminput"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 	"github.com/sungjunlee/aibris/internal/worktree"
@@ -944,7 +945,7 @@ func receiptExecutionReasonCodes(t *testing.T, home string) map[string]struct{} 
 			if scenario.omitSelected {
 				items = items[:1]
 			}
-			receipt, _ := ExecuteReceipt(ctx, document, components,
+			receipt, _ := ExecuteReceipt(ctx, confirminput.NewReader(os.Stdin), document, components,
 				func() []types.DebrisInfo { return items }, prepared, false, !scenario.confirm, scenario.interactive,
 				func(context.Context, time.Time) error { return scenario.validationErr },
 				func(_ context.Context, targets []PreparedTarget) (ExecutionReceipt, error) {

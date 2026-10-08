@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -30,16 +29,16 @@ func apfsSnapshotFlagConflict(cmd *cobra.Command) string {
 	return ""
 }
 
-func runAPFSSnapshotClean() {
+func runAPFSSnapshotClean(input *confirminput.Reader) {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	if err := runAPFSSnapshotAction(ctx, cleanDryRun, cleanForce); err != nil {
+	if err := runAPFSSnapshotAction(ctx, input, cleanDryRun, cleanForce); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func runAPFSSnapshotAction(ctx context.Context, dryRun, force bool) error {
+func runAPFSSnapshotAction(ctx context.Context, input *confirminput.Reader, dryRun, force bool) error {
 	count, err := listLocalAPFSSnapshots()
 	if err != nil {
 		return err
@@ -54,7 +53,7 @@ func runAPFSSnapshotAction(ctx context.Context, dryRun, force bool) error {
 		return nil
 	}
 	if !force {
-		approved, err := confirmAPFSSnapshotThin(ctx, os.Stdin, os.Stdout)
+		approved, err := confirmAPFSSnapshotThin(ctx, input, os.Stdout)
 		if err != nil {
 			return err
 		}
@@ -76,9 +75,9 @@ func printAPFSSnapshotPlan(count int) {
 	fmt.Println("  Finder / df free space may change only after thinning.")
 }
 
-func confirmAPFSSnapshotThin(ctx context.Context, input io.Reader, output io.Writer) (bool, error) {
+func confirmAPFSSnapshotThin(ctx context.Context, input *confirminput.Reader, output io.Writer) (bool, error) {
 	fmt.Fprint(output, "Thin local APFS snapshots? [y/N]: ")
-	answer, ok, err := confirminput.Scan(ctx, bufio.NewScanner(input))
+	answer, ok, err := confirminput.Scan(ctx, input)
 	return ok && strings.EqualFold(strings.TrimSpace(answer), "y"), err
 }
 

@@ -1,13 +1,11 @@
 package cleanjson
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -229,6 +227,7 @@ type ExecutionReceipt = executor.ExecutionReceipt
 // a receipt can describe this execution, but can never authorize a replay.
 func ExecuteReceipt(
 	ctx context.Context,
+	input *confirminput.Reader,
 	document Plan,
 	components []SnapshotComponent,
 	selectedPhysicalTargets func() []types.DebrisInfo,
@@ -288,13 +287,13 @@ func ExecuteReceipt(
 
 	if interactive {
 		return executeInteractiveReceipt(
-			ctx, receipt, validatePlan, executePrepared, listSnapshots, isMinimumAgeError,
+			ctx, input, receipt, validatePlan, executePrepared, listSnapshots, isMinimumAgeError,
 			prepared, targetIDs, selectedIDs,
 		)
 	}
 
 	if !force {
-		approved, cancelled := readConfirmation(ctx, bufio.NewScanner(os.Stdin))
+		approved, cancelled := readConfirmation(ctx, input)
 		if !approved {
 			code := "confirmation_cancelled"
 			if cancelled {
@@ -330,6 +329,7 @@ func ExecuteReceipt(
 
 func executeInteractiveReceipt(
 	ctx context.Context,
+	input *confirminput.Reader,
 	receipt Receipt,
 	validatePlan func(context.Context, time.Time) error,
 	executePrepared func(context.Context, []PreparedTarget) (ExecutionReceipt, error),
@@ -339,7 +339,6 @@ func executeInteractiveReceipt(
 	targetIDs map[string]string,
 	selectedIDs []string,
 ) (Receipt, error) {
-	scanner := bufio.NewScanner(os.Stdin)
 	var executionErr error
 	for i, target := range prepared {
 		id := targetIDs[receiptItemKey(target.Item)]
@@ -348,7 +347,7 @@ func executeInteractiveReceipt(
 			markPreparedReceiptTargets(&receipt, prepared[i+1:], targetIDs, ReceiptStatusCancelled, true, "cancelled_during_confirmation")
 			return finishReceipt(receipt, err, listSnapshots, isMinimumAgeError)
 		}
-		line, ok, cancelled := scanInput(ctx, scanner)
+		line, ok, cancelled := scanInput(ctx, input)
 		if cancelled {
 			markReceiptTarget(&receipt, id, ReceiptStatusCancelled, true, "cancelled_during_confirmation")
 			markPreparedReceiptTargets(&receipt, prepared[i+1:], targetIDs, ReceiptStatusCancelled, true, "cancelled_during_confirmation")
@@ -396,8 +395,8 @@ func executeInteractiveReceipt(
 	return finishReceipt(receipt, executionErr, listSnapshots, isMinimumAgeError)
 }
 
-func readConfirmation(ctx context.Context, scanner *bufio.Scanner) (approved, cancelled bool) {
-	line, ok, cancelled := scanInput(ctx, scanner)
+func readConfirmation(ctx context.Context, input *confirminput.Reader) (approved, cancelled bool) {
+	line, ok, cancelled := scanInput(ctx, input)
 	if cancelled || !ok {
 		return false, true
 	}
@@ -408,11 +407,11 @@ func readConfirmation(ctx context.Context, scanner *bufio.Scanner) (approved, ca
 	return false, false
 }
 
-func scanInput(ctx context.Context, scanner *bufio.Scanner) (line string, ok, cancelled bool) {
-	if scanner == nil {
+func scanInput(ctx context.Context, input *confirminput.Reader) (line string, ok, cancelled bool) {
+	if input == nil {
 		return "", false, true
 	}
-	line, ok, _ = confirminput.Scan(ctx, scanner)
+	line, ok, _ = confirminput.Scan(ctx, input)
 	return line, ok, ctx.Err() != nil
 }
 

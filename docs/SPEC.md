@@ -556,6 +556,17 @@ deduplicated, and collapsed when one root is nested inside another.
 - Command-backed cleanup must use argv-only execution and context cancellation.
 - `--dry-run` must never delete.
 - `clean` must ask for confirmation unless `--force` or `--interactive` is set.
+- All prompts in one `clean` run share one stdin line reader, including guided
+  and unified review, final and per-item confirmation, JSON, strip, and APFS
+  routes. Piped answers are consumed in order without losing buffered lines
+  between prompts. TTY rendering is unchanged, and each prompt still treats EOF
+  as before. EOF is sticky for the run: once stdin ends (for example Ctrl-D
+  at a review prompt), every later prompt also sees EOF, so a final
+  confirmation receives no answer and nothing is deleted.
+  SIGINT, SIGTERM, or context cancellation returns promptly and stops the run.
+  A cancelled reader permanently refuses further reads, including with a new
+  context. A generic blocking input read may last until input, EOF, a read error,
+  or process exit, but cannot compete with a later prompt in that run.
 - Context cancellation must be checked during scans and directory walks.
 - Adapter failures must not silently abort unrelated providers. A usable
   partial scan must identify failed providers in human and JSON output, emit

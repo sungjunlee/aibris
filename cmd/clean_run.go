@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/sungjunlee/aibris/internal/cleancommand"
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/confirminput"
 	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -21,6 +22,7 @@ import (
 // filtering, overlap safety, and execution lives in internal packages.
 
 func runCleanCommand(cmd *cobra.Command) {
+	input := confirminput.NewReader(os.Stdin)
 	routeInput := cleancommand.RouteInput{
 		IncludePaths:  cleanIncludePaths,
 		ReceiptFile:   cleanReceiptFile,
@@ -40,13 +42,13 @@ func runCleanCommand(cmd *cobra.Command) {
 	}
 	switch route {
 	case cleancommand.RouteAPFS:
-		runAPFSSnapshotClean()
+		runAPFSSnapshotClean(input)
 		return
 	case cleancommand.RouteStrip:
-		runStripClean()
+		runStripClean(input)
 		return
 	case cleancommand.RouteJSON:
-		runCleanJSON(cmd)
+		runCleanJSON(cmd, input)
 		return
 	case cleancommand.RouteScan:
 		// classic scan-and-delete continues below
@@ -122,7 +124,7 @@ func runCleanCommand(cmd *cobra.Command) {
 	var guidedStatePtr *guidedCleanState
 	if experience == cleanExperienceGuided {
 		guidedState.Reason = reason
-		final, aborted, err := promptGuidedCleanStateForFiles(ctx, os.Stdin, os.Stdout, guidedState)
+		final, aborted, err := promptGuidedCleanStateForFiles(ctx, os.Stdin, os.Stdout, input, guidedState)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
@@ -156,6 +158,7 @@ func runCleanCommand(cmd *cobra.Command) {
 			overlapSafety,
 			os.Stdin,
 			os.Stdout,
+			input,
 		)
 		return
 	}
@@ -185,7 +188,7 @@ func runCleanCommand(cmd *cobra.Command) {
 	prepared := prepareCleanExecutionWithOptions(ctx, overlapSelection, overlapSafety, opts)
 
 	if opts.Interactive {
-		receipt, err := interactiveClean(ctx, prepared)
+		receipt, err := interactiveClean(ctx, input, prepared)
 		printWorktreeExecutionReceipts(receipt)
 		printCleanupReceipt(len(targets), receipt, audit)
 		if err != nil {
@@ -198,7 +201,7 @@ func runCleanCommand(cmd *cobra.Command) {
 
 	if !opts.Force {
 		printCleanPlanWithComponents(targets, overlapSelection.Components, cleanPlanModeDelete)
-		approved, err := confirmCleanExecution(ctx, os.Stdin, os.Stdout)
+		approved, err := confirmCleanExecution(ctx, input, os.Stdout)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)

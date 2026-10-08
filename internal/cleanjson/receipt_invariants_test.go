@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/confirminput"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -263,6 +264,7 @@ func TestReceiptTargetSetMismatchRefusesExecution(t *testing.T) {
 	ctx := context.Background()
 	receipt, err := ExecuteReceipt(
 		ctx,
+		confirminput.NewReader(strings.NewReader("")),
 		document,
 		components,
 		selectedPhysicalTargets,

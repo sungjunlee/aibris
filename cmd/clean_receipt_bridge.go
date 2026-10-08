@@ -8,6 +8,7 @@ import (
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/cleanjson"
+	"github.com/sungjunlee/aibris/internal/confirminput"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -39,6 +40,7 @@ func cleanJSONReceiptItemKey(item types.DebrisInfo) string {
 
 func executeCleanJSONReceipt(
 	ctx context.Context,
+	input *confirminput.Reader,
 	document cleanJSONPlan,
 	components []cleanJSONSnapshotComponent,
 	plan UnifiedCleanupPlan,
@@ -48,6 +50,7 @@ func executeCleanJSONReceipt(
 ) (cleanJSONReceipt, error) {
 	return cleanjson.ExecuteCleanJSONReceipt(
 		ctx,
+		input,
 		document,
 		components,
 		plan.SelectedPhysicalTargets,

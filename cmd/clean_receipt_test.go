@@ -17,6 +17,7 @@ import (
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/cleanjson"
+	"github.com/sungjunlee/aibris/internal/confirminput"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -206,6 +207,7 @@ func TestCleanJSONReceiptBatchConfirmationContextCancellationUsesStableReason(t 
 	cancel()
 	receipt, executionErr := executeCleanJSONReceipt(
 		ctx,
+		confirminput.NewReader(os.Stdin),
 		cleanJSONPlan{PhysicalTargets: []cleanJSONPhysicalTarget{{ID: "target-1", Decision: cleanJSONDecisionSelected, Bytes: target.Size}}},
 		[]cleanJSONSnapshotComponent{{Key: key, Owner: target}},
 		UnifiedCleanupPlan{Components: []CleanupPhysicalComponent{{Owner: target, Selection: CleanupPlanSelected}}},
@@ -594,7 +596,8 @@ func TestExecuteCleanJSONReceiptRejectsSelectedPreparedSetMismatchBeforeInteract
 	// only the second target prepared. Interactive input must never be read or
 	// applied to that shifted set.
 	receipt, err := executeCleanJSONReceipt(
-		context.Background(), document, components, plan,
+		context.Background(),
+		confirminput.NewReader(os.Stdin), document, components, plan,
 		[]preparedCleanTarget{{Item: second}}, false, true,
 	)
 	if err == nil || !strings.Contains(err.Error(), "selected and prepared physical target IDs differ") {

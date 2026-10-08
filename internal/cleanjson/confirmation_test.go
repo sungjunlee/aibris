@@ -1,17 +1,18 @@
 package cleanjson
 
 import (
-	"bufio"
 	"context"
 	"io"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sungjunlee/aibris/internal/confirminput"
 )
 
 func TestJSONConfirmationInput(t *testing.T) {
 	for _, input := range []string{"y\n", "n\n", "", "invalid\n"} {
-		approved, cancelled := readConfirmation(t.Context(), bufio.NewScanner(strings.NewReader(input)))
+		approved, cancelled := readConfirmation(t.Context(), confirminput.NewReader(strings.NewReader(input)))
 		if approved != (input == "y\n") || cancelled != (input == "") {
 			t.Fatalf("input %q = approved %t, cancelled %t", input, approved, cancelled)
 		}
@@ -27,7 +28,7 @@ func TestJSONConfirmationCancellation(t *testing.T) {
 	started := make(chan struct{})
 	done := make(chan bool, 1)
 	go func() {
-		approved, cancelled := readConfirmation(ctx, bufio.NewScanner(&jsonConfirmationBarrier{Reader: input, started: started}))
+		approved, cancelled := readConfirmation(ctx, confirminput.NewReader(&jsonConfirmationBarrier{Reader: input, started: started}))
 		done <- !approved && cancelled
 	}()
 	select {
@@ -66,7 +67,7 @@ func (r jsonConfirmationCancellingReader) Read(p []byte) (int, error) {
 func TestJSONConfirmationCancellationWinsInput(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		ctx, cancel := context.WithCancel(t.Context())
-		approved, cancelled := readConfirmation(ctx, bufio.NewScanner(jsonConfirmationCancellingReader{cancel}))
+		approved, cancelled := readConfirmation(ctx, confirminput.NewReader(jsonConfirmationCancellingReader{cancel}))
 		cancel()
 		if approved || !cancelled {
 			t.Fatalf("input during cancellation = approved %t, cancelled %t", approved, cancelled)

@@ -12,6 +12,7 @@ import (
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/cleanjson"
+	"github.com/sungjunlee/aibris/internal/confirminput"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -49,7 +50,7 @@ func TestCleanJSONReceiptRejectsDuplicatePreparedEvidenceBeforeMutation(t *testi
 	plan, document, components, prepared := preparedReceiptFixture(t, []types.DebrisInfo{item}, staticOverlapSafetyRuntime(nil, nil))
 	refused := prepared[0]
 	refused.PreparationError = errors.New("first prepared evidence must not be overwritten")
-	receipt, err := executeCleanJSONReceipt(context.Background(), document, components, plan,
+	receipt, err := executeCleanJSONReceipt(context.Background(), confirminput.NewReader(strings.NewReader("")), document, components, plan,
 		[]preparedCleanTarget{refused, prepared[0]}, true, false)
 	if err == nil || !strings.Contains(err.Error(), "execution receipt invariant") {
 		t.Errorf("duplicate prepared targets did not fail with an invariant error: receipt=%+v error=%v", receipt, err)
@@ -71,7 +72,7 @@ func TestCleanJSONReceiptProductionCommandFallback(t *testing.T) {
 	// An empty PATH guarantees that no real package-manager cleanup can run.
 	t.Setenv("PATH", t.TempDir())
 	plan, document, components, prepared := preparedReceiptFixture(t, []types.DebrisInfo{item}, staticOverlapSafetyRuntime(nil, nil))
-	receipt, err := executeCleanJSONReceipt(context.Background(), document, components, plan, prepared, true, false)
+	receipt, err := executeCleanJSONReceipt(context.Background(), confirminput.NewReader(strings.NewReader("")), document, components, plan, prepared, true, false)
 	if err != nil || receipt.Status != cleanJSONReceiptSucceeded || receipt.Totals.Requested != 1 || receipt.Totals.Removed != 1 || receipt.Totals.FreedBytes != 8 {
 		t.Fatalf("command fallback receipt=%+v error=%v", receipt, err)
 	}
@@ -101,7 +102,7 @@ func TestCleanJSONReceiptProductionCancellationAtMutationBoundary(t *testing.T) 
 		return evidence, nil
 	}, nil)
 	plan, document, components, prepared := preparedReceiptFixture(t, items, runtime)
-	receipt, err := executeCleanJSONReceipt(ctx, document, components, plan, prepared, true, false)
+	receipt, err := executeCleanJSONReceipt(ctx, confirminput.NewReader(strings.NewReader("")), document, components, plan, prepared, true, false)
 	if !errors.Is(err, context.Canceled) || receipt.Status != cleanJSONReceiptCancelled || receipt.Totals.Requested != 2 || receipt.Totals.Cancelled != 2 || receipt.Totals.FreedBytes != 0 {
 		t.Fatalf("mutation-boundary cancellation receipt=%+v error=%v", receipt, err)
 	}
@@ -127,7 +128,7 @@ func TestCleanJSONReceiptProductionSnapshotDriftPartialFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeJSONReceiptFixture(t, items[1].Path, "new data")
-	receipt, err := executeCleanJSONReceipt(context.Background(), document, components, plan, prepared, true, false)
+	receipt, err := executeCleanJSONReceipt(context.Background(), confirminput.NewReader(strings.NewReader("")), document, components, plan, prepared, true, false)
 	if err == nil || receipt.Status != cleanJSONReceiptPartialFailure || receipt.Totals.Requested != 2 || receipt.Totals.Removed != 1 || receipt.Totals.Failed != 1 || receipt.Totals.FreedBytes != 8 {
 		t.Fatalf("snapshot drift receipt=%+v error=%v", receipt, err)
 	}
@@ -170,7 +171,7 @@ func TestCleanJSONReceiptTypedEvidenceSurvivesOrderingAndInteractiveSelection(t 
 				defer withStdin(t, "y\ny\n")()
 			}
 			var executed []string
-			receipt, err := cleanjson.ExecuteCleanJSONReceipt(context.Background(), document, components, plan.SelectedPhysicalTargets, prepared, false, true, interactive,
+			receipt, err := cleanjson.ExecuteCleanJSONReceipt(context.Background(), confirminput.NewReader(os.Stdin), document, components, plan.SelectedPhysicalTargets, prepared, false, true, interactive,
 				func(ctx context.Context, now time.Time) error {
 					return validateUnifiedCleanupPlanForMutation(ctx, plan, now)
 				},

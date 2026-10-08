@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/sungjunlee/aibris/internal/confirminput"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -24,7 +25,7 @@ func TestPromptGuidedCleanRendersAndTogglesSelection(t *testing.T) {
 	}
 	var output bytes.Buffer
 
-	targets, aborted, err := promptGuidedClean(context.Background(), strings.NewReader("1 2\n\n"), &output, state)
+	targets, aborted, err := promptGuidedClean(context.Background(), confirminput.NewReader(strings.NewReader("1 2\n\n")), &output, state)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +51,7 @@ func TestPromptGuidedCleanTTYModeRendersChecklistLabel(t *testing.T) {
 	}
 	var output bytes.Buffer
 
-	targets, aborted, err := promptGuidedCleanWithMode(context.Background(), strings.NewReader("\n"), &output, state, guidedCleanPromptTTY)
+	targets, aborted, err := promptGuidedCleanWithMode(context.Background(), confirminput.NewReader(strings.NewReader("\n")), &output, state, guidedCleanPromptTTY)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +127,7 @@ func TestPromptGuidedCleanEnterReturnsDefaultSelectionForPreview(t *testing.T) {
 	}
 	var output bytes.Buffer
 
-	targets, aborted, err := promptGuidedClean(context.Background(), strings.NewReader("\n"), &output, state)
+	targets, aborted, err := promptGuidedClean(context.Background(), confirminput.NewReader(strings.NewReader("\n")), &output, state)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +150,7 @@ func TestPromptGuidedCleanEnterReturnsDefaultSelectionForPreview(t *testing.T) {
 
 func TestPromptGuidedCleanAbort(t *testing.T) {
 	var output bytes.Buffer
-	_, aborted, err := promptGuidedClean(context.Background(), strings.NewReader("q\n"), &output, guidedCleanState{})
+	_, aborted, err := promptGuidedClean(context.Background(), confirminput.NewReader(strings.NewReader("q\n")), &output, guidedCleanState{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +177,7 @@ func TestPromptGuidedCleanDoesNotToggleLockedRows(t *testing.T) {
 	}
 	var output bytes.Buffer
 
-	targets, aborted, err := promptGuidedClean(context.Background(), strings.NewReader("1\n\n"), &output, state)
+	targets, aborted, err := promptGuidedClean(context.Background(), confirminput.NewReader(strings.NewReader("1\n\n")), &output, state)
 	if err != nil {
 		t.Fatal(err)
 	}

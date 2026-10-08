@@ -336,6 +336,10 @@ repository별 최신 3개 retention은 그대로다. prompt 안에서도 `age 7d
 `-`, `[`, `]`로 같은 값만 재계획할 수 있고, selectable row에 대한 사용자
 선택 override는 유지된다.
 
+한 실행의 guided/unified review와 최종·per-item confirm은 stdin line reader
+하나를 공유하므로 pipe에 미리 넣은 답변도 prompt 순서대로 읽는다.
+cancellation이 발생하면 실행이 끝나며 같은 reader로 confirm을 재개하지 않는다.
+
 > **중요**: `--dry-run` → 사용자 확인 → 실제 실행, 이 순서를 반드시 지킨다.
 
 Docker 정리는 `docker system df`로 확인한 뒤 `docker system prune`으로 직접 실행한다:

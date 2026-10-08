@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/sungjunlee/aibris/internal/apfs"
+	"github.com/sungjunlee/aibris/internal/confirminput"
 	"github.com/sungjunlee/aibris/internal/volume"
 )
 
@@ -30,7 +31,7 @@ func TestRunAPFSSnapshotActionDryRunDoesNotThin(t *testing.T) {
 		return []byte("Snapshots for disk /:\n2026-08-17-101530\n"), nil
 	}
 	output := captureOutput(func() {
-		if err := runAPFSSnapshotAction(t.Context(), true, true); err != nil {
+		if err := runAPFSSnapshotAction(t.Context(), confirminput.NewReader(strings.NewReader("")), true, true); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -78,7 +79,7 @@ func TestRunAPFSSnapshotActionSuccessOmitsTimestamps(t *testing.T) {
 		}, nil
 	}
 	output := captureOutput(func() {
-		if err := runAPFSSnapshotAction(t.Context(), false, true); err != nil {
+		if err := runAPFSSnapshotAction(t.Context(), confirminput.NewReader(strings.NewReader("")), false, true); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -116,7 +117,7 @@ func TestRunAPFSSnapshotActionVolumeReadFailureKeepsRemaining(t *testing.T) {
 		return nil, errors.New("statfs failed")
 	}
 	stdout, stderr := captureStdStreams(func() {
-		if err := runAPFSSnapshotAction(t.Context(), false, true); err != nil {
+		if err := runAPFSSnapshotAction(t.Context(), confirminput.NewReader(strings.NewReader("")), false, true); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -159,7 +160,7 @@ func TestRunAPFSSnapshotActionRemainingListFailureRedactsSnapshots(t *testing.T)
 		}, nil
 	}
 	stdout, stderr := captureStdStreams(func() {
-		if err := runAPFSSnapshotAction(t.Context(), false, true); err != nil {
+		if err := runAPFSSnapshotAction(t.Context(), confirminput.NewReader(strings.NewReader("")), false, true); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -191,7 +192,7 @@ func TestRunAPFSSnapshotActionReportsTMUtilFailure(t *testing.T) {
 		}
 		return []byte("Snapshots for disk /:\n2026-08-17-101530\n"), nil
 	}
-	if err := runAPFSSnapshotAction(t.Context(), false, true); err == nil {
+	if err := runAPFSSnapshotAction(t.Context(), confirminput.NewReader(strings.NewReader("")), false, true); err == nil {
 		t.Fatal("tmutil failure must be visible")
 	}
 }
@@ -238,7 +239,7 @@ func TestRunAPFSSnapshotActionForceRepeatsUntilRemainingZeroViaTMUtil(t *testing
 		}, nil
 	}
 	output := captureOutput(func() {
-		if err := runAPFSSnapshotAction(t.Context(), false, true); err != nil {
+		if err := runAPFSSnapshotAction(t.Context(), confirminput.NewReader(strings.NewReader("")), false, true); err != nil {
 			t.Fatal(err)
 		}
 	})

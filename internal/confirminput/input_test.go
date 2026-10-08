@@ -1,7 +1,6 @@
 package confirminput
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"io"
@@ -11,7 +10,7 @@ import (
 )
 
 func TestScanLines(t *testing.T) {
-	scanner := bufio.NewScanner(strings.NewReader("y\nn\ninvalid\nlast"))
+	scanner := NewReader(strings.NewReader("y\nn\ninvalid\nlast"))
 	for _, want := range []string{"y", "n", "invalid", "last"} {
 		line, ok, err := Scan(t.Context(), scanner)
 		if err != nil || !ok || line != want {
@@ -30,8 +29,9 @@ func TestScanCancellationReleasesCaller(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	reader := &observedReader{Reader: input, started: make(chan struct{}), ended: make(chan struct{})}
+	lines := NewReader(reader)
 	result := make(chan error, 1)
-	go func() { _, _, err := Scan(ctx, bufio.NewScanner(reader)); result <- err }()
+	go func() { _, _, err := Scan(ctx, lines); result <- err }()
 	<-reader.started
 	cancel()
 	select {
@@ -42,12 +42,28 @@ func TestScanCancellationReleasesCaller(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("input wait ignored cancellation")
 	}
-	// Closing our reader releases the outstanding read. Never reuse its scanner.
+	// Even a fresh context cannot resume prompts while the original read is
+	// blocked: no second goroutine may race it or lose the next answer to it.
+	if line, ok, err := Scan(t.Context(), lines); line != "" || ok || !errors.Is(err, context.Canceled) {
+		t.Fatalf("reuse after cancellation = %q, %t, %v", line, ok, err)
+	}
+	// Closing our reader releases the outstanding read.
 	input.Close()
 	select {
 	case <-reader.ended:
 	case <-time.After(time.Second):
 		t.Fatal("owned reader did not terminate after close")
+	}
+}
+
+func TestScanDeadlinePermanentlyStopsReader(t *testing.T) {
+	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancel()
+	lines := NewReader(panicReader{})
+	for _, readCtx := range []context.Context{ctx, t.Context()} {
+		if _, ok, err := Scan(readCtx, lines); ok || !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("expired reader = %t, %v", ok, err)
+		}
 	}
 }
 
@@ -70,7 +86,7 @@ func (r cancellingReader) Read(p []byte) (int, error) { r.cancel(); return copy(
 func TestScanCancellationWinsArrivingInput(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		ctx, cancel := context.WithCancel(t.Context())
-		line, ok, err := Scan(ctx, bufio.NewScanner(cancellingReader{cancel}))
+		line, ok, err := Scan(ctx, NewReader(cancellingReader{cancel}))
 		cancel()
 		if !errors.Is(err, context.Canceled) || ok || line != "" {
 			t.Fatalf("cancelled input = %q, %t, %v", line, ok, err)
@@ -81,7 +97,7 @@ func TestScanCancellationWinsArrivingInput(t *testing.T) {
 func TestScanAlreadyCancelledDoesNotRead(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	_, ok, err := Scan(ctx, bufio.NewScanner(panicReader{}))
+	_, ok, err := Scan(ctx, NewReader(panicReader{}))
 	if ok || !errors.Is(err, context.Canceled) {
 		t.Fatalf("pre-cancelled Scan = %t, %v", ok, err)
 	}
@@ -92,7 +108,7 @@ type panicReader struct{}
 func (panicReader) Read([]byte) (int, error) { panic("read after cancellation") }
 
 func TestScanReadError(t *testing.T) {
-	_, ok, err := Scan(t.Context(), bufio.NewScanner(errorReader{}))
+	_, ok, err := Scan(t.Context(), NewReader(errorReader{}))
 	if ok || !errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Fatalf("read error = %t, %v", ok, err)
 	}
