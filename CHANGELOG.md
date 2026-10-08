@@ -8,8 +8,8 @@
   each worktree as its own mutation owner. On macOS, a layout-verified Orca
   Codex home supplies worktrees, read-only retention, and `--risky` logs.
   Orca workspace activity uses the newest session across all resolved Codex
-  homes; unavailable home evidence (including a resolved home without a
-  session store, such as a missing `~/.codex/sessions`) or an undiscovered
+  homes; unavailable home evidence (including a resolved home whose
+  `sessions/` directory is missing or a dangling symlink) or an undiscovered
   Orca home keeps active worktrees protected. All resolved homes (primary,
   `$AIBRIS_CODEX_HOMES`, and verified Orca) contribute read-only retention
   aggregates. Homes, containers,

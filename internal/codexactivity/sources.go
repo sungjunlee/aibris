@@ -12,6 +12,9 @@ import (
 type SourceCoverage struct {
 	Roots     []string `json:"roots"`
 	Available bool     `json:"available"`
+	// ActiveRoot reports that the home's sessions/ root exists as a directory.
+	// An archive alone cannot vouch for the absence of recent sessions.
+	ActiveRoot bool `json:"active_root"`
 }
 
 // LookupMember returns activity and whether every required source was queried.
@@ -63,7 +66,10 @@ func (i Index) lookupOrcaWorkspace(id, project string) (Worktree, bool) {
 		roots := canonicalRoots([]string{filepath.Join(home, "sessions"), filepath.Join(home, "archived_sessions")})
 		// A session-root symlink can split this home's roots across source keys.
 		// Partial coverage cannot speak for the whole home, even if it is readable.
-		if !coverage.Available || !sameRoots(coverage.Roots, roots) {
+		// Every home must also have its sessions/ root: a missing or dangling
+		// one (for example on an unmounted volume) with only an archive present
+		// would otherwise read as "no recent session".
+		if !coverage.Available || !coverage.ActiveRoot || !sameRoots(coverage.Roots, roots) {
 			return Worktree{}, false
 		}
 		matching := i.memberActivity(home, id, project)

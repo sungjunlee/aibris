@@ -120,3 +120,32 @@ func TestOrcaWorkspaceRefreshesHomeScopedCache(t *testing.T) {
 		t.Fatalf("legacy cache refresh = %s/%+v/%t; want re-parsed recent session", index.Source, activity, available)
 	}
 }
+
+func TestOrcaWorkspaceRequiresEveryActiveSessionsRoot(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("Orca Codex home is macOS-only")
+	}
+	for _, primarySessions := range []string{"missing", "dangling"} {
+		t.Run(primarySessions, func(t *testing.T) {
+			home := t.TempDir()
+			testutil.SetHome(t, home)
+			primary := filepath.Join(home, ".codex")
+			orca := testutil.OrcaCodexHome(t, home)
+			now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+			member := filepath.Join(home, "orca", "workspaces", "project", "member")
+			// The primary home has only an archive; its active root is absent or
+			// points at a volume that is not mounted.
+			writeCodexSession(t, filepath.Join(primary, "archived_sessions", "old.jsonl"), now.Add(-90*24*time.Hour), filepath.Join(home, "elsewhere"), "session", "PRIVATE-BODY")
+			if primarySessions == "dangling" {
+				if err := os.Symlink(filepath.Join(home, "unmounted", "sessions"), filepath.Join(primary, "sessions")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			writeCodexSession(t, filepath.Join(orca, "sessions", "other.jsonl"), now, filepath.Join(home, "elsewhere"), "session", "PRIVATE-BODY")
+			index := LoadWithOptions(context.Background(), IndexOptions{Now: now, CachePath: filepath.Join(home, "activity.json")})
+			if activity, available := index.LookupMember(member); available {
+				t.Fatalf("workspace activity = %+v/%t; a home without its sessions root must not vouch for no recent session", activity, available)
+			}
+		})
+	}
+}

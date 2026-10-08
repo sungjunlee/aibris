@@ -105,6 +105,9 @@ func Refresh(ctx context.Context, opts IndexOptions, previous Cache, previousOK 
 		for _, root := range coverage.Roots {
 			if info, err := os.Stat(root); err == nil && info.IsDir() {
 				coverage.Available = true
+				if filepath.Base(root) == "sessions" {
+					coverage.ActiveRoot = true
+				}
 			}
 		}
 		homeRecords := make(map[string]FileRecord)
