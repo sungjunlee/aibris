@@ -365,7 +365,8 @@ non-symlink `README` beginning with
 the default `os.UserCacheDir()/go-build` needs no signature and also uses
 whole-directory removal. Both default and override paths require a Go-only
 layout at the top level: regular files `README`, `trim.txt`, `testexpire.txt`,
-`log.txt`; a `fuzz` directory; and directories matching `^[0-9a-f]{2}$`.
+`log.txt`, and Finder's `.DS_Store`; a `fuzz` directory; and directories
+matching `^[0-9a-f]{2}$`.
 The allowed entries follow Go's
 [cache implementation](https://go.dev/src/cmd/go/internal/cache/cache.go) and
 [clean implementation](https://go.dev/src/cmd/go/internal/clean/clean.go).

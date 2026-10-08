@@ -215,9 +215,9 @@ directory it names marks itself as a cache with a valid `CACHEDIR.TAG`
 the environment or GOENV file); otherwise an override could make an ordinary
 directory a cleanup target. Every Go cache path, including the default
 `os.UserCacheDir()/go-build`, must also have only these top-level entries:
-regular files `README`, `trim.txt`, `testexpire.txt`, `log.txt`; a `fuzz`
-directory; and directories matching `^[0-9a-f]{2}$` (see Go's
-[cache](https://go.dev/src/cmd/go/internal/cache/cache.go) and
+regular files `README`, `trim.txt`, `testexpire.txt`, `log.txt`, and Finder's
+`.DS_Store`; a `fuzz` directory; and directories matching `^[0-9a-f]{2}$`
+(see Go's [cache](https://go.dev/src/cmd/go/internal/cache/cache.go) and
 [clean](https://go.dev/src/cmd/go/internal/clean/clean.go) implementations).
 Foreign entries, symlinks, wrong types, or unreadable layouts silently exclude
 it from scan and the cleanup allowlist, even under cache-age relaxation. Check

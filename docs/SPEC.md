@@ -273,7 +273,8 @@ Command-backed cleanup:
   (Go's `cacheREADME` in the same source). Invalid overrides are not targets;
   the default `os.UserCacheDir()/go-build` needs no signature. Both default and
   override paths must have a Go-only top-level layout: regular files `README`,
-  `trim.txt`, `testexpire.txt`, `log.txt`; a `fuzz` directory; and directories
+  `trim.txt`, `testexpire.txt`, `log.txt`, and Finder's `.DS_Store`; a `fuzz`
+  directory; and directories
   matching `^[0-9a-f]{2}$`. This follows Go's
   [cache implementation](https://go.dev/src/cmd/go/internal/cache/cache.go) and
   [clean implementation](https://go.dev/src/cmd/go/internal/clean/clean.go).

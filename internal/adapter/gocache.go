@@ -143,7 +143,9 @@ func hasGoCacheLayout(dir string) bool {
 		}
 		name := entry.Name()
 		switch name {
-		case "README", "trim.txt", "testexpire.txt", "log.txt":
+		// .DS_Store is Finder view metadata, created whenever the directory is
+		// opened in Finder; it holds no user data.
+		case "README", "trim.txt", "testexpire.txt", "log.txt", ".DS_Store":
 			if !info.Mode().IsRegular() {
 				return false
 			}

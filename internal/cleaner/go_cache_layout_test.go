@@ -175,3 +175,25 @@ func assertGoCacheLayoutPreserved(t *testing.T, path, foreign string) {
 		}
 	}
 }
+
+func TestGoCacheLayoutToleratesFinderMetadata(t *testing.T) {
+	path := goCacheLayoutFixture(t, "default")
+	if err := os.WriteFile(filepath.Join(path, ".DS_Store"), []byte("finder"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	items, err := (&adapter.BuildCacheAdapter{}).Scan(context.Background(), types.ScanOptions{Roots: []string{path}})
+	if err != nil || len(items) != 1 {
+		t.Fatalf("scan = %+v, %v; want the Go cache despite Finder metadata", items, err)
+	}
+
+	if err := os.Remove(filepath.Join(path, ".DS_Store")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(path, ".DS_Store"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	items, err = (&adapter.BuildCacheAdapter{}).Scan(context.Background(), types.ScanOptions{Roots: []string{path}})
+	if err != nil || len(items) != 0 {
+		t.Fatalf("scan = %+v, %v; a .DS_Store directory is not Finder metadata", items, err)
+	}
+}
