@@ -9,42 +9,29 @@
   Cancellation still returns promptly and prevents reader reuse (#606).
 - Guided execution receipts share typed prepared-target identity binding with
   JSON execution, retaining the identity captured before confirmation even if
-  a symlinked target disappears. Identity errors after mutation preserve known
-  cleanup outcomes in a failed receipt, while valid receipt JSON stays unchanged
-  (#603).
-- Go cache cleanup pins `GOCACHE`, `GOTOOLCHAIN=local`, `GO111MODULE=off`,
-  and `GOWORK=off` and runs in the verified cache, avoiding toolchain
-  selection/downloads and module/workspace access. npm `_cacache` cleanup
-
-- Go cache removal requires a Go-only top-level layout for default and override
-  paths, in addition to the existing override README signature. Foreign entries,
-  symlinks, wrong file types, or unreadable layouts silently exclude shared
-  directories from scan and the cleanup allowlist, including under cache-age
-  relaxation. The one-level layout check repeats at the mutation boundary,
-  refusing foreign entries added after scan (#610, follow-up).
-- Human cache symlink eligibility output explains why removing the link leaves
-  target bytes behind; JSON retains `cache_leaf_symlink` (#611, follow-up).
-
-- Cleanup previews skip symlinked catalog path-route cache leaves (including
-  Go, npm, and Homebrew) with an explanation in human output and
-  `cache_leaf_symlink` in JSON output,
-  excluding their bytes from the selected total. Execution still refuses
-  symlink drift at the mutation boundary; the uv command route is unchanged
-  (#611, part 1).
-
-- Go cache cleanup removes only the verified directory through the deletion
-  gate without running `go`, preventing telemetry writes/uploads and
-  toolchain/module access. Removal includes fuzz and cache metadata. GOCACHE
-  overrides require Go's regular README signature and are rechecked before
-  removal. Old Go command inventories refuse with `cleanup_recipe_changed`
-  and require a fresh scan (#610).
-
-- npm `_cacache` cleanup
-  uses gated path removal instead of `npm cache clean --force`. Cached
-  inventories with the old npm command refuse as `cleanup_recipe_changed`
-  and require a fresh scan. Catalog cache path removal, including Homebrew,
-  refuses symlink leaves with `cache_leaf_symlink` rather than crediting bytes left
-  in the target (#605).
+  a symlinked target disappears. Identity errors after mutation keep the
+  receipt with known cleanup outcomes and report `partial_failure` only when
+  something was reclaimed; valid receipt JSON stays unchanged (#603).
+- npm `_cacache` cleanup uses gated path removal instead of
+  `npm cache clean --force`, so nothing is written outside the previewed
+  target. Cached inventories with the old npm command refuse as
+  `cleanup_recipe_changed` and require a fresh scan. Catalog cache path
+  removal, including Homebrew, refuses symlink leaves with
+  `cache_leaf_symlink` rather than crediting bytes left in the target (#605).
+- Go cache cleanup no longer runs `go clean -cache`. It removes the verified
+  cache directory through the deletion gate, so no `go` process runs: no
+  telemetry writes or uploads, no toolchain or module access. Removal includes
+  the fuzz cache and cache metadata. A directory qualifies only when every
+  top-level entry is one Go creates (`README`, `trim.txt`, `testexpire.txt`,
+  `log.txt`, `fuzz`, two-hex-digit directories); a `GOCACHE` override from the
+  environment or the `GOENV` file must also carry Go's `README` signature. A
+  directory shared with other files is never a target. Both checks repeat
+  right before removal. Cached inventories with the old Go command refuse as
+  `cleanup_recipe_changed` and require a fresh scan (#605, #610).
+- Cleanup previews skip symlinked catalog path-route cache leaves (Go, npm,
+  Homebrew) and exclude their bytes from the selected total, with an
+  explanation in human output and `cache_leaf_symlink` in JSON, matching what
+  execution does. The uv command route is unchanged (#611).
 - Root `--help` lists Grok among agent-state providers; the list now comes
   from the provider registry (#607).
 
