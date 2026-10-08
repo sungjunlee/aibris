@@ -15,6 +15,12 @@
 - Go cache cleanup pins `GOCACHE`, `GOTOOLCHAIN=local`, `GO111MODULE=off`,
   and `GOWORK=off` and runs in the verified cache, avoiding toolchain
   selection/downloads and module/workspace access. npm `_cacache` cleanup
+- Cleanup previews skip symlinked catalog path-route cache leaves (including
+  Go, npm, and Homebrew) with `cache_leaf_symlink` in human and JSON output,
+  excluding their bytes from the selected total. Execution still refuses
+  symlink drift at the mutation boundary; the uv command route is unchanged
+  (#611, part 1).
+
 - Go cache cleanup removes only the verified directory through the deletion
   gate without running `go`, preventing telemetry writes/uploads and
   toolchain/module access. Removal includes fuzz and cache metadata. GOCACHE

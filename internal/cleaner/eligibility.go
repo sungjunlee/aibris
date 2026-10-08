@@ -1,6 +1,7 @@
 package cleaner
 
 import (
+	"os"
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/types"
@@ -27,6 +28,7 @@ const (
 	EligibilityReasonAgentStateMinIdleAge   EligibilityReason = "orphaned agent-state within minimum idle age"
 	EligibilityReasonVolumePressure         EligibilityReason = "selected because of volume pressure"
 	EligibilityReasonEligible               EligibilityReason = "eligible for cleanup"
+	EligibilityReasonCacheLeafSymlink       EligibilityReason = "cache_leaf_symlink"
 )
 
 // EvaluateEligibility is the single cleanup eligibility policy used by
@@ -37,6 +39,14 @@ func EvaluateEligibility(item types.DebrisInfo, opts types.PruneOptions, observe
 	matchTool := len(opts.Tools) == 0 || containsTool(opts.Tools, item.Tool)
 	if !matchCategory || !matchTool {
 		return false, EligibilityReasonFiltered
+	}
+
+	// Path removal deletes a symlink leaf rather than the measured referent.
+	// Command recipes (uv) retain their policy and mutation-boundary checks.
+	if cleanupKind(item) == types.CleanupRemovePath && len(item.CleanupCommand) == 0 && catalogCacheTarget(item) {
+		if info, err := os.Lstat(item.Path); err == nil && info.Mode()&os.ModeSymlink != 0 {
+			return false, EligibilityReasonCacheLeafSymlink
+		}
 	}
 
 	if item.Category == types.CategoryAgentState {

@@ -366,8 +366,11 @@ the default `os.UserCacheDir()/go-build` retains its existing behavior.
 The live path and override signature are rechecked at the mutation boundary.
 
 The npm `_cacache` and Homebrew caches also use gated path removal.
-Catalog cache path removal refuses a symlink leaf because removing the link
-would leave the measured cache bytes behind. Cached inventories carrying the
+Catalog cache path removal skips a symlink leaf in human dry-run audits and
+JSON plans with `cache_leaf_symlink`, excluding its referent size from selected
+bytes. Removing the link would leave those measured bytes behind. Execution
+still rechecks the leaf and refuses symlinks introduced after planning. Ordinary
+directories and the uv command route retain their policy. Cached inventories carrying the
 former Go or npm command recipe are refused as `cleanup_recipe_changed`; run a
 fresh scan before retrying.
 

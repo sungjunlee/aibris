@@ -274,6 +274,12 @@ Command-backed cleanup:
   the default `os.UserCacheDir()/go-build` needs no signature. Execution checks
   the live path and override signature again before removal. Inventories with
   the former Go command refuse as `cleanup_recipe_changed`; scan again.
+- Catalog caches using path removal (including Go, npm, and Homebrew) with a
+  symlink leaf are skipped by cleanup eligibility. Human dry-run audits and
+  JSON plans report `cache_leaf_symlink`, with zero selected targets/bytes for
+  that cache. Scan inventory still measures the referent. The execution-time
+  leaf check remains authoritative and refuses a symlink introduced after
+  planning. Ordinary directories and the uv command route retain their policy.
 - Commands that run and fail do not fall back silently.
 - Context cancellation must stop command execution.
 

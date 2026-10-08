@@ -16,7 +16,7 @@ import (
 )
 
 func TestCleanJSONReceiptRefusesSymlinkedCacheLeaf(t *testing.T) {
-	for _, cache := range []string{"npm", "homebrew"} {
+	for _, cache := range []string{"npm", "go-build", "homebrew"} {
 		t.Run(cache, func(t *testing.T) {
 			if cache == "homebrew" && runtime.GOOS != "darwin" {
 				t.Skip("Homebrew catalog entry is macOS-only")
@@ -32,6 +32,9 @@ func TestCleanJSONReceiptRefusesSymlinkedCacheLeaf(t *testing.T) {
 			if cache == "homebrew" {
 				path = filepath.Join(home, "Library", "Caches", "Homebrew")
 			}
+			if cache == "go-build" {
+				path = testutil.GoBuildCache(home)
+			}
 			elsewhere := filepath.Join(home, "elsewhere", filepath.Base(path))
 			payload := strings.Repeat("x", 5000)
 			writeJSONReceiptFixture(t, elsewhere, payload)
@@ -45,6 +48,8 @@ func TestCleanJSONReceiptRefusesSymlinkedCacheLeaf(t *testing.T) {
 			if err != nil || len(items) != 1 || items[0].Size != 5000 {
 				t.Fatalf("scan = %+v, %v", items, err)
 			}
+			// Deliberately supply a selected inventory claim to exercise the
+			// execution authority independently of preview eligibility.
 			plan, document, components, prepared := preparedReceiptFixture(t, items, staticOverlapSafetyRuntime(nil, nil))
 			receipt, err := executeCleanJSONReceipt(context.Background(), confirminput.NewReader(strings.NewReader("")), document, components, plan, prepared, true, false)
 			if err == nil || !strings.Contains(err.Error(), "cache leaf is a symlink") || receipt.Status != cleanJSONReceiptFailed ||

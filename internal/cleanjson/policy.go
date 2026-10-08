@@ -83,6 +83,8 @@ func PolicyForAuditItem(
 
 func ReasonCodeForEligibility(reason cleaner.EligibilityReason) string {
 	switch reason {
+	case cleaner.EligibilityReasonCacheLeafSymlink:
+		return "cache_leaf_symlink"
 	case cleaner.EligibilityReasonFiltered:
 		return "filtered"
 	case cleaner.EligibilityReasonRisky:
@@ -110,6 +112,8 @@ func ReasonCodeForEligibility(reason cleaner.EligibilityReason) string {
 
 func ReasonCodeForAuditReason(reason string) string {
 	switch reason {
+	case string(cleaner.EligibilityReasonCacheLeafSymlink):
+		return "cache_leaf_symlink"
 	case string(cleaner.EligibilityReasonFiltered):
 		return "filtered"
 	case string(cleaner.EligibilityReasonRisky):

@@ -274,7 +274,7 @@ revalidation을 건너뛸 수 없다.
 | Code | 의미 |
 | ---- | ---- |
 | `cleanup_recipe_changed` | 현재 cleanup recipe가 준비된 recipe와 달라 mutation 전에 실행을 거부했다. |
-| `cache_leaf_symlink` | catalog cache leaf가 symlink여서 링크 삭제 후 대상 bytes가 남으므로 mutation 전에 실행을 거부했다. |
+| `cache_leaf_symlink` | catalog path-route cache leaf가 symlink여서 plan에서 skipped로 제외한다. 링크 삭제 후 대상 bytes가 남으므로 실행도 mutation 전에 재검증하고 거부한다. |
 | `worktree_evidence_changed` | 현재 worktree Git evidence가 준비된 evidence와 달라 mutation 전에 실행을 거부했다. |
 
 JSON receipt의 `post_clean.snapshot_thinning_recommended`가 true이면
@@ -471,7 +471,7 @@ aibris clean --category node_modules
 - active worktree는 실행 직전 모든 member의 repository/HEAD/dirty/ref를 재검사하고 Git-aware removal로 제거한다. branch ref와 parent `git worktree` metadata를 검증하며 실패 시 raw recursive deletion으로 fallback하지 않는다
 - `uv` cache는 공식 command(`uv cache clean`)로 정리함. `go-build`는 검증된 GOCACHE 디렉터리를 gated path removal로 정리하며 `go`를 실행하지 않아 Go telemetry·toolchain·module 접근을 일으키지 않음. `fuzz`, `README`, `trim.txt`도 함께 제거하며 Go가 다음 사용 시 cache 디렉터리와 README를 다시 만듦
 - 환경 또는 GOENV file의 GOCACHE override는 Go README signature가 있는 regular non-symlink README가 필요함. 없으면 scan/allowlist에서 제외하며 실행 직전에 다시 검증함. 이전 `go clean -cache` inventory는 `cleanup_recipe_changed`로 거부되므로 fresh scan 필요
-- npm `_cacache`와 Homebrew cache는 gated path removal로 정리함. catalog cache leaf가 symlink면 대상 bytes가 남으므로 삭제를 거부하고 JSON receipt에 `cache_leaf_symlink`를 기록함
+- npm `_cacache`와 Homebrew cache는 gated path removal로 정리함. Go를 포함한 catalog path-route cache leaf가 symlink면 human dry-run audit과 JSON plan에서 `skipped` 및 `cache_leaf_symlink`로 표시하고 selected bytes에서 제외함. 실행 직전에도 leaf를 재검증하고 거부 시 JSON receipt에 같은 reason code를 기록함. 일반 디렉터리와 uv command route의 policy는 유지함
 - 이전 `npm cache clean --force` recipe가 남은 cached inventory는 `cleanup_recipe_changed`로 거부함. fresh scan 후 다시 preview해야 함
 - command가 없으면 기존 safe path 삭제로 fallback하지만, command가 실행 후 실패하면 조용히 fallback하지 않음
 - orphaned/일반 path target은 안전 검사 후 경로 삭제한다. active worktree는 non-forced Git-aware executor를 사용하고 branch ref는 삭제하지 않는다
