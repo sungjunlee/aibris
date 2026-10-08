@@ -2,7 +2,10 @@ package cleanjson
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -11,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 	"github.com/sungjunlee/aibris/internal/worktree"
 )
@@ -833,4 +837,219 @@ func jsonRowWithReason(t *testing.T, document Plan, reason string) Row {
 	}
 	t.Fatalf("row with %s missing: %+v", reason, document.Rows)
 	return Row{}
+}
+
+func TestSupportedReasonCodesRoundTripPlanAndReceipt(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	codes := receiptExecutionReasonCodes(t, home)
+	for code := range supportedReasonCodes {
+		codes[code] = struct{}{}
+	}
+	for code := range codes {
+		t.Run(code, func(t *testing.T) {
+			assertReasonCodeRoundTrip(t, home, code, code)
+		})
+	}
+}
+
+// Collect codes from execution behavior, rather than duplicating the catalog.
+// Callbacks report synthetic outcomes and never run a cleanup command.
+func receiptExecutionReasonCodes(t *testing.T, home string) map[string]struct{} {
+	t.Helper()
+	minimumAgeErr := errors.New("minimum age")
+	failure := errors.New("execution failure")
+	units := []ExecutionUnit{
+		{State: "removed", PhysicalRemoved: true},
+		{State: "removed", FreedBytes: 10},
+		{State: "removed"},
+		{State: "removed", PhysicalRemoved: true, CommandFallbackPathRemoval: true},
+		{State: "partial"},
+		{State: "failed"},
+		{State: "failed", FailureCause: fmt.Errorf("wrapped: %w", cleaner.ErrCleanupRecipeChanged)},
+		{State: "failed", FailureCause: fmt.Errorf("wrapped: %w", worktree.ErrWorktreeEvidenceChanged)},
+		{State: "failed", FailureCause: minimumAgeErr},
+		{State: "cancelled"},
+		{}, // Unknown execution state uses the stable fallback.
+	}
+	type scenario struct {
+		name          string
+		unit          ExecutionUnit
+		interactive   bool
+		confirm       bool
+		input         string
+		cancel        bool
+		validationErr error
+		executionErr  error
+		omitExecution bool
+		omitPrepared  bool
+		omitSelected  bool
+	}
+	scenarios := []scenario{
+		{name: "missing execution", omitExecution: true},
+		{name: "safety refusal", omitPrepared: true},
+		{name: "unselected prepared target", omitSelected: true},
+		{name: "plan validation", validationErr: failure},
+		{name: "cancel before execution", validationErr: context.Canceled},
+		{name: "decline confirmation", confirm: true, input: "n\n"},
+		{name: "confirmation EOF", confirm: true},
+		{name: "cancel confirmation", confirm: true, cancel: true},
+		{name: "interactive decline", interactive: true, input: "n\nn\n"},
+		{name: "interactive invalid", interactive: true, input: "invalid\n"},
+		{name: "interactive EOF", interactive: true},
+		{name: "interactive cancel", interactive: true, cancel: true},
+		{name: "interactive validation", interactive: true, input: "y\n", validationErr: failure},
+		{name: "cancel after confirmation", interactive: true, input: "y\n", validationErr: context.Canceled},
+		{name: "cancel after execution", interactive: true, input: "y\n", unit: ExecutionUnit{State: "cancelled"}, executionErr: context.Canceled},
+	}
+	for i, unit := range units {
+		scenarios = append(scenarios, scenario{name: fmt.Sprintf("execution outcome %d", i), unit: unit})
+	}
+	codes := make(map[string]struct{})
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			stdin, err := os.CreateTemp(home, "confirmation-*")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer stdin.Close()
+			if _, err := stdin.WriteString(scenario.input); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := stdin.Seek(0, 0); err != nil {
+				t.Fatal(err)
+			}
+			previousStdin := os.Stdin
+			os.Stdin = stdin
+			defer func() { os.Stdin = previousStdin }()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			if scenario.cancel {
+				cancel()
+			}
+			document := Plan{}
+			var components []SnapshotComponent
+			var items []types.DebrisInfo
+			var prepared []PreparedTarget
+			for i := 1; i <= 2; i++ {
+				item := types.DebrisInfo{Path: filepath.Join(home, fmt.Sprintf("cache-%d", i))}
+				items = append(items, item)
+				components = append(components, SnapshotComponent{Key: mustPathKey(t, item.Path), Owner: item})
+				prepared = append(prepared, PreparedTarget{Item: item})
+				document.PhysicalTargets = append(document.PhysicalTargets, PhysicalTarget{ID: fmt.Sprintf("target-%d", i), Decision: DecisionSelected})
+			}
+			if scenario.omitPrepared {
+				prepared = prepared[:1]
+			}
+			if scenario.omitSelected {
+				items = items[:1]
+			}
+			receipt, _ := ExecuteReceipt(ctx, document, components,
+				func() []types.DebrisInfo { return items }, prepared, false, !scenario.confirm, scenario.interactive,
+				func(context.Context, time.Time) error { return scenario.validationErr },
+				func(_ context.Context, targets []PreparedTarget) (ExecutionReceipt, error) {
+					var execution ExecutionReceipt
+					if !scenario.omitExecution {
+						for _, target := range targets {
+							unit := scenario.unit
+							unit.ReceiptTargetKey = receiptItemKey(target.Item)
+							execution.Units = append(execution.Units, unit)
+						}
+					}
+					return execution, scenario.executionErr
+				},
+				func() (int, error) { return 0, nil },
+				func(err error) bool { return errors.Is(err, minimumAgeErr) },
+			)
+			data, err := json.Marshal(receipt)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var decoded Receipt
+			if err := json.Unmarshal(data, &decoded); err != nil {
+				t.Fatal(err)
+			}
+			if len(decoded.PhysicalTargets) != 2 {
+				t.Fatalf("receipt targets = %v; want two", decoded.PhysicalTargets)
+			}
+			for _, target := range decoded.PhysicalTargets {
+				if len(target.ReasonCodes) == 0 {
+					t.Fatal("receipt target has no reason codes")
+				}
+				for _, code := range target.ReasonCodes {
+					codes[code] = struct{}{}
+				}
+			}
+		})
+	}
+	return codes
+}
+
+func TestUnknownReasonTextRoundTripRedactsMetadata(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	for _, reason := range []string{
+		"", "unknown_reason_code", "cleanup refused for " + home,
+		`C:\Users\private-user\secret-project`,
+		`{"project":"secret-project","metadata":"private-metadata"}`,
+	} {
+		t.Run(reason, func(t *testing.T) {
+			assertReasonCodeRoundTrip(t, home, reason, "policy_decision")
+		})
+	}
+}
+
+func assertReasonCodeRoundTrip(t *testing.T, home, reason, want string) {
+	t.Helper()
+	path := filepath.Join(home, "secret-project", "private-cache")
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	item := types.DebrisInfo{
+		Tool: types.ToolBuildCache, Category: types.CategoryBuildCache,
+		Path: path, ID: "secret-item", Project: "secret-project", Size: 64,
+		CleanupCommand: []string{"private-cleanup-command", "--private-metadata"},
+	}
+	canonical := mustPathKey(t, path)
+	document := mustBuild(t, Input{
+		Result: &types.ScanResult{Worktrees: []types.DebrisInfo{item}},
+		Source: Source{Kind: SourceLive, ObservedAt: time.Now()},
+		Plan:   selectedPlan(item, reason),
+		Audit: []AuditComponent{{
+			CanonicalPath: canonical, Owner: item,
+			LogicalRows: []AuditRow{{
+				Item: item, CanonicalPath: canonical, Relation: overlapOwner,
+				PolicyDecision: PolicyEligible, ReasonCodes: []string{reason},
+			}},
+		}},
+	})
+	planJSON, err := json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded Plan
+	if err := json.Unmarshal(planJSON, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	receiptJSON, err := json.Marshal(NewReceipt(decoded, false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var receipt Receipt
+	if err := json.Unmarshal(receiptJSON, &receipt); err != nil {
+		t.Fatal(err)
+	}
+	for label, rows := range map[string][]Row{"plan": decoded.Rows, "receipt plan": receipt.Plan.Rows} {
+		if len(rows) != 1 || !slices.Equal(rows[0].ReasonCodes, []string{want}) {
+			t.Errorf("%s rows = %+v; want exactly reason %q", label, rows, want)
+		}
+	}
+	if len(receipt.PhysicalTargets) != 1 || !slices.Equal(receipt.PhysicalTargets[0].ReasonCodes, []string{want}) {
+		t.Errorf("receipt targets = %+v; want exactly reason %q", receipt.PhysicalTargets, want)
+	}
+	for _, secret := range []string{home, "secret-project", "private-cache", "secret-item", "private-cleanup-command", "private-metadata", "private-user", "unknown_reason_code"} {
+		if strings.Contains(string(planJSON), secret) || strings.Contains(string(receiptJSON), secret) {
+			t.Errorf("plan or receipt leaked %q", secret)
+		}
+	}
 }

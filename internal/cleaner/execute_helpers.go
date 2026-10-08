@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
@@ -96,24 +95,30 @@ func executeWithContextOutput(
 			}
 		}
 		commandFallbackPathRemoval := false
-		if cleanupKind(w) == types.CleanupCommand && len(w.CleanupCommand) > 0 {
-			if err := refuseStaleGoCache(w); err != nil {
+		commandIntent := cleanupKind(w) == types.CleanupCommand || len(w.CleanupCommand) > 0
+		if commandIntent {
+			if _, _, err := adapter.ResolveCleanupCommand(w); err != nil {
 				errs = append(errs, fmt.Errorf("running cleanup command for %s: %w", w.ID, err))
 				fmt.Fprintf(errorOutput, "error: %v\n", err)
 				continue
 			}
 			fmt.Fprintf(output, "running %d/%d: %s (%s) via %s ...\n",
 				i+1, len(worktrees), debrisName(w), w.Category, strings.Join(w.CleanupCommand, " "))
-			if err := runMutationBarrier(ctx, barrier, w); err != nil {
-				errs = append(errs, err)
-				fmt.Fprintf(errorOutput, "error: %v\n", err)
-				continue
-			}
-			freed, residual, err := observeReclamation(ctx, w.Path, func() error {
-				return runCleanupCommand(ctx, w.CleanupCommand, cleanupCommandEnv(w), func() {
+
+			freed, residual, attempted, err := observeReclamation(ctx, w.Path, func() (bool, error) {
+				argv, env, err := authorizedCleanupCommand(home, w)
+				if err != nil {
+					return false, err
+				}
+				return runCleanupCommand(ctx, argv, env, func() error {
 					if observer != nil {
-						observer(CleanupMutationOutcome{Item: w, MutationAttempted: true})
+						observer(CleanupMutationOutcome{Item: w})
 					}
+					if err := runMutationBarrier(ctx, barrier, w); err != nil {
+						return err
+					}
+					_, _, err := authorizedCleanupCommand(home, w)
+					return err
 				})
 			})
 			if err == nil {
@@ -121,7 +126,7 @@ func executeWithContextOutput(
 				reportCommandCleaned(output, w, freed, residual)
 				if observer != nil {
 					observer(CleanupMutationOutcome{
-						Item: w, MutationAttempted: true, FreedBytes: freed, ResidualBytes: residual,
+						Item: w, MutationAttempted: attempted, FreedBytes: freed, ResidualBytes: residual,
 					})
 				}
 				continue
@@ -130,7 +135,7 @@ func executeWithContextOutput(
 				reportCommandResidual(output, w, freed, residual)
 				if observer != nil {
 					observer(CleanupMutationOutcome{
-						Item: w, MutationAttempted: true, FreedBytes: freed, ResidualBytes: residual,
+						Item: w, MutationAttempted: attempted, FreedBytes: freed, ResidualBytes: residual,
 					})
 				}
 				errs = append(errs, fmt.Errorf("running cleanup command for %s: %w", w.ID, err))
@@ -142,26 +147,29 @@ func executeWithContextOutput(
 		}
 		fmt.Fprintf(output, "removing %d/%d: %s (%s) ...\n",
 			i+1, len(worktrees), debrisName(w), w.Category)
-		if err := runMutationBarrier(ctx, barrier, w); err != nil {
-			errs = append(errs, err)
-			fmt.Fprintf(errorOutput, "error: %v\n", err)
-			continue
-		}
-		if observer != nil {
-			observer(CleanupMutationOutcome{
-				Item:                       w,
-				MutationAttempted:          true,
-				CommandFallbackPathRemoval: commandFallbackPathRemoval,
-			})
-		}
-		freed, residual, err := observeReclamation(ctx, w.Path, func() error {
-			return safedelete.RemoveAll(home, w.Path)
+
+		freed, residual, attempted, err := observeReclamation(ctx, w.Path, func() (bool, error) {
+			if observer != nil {
+				observer(CleanupMutationOutcome{Item: w, CommandFallbackPathRemoval: commandFallbackPathRemoval})
+			}
+			if err := runMutationBarrier(ctx, barrier, w); err != nil {
+				return false, err
+			}
+			if commandFallbackPathRemoval {
+				if _, _, err := authorizedCleanupCommand(home, w); err != nil {
+					return false, err
+				}
+			}
+			if err := ctx.Err(); err != nil {
+				return false, err
+			}
+			return true, safedelete.RemoveAll(home, w.Path)
 		})
 		total += freed
 		if observer != nil {
 			observer(CleanupMutationOutcome{
 				Item:                       w,
-				MutationAttempted:          true,
+				MutationAttempted:          attempted,
 				CommandFallbackPathRemoval: commandFallbackPathRemoval,
 				FreedBytes:                 freed,
 				ResidualBytes:              residual,
@@ -206,15 +214,15 @@ func cleanupKind(w types.DebrisInfo) types.CleanupKind {
 	return types.CleanupRemovePath
 }
 
-func refuseStaleGoCache(item types.DebrisInfo) error {
-	if !isGoCleanCache(item.CleanupCommand) {
-		return nil
+func authorizedCleanupCommand(home string, item types.DebrisInfo) ([]string, []string, error) {
+	argv, env, err := adapter.ResolveCleanupCommand(item)
+	if err != nil {
+		return nil, nil, err
 	}
-	return adapter.RefuseStaleGoCache(item.Path)
-}
-
-func isGoCleanCache(argv []string) bool {
-	return len(argv) == 3 && argv[0] == "go" && argv[1] == "clean" && argv[2] == "-cache"
+	if err := safedelete.Check(home, item.Path); err != nil {
+		return nil, nil, err
+	}
+	return argv, env, nil
 }
 
 func reportCommandCleaned(output io.Writer, w types.DebrisInfo, freed, residual int64) {
@@ -235,54 +243,37 @@ func reportCommandResidual(output io.Writer, w types.DebrisInfo, freed, residual
 		w.ID, FormatSize(residual), FormatSize(freed))
 }
 
-// cleanupCommandEnv pins the cache location a cleanup command acts on to the
-// path that was scanned, measured, and passed the deletion gate. Without it,
-// an inherited npm_config_cache or UV_CACHE_DIR would point the command at a
-// directory nothing checked.
-func cleanupCommandEnv(item types.DebrisInfo) []string {
-	if len(item.CleanupCommand) == 0 || item.Path == "" {
-		return nil
-	}
-	switch item.CleanupCommand[0] {
-	case "go":
-		return []string{"GOCACHE=" + item.Path}
-	case "uv":
-		return []string{"UV_CACHE_DIR=" + item.Path}
-	case "brew":
-		return []string{"HOMEBREW_CACHE=" + item.Path}
-	case "npm":
-		// The scanned path is <cache>/_cacache; npm takes <cache>.
-		if filepath.Base(item.Path) == "_cacache" {
-			return []string{"npm_config_cache=" + filepath.Dir(item.Path)}
-		}
-	}
-	return nil
-}
-
-func runCleanupCommand(ctx context.Context, argv []string, env []string, beforeStart func()) error {
+func runCleanupCommand(ctx context.Context, argv []string, env []string, beforeStart func() error) (bool, error) {
 	if len(argv) == 0 {
-		return nil
+		return false, nil
 	}
-	bin, err := lookPath(argv[0])
-	if err != nil {
-		return errCleanupCommandNotFound
+	bin, lookupErr := lookPath(argv[0])
+	var cmd *exec.Cmd
+	if lookupErr == nil {
+		cmd = commandContext(ctx, bin, argv[1:]...)
 	}
-	cmd := commandContext(ctx, bin, argv[1:]...)
-	if len(env) > 0 {
+	if cmd != nil && len(env) > 0 {
 		cmd.Env = append(os.Environ(), env...)
 	}
-	if beforeStart != nil {
-		beforeStart()
+	if err := beforeStart(); err != nil {
+		return false, err
+	}
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	if lookupErr != nil {
+		return false, errCleanupCommandNotFound
 	}
 	output, err := cmd.CombinedOutput()
+	attempted := cmd.Process != nil
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return ctxErr
+			return attempted, ctxErr
 		}
 		if len(output) > 0 {
-			return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(output)))
+			return attempted, fmt.Errorf("%w: %s", err, strings.TrimSpace(string(output)))
 		}
-		return err
+		return attempted, err
 	}
-	return nil
+	return attempted, nil
 }

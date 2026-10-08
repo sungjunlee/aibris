@@ -24,22 +24,13 @@ func newGuidedCleanExecutionReceipt(
 ) (guidedCleanExecutionReceipt, error) {
 	components := cleanjson.SnapshotComponentsFromCmd(plan, audit.Components, inventory, protections)
 
-	// Convert prepared targets to cleanjson format
-	preparedTargets := make([]cleanjson.PreparedTarget, len(prepared))
-	for i, p := range prepared {
-		preparedTargets[i] = cleanjson.PreparedTarget{
-			Item:      p.Item,
-			Component: p.Component,
-		}
-	}
-
 	inner, err := cleanjson.NewGuidedExecutionReceipt(
 		cleanjson.SourceFromCleaner(source),
 		opts,
 		cleanjson.GuidedPolicyFromWorktree(guidedState),
 		cleanjson.PlanEvidenceFromCleaner(plan.Evidence),
 		components,
-		preparedTargets,
+		prepared,
 		cleanjson.UnifiedPlanFromCleaner(plan),
 		cleanIncludePaths,
 	)
@@ -58,11 +49,9 @@ func (r *guidedCleanExecutionReceipt) observeInteractiveSkip(outcome interactive
 		return
 	}
 	r.inner.ObserveInteractiveSkip(cleanjson.InteractiveSkipOutcome{
-		Target: cleanjson.PreparedTarget{
-			Item:      outcome.Target.Item,
-			Component: outcome.Target.Component,
-		},
-		Declined: outcome.Declined,
+		Target:            outcome.Target,
+		Declined:          outcome.Declined,
+		AfterConfirmation: outcome.AfterConfirmation,
 	})
 }
 
@@ -74,22 +63,8 @@ func (r *guidedCleanExecutionReceipt) finish(
 		return cleanJSONReceipt{}, nil
 	}
 
-	// Convert execution receipt to cleanjson format
-	units := make([]cleanjson.ExecutionUnit, len(execution.Units))
-	for i, u := range execution.Units {
-		units[i] = cleanjson.ExecutionUnit{
-			ReceiptTargetKey:           u.ReceiptTargetKey,
-			State:                      string(u.State),
-			PhysicalRemoved:            u.PhysicalRemoved,
-			FreedBytes:                 u.FreedBytes,
-			ResidualBytes:              u.ResidualBytes,
-			CommandFallbackPathRemoval: u.CommandFallbackPathRemoval,
-			FailureCause:               u.FailureCause,
-		}
-	}
-
 	return r.inner.Finish(
-		cleanjson.ExecutionReceipt{Units: units},
+		execution,
 		executionErr,
 		listLocalAPFSSnapshots,
 	)
@@ -107,24 +82,10 @@ func writeGuidedCleanExecutionReceipt(
 		return
 	}
 
-	// Convert execution receipt to cleanjson format
-	units := make([]cleanjson.ExecutionUnit, len(execution.Units))
-	for i, u := range execution.Units {
-		units[i] = cleanjson.ExecutionUnit{
-			ReceiptTargetKey:           u.ReceiptTargetKey,
-			State:                      string(u.State),
-			PhysicalRemoved:            u.PhysicalRemoved,
-			FreedBytes:                 u.FreedBytes,
-			ResidualBytes:              u.ResidualBytes,
-			CommandFallbackPathRemoval: u.CommandFallbackPathRemoval,
-			FailureCause:               u.FailureCause,
-		}
-	}
-
 	cleanjson.WriteGuidedExecutionReceipt(
 		cleanReceiptFile,
 		pending.inner,
-		cleanjson.ExecutionReceipt{Units: units},
+		execution,
 		executionErr,
 		listLocalAPFSSnapshots,
 	)

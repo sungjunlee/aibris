@@ -456,3 +456,30 @@ func TestReadLastScanCacheRejectsMalformedPayload(t *testing.T) {
 		t.Fatal("valid cache must be readable after malformed payload is replaced")
 	}
 }
+
+func TestRejectsInventoryBeforeApparentSizeContract(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	roots := []string{home}
+	Write(roots, adapter.DefaultProviderIdentity(), &types.ScanResult{}, false)
+	path, err := lastScanCachePath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc Document
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatal(err)
+	}
+	// Revision 11 admitted mixed allocated/apparent inventory.
+	doc.SchemaVersion = 11
+	if err := saveLastScanCache(doc); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, ok := readFreshLastScanCache(roots); ok {
+		t.Fatal("mixed-size revision 11 must trigger a live rescan")
+	}
+}

@@ -208,16 +208,16 @@ item list, not as a worktree-only list.
 | `project` | string | Project name if detectable, empty otherwise |
 | `source` | string | Worktree source such as `.codex`, `.somename`, `project-local`, or the registered `superpowers`; empty for non-worktree items. Superpowers rows use `tool=unknown`. |
 | `path` | string | Absolute filesystem path |
-| `size` | integer | Size in bytes |
+| `size` | integer | Apparent bytes: sum of non-directory entry lengths. Sparse files count logical length. Regular hardlinks count once per (device, inode) within each target when Unix `FileInfo.Sys()` exposes `syscall.Stat_t`; Windows and unavailable identity count per path. Different targets are measured independently. Root symlinks are followed; nested symlinks count their own length without following targets. Directory metadata is excluded; unreadable entries may leave a partial estimate. Not allocated blocks or guaranteed reclaimed space. |
 | `mod_time` | string | Last modification time in RFC 3339 format. For `build-cache`, `other-cache`, and `agent-state` rows this is the newest mtime found anywhere in the tree, not the path's own mtime. |
 | `status` | string | Worktree health (`active`, `orphaned`, `plain-dir`) or empty for non-worktree items. Only scanner-validated `active` and `orphaned` worktree rows can enter cleanup safety; `plain-dir`, empty, and unknown values are review-only. |
 | `classification` | string | Agent-state health (`live`, `orphaned`, `undetermined`), omitted for items outside `agent-state`. Cursor project-store entries derive this from all distinct absolute `workspacePath=` values in `worker.log` that are outside `~/.cursor`; any live path wins and `orphaned` requires every usable path to be proven absent. |
 | `risk` | string | Derived cleanup risk (`low`, `medium`, `high`) |
 | `reason` | string | Short derived explanation for cleanup review |
 | `cleanup_kind` | string | Cleanup strategy (`remove-path` or `command`) |
-| `cleanup_command` | array | Argv command used when `cleanup_kind` is `command`; empty for path removal |
+| `cleanup_command` | array | Inventory argv claim when `cleanup_kind` is `command`; empty for path removal. Execution re-derives argv and the pinned environment from the live catalog; inventory is not command authority. |
 | `physical_target_id` | string | Document-local physical unit id (`target-1`, `target-2`, …), the same pattern as clean `physical_target_id`. Nested members under one outer owner share one id. These ids are not path hashes and are not stable across runs. |
-| `strippable_bytes` | integer | Bytes in regenerable subtrees (dependency directories and platform build output) inventoried at fixed known-relative positions inside a `worktree` unit. Omitted when zero. Reported separately from `size` so protected worktrees do not read as unrecoverable; only `clean --strip` removes them, and strip eligibility never authorizes deletion. |
+| `strippable_bytes` | integer | Apparent bytes under the same `size` accounting in regenerable subtrees (dependency directories and platform build output) inventoried at fixed known-relative positions inside a `worktree` unit. Omitted when zero. Reported separately from `size` so protected worktrees do not read as unrecoverable; only `clean --strip` removes them, and strip eligibility never authorizes deletion. |
 | `strippable_paths` | array | Absolute paths of those regenerable subtrees. Omitted when empty. |
 
 `risk` and `reason` are presentation fields derived from `category`, `status`,
@@ -256,7 +256,7 @@ protected.
 | `total_count` | integer | Total number of evidence-row debris items |
 | `total_size` | integer | Sum of evidence-row `size` values. Nested members that share one outer owner are each counted, so this can overstate physical bytes. |
 | `physical_unit_count` | integer | Number of physical mutation owners after the same alias/containment collapse clean uses (`NormalizeTargets`). N nested worktree members under one outer owner contribute 1. |
-| `physical_total_bytes` | integer | Sum of those physical owners' sizes, counted once each. Human scan headline and volume debris use this figure. |
+| `physical_total_bytes` | integer | Sum of those outer owners' apparent sizes, counted once each; physical means owner deduplication, not allocated or reclaimed bytes. Human scan headline and volume debris use this figure. |
 | `total_strippable_bytes` | integer | Sum of `strippable_bytes` across all items. Omitted when zero. Reported separately from `total_size`; it never changes deletion totals. |
 | `by_category` | object | Per-category evidence-row and physical counts and sizes |
 | `by_tool` | object | Per-tool evidence-row and physical counts and sizes |
@@ -337,6 +337,12 @@ Diagnostics carry only aggregate accounting (tool, state, count, bytes,
 duration, error). They never contain file paths, item paths, or file content.
 
 ## Retention projection (read-only, shipped)
+
+An explicit `--root` is a hard boundary for this projection too: an excluded
+Codex sessions store is not added back implicitly. Default-home scans may add
+the resolved primary Codex home; additional homes do not expand this retention
+store contract. Traversal stays inside that store, skips non-regular leaves
+without skipping their ordinary siblings, and never follows directory symlinks.
 
 The top-level `retention` object is always present. It is non-additive
 physical accounting: one aggregate row exists per `(store_id, bucket_id)`,
@@ -680,6 +686,21 @@ and path-free; external command output is never copied into JSON. A
 `command_fallback_path_removal` reason code records that a missing planned
 cleanup command reached its safe path-removal fallback. `no_bytes_reclaimed`
 records a successful command that did not shrink the container.
+
+The mutation-boundary refusal codes are also in the supported reason catalog:
+
+| Code | Meaning |
+| ---- | ------- |
+| `cleanup_recipe_changed` | The current cleanup recipe differs from the prepared recipe; execution is refused before mutation. |
+| `worktree_evidence_changed` | Current worktree Git evidence differs from the prepared evidence; execution is refused before mutation. |
+
+`cleanup_recipe_changed` also covers removed recipes and mismatched tool,
+category, canonical target, or argv. It does not trigger a path-removal fallback.
+`worktree_evidence_changed` covers orphaned Git/member/marker drift, including
+symlinked `.git` markers; it never upgrades an orphan request to active removal.
+These codes preserve the specific refusal instead of using `execution_failed`.
+Re-scan and review a new plan before retrying; `--force` does not bypass the
+revalidation.
 
 Every receipt carries a path-free top-level `post_clean` object. Its `volume`
 uses the same shape as the scan document's `volume` (omitted when volume

@@ -14,8 +14,11 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/confirminput"
+	"github.com/sungjunlee/aibris/internal/executor"
 	"github.com/sungjunlee/aibris/internal/scanreport"
 	"github.com/sungjunlee/aibris/internal/types"
+	"github.com/sungjunlee/aibris/internal/worktree"
 )
 
 const (
@@ -216,21 +219,10 @@ func EncodeReceipt(output io.Writer, receipt Receipt) error {
 	return encoder.Encode(receipt)
 }
 
-// ExecutionUnit represents the execution state of a single cleanup unit.
-type ExecutionUnit struct {
-	ReceiptTargetKey           string
-	State                      string
-	PhysicalRemoved            bool
-	FreedBytes                 int64
-	ResidualBytes              int64
-	CommandFallbackPathRemoval bool
-	FailureCause               error
-}
-
-// ExecutionReceipt carries the outcomes of executing prepared cleanup targets.
-type ExecutionReceipt struct {
-	Units []ExecutionUnit
-}
+// ExecutionUnit and ExecutionReceipt preserve the domain executor's typed
+// outcomes until they are projected into the public receipt document.
+type ExecutionUnit = executor.UnitExecutionReceipt
+type ExecutionReceipt = executor.ExecutionReceipt
 
 // ExecuteReceipt consumes only the plan and prepared targets built
 // by the current command invocation. It deliberately has no JSON input path:
@@ -420,31 +412,8 @@ func scanInput(ctx context.Context, scanner *bufio.Scanner) (line string, ok, ca
 	if scanner == nil {
 		return "", false, true
 	}
-	result := make(chan struct {
-		line string
-		ok   bool
-	}, 1)
-	go func() {
-		if scanner.Scan() {
-			result <- struct {
-				line string
-				ok   bool
-			}{line: scanner.Text(), ok: true}
-			return
-		}
-		result <- struct {
-			line string
-			ok   bool
-		}{ok: false}
-	}()
-	select {
-	case <-ctx.Done():
-		// A scanner read may still be running in the goroutine; callers must
-		// return after cancelled=true and never reuse this scanner.
-		return "", false, true
-	case value := <-result:
-		return value.line, value.ok, false
-	}
+	line, ok, _ = confirminput.Scan(ctx, scanner)
+	return line, ok, ctx.Err() != nil
 }
 
 func markPreparedReceiptTargets(
@@ -495,8 +464,8 @@ func receiptTargetIDsForPrepared(
 		if id == "" {
 			return targetIDs, fmt.Errorf("execution receipt invariant: no physical target ID for prepared target %q", key)
 		}
-		if previous := targetIDs[key]; previous != "" && previous != id {
-			return targetIDs, fmt.Errorf("execution receipt invariant: conflicting physical target IDs for prepared target %q", key)
+		if previous := targetIDs[key]; previous != "" {
+			return targetIDs, fmt.Errorf("execution receipt invariant: duplicate prepared target %q", key)
 		}
 		targetIDs[key] = id
 	}
@@ -518,6 +487,12 @@ func orderReceiptPreparedTargets(
 			return nil, fmt.Errorf("execution receipt invariant: invalid physical target ID %q", id)
 		}
 		orders[key] = order
+	}
+	for _, target := range ordered {
+		key := receiptItemKey(target.Item)
+		if _, ok := orders[key]; !ok {
+			return nil, fmt.Errorf("execution receipt invariant: no physical target ID for prepared target %q", key)
+		}
 	}
 	sort.SliceStable(ordered, func(i, j int) bool {
 		return orders[receiptItemKey(ordered[i].Item)] < orders[receiptItemKey(ordered[j].Item)]
@@ -604,7 +579,7 @@ func applyExecutionReceipt(
 			}
 			matched = true
 			target := &receipt.PhysicalTargets[i]
-			target.State = unit.State
+			target.State = string(unit.State)
 			target.Requested = unit.State == "removed" ||
 				unit.State == "partial" ||
 				unit.State == "failed" ||
@@ -652,6 +627,12 @@ func receiptStateReasons(unit ExecutionUnit, isMinimumAgeError func(error) bool)
 	case "partial":
 		return append(codes, "partial_failure")
 	case "failed":
+		if errors.Is(unit.FailureCause, cleaner.ErrCleanupRecipeChanged) {
+			return append(codes, "cleanup_recipe_changed")
+		}
+		if errors.Is(unit.FailureCause, worktree.ErrWorktreeEvidenceChanged) {
+			return append(codes, "worktree_evidence_changed")
+		}
 		if unit.FailureCause != nil && isMinimumAgeError(unit.FailureCause) {
 			// The pre-mutation barrier refused a target that went live again.
 			// That is retry-later, not a removal failure.
@@ -729,8 +710,6 @@ func finalizeReceipt(receipt Receipt, listSnapshots func() (int, error)) (Receip
 	return receipt, nil
 }
 
-// PreparedTarget represents a target prepared for execution with its overlap component.
-type PreparedTarget struct {
-	Item      types.DebrisInfo
-	Component interface{} // Will be *cleanupOverlapComponent from cmd, kept as interface{}
-}
+// PreparedTarget carries the complete execution evidence through receipt
+// ordering and interactive selection without a DTO or identity-map recovery.
+type PreparedTarget = executor.PreparedExecutionTarget

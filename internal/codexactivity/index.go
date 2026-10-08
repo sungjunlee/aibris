@@ -1,12 +1,9 @@
 package codexactivity
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -15,11 +12,12 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/codexhome"
+	"github.com/sungjunlee/aibris/internal/codexsession"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
 const (
-	CacheSchemaVersion = 1
+	CacheSchemaVersion = 3
 	Freshness          = 15 * time.Minute
 
 	SourceCache       = "cache"
@@ -46,6 +44,7 @@ type Index struct {
 	Worktrees map[string]Worktree
 	Members   map[string]Worktree
 	Projects  map[string]Project
+	Sources   map[string]SourceCoverage
 	Err       error
 }
 
@@ -92,6 +91,9 @@ func LoadWithOptions(ctx context.Context, opts IndexOptions) Index {
 	}
 
 	cache, cacheOK, cacheErr := Read(opts.CachePath)
+	if cacheOK && !sameRoots(cache.SessionRoots, opts.SessionRoots) {
+		cacheOK = false
+	}
 	if cacheOK {
 		cache.rebuildAggregates()
 		age := opts.Now.Sub(cache.CreatedAt)
@@ -130,14 +132,15 @@ func FillOptions(opts IndexOptions) IndexOptions {
 			opts.SessionRoots = roots
 		}
 	}
+	opts.SessionRoots = canonicalRoots(opts.SessionRoots)
 	return opts
 }
 
-func (i Index) ProjectHasSessionAfter(project string, ts time.Time) bool {
+func (i Index) ProjectHasSessionAfter(home, project string, ts time.Time) bool {
 	if !i.Available || project == "" {
 		return false
 	}
-	activity, ok := i.Projects[project]
+	activity, ok := i.Projects[ProjectKey(canonicalPath(home), project)]
 	return ok && activity.LatestSession.After(ts)
 }
 
@@ -188,17 +191,17 @@ func IsActiveCodexWorktree(item types.DebrisInfo) bool {
 		item.Status == types.WorktreeActive
 }
 
-// DefaultSessionRoots returns the Codex session roots under the
-// resolved Codex home ($CODEX_HOME, or ~/.codex when unset).
+// DefaultSessionRoots uses the same resolved home list as worktree discovery.
 func DefaultSessionRoots() ([]string, error) {
-	codexHome, err := codexhome.Home()
+	homes, err := codexhome.Homes()
 	if err != nil {
 		return nil, err
 	}
-	return []string{
-		filepath.Join(codexHome, "sessions"),
-		filepath.Join(codexHome, "archived_sessions"),
-	}, nil
+	var roots []string
+	for _, home := range homes {
+		roots = append(roots, filepath.Join(home, "sessions"), filepath.Join(home, "archived_sessions"))
+	}
+	return roots, nil
 }
 
 // Session-file discovery, record parsing, and CWD worktree identity for the
@@ -206,6 +209,7 @@ func DefaultSessionRoots() ([]string, error) {
 
 type sessionFileInfo struct {
 	path    string
+	home    string
 	modTime time.Time
 	size    int64
 }
@@ -225,10 +229,7 @@ func findSessionFiles(ctx context.Context, roots []string) ([]sessionFileInfo, e
 			return nil, err
 		}
 		if !info.IsDir() {
-			if strings.EqualFold(filepath.Ext(root), ".jsonl") {
-				files = appendSessionFileInfo(files, seen, root, info)
-			}
-			continue
+			return nil, fmt.Errorf("session root is not a directory")
 		}
 		err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 			if walkErr != nil {
@@ -237,7 +238,7 @@ func findSessionFiles(ctx context.Context, roots []string) ([]sessionFileInfo, e
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".jsonl") {
+			if !entry.Type().IsRegular() || !strings.EqualFold(filepath.Ext(entry.Name()), ".jsonl") {
 				return nil
 			}
 			info, err := entry.Info()
@@ -258,6 +259,9 @@ func findSessionFiles(ctx context.Context, roots []string) ([]sessionFileInfo, e
 }
 
 func appendSessionFileInfo(files []sessionFileInfo, seen map[string]bool, path string, info fs.FileInfo) []sessionFileInfo {
+	if !info.Mode().IsRegular() {
+		return files
+	}
 	cleanPath := filepath.Clean(path)
 	if seen[cleanPath] {
 		return files
@@ -270,57 +274,49 @@ func appendSessionFileInfo(files []sessionFileInfo, seen map[string]bool, path s
 	})
 }
 
-func readSessionFileRecord(file sessionFileInfo) (FileRecord, error) {
-	record := FileRecord{
-		Path:    file.path,
-		ModTime: file.modTime,
-		Size:    file.size,
+func readSessionFileRecord(ctx context.Context, file sessionFileInfo) (FileRecord, error) {
+	record := FileRecord{Path: file.path, Home: file.home, ModTime: file.modTime, Size: file.size}
+	if err := ctx.Err(); err != nil {
+		return record, err
+	}
+	before, err := os.Lstat(file.path)
+	if err != nil {
+		return record, err
+	}
+	if !before.Mode().IsRegular() {
+		return record, nil
 	}
 	f, err := os.Open(file.path)
 	if err != nil {
 		return record, err
 	}
-	defer f.Close()
-
-	reader := bufio.NewReader(f)
-	line, err := reader.ReadString('\n')
-	if err != nil && !errors.Is(err, io.EOF) {
+	defer func() { _ = f.Close() }()
+	opened, err := f.Stat()
+	if err != nil {
 		return record, err
 	}
-	line = strings.TrimSpace(line)
-	if line == "" {
-		return record, nil
-	}
-
-	var meta struct {
-		Timestamp string `json:"timestamp"`
-		Type      string `json:"type"`
-		Payload   struct {
-			CWD       string `json:"cwd"`
-			SessionID string `json:"session_id"`
-			ID        string `json:"id"`
-			ThreadID  string `json:"thread_id"`
-		} `json:"payload"`
-	}
-	if err := json.Unmarshal([]byte(line), &meta); err != nil {
-		return record, nil
-	}
-	if meta.Type != "session_meta" {
-		return record, nil
-	}
-	sessionID := firstNonEmpty(meta.Payload.SessionID, meta.Payload.ID, meta.Payload.ThreadID)
-	if sessionID == "" || meta.Timestamp == "" || meta.Payload.CWD == "" {
-		return record, nil
-	}
-	timestamp, err := time.Parse(time.RFC3339Nano, meta.Timestamp)
+	after, err := os.Lstat(file.path)
 	if err != nil {
-		return record, nil
+		return record, err
 	}
-	worktreeID, project, ok := WorktreeFromCWD(meta.Payload.CWD)
+	if !opened.Mode().IsRegular() || !after.Mode().IsRegular() || !os.SameFile(before, opened) || !os.SameFile(opened, after) {
+		return record, fmt.Errorf("%w: session leaf changed while opening", ErrUnavailable)
+	}
+	metadata, err := codexsession.ReadFirstMetadataFrom(ctx, f)
+	if err != nil {
+		return record, err
+	}
+	if !metadata.HasActivityFields() {
+		return record, &codexsession.ParseError{Kind: codexsession.ErrorInvalidField}
+	}
+	timestamp, err := time.Parse(time.RFC3339Nano, metadata.Timestamp)
+	if err != nil {
+		return record, &codexsession.ParseError{Kind: codexsession.ErrorInvalidField}
+	}
+	worktreeID, project, ok := WorktreeFromCWD(metadata.CWD, file.home)
 	if !ok {
 		return record, nil
 	}
-
 	record.Valid = true
 	record.WorktreeID = worktreeID
 	record.Project = project
@@ -328,23 +324,20 @@ func readSessionFileRecord(file sessionFileInfo) (FileRecord, error) {
 	return record, nil
 }
 
-func WorktreeFromCWD(cwd string) (string, string, bool) {
-	parts := pathParts(cwd)
-	for i := 0; i+2 < len(parts); i++ {
-		if parts[i] != ".codex" || !isCodexActivityWorktreeRoot(parts[i+1]) {
-			continue
-		}
-		worktreeID := parts[i+2]
-		project := worktreeID
-		if i+3 < len(parts) {
-			project = parts[i+3]
-		}
-		if worktreeID == "" || project == "" {
-			return "", "", false
-		}
-		return worktreeID, project, true
+func WorktreeFromCWD(cwd, home string) (string, string, bool) {
+	rel, err := filepath.Rel(canonicalPath(home), canonicalPath(cwd))
+	if err != nil {
+		return "", "", false
 	}
-	return "", "", false
+	parts := pathParts(rel)
+	if len(parts) < 2 || !isCodexActivityWorktreeRoot(parts[0]) {
+		return "", "", false
+	}
+	project := parts[1]
+	if len(parts) > 2 {
+		project = parts[2]
+	}
+	return parts[1], project, true
 }
 
 func pathParts(path string) []string {
@@ -368,13 +361,4 @@ func isCodexActivityWorktreeRoot(name string) bool {
 		name == "worktrees" ||
 		strings.HasPrefix(name, "worktree-") ||
 		strings.HasPrefix(name, "worktrees-")
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if value != "" {
-			return value
-		}
-	}
-	return ""
 }

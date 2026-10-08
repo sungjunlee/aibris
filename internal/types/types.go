@@ -81,8 +81,16 @@ type DebrisInfo struct {
 	Project  string
 	Source   string
 	Path     string
-	Size     int64
-	ModTime  time.Time
+	// Size is apparent bytes: sum of non-directory entry lengths. Sparse files
+	// count their logical length; regular hardlinks count once per (device, inode)
+	// within each target when Unix FileInfo.Sys() exposes syscall.Stat_t. Windows
+	// and unavailable identity count per path. Targets are measured independently.
+	// Root symlinks are followed; nested symlinks count their own length without
+	// following targets. Directory metadata contributes zero.
+	// Unreadable entries can leave a partial reporting estimate. Size does not
+	// measure allocated blocks or guarantee space reclaimed by deletion.
+	Size    int64
+	ModTime time.Time
 	// PathModTime is the target path's own mtime. Cache adapters set it whenever
 	// the item may carry tree-derived activity, so integrity checks can still
 	// compare against the path's own stat. A zero value means the path's own
@@ -96,8 +104,9 @@ type DebrisInfo struct {
 	// StrippableBytes and StrippablePaths inventory regenerable subtrees
 	// (dependency dirs, platform build output) found at fixed known-relative
 	// positions inside a worktree unit. They are a separate disposition from
-	// Size: stripping removes only these subtrees and never the unit itself,
-	// and strip eligibility never authorizes deletion.
+	// Size, using the same apparent-byte accounting: stripping removes only
+	// these subtrees and never the unit itself. Strip eligibility never
+	// authorizes deletion.
 	StrippableBytes int64
 	StrippablePaths []string
 	// ScanPathIdentity, ScanPathType, and ScanPathEvidenceRequired are transient
@@ -114,7 +123,8 @@ type ScanResult struct {
 	TotalCount int
 	TotalSize  int64
 	// PhysicalUnitCount and PhysicalTotalBytes count each outer mutation
-	// owner once. TotalCount/TotalSize remain the evidence-row sum.
+	// owner once, using the same apparent-byte Size contract, not allocated or
+	// reclaimed bytes. TotalCount/TotalSize remain the evidence-row sum.
 	PhysicalUnitCount  int
 	PhysicalTotalBytes int64
 	// TotalStrippableBytes sums regenerable-subtree bytes reported separately
@@ -270,7 +280,8 @@ type CategorySummary struct {
 	Count int
 	Size  int64
 	// PhysicalUnitCount and PhysicalTotalBytes count each outer mutation
-	// owner once. Count/Size remain the evidence-row sum.
+	// owner once under the apparent-byte Size contract, not allocated or
+	// reclaimed bytes. Count/Size remain the evidence-row sum.
 	PhysicalUnitCount  int
 	PhysicalTotalBytes int64
 	// StrippableBytes reports regenerable-subtree bytes separately from Size.
@@ -282,7 +293,8 @@ type ToolSummary struct {
 	Count int
 	Size  int64
 	// PhysicalUnitCount and PhysicalTotalBytes count each outer mutation
-	// owner once. Count/Size remain the evidence-row sum.
+	// owner once under the apparent-byte Size contract, not allocated or
+	// reclaimed bytes. Count/Size remain the evidence-row sum.
 	PhysicalUnitCount  int
 	PhysicalTotalBytes int64
 	// StrippableBytes reports regenerable-subtree bytes separately from Size.

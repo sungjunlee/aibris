@@ -67,22 +67,35 @@ func (e *cwdMetadataExtractor) feedStringByte(b byte) string {
 		}
 	}
 	if e.unicodeDigits > 0 {
-		if !isJSONHexDigit(b) {
+		digit, ok := jsonHexDigitValue(b)
+		if !ok {
 			e.invalid = true
 			return ""
 		}
+		e.unicodeValue = e.unicodeValue<<4 | digit
 		e.unicodeDigits--
+		if e.unicodeDigits == 0 && e.stringIsKey {
+			// Only ASCII code points can match "cwd". Non-ASCII and
+			// surrogate escapes cannot contribute a matching character.
+			if e.unicodeValue > 0x7f {
+				e.keyMatched = false
+			} else {
+				e.matchKeyByte(byte(e.unicodeValue))
+			}
+		}
 		return ""
 	}
 	if e.escaped {
 		e.escaped = false
-		if e.stringIsKey {
-			e.keyMatched = false
-		}
 		switch b {
 		case '"', '\\', '/', 'b', 'f', 'n', 'r', 't':
+			// No short escape decodes to c, w, or d.
+			if e.stringIsKey {
+				e.keyMatched = false
+			}
 		case 'u':
 			e.unicodeDigits = 4
+			e.unicodeValue = 0
 		default:
 			e.invalid = true
 		}
@@ -108,6 +121,10 @@ func (e *cwdMetadataExtractor) feedStringByte(b byte) string {
 		frame := &e.containers[len(e.containers)-1]
 		frame.keyIsCWD = e.keyMatched && e.keyLength == len("cwd")
 		if frame.keyIsCWD {
+			if e.cwdFieldSeen {
+				e.cwdAmbiguous = true
+				e.invalid = true
+			}
 			e.cwdFieldSeen = true
 		}
 		frame.state = jsonObjectColon
@@ -231,6 +248,9 @@ func (e *cwdMetadataExtractor) numberCanEnd() bool {
 
 func (e *cwdMetadataExtractor) matchKeyByte(b byte) {
 	const key = "cwd"
+	if !e.keyMatched {
+		return
+	}
 	if e.keyLength >= len(key) || key[e.keyLength] != b {
 		e.keyMatched = false
 	}
@@ -241,10 +261,17 @@ func isJSONValueDelimiter(b byte) bool {
 	return isJSONWhitespace(b) || b == ',' || b == '}' || b == ']'
 }
 
-func isJSONHexDigit(b byte) bool {
-	return (b >= '0' && b <= '9') ||
-		(b >= 'a' && b <= 'f') ||
-		(b >= 'A' && b <= 'F')
+func jsonHexDigitValue(b byte) (uint16, bool) {
+	switch {
+	case b >= '0' && b <= '9':
+		return uint16(b - '0'), true
+	case b >= 'a' && b <= 'f':
+		return uint16(b-'a') + 10, true
+	case b >= 'A' && b <= 'F':
+		return uint16(b-'A') + 10, true
+	default:
+		return 0, false
+	}
 }
 
 func isJSONWhitespace(b byte) bool {

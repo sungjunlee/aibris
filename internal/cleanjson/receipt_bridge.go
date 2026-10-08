@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/executor"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -71,7 +72,7 @@ func CleanJSONReceiptStateReasons(
 	isMinimumAgeError func(error) bool,
 ) []string {
 	unit := ExecutionUnit{
-		State:                      state,
+		State:                      executor.ExecutionState(state),
 		PhysicalRemoved:            physicalRemoved,
 		FreedBytes:                 freedBytes,
 		CommandFallbackPathRemoval: commandFallbackPathRemoval,

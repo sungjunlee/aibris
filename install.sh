@@ -8,12 +8,18 @@ INSTALL_DIR="${AIBRIS_INSTALL_DIR:-}"
 INSTALL_DIR_EXPLICIT=0
 VERSION=""
 TMP_ROOT=""
+STAGED_BINARY=""
 
 if [[ -n "${AIBRIS_INSTALL_DIR:-}" ]]; then
   INSTALL_DIR_EXPLICIT=1
 fi
 
 cleanup() {
+  # Only the unique staging file belongs to this install; never remove the
+  # destination or its parent when preparation or replacement fails.
+  if [[ -n "${STAGED_BINARY:-}" ]]; then
+    run_install_command rm -f "$STAGED_BINARY"
+  fi
   if [[ -n "${TMP_ROOT:-}" ]]; then
     rm -rf "$TMP_ROOT"
   fi
@@ -114,15 +120,18 @@ need() {
 }
 
 run_install_command() {
+  # Return the command's own status explicitly: inside an EXIT trap, a bare
+  # `return` reports the status that triggered the trap (bash 4.4+), which
+  # would abort cleanup under `set -e` before temporary files are removed.
   if [[ -w "$INSTALL_DIR" ]]; then
     "$@"
-    return
+    return $?
   fi
   if [[ "$INSTALL_DIR_EXPLICIT" -eq 1 ]]; then
     need sudo
-    log "Using sudo to install into ${INSTALL_DIR}"
+    log "Using sudo to install into ${INSTALL_DIR}" >&2
     sudo "$@"
-    return
+    return $?
   fi
 
   err "${INSTALL_DIR} is not writable"
@@ -183,7 +192,12 @@ install_binary() {
   local source="$1"
   log "Installing ${BINARY} to ${INSTALL_DIR}"
   mkdir -p "$INSTALL_DIR" 2>/dev/null || run_install_command mkdir -p "$INSTALL_DIR"
-  run_install_command install -m 0755 "$source" "${INSTALL_DIR}/${BINARY}"
+  # Prepare on the destination filesystem so replacement is a rename, and
+  # a failed write cannot truncate the existing binary.
+  STAGED_BINARY="$(run_install_command mktemp "${INSTALL_DIR}/.${BINARY}-install.XXXXXX")"
+  run_install_command install -m 0755 "$source" "$STAGED_BINARY"
+  run_install_command mv -f "$STAGED_BINARY" "${INSTALL_DIR}/${BINARY}"
+  STAGED_BINARY=""
   log "Installed ${BINARY} to ${INSTALL_DIR}/${BINARY}"
 }
 

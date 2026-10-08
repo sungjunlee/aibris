@@ -15,7 +15,7 @@ import (
 const (
 	// Bump this explicit compatibility revision when cache format or provider
 	// behavior changes without a concrete provider-membership change.
-	lastScanCacheSchemaVersion = 11
+	lastScanCacheSchemaVersion = 12 // apparent Size; reject mixed allocated/apparent inventory
 	lastScanCacheMaxAge        = 5 * time.Minute
 
 	SchemaVersion = lastScanCacheSchemaVersion

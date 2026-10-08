@@ -97,11 +97,18 @@ func runStripClean() {
 		fmt.Println("[DRY-RUN] No files were removed.")
 		return
 	}
-	if !opts.Force && !confirmCleanExecution() {
-		return
+	if !opts.Force {
+		approved, err := confirmCleanExecution(ctx, os.Stdin, os.Stdout)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		if !approved {
+			return
+		}
 	}
 	outcomes := executeStripTargetsWithProgress(ctx, targets, cwd)
-	printStripOutcomes(outcomes, len(outcomes))
+	printStripOutcomes(outcomes, len(targets))
 	var errs []string
 	for _, outcome := range outcomes {
 		if outcome.Error != "" {
@@ -121,6 +128,9 @@ func executeStripTargetsWithProgress(ctx context.Context, targets []types.Debris
 	outcomes := make([]stripUnitOutcome, 0, len(targets))
 	for i, target := range targets {
 		if err := ctx.Err(); err != nil {
+			for _, remaining := range targets[i:] {
+				outcomes = append(outcomes, stripUnitOutcome{Item: remaining, Error: err.Error()})
+			}
 			return outcomes
 		}
 		fmt.Printf("stripping %d/%d: %s (%s) ...\n",

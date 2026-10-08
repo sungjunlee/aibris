@@ -1,6 +1,12 @@
 name: CI
 
 on:
+  workflow_call:
+    inputs:
+      commit:
+        description: Immutable commit to verify (the tag event SHA for releases)
+        required: true
+        type: string
   push:
     branches: [main]
   pull_request:
@@ -18,12 +24,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-go@v7
+          ref: ${{ inputs.commit || github.sha }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: "1.26"
+          go-version: "1.26.3"
       - run: make check
 
   test:
@@ -33,12 +40,16 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          go-version: "1.26"
+          persist-credentials: false
+          ref: ${{ inputs.commit || github.sha }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: "1.26.3"
       - run: go test -race -count=1 -cover ./...
-      - run: go vet ./...
+      - run: go -C tools/perfharness test -race -count=1 -cover ./...
+      - run: make lint
 
   windows-safety:
     permissions:
@@ -48,12 +59,13 @@ jobs:
       run:
         shell: pwsh
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-go@v7
+          ref: ${{ inputs.commit || github.sha }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: "1.26"
+          go-version: "1.26.3"
       - name: Build native Windows executable
         run: go build -o aibris.exe .
       - name: Exercise native Windows commands in an isolated profile
@@ -106,14 +118,17 @@ jobs:
       - name: Test platform-safe command and cleanup identity behavior
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
-          go test -race -count=1 -cover ./internal/pathidentity -run '^TestWindowsCleanupPathIdentityRejectsReparsePoint$'
           go test -race -count=1 -cover ./cmd -run '^(TestCleanCmd_NegativeAge|TestCleanCmd_GuideNoGuideErrors|TestParseAge|TestCleanCmd_InvalidSelector|TestParseCleanSelectorsTrimAndDeduplicate)$'
       - name: Test effective GOCACHE cleanup safety
         run: go test -race -count=1 -cover ./internal/cleaner -run '^TestIsSafeTarget_GoBuildCacheUnderHome$'
+      # Run whole packages so new deletion-gate tests are included automatically.
+      # Symlink fixtures skip only if Windows lacks symlink privilege; their
+      # t.Skipf messages report that reason. No test-name exclusions here.
+      - name: Test deletion gate, path identity, and HOME hermeticity
+        run: go test -race -count=1 -cover ./internal/safedelete ./internal/pathidentity ./internal/testutil
       - name: Test HOME hermeticity under isolated profile
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
-          go test -race -count=1 -cover ./internal/testutil -run '^(TestSetHomeRedirectsUserHomeDir|TestSetHomeRedirectsUserCacheDir|TestSetHomePreservesVolumeShape|TestSetHomeClearsGOCACHE|TestSetHomeDisablesGOENV|TestGoBuildCacheMatchesUserCacheDir)$'
           go test -race -count=1 -cover ./cmd -run '^TestAgentStateEntryFingerprintTracksEntrySet$'
           go test -race -count=1 -cover ./internal/scanner -run '^(TestScan_Default|TestNormalizeRoots_DefaultHome)$'
       - name: Test nested perfharness module environment
@@ -123,15 +138,17 @@ jobs:
   release-build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v7
+          persist-credentials: false
+          ref: ${{ inputs.commit || github.sha }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: "1.26"
+          go-version: "1.26.3"
       - name: Cross-compile release targets
-        uses: goreleaser/goreleaser-action@v7
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
         with:
           distribution: goreleaser
-          version: "~> v2"
+          version: "v2.18.2"
           args: build --snapshot --clean

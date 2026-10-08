@@ -3,6 +3,13 @@
 Shared guidance for any AI agent (Claude Code, Codex, and others) working on
 this repository. `CLAUDE.md` is a symlink to this file.
 
+Current contributor/safety guidance is maintained here. [docs/SPEC.md](docs/SPEC.md)
+is the CLI and execution contract; [docs/JSON_SCHEMA.md](docs/JSON_SCHEMA.md)
+is the stable JSON contract; [docs/INSTALL.md](docs/INSTALL.md) and
+[docs/WINDOWS.md](docs/WINDOWS.md) cover release/install trust and native platform
+assurance. Dated design and dogfood notes are historical evidence, not overrides
+of these contracts.
+
 ## Project
 
 aibris (AI + debris) is a Go CLI that finds and removes the disk debris AI
@@ -89,8 +96,8 @@ docs/                 user documentation, spec, and design notes
 ```bash
 make build       # go build -o aibris .
 make check       # gofmt, go mod tidy -diff, vet, staticcheck, govulncheck, shellcheck
-make test        # go test ./...
-make test-race   # go test -race ./...
+make test        # root and tools/perfharness module tests
+make test-race   # both modules with the race detector
 ./aibris scan --root <dir-under-home>
 ./aibris clean --dry-run
 ```
@@ -110,7 +117,11 @@ These hold for every change. Breaking one is a bug even if tests pass.
   locations there, not in providers.
 - **Re-verify at the mutation boundary.** Scan results can come from a cache.
   Executors re-check identity, age, Git state, agent-state classification,
-  and overlap right before mutating, and refuse on drift.
+  and overlap right before mutating, and refuse on drift or incomplete
+  activity evidence. Orphaned worktrees need fresh unchanged member/regular
+  `.git` marker evidence, including still-missing gitdirs; symlinked markers
+  cannot authorize removal. Prepared typed evidence stays attached to the
+  selected target through execution and receipt projection.
 - **Never trust inventory for authority.** A path from a scan or cache is a
   claim; execution re-derives whether it may be removed (see strip).
 - **Preview and confirm.** `--dry-run` never mutates. A real `clean` prompts;
@@ -190,7 +201,7 @@ provider reports `codex` for every tool).
 | windsurf | ai-logs | `--risky` only | `~/.codeium/windsurf/` |
 | ai-logs | ai-logs | `--risky` only | `$CODEX_HOME/logs_2.sqlite`, `$CODEX_HOME/archived_sessions/`, `~/.claude/command-audit.log`, `~/.claude/file-history/` |
 | node_modules | node_modules | older than `--age` | `node_modules` under scan roots, noisy trees pruned |
-| build-cache | build-cache | older than `--age` | effective `GOCACHE`; Gradle, npm (`_cacache`, `_npx`), and Cargo registry caches; Xcode caches and DerivedData; Homebrew cache (`brew cleanup --prune=all`); CocoaPods cache; `~/.dartServer/` |
+| build-cache | build-cache | older than `--age` | effective `GOCACHE`; Gradle, npm (`_cacache`, `_npx`), and Cargo registry caches; Xcode caches and DerivedData; Homebrew cache (verified cache path removal); CocoaPods cache; `~/.dartServer/` |
 | pip-cache | other-cache | older than `--age` | pip and uv caches |
 
 Cache locations come from `internal/adapter/cache_catalog.go` and follow
@@ -201,7 +212,11 @@ cleanup target. Adding a
 rebuildable cache is one catalog entry; the cleanup allowlist accepts every
 path the catalog resolves to. Never add a cache whose wholesale removal can
 break installed projects (stores that projects link into). Cleanup commands
-run with their cache location pinned to the scanned path.
+are re-derived from the live catalog (tool, category, canonical target, argv,
+and pinned cache environment); recipe drift refuses execution and fallback.
+A missing authorized executable may fall back only to gated removal of the
+scanned path. Homebrew cleanup uses gated removal of the verified cache path,
+without a package-manager cleanup command.
 
 ## Code rules
 

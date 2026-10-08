@@ -9,8 +9,19 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
+
+func TestReceiptPreparedOrderRejectsMissingIdentity(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	prepared := []PreparedTarget{{Item: types.DebrisInfo{Path: filepath.Join(home, "project", "node_modules")}}}
+	_, err := orderReceiptPreparedTargets(prepared, map[string]string{})
+	if err == nil || !strings.Contains(err.Error(), "execution receipt invariant") {
+		t.Fatalf("missing prepared identity accepted: %v", err)
+	}
+}
 
 // TestReceiptInvariantNoPreparedTargetID verifies that when a prepared target
 // doesn't map to any component, receiptTargetIDsForPrepared returns an error.

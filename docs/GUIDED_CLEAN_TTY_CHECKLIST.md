@@ -1,9 +1,16 @@
 # Guided Clean Checklist And Policy
 
-Status: shipped selection and policy contract through evidence-based worktree
-reclamation (#82-#90).
+As of 2026-10-07: reviewed as historical material.
 
-Source of truth:
+This historical design snapshot describes the #82–#90 selection/policy work
+before later package extraction and safety changes. Current routing, policy,
+and execution contracts are maintained in [SPEC.md](SPEC.md) and
+[JSON_SCHEMA.md](JSON_SCHEMA.md).
+
+Original scope: selection and policy design for evidence-based worktree
+reclamation (#82–#90).
+
+Historical implementation references (paths may have moved):
 
 - `cmd/guided_clean.go`
 - `cmd/worktree_cleanup_units.go`

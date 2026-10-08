@@ -47,6 +47,7 @@ func TestCodexActivityRecommendationsProtectActiveWorktreesWhenIndexUnavailable(
 
 func TestLoadCodexActivityIndexBuildsMetadataOnlyAggregates(t *testing.T) {
 	home := t.TempDir()
+	testutil.SetHome(t, home)
 	cachePath := filepath.Join(home, "cache", "codex-activity.json")
 	sessionsDir := filepath.Join(home, ".codex", "sessions", "2026", "07", "05")
 	if err := os.MkdirAll(sessionsDir, 0755); err != nil {
@@ -68,7 +69,7 @@ func TestLoadCodexActivityIndexBuildsMetadataOnlyAggregates(t *testing.T) {
 	if !index.Available {
 		t.Fatalf("index.Available = false; err = %v", index.Err)
 	}
-	activity := index.Worktrees["wt-1"]
+	activity := index.Worktrees[WorktreeKey(canonicalPath(filepath.Join(home, ".codex")), "wt-1")]
 	if activity.SessionCount != 2 {
 		t.Errorf("wt-1 SessionCount = %d; want 2", activity.SessionCount)
 	}
@@ -78,14 +79,14 @@ func TestLoadCodexActivityIndexBuildsMetadataOnlyAggregates(t *testing.T) {
 	if activity.Project != "project-a" {
 		t.Errorf("wt-1 Project = %q; want project-a", activity.Project)
 	}
-	project := index.Projects["project-a"]
+	project := index.Projects[ProjectKey(canonicalPath(filepath.Join(home, ".codex")), "project-a")]
 	if project.SessionCount != 3 {
 		t.Errorf("project-a SessionCount = %d; want 3", project.SessionCount)
 	}
 	if !project.LatestSession.Equal(latest) {
 		t.Errorf("project-a LatestSession = %s; want %s", project.LatestSession, latest)
 	}
-	if !index.ProjectHasSessionAfter("project-a", latest.Add(-time.Minute)) {
+	if !index.ProjectHasSessionAfter(filepath.Join(home, ".codex"), "project-a", latest.Add(-time.Minute)) {
 		t.Error("ProjectHasSessionAfter should report newer same-project activity")
 	}
 
@@ -102,6 +103,7 @@ func TestLoadCodexActivityIndexBuildsMetadataOnlyAggregates(t *testing.T) {
 
 func TestLoadCodexActivityIndexReusesFreshCache(t *testing.T) {
 	home := t.TempDir()
+	testutil.SetHome(t, home)
 	cachePath := filepath.Join(home, "cache", "codex-activity.json")
 	sessionsDir := filepath.Join(home, ".codex", "sessions")
 	if err := os.MkdirAll(sessionsDir, 0755); err != nil {
@@ -132,7 +134,7 @@ func TestLoadCodexActivityIndexReusesFreshCache(t *testing.T) {
 	if !fresh.Available {
 		t.Fatalf("fresh index unavailable: %v", fresh.Err)
 	}
-	got := fresh.Worktrees["wt-1"].LatestSession
+	got := fresh.Worktrees[WorktreeKey(canonicalPath(filepath.Join(home, ".codex")), "wt-1")].LatestSession
 	want := now.Add(-time.Hour)
 	if !got.Equal(want) {
 		t.Errorf("fresh cache LatestSession = %s; want cached %s", got, want)
@@ -144,6 +146,7 @@ func TestLoadCodexActivityIndexReusesFreshCache(t *testing.T) {
 
 func TestLoadCodexActivityIndexStaleRefreshesIncrementally(t *testing.T) {
 	home := t.TempDir()
+	testutil.SetHome(t, home)
 	cachePath := filepath.Join(home, "cache", "codex-activity.json")
 	sessionsDir := filepath.Join(home, ".codex", "sessions")
 	if err := os.MkdirAll(sessionsDir, 0755); err != nil {
@@ -198,16 +201,16 @@ func TestLoadCodexActivityIndexStaleRefreshesIncrementally(t *testing.T) {
 	if !refreshed.Available {
 		t.Fatalf("refreshed index unavailable: %v", refreshed.Err)
 	}
-	if _, ok := refreshed.Worktrees["wt-unchanged"]; !ok {
+	if _, ok := refreshed.Worktrees[WorktreeKey(canonicalPath(filepath.Join(home, ".codex")), "wt-unchanged")]; !ok {
 		t.Fatal("unchanged file should have reused cached activity despite invalid current contents")
 	}
-	if got := refreshed.Worktrees["wt-changed"].LatestSession; !got.Equal(changedLatest) {
+	if got := refreshed.Worktrees[WorktreeKey(canonicalPath(filepath.Join(home, ".codex")), "wt-changed")].LatestSession; !got.Equal(changedLatest) {
 		t.Errorf("changed LatestSession = %s; want %s", got, changedLatest)
 	}
-	if _, ok := refreshed.Worktrees["wt-removed"]; ok {
+	if _, ok := refreshed.Worktrees[WorktreeKey(canonicalPath(filepath.Join(home, ".codex")), "wt-removed")]; ok {
 		t.Error("removed session file activity should be dropped")
 	}
-	if _, ok := refreshed.Worktrees["wt-new"]; !ok {
+	if _, ok := refreshed.Worktrees[WorktreeKey(canonicalPath(filepath.Join(home, ".codex")), "wt-new")]; !ok {
 		t.Error("new session file activity should be added")
 	}
 	if refreshed.Source != SourceRefresh {
@@ -217,6 +220,7 @@ func TestLoadCodexActivityIndexStaleRefreshesIncrementally(t *testing.T) {
 
 func TestLoadCodexActivityIndexUnavailableForMissingOrInvalidCache(t *testing.T) {
 	home := t.TempDir()
+	testutil.SetHome(t, home)
 	cachePath := filepath.Join(home, "cache", "codex-activity.json")
 
 	missing := LoadWithOptions(context.Background(), IndexOptions{

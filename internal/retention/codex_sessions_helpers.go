@@ -47,7 +47,7 @@ func classifiableMetadata(metadata codexsession.Metadata) bool {
 }
 
 // rootsCoveringCodexHome returns the root selection extended with the
-// resolved Codex home when it is not already covered, so a CODEX_HOME
+// resolved Codex home for default scans only, so a CODEX_HOME
 // outside the scan roots is inventoried rather than silently deselected.
 func rootsCoveringCodexHome(roots []string) []string {
 	codexHome, err := codexhome.Home()

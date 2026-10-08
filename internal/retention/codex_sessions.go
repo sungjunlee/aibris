@@ -54,7 +54,11 @@ func (p *CodexSessionsProvider) Scan(
 		addProviderError(&projection, "resolving store root", err)
 		return projection, nil
 	}
-	if !storeSelected(root, rootsCoveringCodexHome(opts.Roots)) {
+	roots := opts.Roots
+	if !opts.ExplicitRoots {
+		roots = rootsCoveringCodexHome(roots)
+	}
+	if !storeSelected(root, roots) {
 		return projection, nil
 	}
 
@@ -139,25 +143,24 @@ func (s *inventoryState) visit(ctx context.Context, path string, entry fs.DirEnt
 		if entry.IsDir() && validYear(parts[0]) {
 			return nil
 		}
-		return fs.SkipDir
 	case 2:
 		if entry.IsDir() && validMonth(parts[1]) {
 			return nil
 		}
-		return fs.SkipDir
 	case 3:
 		if entry.IsDir() && validDay(parts[0], parts[1], parts[2]) {
 			return nil
 		}
-		return fs.SkipDir
 	case 4:
-		if !entry.Type().IsRegular() || !isRolloutName(parts[3]) {
-			return nil
+		if entry.Type().IsRegular() && isRolloutName(parts[3]) {
+			return s.addUnit(ctx, path, entry)
 		}
-		return s.addUnit(ctx, path, entry)
-	default:
+	}
+	if entry.IsDir() {
 		return fs.SkipDir
 	}
+	// SkipDir on a file would also skip its later siblings.
+	return nil
 }
 
 // addUnit counts one recognized regular rollout leaf in its UTC-month bucket

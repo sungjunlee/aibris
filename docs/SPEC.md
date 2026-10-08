@@ -1,5 +1,11 @@
 # aibris Engineering Spec
 
+This is the current CLI, safety, and execution contract for this checkout.
+[JSON_SCHEMA.md](JSON_SCHEMA.md) owns JSON shapes and reason codes;
+[INSTALL.md](INSTALL.md) and [WINDOWS.md](WINDOWS.md) own release/install trust
+and platform assurance. Dated design and audit notes preserve past decisions;
+[ROADMAP.md](ROADMAP.md) distinguishes tagged releases from unreleased work.
+
 ## Goal
 
 `aibris` is a single-binary CLI for scanning and cleaning disk debris created by
@@ -36,6 +42,17 @@ confirmation path before deletion.
 - Continue scanning when a non-context adapter error occurs; write
   `scan:<tool>:<error>` to stderr.
 - Return context cancellation and deadline errors immediately.
+- `Size` measures apparent bytes: sum non-directory entry lengths, count sparse
+  files at logical length, and count regular hardlinks once per (device, inode)
+  within each target when Unix `FileInfo.Sys()` exposes `syscall.Stat_t`. Windows
+  and unavailable identity count per path; different targets are measured
+  independently. Root symlinks are followed; nested symlinks count at their own
+  length without following them. Directory metadata is excluded. Report-only size can be
+  partial when entries are unreadable; incomplete activity evidence still
+  refuses safety approval. Cache, worktree, strip, reclaim estimates, and size
+  thresholds share this contract. `PhysicalTotalBytes` deduplicates outer
+  owners, not allocated blocks; neither size field guarantees reclaimed disk
+  space.
 - Sort discovered items by size descending.
 - Print progress for human-readable scans. Interactive terminals use a
   single-line spinner summary; non-interactive output uses plain progress
@@ -128,8 +145,11 @@ Behavior:
    candidates into one unified cleanup plan: rows, physical targets, and
    containment components share a single selection state, hard-lock dominance
    covers every category, and nested paths stay evidence rather than
-   additional deletion targets. A mixed selection (guided worktrees plus
-   classic candidates) gets one combined toggle review; a pure guided
+   additional deletion targets. Human review and JSON projection consume this
+   same domain plan. Selected targets retain typed snapshots and overlap/Git
+   evidence through batch ordering, per-item confirmation, and receipt
+   projection; missing or duplicate prepared identities fail closed.
+   A mixed selection (guided worktrees plus classic candidates) gets one combined toggle review; a pure guided
    selection is settled by the guided prompt.
 6. Print the unified cleanup review (guided route) or the classic audit
    (classic route) with policy, scan source, physical totals, and skipped
@@ -179,6 +199,17 @@ same evidence into cleanup preparation. Before selection, `clean` refreshes the
 current modification time. After overlap safety refresh and immediately before
 mutation, it verifies identity, type, modification time, and age again. Evidence
 failure protects the affected target rather than trusting stale scan state.
+Activity-derived age checks require a complete tree walk; unreadable or vanished
+entries and cancellation cannot authorize mutation. Identity and modification
+time are checked again after that walk. Cancellation is checked after the final
+barrier and before each mutation, while receipts retain completed reclamation.
+
+Orphaned-worktree execution separately re-derives current Git authority before
+confirmation and immediately before removal. Every member must remain orphaned,
+with the same member identity and regular `.git` marker identity/content/mtime.
+Restored gitdirs, new members, malformed or symlinked markers, or active members
+refuse deletion with `worktree_evidence_changed`. Cached orphan status is never
+promoted into an active-worktree removal route; rescan and review a new plan.
 
 For `agent-state`, `classification` remains proof-based rather than age-based.
 An entry is `orphaned` only once every usable recorded working directory is
@@ -196,10 +227,11 @@ as non-selected plan evidence but is not offered as a toggleable row anywhere,
 and cleaning it requires rerunning with a shorter or
 zero `--agent-state-grace`, or waiting for the floor to elapse. Its JSON
 `policy_decision` is `reviewable`, meaning "not selected by default". The floor
-is a selection policy, not a mutation safety property: the pre-mutation barrier
-applies no age check to `agent-state`, and the registered agent-state
-revalidator remains the mutation-time guard. `live` and `undetermined` remain
-protected.
+is independent of classic `--age`, but its configured value is also rechecked
+against fresh in-tree activity at the pre-mutation barrier. When enabled,
+incomplete activity evidence or a resumed session refuses cleanup. The
+registered agent-state revalidator must also prove the entry is still orphaned.
+`live` and `undetermined` remain protected.
 
 Absence is proven only when the nearest existing ancestor is inside an
 available home or temporary tree and shares a volume identity with its parent.
@@ -211,7 +243,14 @@ Command-backed cleanup:
 
 - `cleanup_kind=command` uses argv-only execution with `exec.CommandContext`.
 - No shell string execution is allowed.
-- Missing commands fall back to safe path removal for the scanned item.
+- Inventory `cleanup_command` is a claim: argv and the cache environment are
+  re-derived from the live catalog after matching tool, category, and canonical
+  target. Removed or changed recipes refuse execution with
+  `cleanup_recipe_changed`, without path fallback.
+- A missing authorized executable may fall back to gated path removal for the
+  scanned item; authorization is rechecked at that boundary too.
+- Homebrew cache cleanup removes only the verified cache path through
+  `safedelete`, without running a broader Homebrew cleanup command.
 - Commands that run and fail do not fall back silently.
 - Context cancellation must stop command execution.
 
@@ -272,7 +311,11 @@ Default guided Codex worktree cleanup:
   activity reader that exists and failed, is
   unavailable or unsafe.
 - Codex activity uses metadata only: session metadata, working-directory paths,
-  timestamps, and cache file metadata. It must not read conversation bodies.
+  timestamps, and cache file metadata. The shared bounded first-record reader
+  must not read conversation bodies. Primary and additional Codex homes supply
+  session roots; home identity is part of activity/cache keys, so reused
+  worktree or project IDs in different homes cannot share evidence. A failed
+  home source locks its associated units without disabling healthy sources.
 - Git safety protects current working directories, dirty or untracked members,
   unreadable evidence, and detached HEADs not reachable from named refs.
   Missing or gone upstream is explanatory metadata, not a lock. An attached
@@ -559,10 +602,25 @@ Adapter rules:
 Before release:
 
 ```bash
-go test ./...
-go build ./...
-go vet ./...
-goreleaser release --snapshot --clean
+make check
+make test
+make build
+make dist
 ```
 
-For release tags, GitHub Actions runs CI on push/PR and GoReleaser on `v*` tags.
+For `v*` tag events, the release workflow calls the same CI workflow used by
+main pushes and pull requests, passing the event's immutable commit SHA. Every
+verification and release checkout explicitly uses that SHA. Required Linux,
+macOS, Windows safety, and cross-build jobs must all succeed before GoReleaser
+can create a draft. Failure, cancellation, or skipped verification blocks
+publication; an earlier green run or a different SHA cannot authorize it.
+
+Publication remains draft → artifact attestation → public GitHub Release →
+Homebrew tap update → macOS pour verification. Attestation or publication
+failure stops the later steps and preserves the draft when it has not yet been
+made public. Action references are pinned to full commit SHAs with version
+comments for Dependabot; GoReleaser and syft use exact release versions. Local
+YAML graph contracts and stub publication fixtures verify these dependencies
+and ordering without creating a tag, release, or tap commit. Native runner
+behavior still requires GitHub Actions; local contracts are not a claim that
+Windows or PowerShell has executed successfully.

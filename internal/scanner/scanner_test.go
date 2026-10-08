@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
+	"github.com/sungjunlee/aibris/internal/retention"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -900,4 +901,46 @@ func scanContainsID(items []types.DebrisInfo, id string) bool {
 		}
 	}
 	return false
+}
+
+func TestScanRetentionHonorsExplicitRoots(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+	day := filepath.Join(codexHome, "sessions", "2026", "01", "02")
+	if err := os.MkdirAll(day, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(day, "rollout-present.jsonl"), []byte("{}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	child := filepath.Join(home, "unrelated")
+	if err := os.MkdirAll(child, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name        string
+		opts        types.ScanOptions
+		wantBuckets int
+	}{
+		{"default", types.ScanOptions{}, 1},
+		{"explicit-home", types.ScanOptions{Roots: []string{home}, ExplicitRoots: true}, 0},
+		{"explicit-child", types.ScanOptions{Roots: []string{child}, ExplicitRoots: true}, 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			s := NewWithRetentionProviders(nil, retention.DefaultProviders())
+			s.ErrorWriter = &bytes.Buffer{}
+			result, err := s.ScanWithOptions(context.Background(), test.opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Retention.Buckets) != test.wantBuckets || result.Retention.Partial || len(result.Retention.ProviderErrors) != 0 {
+				t.Fatalf("retention = %+v; want %d buckets, complete", result.Retention, test.wantBuckets)
+			}
+			if result.TotalCount != 0 || result.TotalSize != 0 || result.PhysicalUnitCount != 0 || result.PhysicalTotalBytes != 0 || len(result.Worktrees) != 0 {
+				t.Fatalf("result = %+v; retention must not contribute debris", result)
+			}
+		})
+	}
 }

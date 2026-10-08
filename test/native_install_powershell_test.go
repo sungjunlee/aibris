@@ -3,76 +3,64 @@
 package test
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sungjunlee/aibris/internal/testutil"
 )
 
 func runPowerShellSnippet(t *testing.T, home, script string) string {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// Use pwsh if available (PowerShell 7+), fall back to powershell.exe
-	psCmd := "pwsh"
-	if _, err := exec.LookPath("pwsh"); err != nil {
-		psCmd = "powershell.exe"
-	}
-
-	cmd := exec.CommandContext(ctx, psCmd, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script)
-	cmd.Dir = "."
-	cmd.Env = []string{
-		"USERPROFILE=" + home,
-		"LOCALAPPDATA=" + filepath.Join(home, "AppData", "Local"),
-		"PROCESSOR_ARCHITECTURE=AMD64",
-		"PATH=" + os.Getenv("PATH"),
-		"SystemRoot=" + os.Getenv("SystemRoot"),
-		"TEMP=" + filepath.Join(home, "Temp"),
-		"TMP=" + filepath.Join(home, "Temp"),
-	}
-
-	out, err := cmd.CombinedOutput()
-	if ctx.Err() == context.DeadlineExceeded {
-		t.Fatalf("PowerShell script timed out: %v\n%s", ctx.Err(), out)
-	}
+	out, err := runPowerShellSnippetExpectError(t, home, script)
 	if err != nil {
 		t.Fatalf("PowerShell script failed: %v\n%s", err, out)
 	}
-	return string(out)
+	return out
 }
 
 func runPowerShellSnippetExpectError(t *testing.T, home, script string) (string, error) {
 	t.Helper()
+	testutil.SetHome(t, home)
+	temp := filepath.Join(home, "tmp")
+	if err := os.MkdirAll(temp, 0755); err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-
-	// Use pwsh if available (PowerShell 7+), fall back to powershell.exe
 	psCmd := "pwsh"
-	if _, err := exec.LookPath("pwsh"); err != nil {
+	if _, err := exec.LookPath(psCmd); err != nil {
 		psCmd = "powershell.exe"
 	}
-
 	cmd := exec.CommandContext(ctx, psCmd, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script)
-	cmd.Dir = "."
 	cmd.Env = []string{
+		"HOME=" + home,
 		"USERPROFILE=" + home,
 		"LOCALAPPDATA=" + filepath.Join(home, "AppData", "Local"),
 		"PROCESSOR_ARCHITECTURE=AMD64",
 		"PATH=" + os.Getenv("PATH"),
 		"SystemRoot=" + os.Getenv("SystemRoot"),
-		"TEMP=" + filepath.Join(home, "Temp"),
-		"TMP=" + filepath.Join(home, "Temp"),
+		"TEMP=" + temp,
+		"TMP=" + temp,
+		"TMPDIR=" + temp,
 	}
-
 	out, err := cmd.CombinedOutput()
-	if ctx.Err() == context.DeadlineExceeded {
+	if ctx.Err() != nil {
 		t.Fatalf("PowerShell script timed out: %v\n%s", ctx.Err(), out)
 	}
 	return string(out), err
+}
+
+func powerShellLiteral(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
 }
 
 // TestNativeInstallPowerShellHelp verifies that install.ps1 shows usage
@@ -97,10 +85,9 @@ func TestNativeInstallPowerShellHelp(t *testing.T) {
 // TestNativeInstallPowerShellDefaultDir verifies default install directory
 func TestNativeInstallPowerShellDefaultDir(t *testing.T) {
 	home := t.TempDir()
-	// Inline Get-DefaultInstallDir logic to avoid sourcing entire install.ps1
 	output := runPowerShellSnippet(t, home, `
-$env:LOCALAPPDATA = Join-Path "`+home+`" "AppData\Local"
-Join-Path $env:LOCALAPPDATA "Programs\aibris"
+. .\install.ps1
+Get-DefaultInstallDir
 `)
 
 	expected := filepath.Join(home, "AppData", "Local", "Programs", "aibris")
@@ -144,211 +131,184 @@ Normalize-Version -Ver "v0.12.1"
 	}
 }
 
-// TestNativeInstallPowerShellChecksumMismatchPreservesExisting verifies that
-// checksum failures do not remove an existing installation
-func TestNativeInstallPowerShellChecksumMismatchPreservesExisting(t *testing.T) {
-	home := t.TempDir()
-	installDir := filepath.Join(home, "AppData", "Local", "Programs", "aibris")
-	if err := os.MkdirAll(installDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-
-	existingBinary := filepath.Join(installDir, "aibris.exe")
-	existingContent := []byte("existing aibris binary")
-	if err := os.WriteFile(existingBinary, existingContent, 0755); err != nil {
-		t.Fatal(err)
-	}
-
-	// Create mock archive with wrong checksum
-	tmpDir := t.TempDir()
-	mockArchive := filepath.Join(tmpDir, "aibris_windows_amd64.zip")
-	if err := os.WriteFile(mockArchive, []byte("fake zip content"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Create checksums.txt with wrong hash
-	checksums := filepath.Join(tmpDir, "checksums.txt")
-	wrongHash := "0000000000000000000000000000000000000000000000000000000000000000"
-	checksumsContent := wrongHash + "  aibris_windows_amd64.zip\n"
-	if err := os.WriteFile(checksums, []byte(checksumsContent), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Inline checksum verification logic to avoid sourcing entire install.ps1
-	script := `
-$ErrorActionPreference = "Stop"
-$asset = "aibris_windows_amd64.zip"
-$archivePath = "` + filepath.ToSlash(mockArchive) + `"
-$checksumsPath = "` + filepath.ToSlash(checksums) + `"
-
-$checksums = Get-Content $checksumsPath
-$expectedLine = $checksums | Where-Object { $_ -match "\s+$([regex]::Escape($asset))$" }
-$expected = ($expectedLine -split '\s+')[0]
-
-$hash = Get-FileHash -Path $archivePath -Algorithm SHA256
-$actual = $hash.Hash
-
-if ($actual -ne $expected) {
-    Write-Error "SHA-256 checksum mismatch"
-}
-`
-
-	_, err := runPowerShellSnippetExpectError(t, home, script)
-	if err == nil {
-		t.Fatal("expected checksum mismatch error; got success")
-	}
-
-	// Verify existing binary still exists and is unchanged
-	if _, err := os.Stat(existingBinary); os.IsNotExist(err) {
-		t.Fatal("existing binary was removed after checksum failure")
-	}
-
-	content, err := os.ReadFile(existingBinary)
+func (f installFixture) windowsRelease(t *testing.T, failure string) []byte {
+	t.Helper()
+	binary, err := os.ReadFile(cliContractBinary)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(content) != string(existingContent) {
-		t.Fatal("existing binary was modified after checksum failure")
+	var archive bytes.Buffer
+	zw := zip.NewWriter(&archive)
+	name := "aibris.exe"
+	if failure == "binary-missing" {
+		name = "README"
 	}
-}
-
-// TestNativeInstallPowerShellLockedBinaryPreserved verifies that installation
-// preserves an existing binary when it is locked (in use)
-func TestNativeInstallPowerShellLockedBinaryPreserved(t *testing.T) {
-	home := t.TempDir()
-	installDir := filepath.Join(home, "bin")
-	if err := os.MkdirAll(installDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-
-	existingBinary := filepath.Join(installDir, "aibris.exe")
-	existingContent := []byte("existing locked binary")
-	if err := os.WriteFile(existingBinary, existingContent, 0755); err != nil {
-		t.Fatal(err)
-	}
-
-	// Open file exclusively to simulate locked binary
-	file, err := os.OpenFile(existingBinary, os.O_RDWR, 0755)
+	entry, err := zw.Create(name)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer file.Close()
-
-	// Create new binary to install
-	newBinary := filepath.Join(t.TempDir(), "aibris.exe")
-	if err := os.WriteFile(newBinary, []byte("new binary"), 0755); err != nil {
+	if _, err := entry.Write(binary); err != nil {
 		t.Fatal(err)
 	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	data := archive.Bytes()
+	if failure == "malformed-archive" {
+		data = []byte("not a zip archive")
+	}
+	asset := "aibris_windows_amd64.zip"
+	writeInstallFile(t, filepath.Join(f.release, asset), data, 0644)
+	hash := fmt.Sprintf("%x", sha256.Sum256(data))
+	if failure == "checksum-mismatch" {
+		hash = strings.Repeat("0", 64)
+	}
+	checksums := hash + "  " + asset + "\n"
+	if failure == "checksum-missing" {
+		checksums = ""
+	}
+	writeInstallFile(t, filepath.Join(f.release, "checksums.txt"), []byte(checksums), 0644)
+	return binary
+}
 
-	// Inline locked file check logic to avoid sourcing entire install.ps1
+func (f installFixture) runPowerShell(t *testing.T, failure string) (string, error) {
+	t.Helper()
+	// The same Install-Aibris entry point handles success and every failure.
+	// Invoke-WebRequest is the only normal-path stub; files, hashes, extraction
+	// and replacement use the production functions and native filesystem.
 	script := `
-$ErrorActionPreference = "Stop"
-$destination = "` + filepath.ToSlash(existingBinary) + `"
-
+. .\install.ps1
+$release = ` + powerShellLiteral(f.release) + `
+$prefix = ` + powerShellLiteral(f.prefix) + `
+$failure = ` + powerShellLiteral(failure) + `
+$existingDestination = Join-Path $prefix 'aibris.exe'
+function Invoke-WebRequest {
+    param($Uri, $OutFile, [switch]$UseBasicParsing, $TimeoutSec)
+    if ($failure -eq 'download' -or ($failure -eq 'checksum-download' -and $Uri.EndsWith('/checksums.txt'))) {
+        [IO.File]::WriteAllText($OutFile, 'partial download')
+        throw 'injected download failure'
+    }
+    $asset = ([Uri]$Uri).Segments[-1]
+    Microsoft.PowerShell.Management\Copy-Item -LiteralPath (Join-Path $release $asset) -Destination $OutFile
+}
+$lock = $null
 try {
-    $fileStream = [System.IO.File]::Open($destination, 'Open', 'Read', 'None')
-    $fileStream.Close()
-    Write-Output "File is not locked"
+    if ($failure -eq 'locked') {
+        $lock = [IO.File]::Open($existingDestination, 'Open', 'Read', 'Read')
+    }
+    if ($failure -eq 'stage-write') {
+        function Copy-Item {
+            param($Path, $Destination, [switch]$Force)
+            [IO.File]::WriteAllText($Destination, 'partial binary')
+            throw 'injected stage write failure'
+        }
+    }
+    if ($failure -eq 'replacement') {
+        function Copy-Item {
+            param($Path, $Destination, [switch]$Force)
+            Microsoft.PowerShell.Management\Copy-Item -Path $Path -Destination $Destination -Force:$Force
+            # Introduce a native replacement failure after the stage is ready.
+            [IO.File]::SetAttributes($existingDestination, [IO.FileAttributes]::ReadOnly)
+            Write-Host 'injected read-only replacement failure'
+        }
+    }
+    if ($failure -eq 'relative-prefix') {
+        Set-Location (Split-Path -Parent $prefix)
+        $prefix = Split-Path -Leaf $prefix
+    }
+    Install-Aibris -Version '0.12.1' -Prefix $prefix -Arch 'amd64'
 }
 catch {
-    Write-Error "Existing aibris.exe is locked or in use"
+    if ($failure -eq 'replacement') {
+        $nativeError = $_.Exception.InnerException
+        if ($nativeError -is [System.ComponentModel.Win32Exception]) {
+            Write-Host "native-error=$($nativeError.NativeErrorCode)"
+        }
+    }
+    throw
+}
+finally {
+    if ($lock) { $lock.Dispose() }
+    if (Test-Path $existingDestination) { [IO.File]::SetAttributes($existingDestination, [IO.FileAttributes]::Normal) }
 }
 `
+	return runPowerShellSnippetExpectError(t, f.home, script)
+}
 
-	_, err = runPowerShellSnippetExpectError(t, home, script)
+func testPowerShellFailurePreservesExisting(t *testing.T, failure, message string) {
+	t.Helper()
+	f := newInstallFixture(t)
+	f.windowsRelease(t, failure)
+	existing := []byte("existing aibris binary\x00\xff")
+	binary := filepath.Join(f.prefix, "aibris.exe")
+	writeInstallFile(t, binary, existing, 0755)
+	output, err := f.runPowerShell(t, failure)
 	if err == nil {
-		t.Fatal("expected locked file error; got success")
+		t.Errorf("installer succeeded on %s; output:\n%s", failure, output)
+	} else if _, ok := err.(*exec.ExitError); !ok {
+		t.Fatalf("installer did not run: %v", err)
 	}
+	if !strings.Contains(output, message) {
+		t.Errorf("failure did not reach expected boundary %q:\n%s", message, output)
+	}
+	if failure == "replacement" && !strings.Contains(output, "native-error=5") {
+		t.Errorf("read-only replacement did not report native access-denied error:\n%s", output)
+	}
+	assertInstallContents(t, binary, existing)
+	f.assertClean(t, "aibris.exe")
+}
 
-	// Verify existing binary is unchanged
-	file.Close()
-	content, err := os.ReadFile(existingBinary)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(content) != string(existingContent) {
-		t.Fatal("existing locked binary was modified")
+func TestNativeInstallPowerShellChecksumMismatchPreservesExisting(t *testing.T) {
+	testPowerShellFailurePreservesExisting(t, "checksum-mismatch", "SHA-256 checksum mismatch")
+}
+
+func TestNativeInstallPowerShellLockedBinaryPreserved(t *testing.T) {
+	testPowerShellFailurePreservesExisting(t, "locked", "locked or in use")
+}
+
+func TestNativeInstallPowerShellReleaseFailuresPreserveExisting(t *testing.T) {
+	for _, tc := range []struct{ failure, message string }{
+		{"download", "Failed to download release"},
+		{"checksum-download", "Failed to download release"},
+		{"checksum-missing", "not found in checksums.txt"},
+		{"malformed-archive", "Checksum verified"},
+		{"binary-missing", "aibris.exe not found in archive"},
+		{"stage-write", "injected stage write failure"},
+		{"replacement", "injected read-only replacement failure"},
+	} {
+		t.Run(tc.failure, func(t *testing.T) {
+			testPowerShellFailurePreservesExisting(t, tc.failure, tc.message)
+		})
 	}
 }
 
-// TestNativeInstallPowerShellSameVersionRerun verifies that installing
-// the same version again works (replaces existing binary)
 func TestNativeInstallPowerShellSameVersionRerun(t *testing.T) {
-	home := t.TempDir()
-	installDir := filepath.Join(home, "bin")
-	if err := os.MkdirAll(installDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-
-	existingBinary := filepath.Join(installDir, "aibris.exe")
-	if err := os.WriteFile(existingBinary, []byte("version 1"), 0755); err != nil {
-		t.Fatal(err)
-	}
-
-	newBinary := filepath.Join(t.TempDir(), "aibris.exe")
-	newContent := []byte("version 1 re-downloaded")
-	if err := os.WriteFile(newBinary, newContent, 0755); err != nil {
-		t.Fatal(err)
-	}
-
-	script := `
-$ErrorActionPreference = "Stop"
-. .\install.ps1
-$script:Binary = "aibris.exe"
-Install-Binary -Source "` + newBinary + `" -Destination "` + existingBinary + `"
-`
-
-	output := runPowerShellSnippet(t, home, script)
-	if !strings.Contains(output, "Installing aibris.exe") {
-		t.Errorf("install output missing confirmation; output:\n%s", output)
-	}
-
-	content, err := os.ReadFile(existingBinary)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(content) != string(newContent) {
-		t.Errorf("binary not replaced; got %q, want %q", string(content), string(newContent))
+	f := newInstallFixture(t)
+	binary := f.windowsRelease(t, "")
+	for i := 0; i < 2; i++ {
+		output, err := f.runPowerShell(t, "")
+		if err != nil {
+			t.Fatalf("install %d failed: %v\n%s", i+1, err, output)
+		}
+		assertInstallContents(t, filepath.Join(f.prefix, "aibris.exe"), binary)
+		f.assertClean(t, "aibris.exe")
 	}
 }
 
-// TestNativeInstallPowerShellEmptyPrefixFirstInstall verifies that installing
-// into an empty prefix (no existing binary) succeeds
 func TestNativeInstallPowerShellEmptyPrefixFirstInstall(t *testing.T) {
-	home := t.TempDir()
-	installDir := filepath.Join(home, "new-install")
-
-	sourceBinary := filepath.Join(t.TempDir(), "aibris.exe")
-	sourceContent := []byte("first install")
-	if err := os.WriteFile(sourceBinary, sourceContent, 0755); err != nil {
-		t.Fatal(err)
-	}
-
-	destBinary := filepath.Join(installDir, "aibris.exe")
-
-	script := `
-$ErrorActionPreference = "Stop"
-. .\install.ps1
-$script:Binary = "aibris.exe"
-Install-Binary -Source "` + sourceBinary + `" -Destination "` + destBinary + `"
-`
-
-	output := runPowerShellSnippet(t, home, script)
-	if !strings.Contains(output, "Installing aibris.exe") {
-		t.Errorf("install output missing confirmation; output:\n%s", output)
-	}
-
-	if _, err := os.Stat(destBinary); os.IsNotExist(err) {
-		t.Fatal("binary was not installed")
-	}
-
-	content, err := os.ReadFile(destBinary)
+	f := newInstallFixture(t)
+	binary := f.windowsRelease(t, "")
+	// Exercise creation of a destination directory too, beyond an empty prefix.
+	parent := f.prefix
+	f.prefix = filepath.Join(parent, "new-install")
+	output, err := f.runPowerShell(t, "relative-prefix")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("first install failed: %v\n%s", err, output)
 	}
-	if string(content) != string(sourceContent) {
-		t.Errorf("installed binary content = %q; want %q", string(content), string(sourceContent))
-	}
+	assertInstallContents(t, filepath.Join(f.prefix, "aibris.exe"), binary)
+	assertInstallContents(t, filepath.Join(parent, "sentinel"), []byte("keep parent"))
+	writeInstallFile(t, filepath.Join(f.prefix, "sentinel"), []byte("keep parent"), 0644)
+	f.assertClean(t, "aibris.exe")
 }
 
 // TestNativeInstallPowerShellPathHintWithoutAddToPath verifies that the installer

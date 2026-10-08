@@ -3,31 +3,42 @@ package adapter
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
-	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 )
 
-// dirActivity reports the total file bytes and the newest modification time
-// observed anywhere in a tree.
+// dirActivity reports apparent bytes (the DebrisInfo.Size contract) and the
+// newest modification time observed anywhere in a tree. Err is non-nil if any activity evidence is
+// missing; Size and NewestModTime remain partial, report-only observations.
 type dirActivity struct {
 	Size          int64
 	NewestModTime time.Time
+	Err           error
 }
+
+var walkDirectory = filepath.WalkDir
 
 type dirActivityAccumulator struct {
-	modTimeMu        sync.Mutex
+	mu               sync.Mutex
 	newestModTime    time.Time
 	hasReadableEntry bool
+	err              error
+	seenHardlinks    map[sizeFileIdentity]struct{}
 }
 
-// estimateDirSize returns the total file size in bytes for the given path.
-// For regular files it returns the file's size directly.
+type sizeFileIdentity struct {
+	device uint64
+	inode  uint64
+}
+
+// estimateDirSize returns apparent bytes under the DebrisInfo.Size contract:
+// directories contribute no bytes and regular hardlinks count once per device
+// and inode within this tree when identity is available, otherwise per path.
+// Root symlinks are followed; nested symlinks contribute their own length
+// without following their targets. Unreadable entries leave a partial
+// report-only size.
 // For directories it uses a worker pool that walks top-level subdirectories
 // in parallel, with each worker traversing its assigned subtree sequentially
 // (no recursive goroutine spawning). This avoids the goroutine explosion that
@@ -42,15 +53,17 @@ func estimateDirActivity(ctx context.Context, path string) dirActivity {
 
 func estimateDirActivityWithOptions(ctx context.Context, path string, trackModTime bool) dirActivity {
 	if err := ctx.Err(); err != nil {
-		return dirActivity{}
+		return dirActivity{Err: err}
 	}
 
+	// Cache discovery accepts directory symlinks. Observe the same root target
+	// so size and safety-critical activity evidence describe its contents.
 	info, err := os.Stat(path)
 	if err != nil {
-		return dirActivity{}
+		return dirActivity{Err: err}
 	}
 	if !info.IsDir() {
-		activity := dirActivity{Size: info.Size()}
+		activity := dirActivity{Size: info.Size(), Err: ctx.Err()}
 		if trackModTime {
 			activity.NewestModTime = info.ModTime()
 		}
@@ -59,7 +72,7 @@ func estimateDirActivityWithOptions(ctx context.Context, path string, trackModTi
 
 	entries, err := os.ReadDir(path)
 	if err != nil {
-		return dirActivity{}
+		return dirActivity{Err: err}
 	}
 
 	// Collect subdirectories to be walked in parallel.
@@ -67,12 +80,18 @@ func estimateDirActivityWithOptions(ctx context.Context, path string, trackModTi
 	var filesSize int64
 	activity := &dirActivityAccumulator{}
 	for _, e := range entries {
+		if err := ctx.Err(); err != nil {
+			activity.recordError(err)
+			break
+		}
 		if e.IsDir() {
 			subdirs = append(subdirs, filepath.Join(path, e.Name()))
 		} else {
 			info, err := e.Info()
-			if err == nil {
-				filesSize += info.Size()
+			if err != nil {
+				activity.recordError(err)
+			} else {
+				filesSize += activity.fileSize(info)
 				if trackModTime {
 					activity.recordModTime(info.ModTime())
 				}
@@ -89,12 +108,17 @@ func estimateDirActivityWithOptions(ctx context.Context, path string, trackModTi
 	sem := make(chan struct{}, workers)
 	var wg sync.WaitGroup
 
+schedule:
 	for _, subdir := range subdirs {
 		if ctx.Err() != nil {
 			break
 		}
+		select {
+		case sem <- struct{}{}: // acquire
+		case <-ctx.Done():
+			break schedule
+		}
 		wg.Add(1)
-		sem <- struct{}{} // acquire
 		go func(dir string) {
 			defer func() {
 				<-sem // release
@@ -105,22 +129,21 @@ func estimateDirActivityWithOptions(ctx context.Context, path string, trackModTi
 	}
 
 	wg.Wait()
-	result := dirActivity{Size: total.Load()}
+	activity.recordError(ctx.Err())
+	result := dirActivity{Size: total.Load(), Err: activity.err}
 	if trackModTime {
 		result.NewestModTime = activity.latestModTime(info.ModTime())
 	}
 	return result
 }
 
+// estimateDirSizes measures each target independently with the same walker.
+// du is intentionally not used: portable du flags cannot match apparent bytes
+// with this hardlink policy and no directory metadata bytes.
 func estimateDirSizes(ctx context.Context, paths []string) map[string]int64 {
 	sizes := make(map[string]int64, len(paths))
 	if len(paths) == 0 || ctx.Err() != nil {
 		return sizes
-	}
-	if runtime.GOOS != "windows" {
-		if duSizes, ok := estimateDirSizesWithDU(ctx, paths); ok {
-			return duSizes
-		}
 	}
 	for _, path := range paths {
 		if ctx.Err() != nil {
@@ -129,42 +152,6 @@ func estimateDirSizes(ctx context.Context, paths []string) map[string]int64 {
 		sizes[path] = estimateDirSize(ctx, path)
 	}
 	return sizes
-}
-
-func estimateDirSizesWithDU(ctx context.Context, paths []string) (map[string]int64, bool) {
-	if _, err := exec.LookPath("du"); err != nil {
-		return nil, false
-	}
-	args := append([]string{"-sk"}, paths...)
-	output, err := exec.CommandContext(ctx, "du", args...).Output()
-	if err != nil {
-		return nil, false
-	}
-	sizes := make(map[string]int64, len(paths))
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-	for _, line := range lines {
-		sizeField, pathField, ok := strings.Cut(line, "\t")
-		if !ok {
-			fields := strings.Fields(line)
-			if len(fields) < 2 {
-				return nil, false
-			}
-			sizeField = fields[0]
-			pathField = strings.TrimSpace(strings.TrimPrefix(line, sizeField))
-		}
-		if pathField == "" {
-			return nil, false
-		}
-		kb, err := strconv.ParseInt(sizeField, 10, 64)
-		if err != nil {
-			return nil, false
-		}
-		sizes[pathField] = kb * 1024
-	}
-	if len(sizes) != len(paths) {
-		return nil, false
-	}
-	return sizes, true
 }
 
 // walkDirSequential walks a directory tree sequentially within a single
@@ -177,39 +164,80 @@ func walkDirSequential(
 	activity *dirActivityAccumulator,
 	trackModTime bool,
 ) {
-	filepath.WalkDir(path, func(p string, d os.DirEntry, err error) error {
+	err := walkDirectory(path, func(p string, d os.DirEntry, err error) error {
 		if err != nil {
-			if os.IsNotExist(err) {
-				return nil
-			}
-			return filepath.SkipDir
+			activity.recordError(err)
 		}
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		if err != nil {
+			// Missing evidence refuses safety approval, but reporting should
+			// still collect readable siblings instead of abandoning the walk.
+			if d != nil && d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
 		if d.IsDir() {
 			if trackModTime {
 				info, err := d.Info()
-				if err == nil {
+				if err != nil {
+					activity.recordError(err)
+				} else {
 					activity.recordModTime(info.ModTime())
 				}
 			}
 			return nil
 		}
 		info, err := d.Info()
-		if err == nil {
-			total.Add(info.Size())
-			if trackModTime {
-				activity.recordModTime(info.ModTime())
-			}
+		if err != nil {
+			activity.recordError(err)
+			return nil
+		}
+		total.Add(activity.fileSize(info))
+		if trackModTime {
+			activity.recordModTime(info.ModTime())
 		}
 		return nil
 	})
+	activity.recordError(err)
+}
+
+// fileSize deduplicates only regular files with multiple links and available
+// identity. The set is shared by all workers in one measured tree and allocated
+// lazily, so ordinary files and unknown identities need no bookkeeping.
+func (a *dirActivityAccumulator) fileSize(info os.FileInfo) int64 {
+	identity, ok := hardlinkSizeIdentity(info)
+	if !ok {
+		return info.Size()
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if _, seen := a.seenHardlinks[identity]; seen {
+		return 0
+	}
+	if a.seenHardlinks == nil {
+		a.seenHardlinks = make(map[sizeFileIdentity]struct{})
+	}
+	a.seenHardlinks[identity] = struct{}{}
+	return info.Size()
+}
+
+func (a *dirActivityAccumulator) recordError(err error) {
+	if err == nil {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.err == nil {
+		a.err = err
+	}
 }
 
 func (a *dirActivityAccumulator) recordModTime(modTime time.Time) {
-	a.modTimeMu.Lock()
-	defer a.modTimeMu.Unlock()
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	if !a.hasReadableEntry || modTime.After(a.newestModTime) {
 		a.newestModTime = modTime
 	}
@@ -217,8 +245,8 @@ func (a *dirActivityAccumulator) recordModTime(modTime time.Time) {
 }
 
 func (a *dirActivityAccumulator) latestModTime(rootModTime time.Time) time.Time {
-	a.modTimeMu.Lock()
-	defer a.modTimeMu.Unlock()
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	if !a.hasReadableEntry {
 		return time.Time{}
 	}

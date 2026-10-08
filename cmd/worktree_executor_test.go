@@ -117,8 +117,11 @@ func TestExecutePreparedCommandCancellationAfterStartRemainsFailed(t *testing.T)
 		t.Fatal(err)
 	}
 	marker := filepath.Join(home, "command-started")
-	command := filepath.Join(t.TempDir(), "cancel-after-start")
-	writeJSONReceiptExecutable(t, command, "#!/bin/sh\ntouch \"$1\"\nsleep 5\n")
+	binDir := t.TempDir()
+	command := filepath.Join(binDir, "go")
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	writeJSONReceiptExecutable(t, command, "#!/bin/sh\ntouch \""+marker+"\"\nsleep 5\n")
+	t.Setenv("GOCACHE", targetPath)
 	target := types.DebrisInfo{
 		ID:             "command-cancelled",
 		Tool:           types.ToolBuildCache,
@@ -126,7 +129,7 @@ func TestExecutePreparedCommandCancellationAfterStartRemainsFailed(t *testing.T)
 		Path:           targetPath,
 		Size:           int64(len(payload)),
 		CleanupKind:    types.CleanupCommand,
-		CleanupCommand: []string{command, marker},
+		CleanupCommand: []string{"go", "clean", "-cache"},
 	}
 	runtime := staticOverlapSafetyRuntime(nil, nil)
 	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{target})
@@ -174,8 +177,11 @@ func TestExecutePreparedCommandRemovingOwnerThenFailingIsPartial(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(targetPath, "payload"), payload, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	command := filepath.Join(t.TempDir(), "remove-then-fail")
-	writeJSONReceiptExecutable(t, command, "#!/bin/sh\nrm -rf \"$1\"\nexit 7\n")
+	binDir := t.TempDir()
+	command := filepath.Join(binDir, "go")
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	writeJSONReceiptExecutable(t, command, "#!/bin/sh\nrm -rf \""+targetPath+"\"\nexit 7\n")
+	t.Setenv("GOCACHE", targetPath)
 	target := types.DebrisInfo{
 		ID:             "command-removes-owner",
 		Tool:           types.ToolBuildCache,
@@ -183,7 +189,7 @@ func TestExecutePreparedCommandRemovingOwnerThenFailingIsPartial(t *testing.T) {
 		Path:           targetPath,
 		Size:           int64(len(payload)),
 		CleanupKind:    types.CleanupCommand,
-		CleanupCommand: []string{command, targetPath},
+		CleanupCommand: []string{"go", "clean", "-cache"},
 	}
 	runtime := staticOverlapSafetyRuntime(nil, nil)
 	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{target})
@@ -272,8 +278,11 @@ func TestExecutePreparedCommandRemovingOwnerThenCancelledIsPartial(t *testing.T)
 		t.Fatal(err)
 	}
 	marker := filepath.Join(home, "command-owner-removed")
-	command := filepath.Join(t.TempDir(), "remove-then-wait")
-	writeJSONReceiptExecutable(t, command, "#!/bin/sh\nrm -rf \"$1\"\ntouch \"$2\"\nsleep 5\n")
+	binDir := t.TempDir()
+	command := filepath.Join(binDir, "go")
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	writeJSONReceiptExecutable(t, command, "#!/bin/sh\nrm -rf \""+targetPath+"\"\ntouch \""+marker+"\"\nsleep 5\n")
+	t.Setenv("GOCACHE", targetPath)
 	target := types.DebrisInfo{
 		ID:             "command-removes-then-cancels",
 		Tool:           types.ToolBuildCache,
@@ -281,7 +290,7 @@ func TestExecutePreparedCommandRemovingOwnerThenCancelledIsPartial(t *testing.T)
 		Path:           targetPath,
 		Size:           int64(len(payload)),
 		CleanupKind:    types.CleanupCommand,
-		CleanupCommand: []string{command, targetPath, marker},
+		CleanupCommand: []string{"go", "clean", "-cache"},
 	}
 	runtime := staticOverlapSafetyRuntime(nil, nil)
 	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{target})
@@ -320,6 +329,8 @@ func TestExecutePreparedMissingCommandRecordsFallbackPathRemoval(t *testing.T) {
 	if err := os.MkdirAll(targetPath, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	t.Setenv("GOCACHE", targetPath)
+	t.Setenv("PATH", t.TempDir())
 	target := types.DebrisInfo{
 		ID:             "command-fallback",
 		Tool:           types.ToolBuildCache,
@@ -327,7 +338,7 @@ func TestExecutePreparedMissingCommandRecordsFallbackPathRemoval(t *testing.T) {
 		Path:           targetPath,
 		Size:           19,
 		CleanupKind:    types.CleanupCommand,
-		CleanupCommand: []string{"definitely-missing-aibris-cleaner"},
+		CleanupCommand: []string{"go", "clean", "-cache"},
 	}
 	runtime := staticOverlapSafetyRuntime(nil, nil)
 	selection, err := applyCleanupOverlapSafety(context.Background(), runtime, []types.DebrisInfo{target})

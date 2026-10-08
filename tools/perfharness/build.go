@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -42,6 +43,9 @@ func BuildBinary(label, ref, repoDir, outDir string) (*Binary, error) {
 		return nil, fmt.Errorf("exporting %s: %w", sha, err)
 	}
 	binPath := filepath.Join(outDir, "aibris-"+label)
+	if runtime.GOOS == "windows" {
+		binPath += ".exe"
+	}
 	if err := goBuildTrimpath(srcDir, binPath); err != nil {
 		return nil, fmt.Errorf("building %s: %w", label, err)
 	}
