@@ -135,13 +135,15 @@ lsof -u "$USER" -d cwd 2>/dev/null | awk 'NR>1 {print $NF}' | sort -u
 aibris JSON과 Docker 출력을 파싱해 **크기 순으로 정렬**하여 사용자에게 보여준다.
 
 aibris의 `size`는 non-directory entry 길이를 합한 apparent bytes다. Sparse file은
-logical length, hardlink는 target별로 각 경로의 길이를 센다. Root symlink는 따라가며
+logical length를 센다. Regular hardlink는 Unix `FileInfo.Sys()`가 `syscall.Stat_t`를
+제공할 때 한 target 안에서 (device, inode)당 한 번 센다. Windows 또는 identity가
+없으면 경로마다 센다. 서로 다른 target의 집계는 독립적이다. Root symlink는 따라가며
 nested symlink는 따라가지 않고 링크 자체 길이만 센다. Directory metadata는 제외한다.
 Cache·worktree·strip·reclaim estimate·size threshold도 이 의미를 쓴다.
 `physical_total_bytes`의 physical은 outer owner 중복 제거이며 allocated/reclaimed
 bytes가 아니다. 읽지 못한 entry가 있으면 크기는 partial estimate일 수 있고,
 incomplete activity evidence는 safety 승인을 거부한다. 삭제 후 실제 확보 공간을
-보장하지 않는다. 기존 Unix `du` 수치와 비교하면 sparse/hardlink는 커지고 directory
+보장하지 않는다. 기존 Unix `du` 수치와 비교하면 sparse file은 커지고 directory
 metadata가 많은 tree는 작아질 수 있다. 이전 scan cache는 live rescan으로 교체되며
 JSON field 이름은 유지된다.
 - worktree는 `source`, `project`, `status`로 그룹핑하고 `risk`, `reason`도 함께 본다

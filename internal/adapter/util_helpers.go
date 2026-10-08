@@ -25,12 +25,20 @@ type dirActivityAccumulator struct {
 	newestModTime    time.Time
 	hasReadableEntry bool
 	err              error
+	seenHardlinks    map[sizeFileIdentity]struct{}
+}
+
+type sizeFileIdentity struct {
+	device uint64
+	inode  uint64
 }
 
 // estimateDirSize returns apparent bytes under the DebrisInfo.Size contract:
-// directories contribute no bytes and hardlinks count per path. Root symlinks
-// are followed; nested symlinks contribute their own length without following
-// their targets. Unreadable entries leave a partial report-only size.
+// directories contribute no bytes and regular hardlinks count once per device
+// and inode within this tree when identity is available, otherwise per path.
+// Root symlinks are followed; nested symlinks contribute their own length
+// without following their targets. Unreadable entries leave a partial
+// report-only size.
 // For directories it uses a worker pool that walks top-level subdirectories
 // in parallel, with each worker traversing its assigned subtree sequentially
 // (no recursive goroutine spawning). This avoids the goroutine explosion that
@@ -83,7 +91,7 @@ func estimateDirActivityWithOptions(ctx context.Context, path string, trackModTi
 			if err != nil {
 				activity.recordError(err)
 			} else {
-				filesSize += info.Size()
+				filesSize += activity.fileSize(info)
 				if trackModTime {
 					activity.recordModTime(info.ModTime())
 				}
@@ -131,7 +139,7 @@ schedule:
 
 // estimateDirSizes measures each target independently with the same walker.
 // du is intentionally not used: portable du flags cannot match apparent bytes
-// with per-path hardlink counting and no directory metadata bytes.
+// with this hardlink policy and no directory metadata bytes.
 func estimateDirSizes(ctx context.Context, paths []string) map[string]int64 {
 	sizes := make(map[string]int64, len(paths))
 	if len(paths) == 0 || ctx.Err() != nil {
@@ -187,13 +195,33 @@ func walkDirSequential(
 			activity.recordError(err)
 			return nil
 		}
-		total.Add(info.Size())
+		total.Add(activity.fileSize(info))
 		if trackModTime {
 			activity.recordModTime(info.ModTime())
 		}
 		return nil
 	})
 	activity.recordError(err)
+}
+
+// fileSize deduplicates only regular files with multiple links and available
+// identity. The set is shared by all workers in one measured tree and allocated
+// lazily, so ordinary files and unknown identities need no bookkeeping.
+func (a *dirActivityAccumulator) fileSize(info os.FileInfo) int64 {
+	identity, ok := hardlinkSizeIdentity(info)
+	if !ok {
+		return info.Size()
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if _, seen := a.seenHardlinks[identity]; seen {
+		return 0
+	}
+	if a.seenHardlinks == nil {
+		a.seenHardlinks = make(map[sizeFileIdentity]struct{})
+	}
+	a.seenHardlinks[identity] = struct{}{}
+	return info.Size()
 }
 
 func (a *dirActivityAccumulator) recordError(err error) {

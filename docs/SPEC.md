@@ -43,9 +43,11 @@ confirmation path before deletion.
   `scan:<tool>:<error>` to stderr.
 - Return context cancellation and deadline errors immediately.
 - `Size` measures apparent bytes: sum non-directory entry lengths, count sparse
-  files at logical length and hardlinks per path independently per target, and
-  follow root symlinks. Nested symlinks count at their own length without
-  following them. Directory metadata is excluded. Report-only size can be
+  files at logical length, and count regular hardlinks once per (device, inode)
+  within each target when Unix `FileInfo.Sys()` exposes `syscall.Stat_t`. Windows
+  and unavailable identity count per path; different targets are measured
+  independently. Root symlinks are followed; nested symlinks count at their own
+  length without following them. Directory metadata is excluded. Report-only size can be
   partial when entries are unreadable; incomplete activity evidence still
   refuses safety approval. Cache, worktree, strip, reclaim estimates, and size
   thresholds share this contract. `PhysicalTotalBytes` deduplicates outer

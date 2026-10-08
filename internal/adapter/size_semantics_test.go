@@ -81,32 +81,84 @@ func TestEstimateDirSizesApparentBytesIndependentOfDU(t *testing.T) {
 	}
 }
 
-func TestEstimateDirSizesHardlinksCountEachPath(t *testing.T) {
-	home := t.TempDir()
-	testutil.SetHome(t, home)
-	sizeTestDU(t, "success")
-	a, b := filepath.Join(home, "a"), filepath.Join(home, "b")
-	for _, p := range []string{a, b, filepath.Join(a, "nested")} {
-		if err := os.MkdirAll(p, 0o700); err != nil {
-			t.Fatal(err)
-		}
+// Override only Sys metadata; the walker must still count bytes and observe
+// activity when a FileInfo implementation cannot expose Unix identity.
+type sizeFileInfoWithoutIdentity struct {
+	os.FileInfo
+	sys any
+}
+
+func (i sizeFileInfoWithoutIdentity) Sys() any { return i.sys }
+
+type sizeDirEntryWithoutIdentity struct {
+	os.DirEntry
+	sys any
+}
+
+func (e sizeDirEntryWithoutIdentity) Info() (os.FileInfo, error) {
+	info, err := e.DirEntry.Info()
+	if err != nil {
+		return nil, err
 	}
-	source := filepath.Join(a, "payload")
-	sparseSizeFile(t, source, 12345)
-	for _, p := range []string{filepath.Join(a, "nested", "link"), filepath.Join(b, "link")} {
-		if err := os.Link(source, p); err != nil {
-			t.Skipf("hardlinks unavailable: %v", err)
-		}
-	}
-	ctx := context.Background()
-	got := estimateDirSizes(ctx, []string{a, b})
-	if got[a] != 24690 || got[b] != 12345 {
-		t.Fatalf("hardlink sizes = %v; want per-path lengths, independently per target", got)
-	}
-	for _, p := range []string{a, b} {
-		if activity := estimateDirActivity(ctx, p); activity.Err != nil || activity.Size != got[p] {
-			t.Fatalf("activity = %+v; size = %d", activity, got[p])
-		}
+	return sizeFileInfoWithoutIdentity{FileInfo: info, sys: e.sys}, nil
+}
+
+func TestEstimateDirSizesHardlinksPerMeasuredTree(t *testing.T) {
+	for _, mode := range []string{"native", "nil-sys", "non-stat-sys"} {
+		t.Run(mode, func(t *testing.T) {
+			home := t.TempDir()
+			testutil.SetHome(t, home)
+			sizeTestDU(t, "missing")
+			a, b := filepath.Join(home, "a"), filepath.Join(home, "b")
+			for _, p := range []string{filepath.Join(a, "one"), filepath.Join(a, "two"), filepath.Join(a, "three"), b} {
+				if err := os.MkdirAll(p, 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			const size = int64(12345)
+			source := filepath.Join(a, "one", "payload")
+			sparseSizeFile(t, source, size)
+			for _, p := range []string{filepath.Join(a, "root-link"), filepath.Join(a, "two", "link"), filepath.Join(a, "three", "link"), filepath.Join(b, "link")} {
+				if err := os.Link(source, p); err != nil {
+					t.Skipf("hardlink creation unsupported by this platform/filesystem: %v", err)
+				}
+			}
+			// Same length, different inode: this file must always count.
+			sparseSizeFile(t, filepath.Join(a, "two", "independent"), size)
+			wantA := 2 * size
+			if runtime.GOOS == "windows" || mode != "native" {
+				wantA = 5 * size
+			}
+			if mode != "native" {
+				original := walkDirectory
+				t.Cleanup(func() { walkDirectory = original })
+				var sys any
+				if mode == "non-stat-sys" {
+					sys = struct{}{}
+				}
+				walkDirectory = func(path string, visit fs.WalkDirFunc) error {
+					return original(path, func(path string, entry os.DirEntry, err error) error {
+						if entry != nil {
+							entry = sizeDirEntryWithoutIdentity{DirEntry: entry, sys: sys}
+						}
+						return visit(path, entry, err)
+					})
+				}
+			}
+			ctx := context.Background()
+			// Repeat and reverse target order: identity sets must be per walk.
+			for _, paths := range [][]string{{a, b}, {b, a}} {
+				got := estimateDirSizes(ctx, paths)
+				if got[a] != wantA || got[b] != size {
+					t.Fatalf("hardlink sizes = %v; want a=%d, b=%d independently per target", got, wantA, size)
+				}
+				for _, p := range paths {
+					if activity := estimateDirActivity(ctx, p); activity.Err != nil || activity.Size != got[p] {
+						t.Fatalf("activity = %+v; size = %d", activity, got[p])
+					}
+				}
+			}
+		})
 	}
 }
 

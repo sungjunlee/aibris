@@ -82,9 +82,11 @@ type DebrisInfo struct {
 	Source   string
 	Path     string
 	// Size is apparent bytes: sum of non-directory entry lengths. Sparse files
-	// count their logical length; hardlinks count once per path, independently
-	// in each target. Root symlinks are followed; nested symlinks count their
-	// own length without following targets. Directory metadata contributes zero.
+	// count their logical length; regular hardlinks count once per (device, inode)
+	// within each target when Unix FileInfo.Sys() exposes syscall.Stat_t. Windows
+	// and unavailable identity count per path. Targets are measured independently.
+	// Root symlinks are followed; nested symlinks count their own length without
+	// following targets. Directory metadata contributes zero.
 	// Unreadable entries can leave a partial reporting estimate. Size does not
 	// measure allocated blocks or guarantee space reclaimed by deletion.
 	Size    int64
