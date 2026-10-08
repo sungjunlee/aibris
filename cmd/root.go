@@ -48,6 +48,9 @@ func agentStateToolList() string {
 	var names []string
 	for _, provider := range adapter.DefaultAgentStateProviders() {
 		name := string(provider.Name())
+		if name == "" {
+			continue
+		}
 		names = append(names, strings.ToUpper(name[:1])+name[1:])
 	}
 	sort.Strings(names)

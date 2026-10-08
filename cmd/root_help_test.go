@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"regexp"
+	"sort"
 	"strings"
 	"testing"
 
@@ -8,14 +10,25 @@ import (
 )
 
 func TestRootHelpListsEveryAgentStateProvider(t *testing.T) {
-	providers := adapter.DefaultAgentStateProviders()
-	if len(providers) == 0 {
+	var want []string
+	for _, provider := range adapter.DefaultAgentStateProviders() {
+		want = append(want, strings.ToLower(string(provider.Name())))
+	}
+	if len(want) == 0 {
 		t.Fatal("no agent-state providers registered")
 	}
-	help := strings.ToLower(rootCmd.Long)
-	for _, provider := range providers {
-		if !strings.Contains(help, string(provider.Name())) {
-			t.Errorf("root help omits agent-state provider %q", provider.Name())
-		}
+	sort.Strings(want)
+
+	match := regexp.MustCompile(`(?m)^  - agent state \((.+) — orphaned only\)$`).FindStringSubmatch(rootCmd.Long)
+	if match == nil {
+		t.Fatalf("root help has no agent-state line:\n%s", rootCmd.Long)
+	}
+	var got []string
+	for _, name := range strings.Split(match[1], ", ") {
+		got = append(got, strings.ToLower(name))
+	}
+	sort.Strings(got)
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("root help agent-state list = %v, registry = %v", got, want)
 	}
 }
