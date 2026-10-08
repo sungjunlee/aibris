@@ -349,13 +349,21 @@ Supported command-backed cleanup:
 | Item | Command |
 | ------ | --------- |
 | `go-build` | `go clean -cache` |
-| `npm` | `npm cache clean --force` |
 | `uv` | `uv cache clean` (`uv cache clean --force` under `--pressure` or a critical home volume) |
 
 If the command is missing, aibris falls back to safe path removal. If the
 command runs and fails, aibris reports the error and does not remove the path.
 `go clean -cache` is also refused when the live `$GOCACHE` path no longer
 matches the path recorded at scan time.
+
+`go clean -cache` runs in the verified cache with `GOCACHE` pinned to it and
+`GOTOOLCHAIN=local`, `GO111MODULE=off`, and `GOWORK=off`, so it does not select
+or download a toolchain or consult module/workspace files.
+The npm `_cacache` and Homebrew caches use gated path removal instead of a
+package-manager command. Catalog cache path removal refuses a symlink leaf
+because removing the link would leave the measured cache bytes behind. Cached
+inventories carrying the former `npm cache clean --force` recipe are refused
+as `cleanup_recipe_changed`; run a fresh scan before retrying.
 
 Age values accept human units such as `7d`, `2w`, `1mo`, and `1y`. Use `mo` for
 months; bare `m` keeps the Go duration meaning of minutes.

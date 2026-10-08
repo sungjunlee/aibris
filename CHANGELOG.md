@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Go cache cleanup pins `GOCACHE`, `GOTOOLCHAIN=local`, `GO111MODULE=off`,
+  and `GOWORK=off` and runs in the verified cache, avoiding toolchain
+  selection/downloads and module/workspace access. npm `_cacache` cleanup
+  uses gated path removal instead of `npm cache clean --force`. Cached
+  inventories with the old npm command refuse as `cleanup_recipe_changed`
+  and require a fresh scan. Catalog cache path removal, including Homebrew,
+  refuses symlink leaves with `cache_leaf_symlink` rather than crediting bytes left
+  in the target (#605).
+
 ## [0.14.0] - 2026-10-08
 
 ### Added

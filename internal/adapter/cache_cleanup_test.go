@@ -104,8 +104,9 @@ func TestResolveCleanupCommandRefusesOldNpmRecipe(t *testing.T) {
 	if err != nil || len(items) != 1 {
 		t.Fatalf("scan = %+v %v", items, err)
 	}
+	// Inventory records the path route; execution must refuse a symlink leaf.
 	if items[0].CleanupKind == types.CleanupCommand || len(items[0].CleanupCommand) != 0 {
-		t.Fatalf("npm must use path removal, including symlink targets: %+v", items[0])
+		t.Fatalf("npm inventory must use the path route: %+v", items[0])
 	}
 	items[0].CleanupKind = types.CleanupCommand
 	items[0].CleanupCommand = []string{"npm", "cache", "clean", "--force"}

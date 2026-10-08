@@ -627,6 +627,9 @@ func receiptStateReasons(unit ExecutionUnit, isMinimumAgeError func(error) bool)
 	case "partial":
 		return append(codes, "partial_failure")
 	case "failed":
+		if errors.Is(unit.FailureCause, cleaner.ErrCacheLeafSymlink) {
+			return append(codes, "cache_leaf_symlink")
+		}
 		if errors.Is(unit.FailureCause, cleaner.ErrCleanupRecipeChanged) {
 			return append(codes, "cleanup_recipe_changed")
 		}

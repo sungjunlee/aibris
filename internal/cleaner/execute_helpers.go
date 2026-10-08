@@ -163,6 +163,17 @@ func executeWithContextOutput(
 			if err := ctx.Err(); err != nil {
 				return false, err
 			}
+			if catalogCacheTarget(w) {
+				// Catalog scans measure the referent of a root symlink, but
+				// path removal would delete only the link and reclaim none of it.
+				info, err := os.Lstat(w.Path)
+				if err != nil {
+					return false, fmt.Errorf("checking cache leaf %q: %w", w.Path, err)
+				}
+				if info.Mode()&os.ModeSymlink != 0 {
+					return false, fmt.Errorf("refusing path removal for %q: %w; target bytes would not be removed", w.Path, ErrCacheLeafSymlink)
+				}
+			}
 			return true, safedelete.RemoveAll(home, w.Path)
 		})
 		total += freed
@@ -177,6 +188,7 @@ func executeWithContextOutput(
 		}
 		if err != nil {
 			errs = append(errs, fmt.Errorf("removing %s: %w", w.Path, err))
+			fmt.Fprintf(errorOutput, "error: %v\n", err)
 			continue
 		}
 		fmt.Fprintf(output, "removed: %s (%s) — %s\n", w.ID, w.Tool, FormatSize(freed))
