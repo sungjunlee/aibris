@@ -15,6 +15,7 @@
 - Go cache cleanup pins `GOCACHE`, `GOTOOLCHAIN=local`, `GO111MODULE=off`,
   and `GOWORK=off` and runs in the verified cache, avoiding toolchain
   selection/downloads and module/workspace access. npm `_cacache` cleanup
+
 - Go cache removal requires a Go-only top-level layout for default and override
   paths, in addition to the existing override README signature. Foreign entries,
   symlinks, wrong file types, or unreadable layouts silently exclude shared
