@@ -753,8 +753,15 @@ safety, or a declined final confirmation — deletes nothing and writes no
 receipt file. A run that cannot resolve a physical target identity for the
 receipt stops before the confirmation prompt and before any mutation, and exits
 non-zero: a receipt whose accounting cannot be trusted is never worth a
-deletion. Receipt status and exit status agree as they do on the `--json`
-route: only a `succeeded` status exits zero. The one exception is the sink
+deletion. Guided receipts bind typed prepared targets to document-local IDs
+before mutation, using the same binding as JSON execution. Duplicate prepared
+identities, missing or unknown execution identities, duplicate outcomes, or a
+prepared target with neither an execution outcome nor an interactive disposition
+are explicit invariant errors. An identity error discovered after cleanup
+prevents receipt emission and leaves an existing receipt file untouched; it
+does not undo cleanup. Valid receipts keep schema version 1, the existing reason
+codes, and the same path redaction. Receipt status and exit status agree as
+they do on the `--json` route: only a `succeeded` status exits zero. The one exception is the sink
 itself — a failure to write the file after a successful cleanup is reported on
 stderr and exits non-zero even though the document it could not store says
 `succeeded`. That reports a missing artifact, never a failed deletion.

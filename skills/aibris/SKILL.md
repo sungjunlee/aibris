@@ -258,6 +258,13 @@ aibris clean --no-guide --json --include-paths --root ~/path/to/project --catego
 aibris clean --no-guide --json --include-paths --force --root ~/path/to/project --category node_modules --age 7d
 ```
 
+Guided `--receipt-file`은 JSON execution과 같은 typed prepared-target identity를
+사용한다. identity가 누락·중복되거나 prepared target의 outcome이 없으면
+invariant error로 종료하고 receipt를 쓰지 않는다. 기존 receipt 파일도 그대로
+남으므로 이번 실행의 artifact로 읽지 않는다. 실행 후 발견된 오류는 이미 수행한
+cleanup을 되돌리지 않는다. 유효한 receipt의 schema version 1, reason code와
+path redaction은 유지된다.
+
 JSON receipt의 mutation-boundary refusal reason code는 다음과 같다.
 모든 code는 supported reason catalog에 포함되며 `execution_failed`와
 구분한다. 새로 scan하고 plan을 검토한 뒤 재시도한다. `--force`로

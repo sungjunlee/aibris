@@ -135,15 +135,22 @@ func receiptReasonCodes(document Plan, targetID string) []string {
 	return uniqueReasonCodes(codes)
 }
 
-func receiptTargetIDForItem(components []SnapshotComponent, item types.DebrisInfo) string {
+func receiptTargetIndexForItem(components []SnapshotComponent, item types.DebrisInfo) (int, bool) {
 	path, ok := cleaner.TargetPathKey(item.Path)
 	if !ok {
-		return ""
+		return 0, false
 	}
 	for i, component := range components {
 		if component.Key == path {
-			return fmt.Sprintf("target-%d", i+1)
+			return i, true
 		}
+	}
+	return 0, false
+}
+
+func receiptTargetIDForItem(components []SnapshotComponent, item types.DebrisInfo) string {
+	if index, ok := receiptTargetIndexForItem(components, item); ok {
+		return fmt.Sprintf("target-%d", index+1)
 	}
 	return ""
 }
@@ -452,21 +459,53 @@ func markReceiptTarget(
 	}
 }
 
+// receiptPreparedTarget binds the complete domain evidence to its document
+// position before mutation. The key is captured once, never recovered from a
+// path after execution. Neither this identity nor the evidence is serialized.
+type receiptPreparedTarget struct {
+	Target PreparedTarget
+	Key    string
+	Index  int
+}
+
+func bindReceiptPreparedTargets(components []SnapshotComponent, prepared []PreparedTarget) ([]receiptPreparedTarget, error) {
+	componentKeys := make(map[string]bool, len(components))
+	for _, component := range components {
+		if componentKeys[component.Key] {
+			return nil, fmt.Errorf("execution receipt invariant: duplicate physical target identity %q", component.Key)
+		}
+		componentKeys[component.Key] = true
+	}
+	bound := make([]receiptPreparedTarget, 0, len(prepared))
+	keys := make(map[string]bool, len(prepared))
+	indexes := make(map[int]bool, len(prepared))
+	for _, target := range prepared {
+		key := receiptItemKey(target.Item)
+		index, ok := receiptTargetIndexForItem(components, target.Item)
+		if !ok {
+			return nil, fmt.Errorf("execution receipt invariant: no physical target ID for prepared target %q", key)
+		}
+		if keys[key] || indexes[index] {
+			return nil, fmt.Errorf("execution receipt invariant: duplicate prepared target %q", key)
+		}
+		keys[key] = true
+		indexes[index] = true
+		bound = append(bound, receiptPreparedTarget{Target: target, Key: key, Index: index})
+	}
+	return bound, nil
+}
+
 func receiptTargetIDsForPrepared(
 	components []SnapshotComponent,
 	prepared []PreparedTarget,
 ) (map[string]string, error) {
-	targetIDs := make(map[string]string, len(prepared))
-	for _, target := range prepared {
-		key := receiptItemKey(target.Item)
-		id := receiptTargetIDForItem(components, target.Item)
-		if id == "" {
-			return targetIDs, fmt.Errorf("execution receipt invariant: no physical target ID for prepared target %q", key)
-		}
-		if previous := targetIDs[key]; previous != "" {
-			return targetIDs, fmt.Errorf("execution receipt invariant: duplicate prepared target %q", key)
-		}
-		targetIDs[key] = id
+	bound, err := bindReceiptPreparedTargets(components, prepared)
+	if err != nil {
+		return nil, err
+	}
+	targetIDs := make(map[string]string, len(bound))
+	for _, target := range bound {
+		targetIDs[target.Key] = fmt.Sprintf("target-%d", target.Index+1)
 	}
 	return targetIDs, nil
 }
@@ -714,4 +753,6 @@ func finalizeReceipt(receipt Receipt, listSnapshots func() (int, error)) (Receip
 
 // PreparedTarget carries the complete execution evidence through receipt
 // ordering and interactive selection without a DTO or identity-map recovery.
+// cleanjson imports executor to project its domain types; executor production
+// code must not depend on the JSON wire model.
 type PreparedTarget = executor.PreparedExecutionTarget

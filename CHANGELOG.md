@@ -7,6 +7,9 @@
 - All clean prompts share one stdin line reader per run, preserving piped
   answers between guided/unified review and final or per-item confirmation.
   Cancellation still returns promptly and prevents reader reuse (#606).
+- Guided execution receipts share typed prepared-target identity binding with
+  JSON execution. Missing or duplicate identities and unrecorded outcomes now
+  fail explicitly before receipt emission, preserving valid receipt JSON (#603).
 - Go cache cleanup pins `GOCACHE`, `GOTOOLCHAIN=local`, `GO111MODULE=off`,
   and `GOWORK=off` and runs in the verified cache, avoiding toolchain
   selection/downloads and module/workspace access. npm `_cacache` cleanup

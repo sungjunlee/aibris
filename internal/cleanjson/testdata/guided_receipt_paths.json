@@ -1,0 +1,305 @@
+{
+  "schema_version": 1,
+  "document_type": "clean_receipt",
+  "mode": "execute",
+  "paths_included": true,
+  "status": "partial_failure",
+  "plan": {
+    "schema_version": 1,
+    "document_type": "clean_plan",
+    "mode": "dry_run",
+    "paths_included": true,
+    "evidence": {
+      "complete": true,
+      "source": "live",
+      "observed_at": "2026-10-08T00:00:00Z"
+    },
+    "policy": {
+      "minimum_age": "7d",
+      "guided_min_idle_age": "1d",
+      "agent_state_grace": "0d",
+      "categories": [],
+      "tools": [],
+      "risky": false,
+      "include_active_worktrees": false
+    },
+    "totals": {
+      "visible_rows": 6,
+      "physical_targets": 6,
+      "physical_bytes": 48,
+      "selected": 6,
+      "selected_bytes": 48,
+      "reviewable": 0,
+      "reviewable_bytes": 0,
+      "protected": 0,
+      "protected_bytes": 0,
+      "skipped": 0,
+      "skipped_bytes": 0
+    },
+    "physical_targets": [
+      {
+        "id": "target-1",
+        "decision": "selected",
+        "bytes": 8,
+        "category": "node_modules",
+        "tool": "node_modules",
+        "cleanup_kind": "remove-path",
+        "path": "<HOME>/removed/node_modules"
+      },
+      {
+        "id": "target-2",
+        "decision": "selected",
+        "bytes": 8,
+        "category": "node_modules",
+        "tool": "node_modules",
+        "cleanup_kind": "remove-path",
+        "path": "<HOME>/partial/node_modules"
+      },
+      {
+        "id": "target-3",
+        "decision": "selected",
+        "bytes": 8,
+        "category": "node_modules",
+        "tool": "node_modules",
+        "cleanup_kind": "remove-path",
+        "path": "<HOME>/failed/node_modules"
+      },
+      {
+        "id": "target-4",
+        "decision": "selected",
+        "bytes": 8,
+        "category": "node_modules",
+        "tool": "node_modules",
+        "cleanup_kind": "remove-path",
+        "path": "<HOME>/declined/node_modules"
+      },
+      {
+        "id": "target-5",
+        "decision": "selected",
+        "bytes": 8,
+        "category": "node_modules",
+        "tool": "node_modules",
+        "cleanup_kind": "remove-path",
+        "path": "<HOME>/cancelled/node_modules"
+      },
+      {
+        "id": "target-6",
+        "decision": "selected",
+        "bytes": 8,
+        "category": "node_modules",
+        "tool": "node_modules",
+        "cleanup_kind": "remove-path",
+        "path": "<HOME>/refused/node_modules"
+      }
+    ],
+    "rows": [
+      {
+        "id": "row-1",
+        "physical_target_id": "target-1",
+        "relation": "owner",
+        "policy_decision": "eligible",
+        "decision": "selected",
+        "category": "node_modules",
+        "tool": "node_modules",
+        "reason_codes": [
+          "classic_eligible"
+        ],
+        "path": "<HOME>/removed/node_modules",
+        "project": "removed",
+        "cleanup_command": []
+      },
+      {
+        "id": "row-2",
+        "physical_target_id": "target-2",
+        "relation": "owner",
+        "policy_decision": "eligible",
+        "decision": "selected",
+        "category": "node_modules",
+        "tool": "node_modules",
+        "reason_codes": [
+          "classic_eligible"
+        ],
+        "path": "<HOME>/partial/node_modules",
+        "project": "partial",
+        "cleanup_command": []
+      },
+      {
+        "id": "row-3",
+        "physical_target_id": "target-3",
+        "relation": "owner",
+        "policy_decision": "eligible",
+        "decision": "selected",
+        "category": "node_modules",
+        "tool": "node_modules",
+        "reason_codes": [
+          "classic_eligible"
+        ],
+        "path": "<HOME>/failed/node_modules",
+        "project": "failed",
+        "cleanup_command": []
+      },
+      {
+        "id": "row-4",
+        "physical_target_id": "target-4",
+        "relation": "owner",
+        "policy_decision": "eligible",
+        "decision": "selected",
+        "category": "node_modules",
+        "tool": "node_modules",
+        "reason_codes": [
+          "classic_eligible"
+        ],
+        "path": "<HOME>/declined/node_modules",
+        "project": "declined",
+        "cleanup_command": []
+      },
+      {
+        "id": "row-5",
+        "physical_target_id": "target-5",
+        "relation": "owner",
+        "policy_decision": "eligible",
+        "decision": "selected",
+        "category": "node_modules",
+        "tool": "node_modules",
+        "reason_codes": [
+          "classic_eligible"
+        ],
+        "path": "<HOME>/cancelled/node_modules",
+        "project": "cancelled",
+        "cleanup_command": []
+      },
+      {
+        "id": "row-6",
+        "physical_target_id": "target-6",
+        "relation": "owner",
+        "policy_decision": "eligible",
+        "decision": "selected",
+        "category": "node_modules",
+        "tool": "node_modules",
+        "reason_codes": [
+          "classic_eligible"
+        ],
+        "path": "<HOME>/refused/node_modules",
+        "project": "refused",
+        "cleanup_command": []
+      }
+    ]
+  },
+  "totals": {
+    "requested": 5,
+    "removed": 1,
+    "partial": 1,
+    "failed": 2,
+    "cancelled": 1,
+    "protected": 0,
+    "reviewable": 0,
+    "skipped": 1,
+    "freed_bytes": 11
+  },
+  "physical_targets": [
+    {
+      "id": "target-1",
+      "decision": "selected",
+      "state": "removed",
+      "requested": true,
+      "bytes": 8,
+      "freed_bytes": 8,
+      "physical_removed": true,
+      "category": "node_modules",
+      "tool": "node_modules",
+      "cleanup_kind": "remove-path",
+      "reason_codes": [
+        "classic_eligible"
+      ],
+      "path": "<HOME>/removed/node_modules"
+    },
+    {
+      "id": "target-2",
+      "decision": "selected",
+      "state": "partial",
+      "requested": true,
+      "bytes": 8,
+      "freed_bytes": 3,
+      "residual_bytes": 5,
+      "physical_removed": false,
+      "category": "node_modules",
+      "tool": "node_modules",
+      "cleanup_kind": "remove-path",
+      "reason_codes": [
+        "classic_eligible"
+      ],
+      "path": "<HOME>/partial/node_modules"
+    },
+    {
+      "id": "target-3",
+      "decision": "selected",
+      "state": "failed",
+      "requested": true,
+      "bytes": 8,
+      "freed_bytes": 0,
+      "residual_bytes": 8,
+      "physical_removed": false,
+      "category": "node_modules",
+      "tool": "node_modules",
+      "cleanup_kind": "remove-path",
+      "reason_codes": [
+        "classic_eligible"
+      ],
+      "path": "<HOME>/failed/node_modules"
+    },
+    {
+      "id": "target-4",
+      "decision": "selected",
+      "state": "skipped",
+      "requested": false,
+      "bytes": 8,
+      "freed_bytes": 0,
+      "physical_removed": false,
+      "category": "node_modules",
+      "tool": "node_modules",
+      "cleanup_kind": "remove-path",
+      "reason_codes": [
+        "classic_eligible",
+        "not_confirmed"
+      ],
+      "path": "<HOME>/declined/node_modules"
+    },
+    {
+      "id": "target-5",
+      "decision": "selected",
+      "state": "cancelled",
+      "requested": true,
+      "bytes": 8,
+      "freed_bytes": 0,
+      "physical_removed": false,
+      "category": "node_modules",
+      "tool": "node_modules",
+      "cleanup_kind": "remove-path",
+      "reason_codes": [
+        "classic_eligible",
+        "cancelled_after_confirmation"
+      ],
+      "path": "<HOME>/cancelled/node_modules"
+    },
+    {
+      "id": "target-6",
+      "decision": "selected",
+      "state": "failed",
+      "requested": true,
+      "bytes": 8,
+      "freed_bytes": 0,
+      "physical_removed": false,
+      "category": "node_modules",
+      "tool": "node_modules",
+      "cleanup_kind": "remove-path",
+      "reason_codes": [
+        "classic_eligible",
+        "safety_refused"
+      ],
+      "path": "<HOME>/refused/node_modules"
+    }
+  ],
+  "post_clean": {
+    "local_apfs_snapshots": 0
+  }
+}
