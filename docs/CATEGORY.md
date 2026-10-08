@@ -362,13 +362,24 @@ Explicit GOCACHE settings from the environment or GOENV file require a regular,
 non-symlink `README` beginning with
 `This directory holds cached build artifacts from the Go build system.`
 (Go's `cacheREADME` in that source). Failed checks silently omit the target;
-the default `os.UserCacheDir()/go-build` retains its existing behavior.
-The live path and override signature are rechecked at the mutation boundary.
+the default `os.UserCacheDir()/go-build` needs no signature and also uses
+whole-directory removal. Both default and override paths require a Go-only
+layout at the top level: regular files `README`, `trim.txt`, `testexpire.txt`,
+`log.txt`; a `fuzz` directory; and directories matching `^[0-9a-f]{2}$`.
+The allowed entries follow Go's
+[cache implementation](https://go.dev/src/cmd/go/internal/cache/cache.go) and
+[clean implementation](https://go.dev/src/cmd/go/internal/clean/clean.go).
+Other entries, symlinks, wrong file types, and unreadable layouts silently omit
+the directory from scan and the cleanup allowlist, including under cache-age
+relaxation. The layout check reads only one directory level. The live path,
+override signature, and layout are rechecked at the mutation boundary; a
+foreign entry added after scan refuses removal.
 
 The npm `_cacache` and Homebrew caches also use gated path removal.
-Catalog cache path removal skips a symlink leaf in human dry-run audits and
-JSON plans with `cache_leaf_symlink`, excluding its referent size from selected
-bytes. Removing the link would leave those measured bytes behind. Execution
+Catalog cache path removal skips a symlink leaf, excluding its referent size
+from selected bytes. Human dry-run audits explain why it is skipped; JSON plans
+keep the `cache_leaf_symlink` reason code. Removing the link would leave those
+measured bytes behind. Execution
 still rechecks the leaf and refuses symlinks introduced after planning. Ordinary
 directories and the uv command route retain their policy. Cached inventories carrying the
 former Go or npm command recipe are refused as `cleanup_recipe_changed`; run a

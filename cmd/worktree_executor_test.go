@@ -123,7 +123,6 @@ func TestExecutePreparedCommandCancellationAfterStartRemainsFailed(t *testing.T)
 	command := filepath.Join(binDir, "uv")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	writeJSONReceiptExecutable(t, command, "#!/bin/sh\ntouch \""+marker+"\"\nsleep 5\n")
-
 	target := types.DebrisInfo{
 		ID:             "command-cancelled",
 		Tool:           types.ToolPipCache,
@@ -183,7 +182,6 @@ func TestExecutePreparedCommandRemovingOwnerThenFailingIsPartial(t *testing.T) {
 	command := filepath.Join(binDir, "uv")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	writeJSONReceiptExecutable(t, command, "#!/bin/sh\nrm -rf \""+targetPath+"\"\nexit 7\n")
-
 	target := types.DebrisInfo{
 		ID:             "command-removes-owner",
 		Tool:           types.ToolPipCache,
@@ -284,7 +282,6 @@ func TestExecutePreparedCommandRemovingOwnerThenCancelledIsPartial(t *testing.T)
 	command := filepath.Join(binDir, "uv")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	writeJSONReceiptExecutable(t, command, "#!/bin/sh\nrm -rf \""+targetPath+"\"\ntouch \""+marker+"\"\nsleep 5\n")
-
 	target := types.DebrisInfo{
 		ID:             "command-removes-then-cancels",
 		Tool:           types.ToolPipCache,

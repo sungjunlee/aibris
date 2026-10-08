@@ -28,7 +28,7 @@ const (
 	EligibilityReasonAgentStateMinIdleAge   EligibilityReason = "orphaned agent-state within minimum idle age"
 	EligibilityReasonVolumePressure         EligibilityReason = "selected because of volume pressure"
 	EligibilityReasonEligible               EligibilityReason = "eligible for cleanup"
-	EligibilityReasonCacheLeafSymlink       EligibilityReason = "cache_leaf_symlink"
+	EligibilityReasonCacheLeafSymlink       EligibilityReason = "cache leaf is a symlink; removing it would leave target bytes behind"
 )
 
 // EvaluateEligibility is the single cleanup eligibility policy used by

@@ -70,6 +70,10 @@ func TestCleanDomainPlanMixedFixtureParity(t *testing.T) {
 			for _, item := range inventory {
 				writeJSONReceiptFixture(t, item.Path, "payload!")
 			}
+			if err := os.Rename(filepath.Join(cache.Path, "payload"), filepath.Join(cache.Path, "log.txt")); err != nil {
+				t.Fatal(err)
+			}
+			chtimesTree(t, cache.Path, time.Now().Add(-48*time.Hour))
 			createOrphanedWorktreeGit(t, owner.Path, "old")
 			state := guidedCleanState{Rows: []guidedCleanRow{
 				{Key: "old", Policy: guidedCleanPolicyRecommended, Selected: true, Row: guidedCodexWorktreeRow{Item: owner, Reason: "orphaned"}, ReasonCodes: []DecisionReasonCode{DecisionReasonEligible}},

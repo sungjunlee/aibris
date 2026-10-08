@@ -271,14 +271,24 @@ Command-backed cleanup:
   non-symlink `README` whose content starts with
   `This directory holds cached build artifacts from the Go build system.`
   (Go's `cacheREADME` in the same source). Invalid overrides are not targets;
-  the default `os.UserCacheDir()/go-build` needs no signature. Execution checks
-  the live path and override signature again before removal. Inventories with
-  the former Go command refuse as `cleanup_recipe_changed`; scan again.
+  the default `os.UserCacheDir()/go-build` needs no signature. Both default and
+  override paths must have a Go-only top-level layout: regular files `README`,
+  `trim.txt`, `testexpire.txt`, `log.txt`; a `fuzz` directory; and directories
+  matching `^[0-9a-f]{2}$`. This follows Go's
+  [cache implementation](https://go.dev/src/cmd/go/internal/cache/cache.go) and
+  [clean implementation](https://go.dev/src/cmd/go/internal/clean/clean.go).
+  Any other top-level entry, symlink, wrong file type, or unreadable layout
+  silently excludes the directory from scan and the cleanup allowlist, even
+  under cache-age relaxation. The layout check reads only one directory level.
+  Execution rechecks the live path, override signature, and layout at the
+  mutation boundary; newly added foreign entries refuse removal. Inventories
+  with the former Go command refuse as `cleanup_recipe_changed`; scan again.
 - Catalog caches using path removal (including Go, npm, and Homebrew) with a
-  symlink leaf are skipped by cleanup eligibility. Human dry-run audits and
-  JSON plans report `cache_leaf_symlink`, with zero selected targets/bytes for
-  that cache. Scan inventory still measures the referent. The execution-time
-  leaf check remains authoritative and refuses a symlink introduced after
+  symlink leaf are skipped by cleanup eligibility. Human dry-run audits explain
+  that removing the symlink leaves target bytes behind; JSON plans report
+  `cache_leaf_symlink`, with zero selected targets/bytes for that cache. Scan
+  inventory still measures the referent. The execution-time leaf check remains
+  authoritative and refuses a symlink introduced after
   planning. Ordinary directories and the uv command route retain their policy.
 - Commands that run and fail do not fall back silently.
 - Context cancellation must stop command execution.
@@ -454,7 +464,7 @@ Cross-category containment uses the same physical-component contract:
 | ---------- | --------------- | ------- | ------------------- |
 | `worktree` | orphaned only | `codex`, `claude`, `unknown` | Finite exact registry plus depth-4 convention fallback for directories named `worktrees`, `worktree`, `worktree-*`, `worktrees-*`, `*-worktree`, or `*-worktrees`; after a valid linked member is found, sibling checkouts under scan roots are added from that repo's `.git/worktrees/*/gitdir` files; units are validated at direct or one-level nested `.git` markers, and at two-level `<owner>/<leaf>/<checkout>/.git` only inside a registered container |
 | `node_modules` | yes | `node_modules` | `$HOME/**/node_modules`, with noisy system/media/cache directories pruned |
-| `build-cache` | yes | `build-cache` | process `$GOCACHE`, else `go env -w` file, else `UserCacheDir/go-build` (Linux `~/.cache/go-build`, Darwin `~/Library/Caches/go-build`, Windows `%LocalAppData%\go-build`); a configured GOCACHE requires the regular Go README signature, existence, and containment under requested roots; `~/.gradle/caches`, `~/.npm/_cacache`, `~/.cargo/registry`, `~/Library/Caches/Xcode` |
+| `build-cache` | yes | `build-cache` | process `$GOCACHE`, else `go env -w` file, else `UserCacheDir/go-build` (Linux `~/.cache/go-build`, Darwin `~/Library/Caches/go-build`, Windows `%LocalAppData%\go-build`); all Go cache paths require the Go-only top-level layout; a configured GOCACHE also requires the regular Go README signature, existence, and containment under requested roots; `~/.gradle/caches`, `~/.npm/_cacache`, `~/.cargo/registry`, `~/Library/Caches/Xcode` |
 | `other-cache` | yes | `pip-cache` | `~/.cache/pip`, `~/.cache/uv` |
 | `agent-state` | proof-classified orphaned only; default selection waits for `--agent-state-grace` | `claude`, `cursor` | recorded-cwd project stores; `live` and `undetermined` entries are protected; classic `--age` does not apply |
 | `ai-logs` | no, requires `--risky` | `ai-logs`, `windsurf` | known Codex, Claude, and Windsurf log/cache locations |

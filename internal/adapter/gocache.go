@@ -8,11 +8,12 @@ import (
 )
 
 // RefuseStaleGoCache reports an error when the live GOCACHE path no longer
-// matches the verified path recorded at scan time, including its signature.
+// matches the verified path recorded at scan time, including its signature
+// and Go-only top-level layout.
 func RefuseStaleGoCache(planned string) error {
 	live, ok := effectiveGoCache()
 	if !ok {
-		return fmt.Errorf("live GOCACHE could not be resolved")
+		return fmt.Errorf("live GOCACHE path, README signature or top-level layout could not be verified")
 	}
 	if !sameCachePath(live, planned) {
 		return fmt.Errorf("live GOCACHE %q no longer matches planned %q", live, planned)
@@ -22,7 +23,7 @@ func RefuseStaleGoCache(planned string) error {
 
 func effectiveGoCache() (string, bool) {
 	path, overridden := goCacheLocation()
-	if path == "" || (overridden && !hasGoCacheREADME(path)) {
+	if path == "" || !hasGoCacheLayout(path) || (overridden && !hasGoCacheREADME(path)) {
 		return "", false
 	}
 	return path, true
@@ -122,4 +123,36 @@ func hasGoCacheREADME(dir string) bool {
 	}
 	data, err := os.ReadFile(readme)
 	return err == nil && strings.HasPrefix(string(data), goCacheREADMESignature)
+}
+
+// hasGoCacheLayout checks only one directory level: a genuine README proves
+// Go used the directory, but foreign entries mean it is not exclusively a cache.
+// Go creates hex buckets, fuzz, and metadata as described in:
+// https://go.dev/src/cmd/go/internal/cache/cache.go
+// https://go.dev/src/cmd/go/internal/clean/clean.go
+// README is created by internal/cache/default.go (see signature above).
+func hasGoCacheLayout(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		info, err := entry.Info() // Does not follow symlinks.
+		if err != nil {
+			return false
+		}
+		name := entry.Name()
+		switch name {
+		case "README", "trim.txt", "testexpire.txt", "log.txt":
+			if !info.Mode().IsRegular() {
+				return false
+			}
+		default:
+			hexBucket := len(name) == 2 && strings.Trim(name, "0123456789abcdef") == ""
+			if !info.IsDir() || (name != "fuzz" && !hexBucket) {
+				return false
+			}
+		}
+	}
+	return true
 }

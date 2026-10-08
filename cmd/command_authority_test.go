@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
@@ -23,6 +24,10 @@ func TestCachedCleanupRecipeRefusalAccountsPartialSuccess(t *testing.T) {
 			cachePath := testutil.GoBuildCache(home)
 			modules := filepath.Join(home, "workspace", "project", "node_modules")
 			writeJSONReceiptFixture(t, cachePath, "cache payload")
+			if err := os.Rename(filepath.Join(cachePath, "payload"), filepath.Join(cachePath, "log.txt")); err != nil {
+				t.Fatal(err)
+			}
+			chtimesTree(t, cachePath, time.Now().Add(-48*time.Hour))
 			writeJSONReceiptFixture(t, modules, "modules payload")
 			if stdout, stderr, err := runCleanJSONProcess(t, binary, home, "scan", "--json", "--root", home); err != nil {
 				t.Fatalf("scan = %v stdout=%s stderr=%s", err, stdout, stderr)

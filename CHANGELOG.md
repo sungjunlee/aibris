@@ -15,8 +15,18 @@
 - Go cache cleanup pins `GOCACHE`, `GOTOOLCHAIN=local`, `GO111MODULE=off`,
   and `GOWORK=off` and runs in the verified cache, avoiding toolchain
   selection/downloads and module/workspace access. npm `_cacache` cleanup
+- Go cache removal requires a Go-only top-level layout for default and override
+  paths, in addition to the existing override README signature. Foreign entries,
+  symlinks, wrong file types, or unreadable layouts silently exclude shared
+  directories from scan and the cleanup allowlist, including under cache-age
+  relaxation. The one-level layout check repeats at the mutation boundary,
+  refusing foreign entries added after scan (#610, follow-up).
+- Human cache symlink eligibility output explains why removing the link leaves
+  target bytes behind; JSON retains `cache_leaf_symlink` (#611, follow-up).
+
 - Cleanup previews skip symlinked catalog path-route cache leaves (including
-  Go, npm, and Homebrew) with `cache_leaf_symlink` in human and JSON output,
+  Go, npm, and Homebrew) with an explanation in human output and
+  `cache_leaf_symlink` in JSON output,
   excluding their bytes from the selected total. Execution still refuses
   symlink drift at the mutation boundary; the uv command route is unchanged
   (#611, part 1).

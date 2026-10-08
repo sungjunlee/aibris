@@ -38,6 +38,13 @@ func TestCleanJSONReceiptRefusesSymlinkedCacheLeaf(t *testing.T) {
 			elsewhere := filepath.Join(home, "elsewhere", filepath.Base(path))
 			payload := strings.Repeat("x", 5000)
 			writeJSONReceiptFixture(t, elsewhere, payload)
+			payloadName := "payload"
+			if cache == "go-build" {
+				payloadName = "log.txt"
+				if err := os.Rename(filepath.Join(elsewhere, "payload"), filepath.Join(elsewhere, payloadName)); err != nil {
+					t.Fatal(err)
+				}
+			}
 			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 				t.Fatal(err)
 			}
@@ -70,7 +77,7 @@ func TestCleanJSONReceiptRefusesSymlinkedCacheLeaf(t *testing.T) {
 			if info, err := os.Lstat(path); err != nil || info.Mode()&os.ModeSymlink == 0 {
 				t.Errorf("refused link changed: %v", err)
 			}
-			if data, err := os.ReadFile(filepath.Join(elsewhere, "payload")); err != nil || string(data) != payload {
+			if data, err := os.ReadFile(filepath.Join(elsewhere, payloadName)); err != nil || string(data) != payload {
 				t.Errorf("target payload changed: %d bytes, %v", len(data), err)
 			}
 		})

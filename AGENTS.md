@@ -213,16 +213,25 @@ each tool's platform defaults. An override variable is honored only when the
 directory it names marks itself as a cache with a valid `CACHEDIR.TAG`
 (`UV_CACHE_DIR`) or Go's regular, non-symlink README signature (`GOCACHE` from
 the environment or GOENV file); otherwise an override could make an ordinary
-directory a cleanup target. Adding a rebuildable cache is one catalog entry; the cleanup allowlist accepts every
-path the catalog resolves to. Never add a cache whose wholesale removal can
-break installed projects (stores that projects link into). Cleanup commands
+directory a cleanup target. Every Go cache path, including the default
+`os.UserCacheDir()/go-build`, must also have only these top-level entries:
+regular files `README`, `trim.txt`, `testexpire.txt`, `log.txt`; a `fuzz`
+directory; and directories matching `^[0-9a-f]{2}$` (see Go's
+[cache](https://go.dev/src/cmd/go/internal/cache/cache.go) and
+[clean](https://go.dev/src/cmd/go/internal/clean/clean.go) implementations).
+Foreign entries, symlinks, wrong types, or unreadable layouts silently exclude
+it from scan and the cleanup allowlist, even under cache-age relaxation. Check
+only one directory level, and repeat the layout check at the mutation boundary.
+Adding a rebuildable cache is one catalog entry; the cleanup allowlist accepts
+every path the catalog resolves to. Never add a cache whose wholesale removal
+can break installed projects (stores that projects link into). Cleanup commands
 are re-derived from the live catalog (tool, category, canonical target, argv,
 and pinned cache environment); recipe drift refuses execution and fallback.
 A missing authorized executable may fall back only to gated removal of the
 scanned path. Go and Homebrew cleanup use gated removal of the verified cache
-path,
-without a package-manager cleanup command. Go removal includes fuzz and cache
-metadata; its override signature and live path are rechecked before mutation.
+path without a package-manager cleanup command. Go removal includes fuzz and
+cache metadata; its override signature, live path, and layout are rechecked before
+mutation.
 Catalog path-route caches with symlink leaves are skipped in cleanup previews
 with `cache_leaf_symlink`; execution rechecks the leaf to cover TOCTOU. The uv
 command route retains its policy.

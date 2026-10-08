@@ -24,7 +24,7 @@ type cacheTarget struct {
 	// verify must accept a directory chosen by an override setting before it
 	// is scanned or allowlisted; otherwise an override could turn an ordinary
 	// directory into a cleanup target. Only caches that mark themselves
-	// unambiguously (Go README or CACHEDIR.TAG) honor overrides; the rest use their
+	// (Go README plus layout or CACHEDIR.TAG) honor overrides; the rest use their
 	// default location only.
 	verify func(path string) bool
 	// command, when set, is the tool's own cleanup command. It runs with its
@@ -37,9 +37,13 @@ type cacheTarget struct {
 
 var cacheCatalog = []cacheTarget{
 	// Go commands can write telemetry outside GOCACHE. Remove only the verified
-	// directory; explicit settings must carry Go's own cache README signature.
+	// Go-only layout; explicit settings also need Go's cache README signature.
 	{id: "go-build", tool: types.ToolBuildCache, locate: func(string) (string, bool) {
-		return goCacheLocation()
+		path, overridden := goCacheLocation()
+		if !hasGoCacheLayout(path) {
+			return "", overridden
+		}
+		return path, overridden
 	}, verify: hasGoCacheREADME},
 	{id: "xcode", tool: types.ToolBuildCache, locate: darwinOnly("Library", "Caches", "Xcode")},
 	{id: "xcode-deriveddata", tool: types.ToolBuildCache, locate: darwinOnly("Library", "Developer", "Xcode", "DerivedData")},

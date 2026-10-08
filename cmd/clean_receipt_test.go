@@ -456,7 +456,6 @@ func TestApplyCleanJSONExecutionReceiptUsesPreMutationIdentityAfterSymlinkedAnce
 	if err := os.WriteFile(filepath.Join(target.Path, "payload"), make([]byte, int(target.Size)), 0o644); err != nil {
 		t.Fatal(err)
 	}
-
 	t.Setenv("PATH", t.TempDir())
 	targetIDKey := cleanJSONReceiptItemKey(target)
 	runtime := staticOverlapSafetyRuntime(nil, nil)

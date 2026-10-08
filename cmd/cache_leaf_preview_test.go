@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/testutil"
 )
 
@@ -40,6 +41,13 @@ func TestCatalogCacheLeafPreviewMatchesPathRemovalPolicy(t *testing.T) {
 					}
 					payload := strings.Repeat("x", 5000)
 					writeJSONReceiptFixture(t, payloadPath, payload)
+					payloadName := "payload"
+					if cache == "go-build" {
+						payloadName = "log.txt"
+						if err := os.Rename(filepath.Join(payloadPath, "payload"), filepath.Join(payloadPath, payloadName)); err != nil {
+							t.Fatal(err)
+						}
+					}
 					if leaf == "symlink" {
 						if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 							t.Fatal(err)
@@ -90,13 +98,13 @@ func TestCatalogCacheLeafPreviewMatchesPathRemovalPolicy(t *testing.T) {
 					if err != nil {
 						t.Fatalf("human preview = %v stdout=%s stderr=%s", err, stdout, stderr)
 					}
-					if refused && (!strings.Contains(stdout, "cache_leaf_symlink") || strings.Contains(stdout, "remove-path")) {
+					if refused && (!strings.Contains(stdout, string(cleaner.EligibilityReasonCacheLeafSymlink)) || strings.Contains(stdout, "remove-path")) {
 						t.Errorf("human preview must show refusal without selecting removal: %s", stdout)
 					}
-					if !refused && strings.Contains(stdout, "cache_leaf_symlink") {
+					if !refused && strings.Contains(stdout, string(cleaner.EligibilityReasonCacheLeafSymlink)) {
 						t.Errorf("ordinary human preview changed: %s", stdout)
 					}
-					if data, err := os.ReadFile(filepath.Join(payloadPath, "payload")); err != nil || string(data) != payload {
+					if data, err := os.ReadFile(filepath.Join(payloadPath, payloadName)); err != nil || string(data) != payload {
 						t.Errorf("preview mutated target: %v", err)
 					}
 					if leaf == "symlink" {

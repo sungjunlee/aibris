@@ -30,8 +30,12 @@ func TestCachePathRemovalRefusesSymlinkIntroducedAtBarrier(t *testing.T) {
 			if err := os.MkdirAll(path, 0o755); err != nil {
 				t.Fatal(err)
 			}
+			payloadName := "payload"
+			if cache == "go-build" {
+				payloadName = "log.txt"
+			}
 			payload := strings.Repeat("x", 5000)
-			if err := os.WriteFile(filepath.Join(path, "payload"), []byte(payload), 0o644); err != nil {
+			if err := os.WriteFile(filepath.Join(path, payloadName), []byte(payload), 0o644); err != nil {
 				t.Fatal(err)
 			}
 			items, err := (&adapter.BuildCacheAdapter{}).Scan(context.Background(), types.ScanOptions{Roots: []string{path}})
@@ -60,7 +64,7 @@ func TestCachePathRemovalRefusesSymlinkIntroducedAtBarrier(t *testing.T) {
 			if info, err := os.Lstat(path); err != nil || info.Mode()&os.ModeSymlink == 0 {
 				t.Errorf("refused link changed: %v", err)
 			}
-			if data, err := os.ReadFile(filepath.Join(elsewhere, "payload")); err != nil || string(data) != payload {
+			if data, err := os.ReadFile(filepath.Join(elsewhere, payloadName)); err != nil || string(data) != payload {
 				t.Errorf("target payload changed: %d bytes, %v", len(data), err)
 			}
 		})

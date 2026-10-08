@@ -38,8 +38,8 @@ func TestBuildCacheAdapter_GoBuild(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	goBuild := testutil.GoBuildCache(home)
-	os.MkdirAll(filepath.Join(goBuild, "cache-entry"), 0755)
-	os.WriteFile(filepath.Join(goBuild, "cache-entry", "a.out"), []byte("binary"), 0644)
+	os.MkdirAll(filepath.Join(goBuild, "00"), 0755)
+	os.WriteFile(filepath.Join(goBuild, "00", "a.out"), []byte("binary"), 0644)
 
 	a := &BuildCacheAdapter{}
 	results, err := a.Scan(context.Background(), types.ScanOptions{})
@@ -623,10 +623,10 @@ func scanGoBuild(t *testing.T) []types.DebrisInfo {
 
 func writeGoBuildFixture(t *testing.T, path string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Join(path, "cache-entry"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(path, "00"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(path, "cache-entry", "a.out"), []byte("binary"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(path, "00", "a.out"), []byte("binary"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(path, "README"), []byte(goCacheREADMESignature), 0o644); err != nil {

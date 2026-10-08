@@ -64,6 +64,9 @@ func TestIsSafePath(t *testing.T) {
 func TestIsSafeTarget_GoBuildCacheUnderHome(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
+	if err := os.MkdirAll(testutil.GoBuildCache(home), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	item := types.DebrisInfo{
 		Tool:           types.ToolBuildCache,
 		Category:       types.CategoryBuildCache,

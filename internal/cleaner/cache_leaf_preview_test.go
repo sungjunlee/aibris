@@ -61,7 +61,7 @@ func TestCatalogCacheLeafEligibilityRefusesOnlyPathRouteSymlinks(t *testing.T) {
 				eligible, reason := EvaluateEligibility(items[0], opts, time.Now())
 				refused := leaf == "symlink" && cache != "uv"
 				if refused {
-					if eligible || string(reason) != "cache_leaf_symlink" || len(Filter(items, opts)) != 0 {
+					if eligible || reason != EligibilityReasonCacheLeafSymlink || len(Filter(items, opts)) != 0 {
 						t.Errorf("path-route leaf selected: eligible=%t reason=%q filtered=%+v", eligible, reason, Filter(items, opts))
 					}
 				} else if !eligible || len(Filter(items, opts)) != 1 {
