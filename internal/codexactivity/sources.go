@@ -3,6 +3,8 @@ package codexactivity
 import (
 	"path/filepath"
 	"slices"
+
+	"github.com/sungjunlee/aibris/internal/codexhome"
 )
 
 // SourceCoverage speaks only for a home whose requested session roots were
@@ -12,11 +14,15 @@ type SourceCoverage struct {
 	Available bool     `json:"available"`
 }
 
-// LookupMember returns home-scoped activity and whether the source was queried.
+// LookupMember returns activity and whether every required source was queried.
+// Codex-owned worktrees are home-scoped; Orca workspaces consult all homes.
 // An available zero timestamp means that no matching session was found.
 func (i Index) LookupMember(path string) (Worktree, bool) {
 	if !i.Available || i.Err != nil {
 		return Worktree{}, false
+	}
+	if id, project, ok := orcaWorkspaceFromCWD(path); ok {
+		return i.lookupOrcaWorkspace(id, project)
 	}
 	// Prefer the innermost home when configured stores are nested.
 	var selected, id, project string
@@ -29,11 +35,44 @@ func (i Index) LookupMember(path string) (Worktree, bool) {
 	if selected == "" || !i.Sources[selected].Available {
 		return Worktree{}, false
 	}
-	matching, ok := i.Members[MemberKey(selected, id, project)]
+	return i.memberActivity(selected, id, project), true
+}
+
+func (i Index) memberActivity(home, id, project string) Worktree {
+	matching, ok := i.Members[MemberKey(home, id, project)]
 	if !ok {
-		matching = i.Worktrees[WorktreeKey(selected, id)]
+		matching = i.Worktrees[WorktreeKey(home, id)]
 	}
-	return matching, true
+	return matching
+}
+
+func (i Index) lookupOrcaWorkspace(id, project string) (Worktree, bool) {
+	// An undiscovered Orca home cannot supply negative activity evidence,
+	// even when another Codex home has readable sessions for this workspace.
+	orca := codexhome.OrcaHome()
+	if orca == "" || !i.Sources[canonicalPath(orca)].Available {
+		return Worktree{}, false
+	}
+	homes, err := codexhome.Homes()
+	if err != nil {
+		return Worktree{}, false
+	}
+	combined := Worktree{WorktreeID: id, Project: project}
+	for _, home := range canonicalRoots(homes) {
+		coverage := i.Sources[home]
+		roots := canonicalRoots([]string{filepath.Join(home, "sessions"), filepath.Join(home, "archived_sessions")})
+		// A session-root symlink can split this home's roots across source keys.
+		// Partial coverage cannot speak for the whole home, even if it is readable.
+		if !coverage.Available || !sameRoots(coverage.Roots, roots) {
+			return Worktree{}, false
+		}
+		matching := i.memberActivity(home, id, project)
+		combined.SessionCount += matching.SessionCount
+		if matching.LatestSession.After(combined.LatestSession) {
+			combined.LatestSession = matching.LatestSession
+		}
+	}
+	return combined, true
 }
 
 func sameRoots(a, b []string) bool { return slices.Equal(a, b) }

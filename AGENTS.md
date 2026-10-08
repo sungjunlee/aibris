@@ -179,8 +179,9 @@ provider reports `codex` for every tool).
   directory; invalid or unavailable layout is silently ignored. Never read
   `auth.json`. It supplies worktree registry, activity, read-only retention,
   risky logs, and home/ancestor deletion protection through resolved homes.
-  Orca rows use `source=orca`, `tool=unknown`; guided review still consults
-  Orca's Codex sessions for their recent-activity lock.
+  Orca rows use `source=orca`, `tool=unknown`; guided review consults sessions
+  from every resolved Codex home for their recent-activity lock. Any unavailable
+  home or an undiscovered Orca home keeps active Orca worktrees protected.
 - The convention fallback looks under `$HOME` for directories named
   `worktrees`, `worktree`, `worktree-*`, `worktrees-*`, `*-worktree`, or
   `*-worktrees`, up to `maxWorktreeContainerDepth = 4`.

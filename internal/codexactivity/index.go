@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -18,7 +17,7 @@ import (
 )
 
 const (
-	CacheSchemaVersion = 4 // recognize Orca workspace CWDs in Orca's Codex home
+	CacheSchemaVersion = 5 // recognize Orca workspace CWDs in every resolved home
 	Freshness          = 15 * time.Minute
 
 	SourceCache       = "cache"
@@ -326,24 +325,10 @@ func readSessionFileRecord(ctx context.Context, file sessionFileInfo) (FileRecor
 }
 
 func WorktreeFromCWD(cwd, home string) (string, string, bool) {
-	home = canonicalPath(home)
-	if runtime.GOOS == "darwin" {
-		// Derive the workspace root from the indexed source, without repeatedly
-		// probing the Orca layout for every session record and member lookup.
-		userHome := home
-		for range 5 {
-			userHome = filepath.Dir(userHome)
-		}
-		if home == filepath.Join(userHome, "Library", "Application Support", "orca", "codex-runtime-home", "home") {
-			root := canonicalPath(filepath.Join(userHome, "orca", "workspaces"))
-			rel, err := filepath.Rel(root, canonicalPath(cwd))
-			parts := pathParts(rel)
-			if err == nil && len(parts) >= 2 && parts[0] != ".." && !filepath.IsAbs(rel) {
-				// Nested CWDs lock the whole <repo>/<worktree> owner.
-				return filepath.Join(parts[0], parts[1]), parts[0], true
-			}
-		}
+	if id, project, ok := orcaWorkspaceFromCWD(cwd); ok {
+		return id, project, true
 	}
+	home = canonicalPath(home)
 	rel, err := filepath.Rel(home, canonicalPath(cwd))
 	if err != nil {
 		return "", "", false
@@ -357,6 +342,22 @@ func WorktreeFromCWD(cwd, home string) (string, string, bool) {
 		project = parts[2]
 	}
 	return parts[1], project, true
+}
+
+// Workspace identity depends on the user's home, not the session's Codex home.
+// Nested CWDs in any resolved session store lock the whole <repo>/<worktree>.
+func orcaWorkspaceFromCWD(cwd string) (string, string, bool) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", "", false
+	}
+	root := canonicalPath(filepath.Join(home, "orca", "workspaces"))
+	rel, err := filepath.Rel(root, canonicalPath(cwd))
+	parts := pathParts(rel)
+	if err != nil || len(parts) < 2 || parts[0] == ".." || filepath.IsAbs(rel) {
+		return "", "", false
+	}
+	return filepath.Join(parts[0], parts[1]), parts[0], true
 }
 
 func pathParts(path string) []string {

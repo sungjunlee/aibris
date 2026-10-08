@@ -74,6 +74,9 @@ func TestOrcaCodexSessionLocksGuidedWorktree(t *testing.T) {
 	}
 	home, live, _ := orcaWorktreeFixture(t)
 	orcaHome := testutil.OrcaCodexHome(t, home)
+	if err := os.MkdirAll(filepath.Join(home, ".codex", "sessions"), 0755); err != nil {
+		t.Fatal(err)
+	}
 	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
 	recent, old := now.Add(-time.Hour), now.Add(-30*24*time.Hour)
 	writeCodexSession(t, filepath.Join(orcaHome, "sessions", "recent.jsonl"), recent, filepath.Join(live, "subdir"), "recent", "PRIVATE-BODY")
@@ -121,6 +124,161 @@ func TestOrcaCodexSessionLocksGuidedWorktree(t *testing.T) {
 	decision = PlanWorktreeCleanup(units, DefaultCleanupPolicy(now)).Decisions[0]
 	if decision.Class != DecisionLocked || !containsReason(cleanupPolicyReasonCodes(decision), DecisionReasonActivityUnavailable) {
 		t.Fatalf("decision = %+v; want unavailable-activity hard lock", decision)
+	}
+}
+
+func TestOrcaWorkspaceActivityAcrossHomes(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("Orca Codex home is macOS-only")
+	}
+	for _, scenario := range []string{"primary", "extra", "newest", "unavailable-primary", "unavailable-extra", "unqueried"} {
+		t.Run(scenario, func(t *testing.T) {
+			home := t.TempDir()
+			testutil.SetHome(t, home)
+			primary, extra := filepath.Join(home, "runtime"), filepath.Join(home, "extra")
+			t.Setenv("CODEX_HOME", primary)
+			t.Setenv("AIBRIS_CODEX_HOMES", extra)
+			orca := testutil.OrcaCodexHome(t, home)
+			for _, source := range []string{primary, extra} {
+				if err := os.MkdirAll(filepath.Join(source, "sessions"), 0755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+			old, recent := now.Add(-30*24*time.Hour), now.Add(-time.Hour)
+			target := filepath.Join(home, "orca", "workspaces", "project", "member")
+			cwd := filepath.Join(target, "nested")
+			writeCodexSession(t, filepath.Join(orca, "sessions", "old.jsonl"), old, cwd, "old", "PRIVATE-BODY")
+			switch scenario {
+			case "primary", "newest":
+				writeCodexSession(t, filepath.Join(primary, "sessions", "recent.jsonl"), recent, cwd, "recent", "PRIVATE-BODY")
+				if scenario == "newest" {
+					writeCodexSession(t, filepath.Join(extra, "sessions", "earlier.jsonl"), recent.Add(-time.Hour), cwd, "earlier", "PRIVATE-BODY")
+				}
+			case "extra":
+				writeCodexSession(t, filepath.Join(extra, "archived_sessions", "recent.jsonl"), recent, cwd, "recent", "PRIVATE-BODY")
+			case "unavailable-primary", "unavailable-extra":
+				source := primary
+				if scenario == "unavailable-extra" {
+					source = extra
+				}
+				// A malformed root is unavailable on every platform and privilege level.
+				if err := os.WriteFile(filepath.Join(source, "archived_sessions"), []byte("blocked"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			opts := codexactivity.IndexOptions{Now: now, CachePath: filepath.Join(home, "activity.json")}
+			if scenario == "unqueried" {
+				opts.SessionRoots = []string{filepath.Join(orca, "sessions")}
+			}
+			units := []WorktreeCleanupUnit{{TargetPath: target, Source: "orca", Members: []GitWorktreeMember{{
+				WorktreePath: target, RepositoryID: filepath.Join(home, "repo", ".git"),
+				EvidenceAvailable: true, GitEvidenceAvailable: true, Recoverable: true,
+				Reason: GitEvidenceReason{Code: GitReasonAttachedBranch},
+			}}}}
+			items := []types.DebrisInfo{{Path: target, Category: types.CategoryWorktree, Tool: types.ToolUnknown, Source: "orca", ModTime: old}}
+			for _, source := range []string{codexactivity.SourceRefresh, codexactivity.SourceCache} {
+				if err := EnrichActivity(context.Background(), units, items, ActivityOptions{IndexOptions: opts, Runner: reflogRunner(map[string]time.Time{target: old})}); err != nil {
+					t.Fatal(err)
+				}
+				if units[0].RegisteredActivitySource != source {
+					t.Errorf("activity source = %s; want %s", units[0].RegisteredActivitySource, source)
+				}
+				decision := PlanWorktreeCleanup(units, DefaultCleanupPolicy(now)).Decisions[0]
+				want := DecisionReasonRecentActivity
+				if scenario == "unavailable-primary" || scenario == "unavailable-extra" || scenario == "unqueried" {
+					want = DecisionReasonActivityUnavailable
+					if units[0].RegisteredActivityAvailable {
+						t.Fatal("incomplete home coverage supplied negative evidence")
+					}
+				} else if !units[0].RegisteredActivityAvailable || !units[0].LastActivity.Equal(recent) || units[0].ActivitySource != WorktreeActivityCodexSession {
+					t.Errorf("%s activity = %s/%s/%t; want newest available session", source, units[0].LastActivity, units[0].ActivitySource, units[0].RegisteredActivityAvailable)
+				}
+				if decision.Class != DecisionLocked || !containsReason(cleanupPolicyReasonCodes(decision), want) {
+					t.Errorf("%s decision = %s/%v; want %s lock", source, decision.Class, cleanupPolicyReasonCodes(decision), want)
+				}
+			}
+		})
+	}
+}
+
+func TestOrcaWorkspaceWithoutDiscoveredHomeFailsClosed(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	old := now.Add(-30 * 24 * time.Hour)
+	target := filepath.Join(home, "orca", "workspaces", "project", "member")
+	writeCodexSession(t, filepath.Join(home, ".codex", "sessions", "old.jsonl"), old, target, "old", "PRIVATE-BODY")
+	units := []WorktreeCleanupUnit{{TargetPath: target, Source: "orca", Members: []GitWorktreeMember{{
+		WorktreePath: target, RepositoryID: filepath.Join(home, "repo", ".git"),
+		EvidenceAvailable: true, GitEvidenceAvailable: true, Recoverable: true,
+		Reason: GitEvidenceReason{Code: GitReasonAttachedBranch},
+	}}}}
+	if err := EnrichActivity(context.Background(), units, nil, ActivityOptions{
+		IndexOptions: codexactivity.IndexOptions{Now: now, CachePath: filepath.Join(home, "activity.json")},
+		Runner:       reflogRunner(map[string]time.Time{target: old}),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	decision := PlanWorktreeCleanup(units, DefaultCleanupPolicy(now)).Decisions[0]
+	if decision.Class != DecisionLocked || !containsReason(cleanupPolicyReasonCodes(decision), DecisionReasonActivityUnavailable) {
+		t.Fatalf("decision = %+v; want unavailable-activity lock without discovered Orca home", decision)
+	}
+}
+
+func TestOrcaWorkspaceSplitSessionRootsFailClosed(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("Orca Codex home is macOS-only")
+	}
+	for _, root := range []string{"sessions", "archived_sessions"} {
+		for _, state := range []string{"readable", "unavailable"} {
+			t.Run(root+"/"+state, func(t *testing.T) {
+				home := t.TempDir()
+				testutil.SetHome(t, home)
+				primary := filepath.Join(home, ".codex")
+				orca := testutil.OrcaCodexHome(t, home)
+				now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+				old := now.Add(-30 * 24 * time.Hour)
+				target := filepath.Join(home, "orca", "workspaces", "project", "member")
+				writeCodexSession(t, filepath.Join(orca, "sessions", "old.jsonl"), old, target, "old", "PRIVATE-BODY")
+				other := "sessions"
+				if root == other {
+					other = "archived_sessions"
+				}
+				if err := os.MkdirAll(filepath.Join(primary, other), 0755); err != nil {
+					t.Fatal(err)
+				}
+				escaped := filepath.Join(home, "shared", "store")
+				if state == "readable" {
+					writeCodexSession(t, filepath.Join(escaped, "recent.jsonl"), now.Add(-time.Hour), target, "recent", "PRIVATE-BODY")
+				} else {
+					if err := os.MkdirAll(filepath.Dir(escaped), 0755); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(escaped, []byte("blocked"), 0600); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if err := os.Symlink(escaped, filepath.Join(primary, root)); err != nil {
+					t.Skipf("symlink unavailable: %v", err)
+				}
+				units := []WorktreeCleanupUnit{{TargetPath: target, Source: "orca", Members: []GitWorktreeMember{{
+					WorktreePath: target, RepositoryID: filepath.Join(home, "repo", ".git"),
+					EvidenceAvailable: true, GitEvidenceAvailable: true, Recoverable: true,
+					Reason: GitEvidenceReason{Code: GitReasonAttachedBranch},
+				}}}}
+				opts := codexactivity.IndexOptions{Now: now, CachePath: filepath.Join(home, "activity.json")}
+				for _, source := range []string{codexactivity.SourceRefresh, codexactivity.SourceCache} {
+					if err := EnrichActivity(context.Background(), units, nil, ActivityOptions{IndexOptions: opts, Runner: reflogRunner(map[string]time.Time{target: old})}); err != nil {
+						t.Fatal(err)
+					}
+					decision := PlanWorktreeCleanup(units, DefaultCleanupPolicy(now)).Decisions[0]
+					if units[0].RegisteredActivityAvailable || decision.Class != DecisionLocked || !containsReason(cleanupPolicyReasonCodes(decision), DecisionReasonActivityUnavailable) {
+						t.Errorf("%s split-root decision = %s/%v; want unavailable-evidence lock", source, decision.Class, cleanupPolicyReasonCodes(decision))
+					}
+				}
+			})
+		}
 	}
 }
 

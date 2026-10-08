@@ -154,7 +154,7 @@ func UncoveredCodexHomeWarning(opts types.ScanOptions) (string, error) {
 	if err != nil || len(uncovered) == 0 {
 		return "", err
 	}
-	return "configured Codex home is outside --root; not widening scan scope", nil
+	return "Codex home is outside --root; not widening scan scope", nil
 }
 
 // appendUncoveredCodexHomes returns roots extended with every Codex home

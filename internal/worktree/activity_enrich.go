@@ -164,7 +164,7 @@ func worktreeActivityAvailability(tool types.Tool, path string, activity codexac
 // the ".codex" source still proves the registered Codex convention there.
 func worktreeActivityTool(rows []types.DebrisInfo, source string) types.Tool {
 	// Orca can run several tools; keep scanner attribution unknown, but consult
-	// its Codex home so a recent Codex session cannot escape the activity lock.
+	// every resolved Codex home so a recent session in any of them locks the unit.
 	if source == "orca" {
 		return types.ToolCodex
 	}

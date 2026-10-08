@@ -34,13 +34,45 @@ func TestOrcaContainersSkipNonContainersAndDoNotCrawl(t *testing.T) {
 		t.Fatal(err)
 	}
 	var orca []string
-	for _, container := range containers {
-		if container.source == "orca" {
-			orca = append(orca, filepath.Base(container.relativePath))
+	roots, _, err := discoverRegisteredWorktreeRoots(context.Background(), containers, []string{canonicalExistingPath(home)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, root := range roots {
+		if root.source == "orca" {
+			orca = append(orca, filepath.Base(root.path))
 		}
 	}
 	if strings.Join(orca, ",") != "group,valid" {
 		t.Fatalf("Orca containers = %v; want only immediate non-checkout directories", orca)
+	}
+}
+
+func TestOrcaSymlinkAliasesAreNotReintroducedByFallback(t *testing.T) {
+	for _, level := range []string{"workspace", "repo"} {
+		t.Run(level, func(t *testing.T) {
+			home := t.TempDir()
+			testutil.SetHome(t, home)
+			actual := filepath.Join(home, "actual", "worktrees")
+			createWorktreeGit(t, filepath.Join(actual, "alias-target"), filepath.Join(home, "missing"), "alias-target")
+			alias := filepath.Join(home, "orca", "workspaces")
+			if level == "repo" {
+				alias = filepath.Join(alias, "project")
+			}
+			if err := os.MkdirAll(filepath.Dir(alias), 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(actual, alias); err != nil {
+				t.Skipf("symlink unavailable: %v", err)
+			}
+			rows, err := NewWorktreeAdapter().Scan(context.Background(), types.ScanOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(rows) != 0 {
+				t.Fatalf("Orca %s alias target rediscovered by fallback: %+v", level, rows)
+			}
+		})
 	}
 }
 
@@ -136,7 +168,7 @@ func TestOrcaCodexHomeFeedsRegistryLogsAndRootBoundary(t *testing.T) {
 			t.Fatalf("explicit root rows = %+v, %v; want no scope widening", rows, err)
 		}
 		warning, err := UncoveredCodexHomeWarning(scoped)
-		if err != nil || warning == "" || strings.Contains(warning, "\n") {
+		if err != nil || warning != "Codex home is outside --root; not widening scan scope" {
 			t.Fatalf("warning = %q, %v; want one-line diagnostic", warning, err)
 		}
 	}

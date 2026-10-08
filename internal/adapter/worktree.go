@@ -62,7 +62,14 @@ func registeredWorktreeContainers(home string, roots []string) ([]registeredWork
 	if err != nil {
 		return nil, fmt.Errorf("inspecting registered worktree container %q: %w", workspaces, err)
 	}
-	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+	if info.Mode()&os.ModeSymlink != 0 {
+		// Pass aliases to registered discovery so it blocks their targets from
+		// convention fallback without traversing the workspace alias.
+		return append(containers, registeredWorktreeContainer{
+			base: home, relativePath: filepath.Join("orca", "workspaces"), source: "orca",
+		}), nil
+	}
+	if !info.IsDir() {
 		return containers, nil
 	}
 	entries, err := os.ReadDir(workspaces)
@@ -70,7 +77,13 @@ func registeredWorktreeContainers(home string, roots []string) ([]registeredWork
 		return nil, fmt.Errorf("reading registered worktree container %q: %w", workspaces, err)
 	}
 	for _, entry := range entries {
-		if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
+		if entry.Type()&os.ModeSymlink != 0 {
+			containers = append(containers, registeredWorktreeContainer{
+				base: home, relativePath: filepath.Join("orca", "workspaces", entry.Name()), source: "orca",
+			})
+			continue
+		}
+		if !entry.IsDir() {
 			continue
 		}
 		path := filepath.Join(workspaces, entry.Name())

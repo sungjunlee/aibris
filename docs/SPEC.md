@@ -358,10 +358,17 @@ Default guided Codex worktree cleanup:
   session roots; home identity is part of activity/cache keys, so reused
   worktree or project IDs in different homes cannot share evidence. A failed
   home source locks its associated units without disabling healthy sources.
-  Orca's macOS Codex home also supplies activity for
+  Session records from every resolved Codex home recognize
   `$HOME/orca/workspaces/<repo>/<worktree>`; a nested session cwd locks that
-  whole worktree. Orca's multi-tool containers retain `tool=unknown`, but
-  guided review consults their Codex source and fails closed if unavailable.
+  whole worktree. Orca workspace activity takes the newest session across all
+  resolved homes, requiring complete coverage of every home. Orca's multi-tool
+  containers retain `tool=unknown`, but guided review locks them with
+  `recent_activity` for a recent Codex session, or `activity_evidence_unavailable`
+  when any required home is unavailable or unqueried. Active Orca worktrees
+  also keep that unavailable-evidence lock when the Orca home is not discovered
+  (including non-macOS platforms or missing, invalid, or unavailable layout).
+  Session-root symlinks that split a home's roots across activity source keys
+  leave its coverage incomplete and keep the same unavailable-evidence lock.
 - Git safety protects current working directories, dirty or untracked members,
   unreadable evidence, and detached HEADs not reachable from named refs.
   Missing or gone upstream is explanatory metadata, not a lock. An attached
@@ -514,13 +521,17 @@ Orca macOS home described below),
 immediate repository directory `$HOME/orca/workspaces/<repo>` when each
 container is within a requested normalized root. A default `$HOME` scan still
 covers a Codex home outside `$HOME`. Explicit `--root` is a hard boundary:
-uncovered Codex homes are not appended, and one diagnostic is emitted instead.
+uncovered Codex homes are not appended, and one diagnostic is emitted instead:
+`Codex home is outside --root; not widening scan scope`. This applies to both
+configured and auto-discovered homes.
 Registered paths are not
 discovered by recursively opening hidden owners, and symlink escapes do not
 produce cleanable rows. Superpowers rows are attributed as
 `source=superpowers`, `tool=unknown`. Orca rows use `source=orca`,
 `tool=unknown`. Orca registration reads only the immediate workspace children;
 symlinks, non-directories, and children with their own `.git` are not containers.
+Skipped workspace and repository symlink targets are blocked from convention
+fallback, following the same alias rule as other registered containers.
 Each `<repo>/<worktree>` is its own mutation owner, even when its siblings have
 different Git health. Unreadable selected workspace directories produce
 provider errors, as do unreadable registered containers. The workspace root,

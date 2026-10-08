@@ -6,10 +6,14 @@
 
 - Discover Orca's default `~/orca/workspaces/<repo>` containers, classifying
   each worktree as its own mutation owner. On macOS, a layout-verified Orca
-  Codex home supplies worktrees, recent-session activity (including Orca
-  workspace CWDs), read-only retention, and `--risky` logs. All resolved Codex
-  homes now contribute retention aggregates. Homes, containers, and their
-  ancestors are deletion-protected; explicit roots stay bounded (#613).
+  Codex home supplies worktrees, read-only retention, and `--risky` logs.
+  Orca workspace activity uses the newest session across all resolved Codex
+  homes; unavailable home evidence or an undiscovered Orca home keeps active
+  worktrees protected. All resolved homes (primary, `$AIBRIS_CODEX_HOMES`, and
+  verified Orca) contribute read-only retention aggregates. Homes, containers,
+  and their ancestors are deletion-protected; explicit roots stay bounded.
+  Skipped Orca symlink targets cannot reappear through convention fallback
+  (#613).
 
 ### Fixed
 
