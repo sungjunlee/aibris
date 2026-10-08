@@ -692,6 +692,7 @@ The mutation-boundary refusal codes are also in the supported reason catalog:
 | Code | Meaning |
 | ---- | ------- |
 | `cleanup_recipe_changed` | The current cleanup recipe differs from the prepared recipe; execution is refused before mutation. |
+| `cache_leaf_symlink` | Cache path removal found a symlink leaf; execution is refused because removing the link would leave the measured target bytes behind. |
 | `worktree_evidence_changed` | Current worktree Git evidence differs from the prepared evidence; execution is refused before mutation. |
 
 `cleanup_recipe_changed` also covers removed recipes and mismatched tool,

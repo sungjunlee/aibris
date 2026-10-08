@@ -243,6 +243,10 @@ Command-backed cleanup:
 
 - `cleanup_kind=command` uses argv-only execution with `exec.CommandContext`.
 - No shell string execution is allowed.
+- Go cleanup runs from the verified cache target, rather than the invoking
+  project. It pins `GOCACHE` to the canonical target, `GOTOOLCHAIN=local`,
+  `GO111MODULE=off`, and `GOWORK=off`, preventing toolchain downloads and
+  module/workspace lookup.
 - Inventory `cleanup_command` is a claim: argv and the cache environment are
   re-derived from the live catalog after matching tool, category, and canonical
   target. Removed or changed recipes refuse execution with
@@ -251,6 +255,10 @@ Command-backed cleanup:
   scanned item; authorization is rechecked at that boundary too.
 - Homebrew cache cleanup removes only the verified cache path through
   `safedelete`, without running a broader Homebrew cleanup command.
+- npm cleanup likewise removes only the verified `_cacache` path through
+  `safedelete`. It does not run npm, so no diagnostics are written to the sibling
+  `_logs` directory. Cached inventories with the old npm command refuse as
+  changed recipes and need a fresh scan.
 - Commands that run and fail do not fall back silently.
 - Context cancellation must stop command execution.
 

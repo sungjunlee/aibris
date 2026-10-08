@@ -259,13 +259,14 @@ aibris clean --no-guide --json --include-paths --force --root ~/path/to/project 
 ```
 
 JSON receipt의 mutation-boundary refusal reason code는 다음과 같다.
-두 code 모두 supported reason catalog에 포함되며 `execution_failed`와
+모든 code는 supported reason catalog에 포함되며 `execution_failed`와
 구분한다. 새로 scan하고 plan을 검토한 뒤 재시도한다. `--force`로
 revalidation을 건너뛸 수 없다.
 
 | Code | 의미 |
 | ---- | ---- |
 | `cleanup_recipe_changed` | 현재 cleanup recipe가 준비된 recipe와 달라 mutation 전에 실행을 거부했다. |
+| `cache_leaf_symlink` | catalog cache leaf가 symlink여서 링크 삭제 후 대상 bytes가 남으므로 mutation 전에 실행을 거부했다. |
 | `worktree_evidence_changed` | 현재 worktree Git evidence가 준비된 evidence와 달라 mutation 전에 실행을 거부했다. |
 
 JSON receipt의 `post_clean.snapshot_thinning_recommended`가 true이면
@@ -456,7 +457,9 @@ aibris clean --category node_modules
 - `--dry-run` 없이 실행하면 confirm 필요. `--force`는 confirm만 생략하며 locked row를 풀거나 `git worktree remove --force`로 전달되지 않는다
 - classic에서는 active worktree가 기본 제외된다. `--include-active-worktrees`로 포함해도 Git hard safety 검사를 통과해야 한다
 - active worktree는 실행 직전 모든 member의 repository/HEAD/dirty/ref를 재검사하고 Git-aware removal로 제거한다. branch ref와 parent `git worktree` metadata를 검증하며 실패 시 raw recursive deletion으로 fallback하지 않는다
-- `go-build`, `npm`, `uv` 캐시는 가능하면 공식 command(`go clean -cache`, `npm cache clean --force`, `uv cache clean`)로 정리함
+- `go-build`, `uv` 캐시는 가능하면 공식 command(`go clean -cache`, `uv cache clean`)로 정리함. Go는 검증된 cache 안에서 `GOCACHE`를 고정하고 `GOTOOLCHAIN=local`, `GO111MODULE=off`, `GOWORK=off`로 실행해 toolchain 선택·다운로드와 module/workspace 파일 접근을 막음
+- npm `_cacache`와 Homebrew cache는 gated path removal로 정리함. catalog cache leaf가 symlink면 대상 bytes가 남으므로 삭제를 거부하고 JSON receipt에 `cache_leaf_symlink`를 기록함
+- 이전 `npm cache clean --force` recipe가 남은 cached inventory는 `cleanup_recipe_changed`로 거부함. fresh scan 후 다시 preview해야 함
 - command가 없으면 기존 safe path 삭제로 fallback하지만, command가 실행 후 실패하면 조용히 fallback하지 않음
 - orphaned/일반 path target은 안전 검사 후 경로 삭제한다. active worktree는 non-forced Git-aware executor를 사용하고 branch ref는 삭제하지 않는다
 - **ai-logs 계열**은 기본 clean에서 제외. 삭제하려면 `--risky` 필요

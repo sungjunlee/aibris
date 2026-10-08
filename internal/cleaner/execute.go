@@ -2,6 +2,7 @@ package cleaner
 
 import (
 	"context"
+	"errors"
 	"io"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
@@ -10,6 +11,9 @@ import (
 
 // ErrCleanupRecipeChanged is the stable refusal for untrusted command inventory.
 var ErrCleanupRecipeChanged = adapter.ErrCleanupRecipeChanged
+
+// ErrCacheLeafSymlink refuses removal that would leave the measured cache behind.
+var ErrCacheLeafSymlink = errors.New("cache leaf is a symlink")
 
 // Execute removes the given worktrees from disk.
 func Execute(worktrees []types.DebrisInfo) (int64, error) {

@@ -41,7 +41,9 @@ var cacheCatalog = []cacheTarget{
 		path, _ := effectiveGoCache()
 		return path, false
 	}, command: []string{"go", "clean", "-cache"}, commandEnv: func(path string) []string {
-		return []string{"GOCACHE=" + path}
+		// Never select/download a toolchain or consult module/workspace files,
+		// even if the cache or an ancestor happens to contain a go.mod.
+		return []string{"GOCACHE=" + path, "GOTOOLCHAIN=local", "GO111MODULE=off", "GOWORK=off"}
 	}},
 	{id: "xcode", tool: types.ToolBuildCache, locate: darwinOnly("Library", "Caches", "Xcode")},
 	{id: "xcode-deriveddata", tool: types.ToolBuildCache, locate: darwinOnly("Library", "Developer", "Xcode", "DerivedData")},
@@ -57,16 +59,11 @@ var cacheCatalog = []cacheTarget{
 	{id: "gradle", tool: types.ToolBuildCache, locate: func(home string) (string, bool) {
 		return filepath.Join(home, ".gradle", "caches"), false
 	}},
+	// npm cache clean writes diagnostics to the parent cache's _logs. Remove
+	// only the verified _cacache path through the deletion gate instead.
 	{id: "npm", tool: types.ToolBuildCache, locate: func(home string) (string, bool) {
 		root, overridden := npmCacheRoot(home)
 		return filepath.Join(root, "_cacache"), overridden
-	}, command: []string{"npm", "cache", "clean", "--force"}, commandEnv: func(path string) []string {
-		// npm takes the parent of the inventoried _cacache directory.
-		// A symlink to a differently named leaf cannot be expressed this way.
-		if filepath.Base(path) != "_cacache" {
-			return nil
-		}
-		return []string{"npm_config_cache=" + filepath.Dir(path)}
 	}},
 	{id: "npx", tool: types.ToolBuildCache, locate: func(home string) (string, bool) {
 		root, overridden := npmCacheRoot(home)
