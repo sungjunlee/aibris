@@ -2,8 +2,12 @@ package cmd
 
 import (
 	"os"
+	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/sungjunlee/aibris/internal/adapter"
 )
 
 var version = "dev"
@@ -20,7 +24,7 @@ Scans for:
   - node_modules (under scan roots, defaulting to $HOME)
   - build caches (Go, Xcode, Gradle, npm, Cargo)
   - pip/uv caches
-  - agent state (Claude, Cursor — orphaned only)
+  - agent state (` + agentStateToolList() + ` — orphaned only)
   - AI logs (Codex, Claude, Windsurf — requires --risky)
   - protected Codex session retention aggregates (read-only inventory)
 
@@ -36,6 +40,18 @@ Safety gates:
 Exit status:
   0  successful completion
   1  invalid usage, fail-closed safety refusal, cancellation, or failed execution`,
+}
+
+// agentStateToolList names every registered agent-state provider, so the
+// help text cannot fall behind the registry.
+func agentStateToolList() string {
+	var names []string
+	for _, provider := range adapter.DefaultAgentStateProviders() {
+		name := string(provider.Name())
+		names = append(names, strings.ToUpper(name[:1])+name[1:])
+	}
+	sort.Strings(names)
+	return strings.Join(names, ", ")
 }
 
 func Execute() {
