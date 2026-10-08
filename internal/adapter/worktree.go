@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -31,8 +32,9 @@ type registeredWorktreeContainer struct {
 // deeper than the bounded convention fallback can discover. Keep this finite:
 // it is an exact lookup registry, not a second filesystem crawler. The codex
 // container follows the resolved Codex home ($CODEX_HOME, plus any extra
-// homes listed in $AIBRIS_CODEX_HOMES) instead of assuming ~/.codex.
-func registeredWorktreeContainers(home string) ([]registeredWorktreeContainer, error) {
+// homes resolved by codexhome) instead of assuming ~/.codex. Orca adds only
+// immediate repository directories from its default workspaces directory.
+func registeredWorktreeContainers(home string, roots []string) ([]registeredWorktreeContainer, error) {
 	containers := []registeredWorktreeContainer{
 		{base: home, relativePath: filepath.Join(".relay", "worktrees"), source: ".relay"},
 		{base: home, relativePath: filepath.Join(".gstack", "worktrees"), source: ".gstack"},
@@ -49,7 +51,69 @@ func registeredWorktreeContainers(home string) ([]registeredWorktreeContainer, e
 			source:       ".codex",
 		})
 	}
+	workspaces := filepath.Join(home, "orca", "workspaces")
+	if !worktreeContainerIntersectsRoots(workspaces, roots) {
+		return containers, nil
+	}
+	info, err := os.Lstat(workspaces)
+	if os.IsNotExist(err) {
+		return containers, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("inspecting registered worktree container %q: %w", workspaces, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		// Pass aliases to registered discovery so it blocks their targets from
+		// convention fallback without traversing the workspace alias.
+		return append(containers, registeredWorktreeContainer{
+			base: home, relativePath: filepath.Join("orca", "workspaces"), source: "orca",
+		}), nil
+	}
+	if !info.IsDir() {
+		return containers, nil
+	}
+	entries, err := os.ReadDir(workspaces)
+	if err != nil {
+		return nil, fmt.Errorf("reading registered worktree container %q: %w", workspaces, err)
+	}
+	for _, entry := range entries {
+		if entry.Type()&os.ModeSymlink != 0 {
+			containers = append(containers, registeredWorktreeContainer{
+				base: home, relativePath: filepath.Join("orca", "workspaces", entry.Name()), source: "orca",
+			})
+			continue
+		}
+		if !entry.IsDir() {
+			continue
+		}
+		path := filepath.Join(workspaces, entry.Name())
+		if !worktreeContainerIntersectsRoots(path, roots) {
+			continue
+		}
+		if _, err := os.Lstat(filepath.Join(path, ".git")); !os.IsNotExist(err) {
+			if err != nil {
+				return nil, fmt.Errorf("inspecting registered worktree container %q: %w", path, err)
+			}
+			continue
+		}
+		containers = append(containers, registeredWorktreeContainer{
+			base: home, relativePath: filepath.Join("orca", "workspaces", entry.Name()), source: "orca",
+		})
+	}
 	return containers, nil
+}
+
+// A selected root may be a container ancestor or an individual owner below it.
+func worktreeContainerIntersectsRoots(path string, roots []string) bool {
+	if pathUnderRoots(path, roots) {
+		return true
+	}
+	for _, root := range roots {
+		if pathUnderRoots(root, []string{path}) {
+			return true
+		}
+	}
+	return false
 }
 
 type worktreeRoot struct {
@@ -96,7 +160,7 @@ func prepareWorktreeScan(opts types.ScanOptions) (worktreeScanPrep, error) {
 	if err != nil {
 		return worktreeScanPrep{}, err
 	}
-	containers, err := registeredWorktreeContainers(canonicalExistingPath(home))
+	containers, err := registeredWorktreeContainers(canonicalExistingPath(home), roots)
 	if err != nil {
 		return worktreeScanPrep{}, err
 	}

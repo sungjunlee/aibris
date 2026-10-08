@@ -2,11 +2,25 @@
 package testutil
 
 import (
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 )
+
+// OrcaCodexHome creates only the layout evidence for Orca's macOS Codex home.
+func OrcaCodexHome(tb testing.TB, home string) string {
+	tb.Helper()
+	path := filepath.Join(home, "Library", "Application Support", "orca", "codex-runtime-home", "home")
+	if err := os.MkdirAll(filepath.Join(path, "sessions"), 0755); err != nil {
+		tb.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(path, "config.toml"), nil, 0600); err != nil {
+		tb.Fatal(err)
+	}
+	return path
+}
 
 // SetHome redirects the user-home environment variables to home for the
 // duration of the test. os.UserHomeDir reads $USERPROFILE on Windows and

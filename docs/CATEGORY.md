@@ -55,6 +55,38 @@ snapshot rather than an age-based deletion path.
 Unknown or future categories should stay risky until they have explicit safety
 rules.
 
+Worktree discovery's finite registry contains `<resolved Codex home>/worktrees`,
+`~/.relay/worktrees`, `~/.gstack/worktrees`,
+`~/.config/superpowers/worktrees`, and each immediate directory
+`~/orca/workspaces/<repo>`. Orca reads only that workspace directory's children,
+skipping symlinks, non-directories, and Git checkouts with their own `.git`.
+Workspace and repository symlink targets cannot reappear through convention
+fallback.
+Each `<repo>/<worktree>` is independently classified and is its own mutation
+owner. Orca rows carry `source=orca`, `tool=unknown`; the containers and their
+ancestors are protected whole targets.
+
+Resolved Codex homes include `$CODEX_HOME` (default `~/.codex`),
+`$AIBRIS_CODEX_HOMES`, and, on macOS, the verified default
+`~/Library/Application Support/orca/codex-runtime-home/home`. Auto-discovery
+requires a regular non-symlink `config.toml` plus a non-symlink `sessions/`
+directory. A layout mismatch is ignored silently; `auth.json` is never read.
+This home contributes worktrees, activity,
+read-only sessions retention, and `ai-logs` requiring `--risky`. Homes and
+their ancestors remain protected, and explicit `--root` never widens to an
+excluded home. Custom Orca locations and other platforms' Orca Codex homes
+remain outside this default registry.
+
+Orca workspace CWDs are recognized in sessions from every resolved Codex home.
+Guided review uses their newest session and requires complete activity evidence
+from all homes. A recent session locks the worktree with `recent_activity`;
+any unavailable or unqueried home locks it with `activity_evidence_unavailable`.
+Session-root symlinks that split a home's source coverage also keep that lock.
+Active Orca worktrees keep that unavailable-evidence lock when the Orca home
+is not discovered, including on non-macOS platforms or after a failed layout
+check, and when any resolved home has no `sessions/` directory (missing or a
+dangling symlink), even if `archived_sessions/` exists.
+
 ## Protected Retention Is Not a Category
 
 The canonical [protected-content retention contract](PROTECTED_RETENTION.md)

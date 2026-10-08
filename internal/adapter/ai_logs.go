@@ -21,7 +21,7 @@ func (a *AILogsAdapter) Category() types.Category {
 }
 
 // Scan reports AI log stores. Codex candidates follow the resolved Codex
-// home ($CODEX_HOME, plus the extra homes listed in $AIBRIS_CODEX_HOMES)
+// homes (primary, configured extras, and the verified Orca macOS home)
 // instead of assuming ~/.codex. Default $HOME scans still cover a Codex home
 // outside $HOME; explicit --root is a hard boundary and is not widened.
 func (a *AILogsAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([]types.DebrisInfo, error) {

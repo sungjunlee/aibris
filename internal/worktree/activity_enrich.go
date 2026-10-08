@@ -159,10 +159,15 @@ func worktreeActivityAvailability(tool types.Tool, path string, activity codexac
 	return codexActivityAvailability(path, activity)
 }
 
-// worktreeActivityTool resolves the producing tool from the scanner rows that
+// worktreeActivityTool selects the session reader from the scanner rows that
 // built the unit. A unit assembled directly from a fixture carries no rows;
 // the ".codex" source still proves the registered Codex convention there.
 func worktreeActivityTool(rows []types.DebrisInfo, source string) types.Tool {
+	// Orca can run several tools; keep scanner attribution unknown, but consult
+	// every resolved Codex home so a recent session in any of them locks the unit.
+	if source == "orca" {
+		return types.ToolCodex
+	}
 	for _, row := range rows {
 		if row.Tool != "" {
 			return row.Tool

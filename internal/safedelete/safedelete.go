@@ -27,6 +27,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/sungjunlee/aibris/internal/codexhome"
 )
 
 // ErrRefused marks every refusal so callers can tell a safety refusal apart
@@ -59,6 +61,7 @@ var protected = []string{
 	".grok/sessions",
 	".relay", ".relay/worktrees", ".gstack", ".gstack/worktrees",
 	".config/superpowers", ".config/superpowers/worktrees",
+	"orca", "orca/workspaces",
 }
 
 // relocatedHome names an environment variable that relocates an agent home
@@ -66,13 +69,10 @@ var protected = []string{
 // they live; entries inside a store stay eligible.
 type relocatedHome struct {
 	env    string
-	list   bool // a path list rather than a single path
 	stores []string
 }
 
 var relocatedHomeEnv = []relocatedHome{
-	{env: "CODEX_HOME", stores: []string{"worktrees", "sessions"}},
-	{env: "AIBRIS_CODEX_HOMES", list: true, stores: []string{"worktrees", "sessions"}},
 	{env: "CLAUDE_CONFIG_DIR", stores: []string{"projects"}},
 }
 
@@ -91,6 +91,11 @@ func Check(home, path string) error {
 		if coversProtected(key, foldCase(p)) {
 			return refuse(path, "protected location")
 		}
+	}
+	// Orca's immediate repository directories are containers, never owners.
+	// Protect this depth without relying on a mutable directory inventory.
+	if foldCase(filepath.ToSlash(filepath.Dir(rel))) == "orca/workspaces" {
+		return refuse(path, "protected worktree container")
 	}
 	for _, p := range relocatedHomes() {
 		if coversProtected(foldCase(filepath.ToSlash(canonical)), foldCase(filepath.ToSlash(p))) {
@@ -117,27 +122,32 @@ func coversProtected(target, protected string) bool {
 	return target == protected || strings.HasPrefix(protected, target+"/")
 }
 
-// relocatedHomes returns the canonical agent homes named by homeEnv and their
-// stores. Relative or unresolvable entries are ignored: they cannot widen
+// relocatedHomes returns resolved Codex homes and environment-relocated agent
+// homes with their stores. Relative entries are ignored: they cannot widen
 // what is allowed, only fail to add protection the defaults already give.
 func relocatedHomes() []string {
 	var out []string
-	for _, home := range relocatedHomeEnv {
-		value := os.Getenv(home.env)
-		entries := []string{value}
-		if home.list {
-			entries = filepath.SplitList(value)
+	homes, err := codexhome.Homes()
+	if err != nil {
+		// A missing default primary home must not drop explicit protections.
+		homes = codexhome.ExtraHomes()
+	}
+	for _, home := range homes {
+		if !filepath.IsAbs(home) {
+			continue
 		}
-		for _, entry := range entries {
-			entry = strings.TrimSpace(entry)
-			if entry == "" || !filepath.IsAbs(entry) {
-				continue
-			}
-			entry = canonicalize(entry)
-			out = append(out, entry)
-			for _, store := range home.stores {
-				out = append(out, filepath.Join(entry, store))
-			}
+		home = canonicalize(home)
+		out = append(out, home, filepath.Join(home, "worktrees"), filepath.Join(home, "sessions"))
+	}
+	for _, home := range relocatedHomeEnv {
+		entry := strings.TrimSpace(os.Getenv(home.env))
+		if entry == "" || !filepath.IsAbs(entry) {
+			continue
+		}
+		entry = canonicalize(entry)
+		out = append(out, entry)
+		for _, store := range home.stores {
+			out = append(out, filepath.Join(entry, store))
 		}
 	}
 	return out

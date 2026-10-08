@@ -25,17 +25,27 @@ var supportedCodexVersion = regexp.MustCompile(
 	`^(0|1)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?(\+[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$`,
 )
 
-// codexSessionsRoot returns the exact bounded store root: the sessions
-// directory of the resolved Codex home ($CODEX_HOME, or ~/.codex when unset).
-func codexSessionsRoot() (string, error) {
-	codexHome, err := codexhome.Home()
+// codexSessionsRoots returns every resolved home's bounded sessions store.
+// Canonical home aliases are counted once; the sessions leaf is not resolved,
+// so a symlinked store still fails closed in the inventory reader.
+func codexSessionsRoots() ([]string, error) {
+	homes, err := codexhome.Homes()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	if resolved, resolveErr := filepath.EvalSymlinks(codexHome); resolveErr == nil {
-		codexHome = resolved
+	var roots []string
+	seen := make(map[string]bool)
+	for _, home := range homes {
+		if resolved, err := filepath.EvalSymlinks(home); err == nil {
+			home = resolved
+		}
+		root := filepath.Join(home, "sessions")
+		if !seen[root] {
+			seen[root] = true
+			roots = append(roots, root)
+		}
 	}
-	return filepath.Join(codexHome, "sessions"), nil
+	return roots, nil
 }
 
 // classifiableMetadata reports whether the first-record metadata is from a
@@ -44,17 +54,6 @@ func classifiableMetadata(metadata codexsession.Metadata) bool {
 	return metadata.Producer == "codex_cli_rs" &&
 		supportedCodexVersion.MatchString(metadata.Version) &&
 		usableRecordedCWD(metadata.CWD)
-}
-
-// rootsCoveringCodexHome returns the root selection extended with the
-// resolved Codex home for default scans only, so a CODEX_HOME
-// outside the scan roots is inventoried rather than silently deselected.
-func rootsCoveringCodexHome(roots []string) []string {
-	codexHome, err := codexhome.Home()
-	if err != nil || len(roots) == 0 || storeSelected(codexHome, roots) {
-		return roots
-	}
-	return append(append([]string(nil), roots...), codexHome)
 }
 
 func storeSelected(store string, roots []string) bool {

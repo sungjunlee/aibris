@@ -22,8 +22,8 @@ var (
 )
 
 // CodexSessionsProvider inventories regular rollout files under the exact
-// sessions root of the resolved Codex home ($CODEX_HOME, or ~/.codex when
-// unset) as read-only UTC-month aggregates. The inventory is
+// sessions roots of all resolved Codex homes as read-only UTC-month
+// aggregates. The inventory is
 // protected content, not debris: it never feeds totals, caching, or any
 // cleanup authorization, and no member path or transcript content is exposed.
 //
@@ -49,39 +49,50 @@ func (p *CodexSessionsProvider) Scan(
 		return projection, err
 	}
 
-	root, err := codexSessionsRoot()
+	stores, err := codexSessionsRoots()
 	if err != nil {
 		addProviderError(&projection, "resolving store root", err)
 		return projection, nil
 	}
-	roots := opts.Roots
-	if !opts.ExplicitRoots {
-		roots = rootsCoveringCodexHome(roots)
+	state := newInventoryState("")
+	for _, root := range stores {
+		if opts.ExplicitRoots && !storeSelected(root, opts.Roots) {
+			continue
+		}
+		if err := inventoryCodexSessionsRoot(ctx, root, state); err != nil {
+			return emptyProjection(), err
+		}
 	}
-	if !storeSelected(root, roots) {
-		return projection, nil
-	}
+	projection.Buckets = state.result()
+	projection.Partial = state.partial
+	projection.ProviderErrors = append(projection.ProviderErrors, state.errs...)
+	return projection, nil
+}
 
+func inventoryCodexSessionsRoot(ctx context.Context, root string, state *inventoryState) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	info, err := os.Lstat(root)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return projection, nil
+			return nil
 		}
 		// Deliberately path-free: diagnostics must never carry the store root
 		// or any member path.
-		addProviderError(&projection, "reading store root", errStoreRootUnreadable)
-		return projection, nil
+		state.fail("reading store root", errStoreRootUnreadable)
+		return nil
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
-		addProviderError(&projection, "reading store root", errStoreRootSymlink)
-		return projection, nil
+		state.fail("reading store root", errStoreRootSymlink)
+		return nil
 	}
 	if !info.IsDir() {
-		addProviderError(&projection, "reading store root", errStoreRootNotDirectory)
-		return projection, nil
+		state.fail("reading store root", errStoreRootNotDirectory)
+		return nil
 	}
 
-	state := newInventoryState(root)
+	state.root = root
 	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if err := ctx.Err(); err != nil {
 			return ctx.Err()
@@ -97,7 +108,7 @@ func (p *CodexSessionsProvider) Scan(
 	switch {
 	case err == nil:
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
-		return emptyProjection(), err
+		return err
 	default:
 		// Unreachable today: the WalkDir callback only returns nil,
 		// fs.SkipDir, or ctx.Err() (handled above). Kept path-free so a
@@ -106,12 +117,7 @@ func (p *CodexSessionsProvider) Scan(
 		state.fail("walking store", errStoreReadFailed)
 	}
 
-	projection.Buckets = state.result()
-	if state.partial {
-		projection.Partial = true
-		projection.ProviderErrors = append(projection.ProviderErrors, state.errs...)
-	}
-	return projection, nil
+	return nil
 }
 
 type inventoryState struct {

@@ -76,7 +76,7 @@ internal/
   cleanjson/          JSON plan and receipt documents
   cleancommand/       clean route selection
   scanreport/         human and JSON scan rendering
-  codexhome/          Codex home resolution (CODEX_HOME, AIBRIS_CODEX_HOMES)
+  codexhome/          Codex home resolution (environment overrides, Orca macOS home)
   codexsession/       Codex session metadata reader
   codexactivity/      Codex session-activity index for worktree activity
   retention/          read-only protected retention inventory
@@ -167,8 +167,21 @@ provider reports `codex` for every tool).
 ## Worktree discovery invariants
 
 - Known deep containers come only from a finite registry: `~/.codex/worktrees`
-  (per Codex home from `$CODEX_HOME` and `$AIBRIS_CODEX_HOMES`),
-  `~/.relay/worktrees`, `~/.gstack/worktrees`, `~/.config/superpowers/worktrees`.
+  (per resolved Codex home: `$CODEX_HOME`, `$AIBRIS_CODEX_HOMES`, and the
+  verified Orca macOS home), `~/.relay/worktrees`, `~/.gstack/worktrees`,
+  `~/.config/superpowers/worktrees`, and each immediate non-symlink,
+  non-checkout directory `~/orca/workspaces/<repo>`. Orca registration uses
+  one bounded directory read; each `<repo>/<worktree>` is its own mutation
+  owner. The workspace root and repository containers are protected targets.
+- Orca's macOS Codex home is
+  `~/Library/Application Support/orca/codex-runtime-home/home`. Discover it
+  only with a regular non-symlink `config.toml` and a non-symlink `sessions/`
+  directory; invalid or unavailable layout is silently ignored. Never read
+  `auth.json`. It supplies worktree registry, activity, read-only retention,
+  risky logs, and home/ancestor deletion protection through resolved homes.
+  Orca rows use `source=orca`, `tool=unknown`; guided review consults sessions
+  from every resolved Codex home for their recent-activity lock. Any unavailable
+  home or an undiscovered Orca home keeps active Orca worktrees protected.
 - The convention fallback looks under `$HOME` for directories named
   `worktrees`, `worktree`, `worktree-*`, `worktrees-*`, `*-worktree`, or
   `*-worktrees`, up to `maxWorktreeContainerDepth = 4`.
@@ -203,7 +216,7 @@ provider reports `codex` for every tool).
 | cursor | agent-state | proven orphaned, after grace | `~/.cursor/projects/<name>/` |
 | grok | agent-state | proven orphaned, after grace | `~/.grok/sessions/<url-encoded cwd>/`; the name must agree with every session's `prompt_context.json` `working_directory` |
 | windsurf | ai-logs | `--risky` only | `~/.codeium/windsurf/` |
-| ai-logs | ai-logs | `--risky` only | `$CODEX_HOME/logs_2.sqlite`, `$CODEX_HOME/archived_sessions/`, `~/.claude/command-audit.log`, `~/.claude/file-history/` |
+| ai-logs | ai-logs | `--risky` only | `logs_2.sqlite` and `archived_sessions/` in every resolved Codex home (including Orca on macOS), `~/.claude/command-audit.log`, `~/.claude/file-history/` |
 | node_modules | node_modules | older than `--age` | `node_modules` under scan roots, noisy trees pruned |
 | build-cache | build-cache | older than `--age` | effective `GOCACHE`; Gradle, npm (`_cacache`, `_npx`), and Cargo registry caches; Xcode caches and DerivedData; Homebrew cache (verified cache path removal); CocoaPods cache; `~/.dartServer/` |
 | pip-cache | other-cache | older than `--age` | pip and uv caches |

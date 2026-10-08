@@ -57,7 +57,16 @@ func TestActivityRejectsOldCacheSchema(t *testing.T) {
 	root := filepath.Join(home, ".codex", "sessions")
 	writeCodexSession(t, filepath.Join(root, "session.jsonl"), now, filepath.Join(home, ".codex", "worktrees", "new", "project"), "new", "PRIVATE-BODY")
 	path := filepath.Join(home, "cache.json")
-	raw, err := json.Marshal(Cache{SchemaVersion: 1, CreatedAt: now, Files: map[string]FileRecord{"old": {Valid: true, WorktreeID: "old", Project: "project", Timestamp: now}}})
+	cache := Cache{
+		SchemaVersion: CacheSchemaVersion - 1,
+		CreatedAt:     now,
+		SessionRoots:  []string{canonicalPath(root)},
+		Sources: map[string]SourceCoverage{
+			canonicalPath(filepath.Dir(root)): {Roots: []string{canonicalPath(root)}, Available: true},
+		},
+		Files: map[string]FileRecord{"old": {Valid: true, WorktreeID: "old", Project: "project", Timestamp: now}},
+	}
+	raw, err := json.Marshal(cache)
 	if err != nil {
 		t.Fatal(err)
 	}

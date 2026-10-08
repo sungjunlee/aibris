@@ -358,6 +358,20 @@ Default guided Codex worktree cleanup:
   session roots; home identity is part of activity/cache keys, so reused
   worktree or project IDs in different homes cannot share evidence. A failed
   home source locks its associated units without disabling healthy sources.
+  Session records from every resolved Codex home recognize
+  `$HOME/orca/workspaces/<repo>/<worktree>`; a nested session cwd locks that
+  whole worktree. Orca workspace activity takes the newest session across all
+  resolved homes, requiring complete coverage of every home. Orca's multi-tool
+  containers retain `tool=unknown`, but guided review locks them with
+  `recent_activity` for a recent Codex session, or `activity_evidence_unavailable`
+  when any required home is unavailable or unqueried. A resolved home whose
+  `sessions/` directory is missing or a dangling symlink counts as unavailable,
+  even when `archived_sessions/` exists (for example, no `~/.codex/sessions`
+  because the Codex CLI was never run directly). Active Orca worktrees
+  also keep that unavailable-evidence lock when the Orca home is not discovered
+  (including non-macOS platforms or missing, invalid, or unavailable layout).
+  Session-root symlinks that split a home's roots across activity source keys
+  leave its coverage incomplete and keep the same unavailable-evidence lock.
 - Git safety protects current working directories, dirty or untracked members,
   unreadable evidence, and detached HEADs not reachable from named refs.
   Missing or gone upstream is explanatory metadata, not a lock. An attached
@@ -503,16 +517,41 @@ active units only after the cleanup-unit policy passes.
 
 Worktree discovery combines two bounded mechanisms. A finite exact registry
 looks up the resolved Codex home's `worktrees` container (`$CODEX_HOME`,
-default `$HOME/.codex`, plus any `$AIBRIS_CODEX_HOMES` entries),
+default `$HOME/.codex`, plus any `$AIBRIS_CODEX_HOMES` entries and the verified
+Orca macOS home described below),
 `$HOME/.relay/worktrees`,
-`$HOME/.gstack/worktrees`, and `$HOME/.config/superpowers/worktrees` when each
+`$HOME/.gstack/worktrees`, `$HOME/.config/superpowers/worktrees`, and each
+immediate repository directory `$HOME/orca/workspaces/<repo>` when each
 container is within a requested normalized root. A default `$HOME` scan still
 covers a Codex home outside `$HOME`. Explicit `--root` is a hard boundary:
-uncovered Codex homes are not appended, and one diagnostic is emitted instead.
+uncovered Codex homes are not appended, and one diagnostic is emitted instead:
+`Codex home is outside --root; not widening scan scope`. This applies to both
+configured and auto-discovered homes.
 Registered paths are not
 discovered by recursively opening hidden owners, and symlink escapes do not
 produce cleanable rows. Superpowers rows are attributed as
-`source=superpowers`, `tool=unknown`.
+`source=superpowers`, `tool=unknown`. Orca rows use `source=orca`,
+`tool=unknown`. Orca registration reads only the immediate workspace children;
+symlinks, non-directories, and children with their own `.git` are not containers.
+Skipped workspace and repository symlink targets are blocked from convention
+fallback, following the same alias rule as other registered containers.
+Each `<repo>/<worktree>` is its own mutation owner, even when its siblings have
+different Git health. Unreadable selected workspace directories produce
+provider errors, as do unreadable registered containers. The workspace root,
+its repository containers, and their ancestors cannot be deleted as targets.
+
+On macOS only, Codex-home resolution automatically adds
+`$HOME/Library/Application Support/orca/codex-runtime-home/home` after the
+environment-configured homes. A configured path or alias of the same physical
+home is kept in its existing position and is not added again. Its layout must contain a regular
+non-symlink `config.toml` and a non-symlink `sessions/` directory; missing,
+unavailable, or mismatched layout is ignored without errors. Neither config
+contents nor `auth.json` are read for discovery. Like an explicit extra home,
+it supplies `<home>/worktrees`, Codex activity, read-only sessions retention,
+and `ai-logs` (`logs_2.sqlite`, `archived_sessions/`, still `--risky` only).
+The home, its `worktrees` and `sessions` stores, and their ancestors are
+protected by the deletion gate. No Orca settings or custom `workspaceDir` are
+read, and no other platform's Codex home is inferred.
 
 The convention fallback still allows hidden owners containing worktree roots,
 for example `$HOME/.some-tool/worktrees` or
