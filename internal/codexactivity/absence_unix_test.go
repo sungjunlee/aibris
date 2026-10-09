@@ -133,3 +133,36 @@ func TestDefaultHomeAbsentRejectsLstatPermissionError(t *testing.T) {
 		t.Fatal("Lstat permission error proved default-home absence")
 	}
 }
+
+func TestStoreUnreadableAfterIndexKeepsActivityUnavailable(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses directory permissions")
+	}
+	for _, store := range []string{"sessions", "archived_sessions"} {
+		t.Run(store, func(t *testing.T) {
+			home := t.TempDir()
+			testutil.SetHome(t, home)
+			source := filepath.Join(home, ".codex")
+			now := time.Now()
+			member := filepath.Join(source, "worktrees", "id", "project")
+			writeCodexSession(t, filepath.Join(source, "sessions", "old.jsonl"), now.Add(-90*24*time.Hour), member, "old", "PRIVATE-BODY")
+			writeCodexSession(t, filepath.Join(source, "archived_sessions", "older.jsonl"), now.Add(-120*24*time.Hour), member, "older", "PRIVATE-BODY")
+			index := LoadWithOptions(context.Background(), IndexOptions{Now: now, CachePath: filepath.Join(home, "activity.json")})
+			if _, available := index.LookupMember(member); !available {
+				t.Fatal("initial activity unavailable")
+			}
+			path := filepath.Join(source, store)
+			if err := os.Chmod(path, 0000); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() {
+				if err := os.Chmod(path, 0755); err != nil {
+					t.Error(err)
+				}
+			})
+			if activity, available := index.LookupMember(member); available {
+				t.Fatalf("unreadable %s kept cached negative evidence: %+v", store, activity)
+			}
+		})
+	}
+}

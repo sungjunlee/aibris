@@ -2,6 +2,7 @@ package codexactivity
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -136,8 +137,23 @@ func homeStoresAvailable(home string) bool {
 		} else if !info.IsDir() {
 			return false
 		}
+		// Metadata survives a permission change; cached negative evidence
+		// needs a store that can still be listed now.
+		if !directoryReadable(path) {
+			return false
+		}
 	}
 	return true
+}
+
+func directoryReadable(path string) bool {
+	dir, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer dir.Close()
+	_, err = dir.Readdirnames(1)
+	return err == nil || errors.Is(err, io.EOF)
 }
 
 func sameRoots(a, b []string) bool { return slices.Equal(a, b) }
