@@ -2,8 +2,10 @@ package cleaner
 
 import (
 	"os"
+	"strings"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/adapter"
 	"github.com/sungjunlee/aibris/internal/types"
 	"github.com/sungjunlee/aibris/internal/volume"
 )
@@ -29,7 +31,13 @@ const (
 	EligibilityReasonVolumePressure         EligibilityReason = "selected because of volume pressure"
 	EligibilityReasonEligible               EligibilityReason = "eligible for cleanup"
 	EligibilityReasonCacheLeafSymlink       EligibilityReason = "cache leaf is a symlink or reparse point (Windows junction); removing it would leave target bytes behind"
+	EligibilityReasonGoCacheUnverified      EligibilityReason = "Go cache unverified"
 )
+
+// IsGoCacheUnverifiedReason recognizes the policy reason with its live cause.
+func IsGoCacheUnverifiedReason(reason EligibilityReason) bool {
+	return reason == EligibilityReasonGoCacheUnverified || strings.HasPrefix(string(reason), string(EligibilityReasonGoCacheUnverified)+": ")
+}
 
 // EvaluateEligibility is the single cleanup eligibility policy used by
 // filtering, audit reporting, and scan diagnostics. observedAt keeps the age
@@ -39,6 +47,12 @@ func EvaluateEligibility(item types.DebrisInfo, opts types.PruneOptions, observe
 	matchTool := len(opts.Tools) == 0 || containsTool(opts.Tools, item.Tool)
 	if !matchCategory || !matchTool {
 		return false, EligibilityReasonFiltered
+	}
+
+	// Inventory (including a cached diagnostic row) carries no authority.
+	// Reject before age or pressure can select an unverified Go cache.
+	if goBuildCacheTarget(item) && !catalogCacheTarget(item) {
+		return false, EligibilityReason(string(EligibilityReasonGoCacheUnverified) + ": " + adapter.GoCacheVerificationFailure(item.Path))
 	}
 
 	// Path removal of a symlink or reparse-point leaf cannot reclaim the

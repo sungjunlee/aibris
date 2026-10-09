@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,15 +26,34 @@ func TestGoCacheLayoutForeignEntriesNeverSelected(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if len(items) != 0 {
-					t.Errorf("shared directory became a cache target: %+v", items)
+				if len(items) != 1 || items[0].ID != "go-build" || items[0].Tool != types.ToolBuildCache || !strings.Contains(items[0].Reason, "Go cache unverified") {
+					t.Fatalf("shared directory missing diagnostic row: %+v", items)
 				}
 				if slices.Contains(adapter.CacheTargetPaths(), path) {
 					t.Error("shared directory remained in the cleanup allowlist")
 				}
-				selected := Filter(items, types.PruneOptions{Age: 7 * 24 * time.Hour, RelaxCacheAge: true})
-				if total, err := Execute(selected); err != nil || total != 0 {
-					t.Errorf("cleanup = %d, %v; want no removal", total, err)
+				home, err := os.UserHomeDir()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if IsSafeTarget(home, items[0]) {
+					t.Error("diagnostic row bypassed the Go cache allowlist via generic cache prefixes")
+				}
+				for _, opts := range []types.PruneOptions{{Age: 0}, {Age: 7 * 24 * time.Hour, RelaxCacheAge: true}} {
+					eligible, reason := EvaluateEligibility(items[0], opts, time.Now())
+					if eligible || !IsGoCacheUnverifiedReason(reason) {
+						t.Errorf("eligibility = %t/%q; want unverified", eligible, reason)
+					}
+					selected := Filter(items, opts)
+					if len(selected) != 0 {
+						t.Fatal("unverified row selected")
+					}
+					if total, err := Execute(selected); err != nil || total != 0 {
+						t.Errorf("cleanup = %d, %v; want no removal", total, err)
+					}
+				}
+				if err := adapter.RefuseStaleGoCache(path); err == nil {
+					t.Error("mutation verifier accepted unverified cache")
 				}
 				assertGoCacheLayoutPreserved(t, path, foreignPath)
 			})
@@ -193,7 +213,51 @@ func TestGoCacheLayoutToleratesFinderMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 	items, err = (&adapter.BuildCacheAdapter{}).Scan(context.Background(), types.ScanOptions{Roots: []string{path}})
-	if err != nil || len(items) != 0 {
-		t.Fatalf("scan = %+v, %v; a .DS_Store directory is not Finder metadata", items, err)
+	if err != nil || len(items) != 1 || !strings.Contains(items[0].Reason, "wrong type") || len(Filter(items, types.PruneOptions{Age: 0})) != 0 {
+		t.Fatalf("scan = %+v, %v; a .DS_Store directory must be visible but unverified", items, err)
+	}
+}
+
+func TestGoCacheUnverifiedEligibilityUsesLiveCatalog(t *testing.T) {
+	path := goCacheLayoutFixture(t, "default")
+	foreign := addForeignGoCacheEntry(t, path, "file")
+	items, err := (&adapter.BuildCacheAdapter{}).Scan(context.Background(), types.ScanOptions{Roots: []string{path}})
+	if err != nil || len(items) != 1 {
+		t.Fatalf("scan = %+v, %v", items, err)
+	}
+	// Cached reason text cannot authorize cleanup or determine live policy.
+	items[0].Reason = "eligible"
+	if len(Filter(items, types.PruneOptions{Age: 0, RelaxCacheAge: true})) != 0 {
+		t.Fatal("cached row authorized cleanup while live layout remained invalid")
+	}
+	if err := os.Remove(foreign); err != nil {
+		t.Fatal(err)
+	}
+	items[0].Reason = "Go cache unverified: foreign entry"
+	if len(Filter(items, types.PruneOptions{Age: 0})) != 1 {
+		t.Fatal("now verified live cache should use normal eligibility despite stale reason")
+	}
+}
+
+func TestGoCacheUnverifiedCannotBorrowOtherCacheAuthority(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	// Gradle's path is allowlisted independently of Go's layout. A signed
+	// GOCACHE override here must still pass Go's own verification.
+	path := filepath.Join(home, ".gradle", "caches")
+	t.Setenv("GOCACHE", path)
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(path, "README"), []byte("This directory holds cached build artifacts from the Go build system.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	addForeignGoCacheEntry(t, path, "file")
+	if !slices.Contains(adapter.CacheTargetPaths(), path) {
+		t.Fatal("fixture needs an independent catalog target at the Go cache path")
+	}
+	item := types.DebrisInfo{ID: "go-build", Tool: types.ToolBuildCache, Category: types.CategoryBuildCache, Path: path, ModTime: time.Now().Add(-24 * time.Hour)}
+	if IsSafeTarget(home, item) || len(Filter([]types.DebrisInfo{item}, types.PruneOptions{Age: 0, RelaxCacheAge: true})) != 0 {
+		t.Fatal("unverified Go cache borrowed authority from another catalog entry")
 	}
 }

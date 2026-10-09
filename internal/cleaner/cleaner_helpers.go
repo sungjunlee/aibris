@@ -75,6 +75,11 @@ func catalogCacheTarget(item types.DebrisInfo) bool {
 	if item.Category != types.CategoryBuildCache && item.Category != types.CategoryOtherCache {
 		return false
 	}
+	// Another catalog entry at the same path cannot authorize a Go cache
+	// whose own live path, signature, or layout is unverified.
+	if goBuildCacheTarget(item) && adapter.RefuseStaleGoCache(item.Path) != nil {
+		return false
+	}
 	path := filepath.Clean(item.Path)
 	for _, target := range adapter.CacheTargetPaths() {
 		if target == path {

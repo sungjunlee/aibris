@@ -221,7 +221,16 @@ item list, not as a worktree-only list.
 | `strippable_paths` | array | Absolute paths of those regenerable subtrees. Omitted when empty. |
 
 Go cache scan/plan items use `cleanup_kind: "remove-path"` and an empty
-`cleanup_command`. Execution refuses cached inventories carrying `go clean -cache` with `cleanup_recipe_changed`; a fresh scan is required. The public
+`cleanup_command`. An existing real Go cache directory rejected by layout
+still appears in scan with its measured `size` and a `reason` naming the cause.
+Overrides without Go's README signature remain hidden. The diagnostic bytes
+count toward scan totals; standalone cleanup reports `skipped`/`go_cache_unverified`
+and excludes them from `selected_bytes`, rechecking the live catalog even for
+cached rows. Existing overlap policy remains: if another provider independently
+selects the same physical path, the Go row keeps `policy_decision=skipped` but
+inherits `decision=selected`, and that physical target's bytes count toward
+`selected_bytes`. An unreadable layout can leave a partial size estimate.
+Execution refuses cached inventories carrying `go clean -cache` with `cleanup_recipe_changed`; a fresh scan is required. The public
 schema stays at version 1; no fields are removed.
 
 `risk` and `reason` are presentation fields derived from `category`, `status`,
@@ -705,6 +714,7 @@ The mutation-boundary refusal codes are also in the supported reason catalog:
 | ---- | ------- |
 | `cleanup_recipe_changed` | The current cleanup recipe differs from the prepared recipe; execution is refused before mutation. |
 | `cache_leaf_symlink` | A catalog path-removal cache has a symlink or reparse point (Windows junction) leaf: plan `policy_decision` and `decision` are `skipped`, its bytes are excluded from `selected_bytes`, and execution rechecks/refuses it because link removal would leave the measured referent bytes behind. The uv command route is unchanged. |
+| `go_cache_unverified` | The live catalog cannot verify a `go-build` cache. An existing real directory rejected by its top-level layout appears in scan with measured bytes and a human `reason` naming the cause (foreign entry, symlink, wrong type, or unreadable layout); overrides without Go's README signature stay hidden. Standalone cleanup `policy_decision` and `decision` are `skipped`, and bytes are excluded from `selected_bytes`. Cached inventory never authorizes Go cache selection: still-rejected caches remain ineligible regardless of age, pressure, or `--force`; a now-valid cache uses normal eligibility. When another provider independently selects the same physical path, existing overlap policy preserves `policy_decision=skipped` but inherits `decision=selected` and the selected physical target's byte accounting. Whole-cache-root removal is unchanged. Additive in 0.16.0; `schema_version` stays 1. |
 | `worktree_evidence_changed` | Current worktree Git evidence differs from the prepared evidence; execution is refused before mutation. |
 | `activity_evidence_changed` | A guided active unit has a later member session activity time than reviewed (a new session, or an append that moves an existing session file's modification time), a current recent-activity lock, unavailable activity evidence (including Orca aggregation), or missing/mismatched review identity; the barrier refuses mutation. |
 

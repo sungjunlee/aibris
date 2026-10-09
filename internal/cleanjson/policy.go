@@ -82,6 +82,9 @@ func PolicyForAuditItem(
 }
 
 func ReasonCodeForEligibility(reason cleaner.EligibilityReason) string {
+	if cleaner.IsGoCacheUnverifiedReason(reason) {
+		return "go_cache_unverified"
+	}
 	switch reason {
 	case cleaner.EligibilityReasonCacheLeafSymlink:
 		return "cache_leaf_symlink"
@@ -111,6 +114,9 @@ func ReasonCodeForEligibility(reason cleaner.EligibilityReason) string {
 }
 
 func ReasonCodeForAuditReason(reason string) string {
+	if cleaner.IsGoCacheUnverifiedReason(cleaner.EligibilityReason(reason)) {
+		return "go_cache_unverified"
+	}
 	switch reason {
 	case string(cleaner.EligibilityReasonCacheLeafSymlink):
 		return "cache_leaf_symlink"
@@ -261,6 +267,7 @@ var supportedReasonCodes = func() map[string]struct{} {
 		"partial_failure":                  {},
 		"execution_failed":                 {},
 		"cache_leaf_symlink":               {},
+		"go_cache_unverified":              {},
 		"cleanup_recipe_changed":           {},
 		"worktree_evidence_changed":        {},
 		"activity_evidence_changed":        {},

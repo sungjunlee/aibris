@@ -150,6 +150,14 @@ func scanCacheCatalog(ctx context.Context, opts types.ScanOptions, tool types.To
 			continue
 		}
 		path := target.resolve(home)
+		reason := ""
+		if path == "" && target.id == "go-build" {
+			var cause string
+			path, cause = rejectedGoCache()
+			if cause != "" {
+				reason = "Go cache unverified: " + cause
+			}
+		}
 		if path == "" || !pathUnderRoots(path, roots) {
 			continue
 		}
@@ -170,6 +178,7 @@ func scanCacheCatalog(ctx context.Context, opts types.ScanOptions, tool types.To
 			Size:        activity.Size,
 			ModTime:     modTime,
 			PathModTime: info.ModTime(),
+			Reason:      reason,
 		}
 		if len(target.command) > 0 {
 			item.CleanupKind = types.CleanupCommand

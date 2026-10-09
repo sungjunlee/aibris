@@ -426,7 +426,8 @@ permissions or ACLs on the cache root are not preserved.
 Explicit GOCACHE settings from the environment or GOENV file require a regular,
 non-symlink `README` beginning with
 `This directory holds cached build artifacts from the Go build system.`
-(Go's `cacheREADME` in that source). Failed checks silently omit the target;
+(Go's `cacheREADME` in that source). Failed signature checks silently omit
+the target;
 the default `os.UserCacheDir()/go-build` needs no signature and also uses
 whole-directory removal. Both default and override paths require a Go-only
 layout at the top level: regular files `README`, `trim.txt`, `testexpire.txt`,
@@ -435,9 +436,18 @@ matching `^[0-9a-f]{2}$`.
 The allowed entries follow Go's
 [cache implementation](https://go.dev/src/cmd/go/internal/cache/cache.go) and
 [clean implementation](https://go.dev/src/cmd/go/internal/clean/clean.go).
-Other entries, symlinks, wrong file types, and unreadable layouts silently omit
-the directory from scan and the cleanup allowlist, including under cache-age
-relaxation. The layout check reads only one directory level. The live path,
+Other entries, symlinks, wrong file types, and unreadable layouts exclude
+the directory from the cleanup allowlist, including under cache-age relaxation.
+An existing real directory rejected by layout appears in scan with measured
+bytes and the specific cause. Overrides without the README signature remain
+hidden. Cleanup reports `skipped` with `go_cache_unverified`; the bytes count
+toward scan totals but are excluded from `selected_bytes`. Cached rows use the
+live catalog: still-rejected caches cannot authorize Go cache selection, even
+with a minimal age, pressure relaxation, or `--force`; now-valid caches use
+normal eligibility. If another provider independently selects the same path,
+existing overlap policy preserves the Go row's `policy_decision=skipped` but
+inherits the selected physical target's `decision` and byte accounting.
+The layout check reads only one directory level. The live path,
 override signature, and layout are rechecked at the mutation boundary; a
 foreign entry added after scan refuses removal.
 

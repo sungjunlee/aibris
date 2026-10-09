@@ -15,7 +15,7 @@ import (
 const (
 	// Bump this explicit compatibility revision when cache format or provider
 	// behavior changes without a concrete provider-membership change.
-	lastScanCacheSchemaVersion = 13 // Orca discovery and all-home Codex retention inventory
+	lastScanCacheSchemaVersion = 14 // Go cache rows rejected by layout (go_cache_unverified)
 	lastScanCacheMaxAge        = 5 * time.Minute
 
 	SchemaVersion = lastScanCacheSchemaVersion

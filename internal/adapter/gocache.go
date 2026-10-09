@@ -132,29 +132,74 @@ func hasGoCacheREADME(dir string) bool {
 // https://go.dev/src/cmd/go/internal/clean/clean.go
 // README is created by internal/cache/default.go (see signature above).
 func hasGoCacheLayout(dir string) bool {
+	return goCacheLayoutFailure(dir) == ""
+}
+
+// rejectedGoCache reports only layout failures of an existing real directory.
+// Overrides without Go's signature are not evidence of a cache at all.
+// This diagnostic path never contributes to the cleanup allowlist.
+func rejectedGoCache() (path, cause string) {
+	path, overridden := goCacheLocation()
+	if path == "" || (overridden && !hasGoCacheREADME(path)) {
+		return "", ""
+	}
+	info, err := os.Lstat(path)
+	if err != nil || !info.IsDir() || info.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0 {
+		return "", ""
+	}
+	cause = goCacheLayoutFailure(path)
+	if cause == "" {
+		return "", ""
+	}
+	return path, cause
+}
+
+// GoCacheVerificationFailure explains a live catalog rejection for a planned
+// Go cache. It is diagnostic only; callers must still use the live allowlist.
+func GoCacheVerificationFailure(planned string) string {
+	path, overridden := goCacheLocation()
+	if path == "" || !sameCachePath(path, planned) {
+		return "live GOCACHE path could not be verified"
+	}
+	if overridden && !hasGoCacheREADME(path) {
+		return "Go README signature could not be verified"
+	}
+	if cause := goCacheLayoutFailure(path); cause != "" {
+		return cause
+	}
+	return "live cache catalog target could not be verified"
+}
+
+func goCacheLayoutFailure(dir string) string {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return false
+		return "unreadable layout"
 	}
 	for _, entry := range entries {
 		info, err := entry.Info() // Does not follow symlinks.
 		if err != nil {
-			return false
+			return fmt.Sprintf("unreadable layout entry %q", entry.Name())
 		}
 		name := entry.Name()
+		if info.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0 {
+			return fmt.Sprintf("symlink or reparse point entry %q", name)
+		}
 		switch name {
 		// .DS_Store is Finder view metadata, created whenever the directory is
 		// opened in Finder; it holds no user data.
 		case "README", "trim.txt", "testexpire.txt", "log.txt", ".DS_Store":
 			if !info.Mode().IsRegular() {
-				return false
+				return fmt.Sprintf("wrong type for metadata entry %q: expected regular file", name)
 			}
 		default:
 			hexBucket := len(name) == 2 && strings.Trim(name, "0123456789abcdef") == ""
-			if !info.IsDir() || (name != "fuzz" && !hexBucket) {
-				return false
+			if name != "fuzz" && !hexBucket {
+				return fmt.Sprintf("foreign entry %q", name)
+			}
+			if !info.IsDir() {
+				return fmt.Sprintf("wrong type for cache entry %q: expected directory", name)
 			}
 		}
 	}
-	return true
+	return ""
 }
