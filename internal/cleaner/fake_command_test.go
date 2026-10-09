@@ -22,6 +22,11 @@ func TestMain(m *testing.M) {
 		}
 		os.Exit(code)
 	}
+	// A fake tool copy launched without its mode must not rerun the suite.
+	if name := strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe"); !strings.HasSuffix(name, ".test") {
+		fmt.Fprintf(os.Stderr, "fake command %q started without AIBRIS_FAKE_CMD\n", name)
+		os.Exit(99)
+	}
 	os.Exit(m.Run())
 }
 
@@ -117,7 +122,7 @@ func runFakeCommand(mode string) (int, error) {
 			return 0, err
 		}
 		cache := os.Getenv("UV_CACHE_DIR")
-		record := append(os.Args[1:], cache, cwd, "")
+		record := append(append([]string{}, os.Args[1:]...), cache, cwd, "")
 		if err := os.WriteFile(filepath.Join(cache, "command-record"), []byte(strings.Join(record, "\n")), 0o644); err != nil {
 			return 0, err
 		}
