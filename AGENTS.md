@@ -186,6 +186,12 @@ provider reports `codex` for every tool).
   and canonical session roots whose parents equal the canonical home. Missing
   or dangling active roots, archive-only homes, and split roots keep the
   unavailable-evidence lock; a whole-home symlink preserves matching activity.
+  Only Orca aggregation accepts proven absence of unconfigured `$HOME/.codex`
+  as zero activity: `CODEX_HOME` is empty, the home is not a configured extra,
+  and `Lstat` proves the home absent or a real non-symlink directory with both
+  stores absent. Native worktrees do not use this exception. Configured missing
+  homes, symlinked/dangling homes, archive-only homes, and I/O errors stay
+  unavailable. Cached absence must still be provable at lookup.
 - The convention fallback looks under `$HOME` for directories named
   `worktrees`, `worktree`, `worktree-*`, `worktrees-*`, `*-worktree`, or
   `*-worktrees`, up to `maxWorktreeContainerDepth = 4`.

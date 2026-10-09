@@ -16,6 +16,9 @@ type SourceCoverage struct {
 	// ActiveRoot reports that the home's sessions/ root exists as a directory.
 	// An archive alone cannot vouch for the absence of recent sessions.
 	ActiveRoot bool `json:"active_root"`
+	// Absent is proven absence of the unconfigured default home or both stores.
+	// It supplies zero activity only to Orca's aggregation, never native worktrees.
+	Absent bool `json:"absent"`
 }
 
 // LookupMember returns activity and whether every required source was queried.
@@ -66,6 +69,9 @@ func (i Index) lookupOrcaWorkspace(id, project string) (Worktree, bool) {
 		if !i.homeAvailable(home, true) {
 			return Worktree{}, false
 		}
+		if i.Sources[home].Absent {
+			continue
+		}
 		matching := i.memberActivity(home, id, project)
 		combined.SessionCount += matching.SessionCount
 		if matching.LatestSession.After(combined.LatestSession) {
@@ -76,9 +82,14 @@ func (i Index) lookupOrcaWorkspace(id, project string) (Worktree, bool) {
 }
 
 // homeAvailable decides whether a home can supply negative activity evidence.
-// Native fixtures may query only sessions; Orca requires both requested roots.
+// Native lookups may query only sessions; Orca requires both requested roots.
+// Only Orca aggregation can accept a still-provably-absent default home.
 func (i Index) homeAvailable(home string, requireAllRoots bool) bool {
 	coverage := i.Sources[home]
+	if requireAllRoots && coverage.Absent {
+		// Cached absence must not authorize a now-configured or populated home.
+		return defaultHomeAbsent(home)
+	}
 	if !coverage.Available || !coverage.ActiveRoot || len(coverage.Roots) == 0 {
 		return false
 	}

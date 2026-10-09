@@ -431,7 +431,7 @@ func saveFreshCodexActivityCacheFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(home, 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(home, "sessions"), 0755); err != nil {
 		t.Fatal(err)
 	}
 	home, err = filepath.EvalSymlinks(home)
@@ -444,7 +444,7 @@ func saveFreshCodexActivityCacheFixture(t *testing.T) {
 		SchemaVersion: codexActivityCacheSchemaVersion,
 		CreatedAt:     now,
 		SessionRoots:  roots,
-		Sources:       map[string]codexactivity.SourceCoverage{home: {Roots: roots, Available: true}},
+		Sources:       map[string]codexactivity.SourceCoverage{home: {Roots: roots, Available: true, ActiveRoot: true}},
 		Files: map[string]codexActivityFileRecord{
 			sessionPath: {
 				Path:       sessionPath,

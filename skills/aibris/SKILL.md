@@ -393,6 +393,13 @@ Native Codex와 Orca 모두 읽을 수 있는 `sessions/` directory가 필요하
 `sessions/`가 missing/dangling이거나 archive만 있거나 roots가 symlink로
 분리되면 `activity_evidence_unavailable`로 보호한다. Home 전체의 symlink는
 roots와 session cwd가 같은 canonical home으로 해석되면 activity를 유지한다.
+Orca aggregation만 미설정 기본 `$HOME/.codex`의 증명된 부재를 zero activity로
+본다. `CODEX_HOME`이 비어 있고 configured extra도 아닌 home에 대해 `Lstat`으로
+home 자체의 부재 또는 symlink가 아닌 directory 안의 두 stores 부재를 증명해야
+한다. Native worktree, configured missing home, dangling/symlink home,
+archive-only, I/O error에는 이 예외가 적용되지 않는다. Cached absence도 lookup에서
+다시 확인한다. Activity cache schema 6으로 이전 cache를 rebuild하며 public JSON과
+reason codes는 유지한다.
 모든 resolved home의 sessions retention은 read-only inventory이고,
 `logs_2.sqlite`와 `archived_sessions/` cleanup에는 계속 `--risky`가 필요하다.
 Orca home과 container 및 그 ancestors는 whole target으로 삭제할 수 없다.

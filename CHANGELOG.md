@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Orca activity aggregation treats the proven absence of the unconfigured
+  default `~/.codex` home or both of its session stores as zero activity.
+  Configured missing homes, symlinks, archive-only homes, and I/O errors remain
+  unavailable; native activity does not use the exception. Cached absence is
+  rechecked at lookup. Activity cache schema 6 rebuilds older caches without
+  changing public JSON or reason codes (#624).
+
 ### Fixed
 
 - Catalog cache path removal refuses Windows junctions and other reparse-point

@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"sort"
 	"time"
+
+	"github.com/sungjunlee/aibris/internal/codexhome"
 )
 
 // Cache persist, aggregate, and index conversion for the Codex activity
@@ -92,6 +94,7 @@ func Refresh(ctx context.Context, opts IndexOptions, previous Cache, previousOK 
 	}
 	records := make(map[string]FileRecord)
 	for home, coverage := range sources {
+		coverage.Absent = defaultHomeAbsent(home)
 		files, err := findSessionFiles(ctx, coverage.Roots)
 		if ctx.Err() != nil {
 			return Cache{}, ctx.Err()
@@ -100,8 +103,8 @@ func Refresh(ctx context.Context, opts IndexOptions, previous Cache, previousOK 
 			sources[home] = coverage
 			continue
 		}
-		// Missing stores are unavailable; an existing empty store is queried
-		// negative evidence. Both active and archive roots must be readable.
+		// Available/ActiveRoot still require existing readable stores. Proven
+		// default-home absence is recorded separately for Orca aggregation.
 		for _, root := range coverage.Roots {
 			if info, err := os.Stat(root); err == nil && info.IsDir() {
 				coverage.Available = true
@@ -148,6 +151,33 @@ func Refresh(ctx context.Context, opts IndexOptions, previous Cache, previousOK 
 	}
 	cache.rebuildAggregates()
 	return cache, nil
+}
+
+// defaultHomeAbsent proves absence without following home or store symlinks.
+// I/O failures and explicit configuration cannot supply negative evidence.
+func defaultHomeAbsent(home string) bool {
+	defaultHome, err := codexhome.UnconfiguredDefaultHome()
+	if err != nil || defaultHome == "" || canonicalPath(defaultHome) != home {
+		return false
+	}
+	for _, configured := range codexhome.ExtraHomes() {
+		if canonicalPath(configured) == home {
+			return false
+		}
+	}
+	info, err := os.Lstat(defaultHome)
+	if err != nil {
+		return errors.Is(err, os.ErrNotExist)
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return false
+	}
+	for _, store := range []string{"sessions", "archived_sessions"} {
+		if _, err := os.Lstat(filepath.Join(defaultHome, store)); !errors.Is(err, os.ErrNotExist) {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *Cache) rebuildAggregates() {

@@ -371,8 +371,17 @@ Default guided Codex worktree cleanup:
   dangling `sessions/`, archive-only homes, and session-root symlinks that
   split a home's roots keep the unavailable-evidence lock. A symlink of the
   whole home preserves activity when its roots and session CWDs resolve to
-  that same canonical home. Active Orca worktrees also keep the lock when the
-  Orca home is not discovered (including non-macOS platforms or missing,
+  that same canonical home. Only Orca aggregation treats proven absence of
+  the unconfigured default `$HOME/.codex` as zero activity: `CODEX_HOME` is
+  empty, the home is not explicitly listed in `AIBRIS_CODEX_HOMES`, and either
+  the home is absent or it is a real non-symlink directory with both `sessions/`
+  and `archived_sessions/` absent, all proven with `Lstat`. A configured missing
+  home, dangling or symlinked home, archive-only home, or any I/O failure stays
+  unavailable. Native worktrees never use this absence exception. Cached
+  absence is rechecked at lookup so configuration or store changes fail closed.
+  Activity cache schema 6 rejects and rebuilds earlier caches; public JSON
+  output and reason codes are unchanged. Active Orca worktrees keep the lock
+  when the Orca home is not discovered (including non-macOS platforms or missing,
   invalid, or unavailable layout).
 - Git safety protects current working directories, dirty or untracked members,
   unreadable evidence, and detached HEADs not reachable from named refs.

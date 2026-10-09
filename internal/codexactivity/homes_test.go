@@ -50,7 +50,7 @@ func TestActivityFreshCacheRejectsChangedRoots(t *testing.T) {
 	}
 }
 
-func TestActivityRejectsOldCacheSchema(t *testing.T) {
+func TestActivityRejectsV5CacheSchema(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	now := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
@@ -58,7 +58,7 @@ func TestActivityRejectsOldCacheSchema(t *testing.T) {
 	writeCodexSession(t, filepath.Join(root, "session.jsonl"), now, filepath.Join(home, ".codex", "worktrees", "new", "project"), "new", "PRIVATE-BODY")
 	path := filepath.Join(home, "cache.json")
 	cache := Cache{
-		SchemaVersion: CacheSchemaVersion - 1,
+		SchemaVersion: 5,
 		CreatedAt:     now,
 		SessionRoots:  []string{canonicalPath(root)},
 		Sources: map[string]SourceCoverage{

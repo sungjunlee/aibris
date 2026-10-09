@@ -88,3 +88,25 @@ func TestHomesDeduplicatesPrimaryAndExtras(t *testing.T) {
 		t.Fatalf("Homes() = %v; want %v", got, want)
 	}
 }
+
+func TestUnconfiguredDefaultHome(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	defaultHome := filepath.Join(home, ".codex")
+	for _, configured := range []string{"", defaultHome, filepath.Join(home, "runtime"), "   "} {
+		t.Run("CODEX_HOME="+configured, func(t *testing.T) {
+			t.Setenv("CODEX_HOME", configured)
+			got, err := UnconfiguredDefaultHome()
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := ""
+			if configured == "" {
+				want = defaultHome
+			}
+			if got != want {
+				t.Fatalf("UnconfiguredDefaultHome() = %q; want %q", got, want)
+			}
+		})
+	}
+}
