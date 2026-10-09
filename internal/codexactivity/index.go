@@ -31,10 +31,13 @@ const (
 var ErrUnavailable = errors.New("codex activity unavailable")
 
 type IndexOptions struct {
-	Now          time.Time
-	CachePath    string
-	SessionRoots []string
-	Freshness    time.Duration
+	// RequireRefresh walks the stores even within Freshness, reusing unchanged
+	// file records. Deletion decisions must not use the cache-only shortcut.
+	RequireRefresh bool
+	Now            time.Time
+	CachePath      string
+	SessionRoots   []string
+	Freshness      time.Duration
 }
 
 type Index struct {
@@ -97,7 +100,7 @@ func LoadWithOptions(ctx context.Context, opts IndexOptions) Index {
 	if cacheOK {
 		cache.rebuildAggregates()
 		age := opts.Now.Sub(cache.CreatedAt)
-		if age >= 0 && age <= opts.Freshness {
+		if !opts.RequireRefresh && age >= 0 && age <= opts.Freshness {
 			return indexFromCache(cache, age, SourceCache, nil)
 		}
 	}

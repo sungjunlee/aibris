@@ -69,7 +69,7 @@ func BuildGuidedCleanState(
 	if opts.Activity != nil {
 		activity = *opts.Activity
 	} else {
-		activity = codexactivity.Load(ctx)
+		activity = codexactivity.LoadWithOptions(ctx, codexactivity.IndexOptions{RequireRefresh: true})
 	}
 
 	activityOpts := ActivityOptions{Index: &activity}

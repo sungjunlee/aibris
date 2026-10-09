@@ -28,7 +28,7 @@ type (
 )
 
 func loadCodexActivityIndex(ctx context.Context) codexActivityIndex {
-	return codexactivity.Load(ctx)
+	return codexactivity.LoadWithOptions(ctx, codexactivity.IndexOptions{RequireRefresh: true})
 }
 
 func loadCodexActivityRecommendations(ctx context.Context, items []types.DebrisInfo) codexActivityRecommendationPlan {

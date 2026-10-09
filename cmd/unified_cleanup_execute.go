@@ -139,7 +139,7 @@ func runUnifiedGuidedClean(
 		auditProtections,
 	)
 
-	prepared := prepareCleanExecutionWithOptions(ctx, selection, overlapSafety, opts)
+	prepared := prepareGuidedCleanExecutionWithOptions(ctx, selection, overlapSafety, opts, guidedState)
 	pendingReceipt := prepareGuidedCleanExecutionReceipt(
 		source, opts, guidedState, plan, audit, result.Worktrees, auditProtections, prepared,
 	)

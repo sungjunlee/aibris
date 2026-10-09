@@ -153,6 +153,18 @@ JSON field 이름은 유지된다.
 - `plain-dir` / review-only owner는 절대 선택·삭제·strip 대상이 아니다. metadata를 검사하라고만 안내한다. 빈 leftover member와 등록된 sidecar(`.orca-worktree-trash`)는 mixed marker가 아니다.
 - 삭제하면 안 되는 **protected active** 체크아웃에서 regenerable subtree만 걷어내려면 `aibris clean --strip --dry-run`을 제안한다. strip은 세 번째 disposition이다. unit을 지우지 않는다. cwd가 unit 또는 그 subtree 안이면 거부한다.
 - Codex activity 판단은 session metadata, cwd, timestamp만 사용한다. 대화 본문은 읽거나 요약하지 않는다.
+- Guided review는 15분 cache freshness 안에서도 session stores를 incremental
+  Refresh한다. 같은 path·mtime·size의 record는 재파싱하지 않는다. Prepared
+  target은 member별 review-time session timestamp와 availability를 보존하며,
+  active unit의 mutation barrier마다 한 번 Refresh하고 review와 같은
+  lookup·recent lock·unavailable 규칙을 적용한다. 더 새로운 member session
+  (6시간 밖도 포함), 현재 recent lock, unavailable evidence(Orca의 모든 필수
+  home 포함)는 삭제를 거부한다. JSON과 human guided receipt file의
+  `activity_evidence_changed`는 이 refusal을 뜻한다. 처음 거부되면 `failed`,
+  `physical_removed=false`, freed bytes 0이다. 앞 member 제거 후 다음 barrier에서
+  거부되면 `partial`과 `partial_failure`도 남겨 실제 결과를 보존한다. 새 field나
+  설정은 없고 `schema_version`은 1이다. 새 scan/review 후 다시 판단하며
+  `--force`로 우회하지 않는다. Classic·non-worktree·orphaned 경로는 그대로다.
 - `by_category`에 없는 카테고리는 출력에서 제외한다
 - Docker가 있으면 별도 섹션으로 추가한다
 

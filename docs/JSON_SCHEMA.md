@@ -706,6 +706,7 @@ The mutation-boundary refusal codes are also in the supported reason catalog:
 | `cleanup_recipe_changed` | The current cleanup recipe differs from the prepared recipe; execution is refused before mutation. |
 | `cache_leaf_symlink` | A catalog path-removal cache has a symlink or reparse point (Windows junction) leaf: plan `policy_decision` and `decision` are `skipped`, its bytes are excluded from `selected_bytes`, and execution rechecks/refuses it because link removal would leave the measured referent bytes behind. The uv command route is unchanged. |
 | `worktree_evidence_changed` | Current worktree Git evidence differs from the prepared evidence; execution is refused before mutation. |
+| `activity_evidence_changed` | A guided active unit has a newer member session than reviewed, a current recent-activity lock, unavailable activity evidence (including Orca aggregation), or missing/mismatched review identity; the barrier refuses mutation. |
 
 `cache_leaf_symlink` (added in 0.14.1) is used in plans as well as execution
 receipts. A plan marks the cache `skipped`; an execution that still meets a
@@ -718,6 +719,13 @@ credited as selectable or reclaimed bytes.
 category, canonical target, or argv. It does not trigger a path-removal fallback.
 `worktree_evidence_changed` covers orphaned Git/member/marker drift, including
 symlinked `.git` markers; it never upgrades an orphan request to active removal.
+`activity_evidence_changed` is additive (#627), with no new JSON field and
+`schema_version` still 1. Review and barriers incrementally refresh session
+stores and reuse unchanged path/mtime/size records. Both JSON execution and
+human guided receipt files record a pre-mutation refusal as `failed`, with
+`physical_removed=false` and zero reclaimed bytes. If an earlier member was
+already removed before a later barrier refusal, known progress is retained as
+`partial` with `partial_failure` and `activity_evidence_changed`.
 These codes preserve the specific refusal instead of using `execution_failed`.
 Re-scan and review a new plan before retrying; `--force` does not bypass the
 revalidation.

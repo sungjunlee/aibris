@@ -8,6 +8,7 @@ import (
 	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/executor"
 	"github.com/sungjunlee/aibris/internal/types"
+	"github.com/sungjunlee/aibris/internal/worktree"
 )
 
 // GuidedExecutionReceipt carries the pre-execution receipt document and
@@ -189,6 +190,9 @@ func (r *GuidedExecutionReceipt) Finish(
 			} else if target.ResidualBytes != nil {
 				*target.ResidualBytes = max(*target.ResidualBytes, unit.ResidualBytes)
 			}
+		}
+		if errors.Is(unit.FailureCause, worktree.ErrActivityEvidenceChanged) {
+			target.ReasonCodes = uniqueReasonCodes(append(target.ReasonCodes, receiptStateReasons(unit, func(error) bool { return false })...))
 		}
 		seen[index] = true
 	}

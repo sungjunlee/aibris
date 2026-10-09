@@ -375,6 +375,15 @@ evidence, and an unreferenced detached HEAD do. `plain-dir` rows stay
 review-only and never enter the plan. Empty leftover members and the
 registered sidecar `.orca-worktree-trash` are not mixed markers.
 
+Guided review incrementally refreshes session activity even inside the
+15-minute cache window, reusing unchanged path/mtime/size records. Prepared
+active targets retain each member's review-time session timestamp and
+availability. Every mutation barrier refreshes once per unit and applies the
+same activity lookup and lock policy. A newer member session, a current recent
+lock, or unavailable evidence (including any required Orca home) keeps the unit
+with receipt reason `activity_evidence_changed`. Classic and orphaned targets
+are unchanged; `--force` skips confirmation only.
+
 `clean --strip` is a third disposition beside protect and delete. It removes
 only inventoried regenerable subtrees from units that deletion would protect.
 It never deletes the unit, its branch, or uncommitted work. Strip refuses a

@@ -656,6 +656,12 @@ func receiptStateReasons(unit ExecutionUnit, isMinimumAgeError func(error) bool)
 	if unit.CommandFallbackPathRemoval {
 		codes = append(codes, "command_fallback_path_removal")
 	}
+	if errors.Is(unit.FailureCause, worktree.ErrActivityEvidenceChanged) {
+		codes = append(codes, "activity_evidence_changed")
+		if unit.State == "failed" {
+			return codes
+		}
+	}
 	if unit.State == "removed" && !unit.PhysicalRemoved {
 		if unit.FreedBytes == 0 {
 			return append(codes, "physical_owner_present", "no_bytes_reclaimed")

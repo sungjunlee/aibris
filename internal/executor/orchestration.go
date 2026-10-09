@@ -21,6 +21,8 @@ type PreparedExecutionTarget struct {
 	ReceiptTargetKey string
 	Component        *cleaner.CleanupOverlapComponent
 	ActiveUnit       *worktree.WorktreeCleanupUnit
+	// ActivityReview is bound from guided review before confirmation; nil on classic routes.
+	ActivityReview   *worktree.ActivityReview
 	OrphanSnapshot   *worktree.OrphanedWorktreeSnapshot
 	TargetSnapshot   *cleaner.CleanupTargetSnapshot
 	PreparationError error
@@ -350,9 +352,10 @@ func ExecuteActiveWorktreeUnit(
 	}
 
 	prepared := worktree.PreparedActiveWorktreeTarget{
-		Item:     target,
-		Unit:     selected,
-		Snapshot: snapshot,
+		Item:           target,
+		Unit:           selected,
+		Snapshot:       snapshot,
+		ActivityReview: preparedTarget.ActivityReview,
 		BeforeMutation: func(ctx context.Context) error {
 			validation, validationErr := safety.Validate(ctx)
 			ApplyOverlapValidationReceipt(&receipt, validation)
@@ -378,6 +381,9 @@ func ExecuteActiveWorktreeUnit(
 
 	ApplyPreparedActiveWorktreeExecutionResult(&receipt, result)
 	if err != nil {
+		if preparedTarget.ActivityReview != nil {
+			receipt.FailureCause = err
+		}
 		if result.StartedMembers {
 			SetActiveReceiptPhysicalState(&receipt, selected)
 		} else if receipt.BlockingPath == "" {
