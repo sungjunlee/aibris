@@ -5,7 +5,6 @@ package codexactivity
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -25,16 +24,7 @@ func TestWindowsNativeActivityRejectsSessionsJunction(t *testing.T) {
 	now := time.Now()
 	writeCodexSession(t, filepath.Join(target, "recent.jsonl"), now.Add(-time.Hour), member, "recent", "PRIVATE-BODY")
 	link := filepath.Join(source, "sessions")
-	command := exec.Command("powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
-		`$ErrorActionPreference = 'Stop'; New-Item -ItemType Junction -Path $env:AIBRIS_TEST_LINK -Target $env:AIBRIS_TEST_TARGET | Out-Null`)
-	command.Env = append(os.Environ(), "AIBRIS_TEST_LINK="+link, "AIBRIS_TEST_TARGET="+target)
-	if output, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("creating Windows junction fixture: %v\n%s", err, output)
-	}
-	info, err := os.Lstat(link)
-	if err != nil || info.Mode()&os.ModeIrregular == 0 {
-		t.Fatalf("junction Lstat = %v/%v; want ModeIrregular", info, err)
-	}
+	testutil.WindowsJunction(t, link, target)
 	index := LoadWithOptions(context.Background(), IndexOptions{Now: now, CachePath: filepath.Join(home, "activity.json")})
 	if activity, available := index.LookupMember(member); available {
 		t.Fatalf("junction supplied negative activity evidence: %+v", activity)
