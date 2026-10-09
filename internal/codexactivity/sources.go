@@ -152,8 +152,16 @@ func directoryReadable(path string) bool {
 		return false
 	}
 	defer dir.Close()
-	_, err = dir.Readdirnames(1)
-	return err == nil || errors.Is(err, io.EOF)
+	names, err := dir.Readdirnames(1)
+	if errors.Is(err, io.EOF) {
+		return true
+	}
+	if err != nil || len(names) == 0 {
+		return false
+	}
+	// Listing needs read permission; reaching an entry also needs search.
+	_, err = os.Lstat(filepath.Join(path, names[0]))
+	return err == nil
 }
 
 func sameRoots(a, b []string) bool { return slices.Equal(a, b) }

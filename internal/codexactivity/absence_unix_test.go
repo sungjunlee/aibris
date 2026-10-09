@@ -5,6 +5,7 @@ package codexactivity
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -138,8 +139,18 @@ func TestStoreUnreadableAfterIndexKeepsActivityUnavailable(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root bypasses directory permissions")
 	}
-	for _, store := range []string{"sessions", "archived_sessions"} {
-		t.Run(store, func(t *testing.T) {
+	cases := []struct {
+		store string
+		mode  os.FileMode
+	}{
+		{"sessions", 0000},
+		{"archived_sessions", 0000},
+		{"sessions", 0444},
+		{"archived_sessions", 0444},
+	}
+	for _, tc := range cases {
+		store := tc.store
+		t.Run(fmt.Sprintf("%s-%o", store, tc.mode), func(t *testing.T) {
 			home := t.TempDir()
 			testutil.SetHome(t, home)
 			source := filepath.Join(home, ".codex")
@@ -152,7 +163,7 @@ func TestStoreUnreadableAfterIndexKeepsActivityUnavailable(t *testing.T) {
 				t.Fatal("initial activity unavailable")
 			}
 			path := filepath.Join(source, store)
-			if err := os.Chmod(path, 0000); err != nil {
+			if err := os.Chmod(path, tc.mode); err != nil {
 				t.Fatal(err)
 			}
 			t.Cleanup(func() {
