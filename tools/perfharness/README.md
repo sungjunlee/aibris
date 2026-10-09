@@ -157,7 +157,6 @@ With `-keep`, the child is retained and its path is printed on success or error.
 - `main.go` — CLI wiring.
 
 The executable imports no aibris `internal/` package and can build a base
-binary from a tree that predates retention. Tests use the root module's shared
-`internal/testutil` HOME isolation through the nested module's local replace;
-run them from a complete checkout. Heavy build/scan integration tests are
-gated behind `PERFHARNESS_INTEGRATION=1`.
+binary from a tree that predates retention. The module has no dependency on
+the root module; tests isolate HOME with a small local helper. Heavy
+build/scan integration tests are gated behind `PERFHARNESS_INTEGRATION=1`.
