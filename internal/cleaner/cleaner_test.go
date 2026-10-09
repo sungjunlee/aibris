@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -1350,9 +1349,8 @@ func TestExecute_CommandCleanupZeroReclaimWhenOwnerRemains(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	binDir := t.TempDir()
-	writeExecutable(t, filepath.Join(binDir, "uv"), "#!/bin/sh\nexit 0\n")
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	path := filepath.Join(home, ".cache", "uv")
+	writeExecutable(t, filepath.Join(binDir, "uv"), fakeCommand{mode: "exit"})
+	path := testutil.UVCache(home)
 	if err := os.MkdirAll(path, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -1383,7 +1381,7 @@ func TestExecute_CommandCleanupZeroReclaimWhenOwnerRemains(t *testing.T) {
 func TestExecute_PressureUvForceLeavesResidualWithoutInventingFreedBytes(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
-	path := filepath.Join(home, ".cache", "uv")
+	path := testutil.UVCache(home)
 	if err := os.MkdirAll(path, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -1393,8 +1391,7 @@ func TestExecute_PressureUvForceLeavesResidualWithoutInventingFreedBytes(t *test
 	}
 	argvFile := filepath.Join(home, "uv-argv")
 	binDir := t.TempDir()
-	writeExecutable(t, filepath.Join(binDir, "uv"), "#!/bin/sh\nprintf '%s\\n' \"$@\" > \""+argvFile+"\"\nexit 0\n")
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	writeExecutable(t, filepath.Join(binDir, "uv"), fakeCommand{mode: "record-argv", file: argvFile})
 
 	item := types.DebrisInfo{
 		ID:             "uv",
@@ -1444,7 +1441,7 @@ func TestExecute_PressureUvForceLeavesResidualWithoutInventingFreedBytes(t *test
 func TestExecute_PressureUvForceRejectionReportsResidualWithoutInventingFreedBytes(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
-	path := filepath.Join(home, ".cache", "uv")
+	path := testutil.UVCache(home)
 	if err := os.MkdirAll(path, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -1453,16 +1450,7 @@ func TestExecute_PressureUvForceRejectionReportsResidualWithoutInventingFreedByt
 		t.Fatal(err)
 	}
 	binDir := t.TempDir()
-	writeExecutable(t, filepath.Join(binDir, "uv"), `#!/bin/sh
-for arg in "$@"; do
-  if [ "$arg" = "--force" ]; then
-    echo "error: unexpected argument '--force' found"
-    exit 2
-  fi
-done
-exit 0
-`)
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	writeExecutable(t, filepath.Join(binDir, "uv"), fakeCommand{mode: "reject-force"})
 
 	item := types.DebrisInfo{
 		ID:             "uv",
@@ -1506,8 +1494,7 @@ func TestExecute_CommandCleanupSuccess(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	binDir := t.TempDir()
-	writeExecutable(t, filepath.Join(binDir, "uv"), "#!/bin/sh\nrm -f \""+filepath.Join(testutil.UVCache(home), "file")+"\"\nexit 0\n")
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	writeExecutable(t, filepath.Join(binDir, "uv"), fakeCommand{mode: "remove-file", file: filepath.Join(testutil.UVCache(home), "file")})
 	path := testutil.UVCache(home)
 	os.MkdirAll(path, 0755)
 	os.WriteFile(filepath.Join(path, "file"), []byte("data"), 0644)
@@ -1542,7 +1529,7 @@ func TestExecute_CommandMissingFallsBackToPathRemoval(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	t.Setenv("PATH", t.TempDir())
-	path := filepath.Join(home, ".cache", "uv")
+	path := testutil.UVCache(home)
 	os.MkdirAll(path, 0755)
 	os.WriteFile(filepath.Join(path, "file"), []byte("data"), 0644)
 
@@ -1570,8 +1557,7 @@ func TestExecute_CommandFailureDoesNotFallback(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	binDir := t.TempDir()
-	writeExecutable(t, filepath.Join(binDir, "uv"), "#!/bin/sh\necho nope\nexit 2\n")
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	writeExecutable(t, filepath.Join(binDir, "uv"), fakeCommand{mode: "exit", content: "nope", exitCode: 2})
 	path := testutil.UVCache(home)
 	os.MkdirAll(path, 0755)
 
@@ -1599,9 +1585,8 @@ func TestExecute_CommandCancellationDoesNotCreditRemainingPayload(t *testing.T) 
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	binDir := t.TempDir()
-	writeExecutable(t, filepath.Join(binDir, "uv"), "#!/bin/sh\nsleep 2\n")
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	path := filepath.Join(home, ".cache", "uv")
+	writeExecutable(t, filepath.Join(binDir, "uv"), fakeCommand{mode: "sleep"})
+	path := testutil.UVCache(home)
 	if err := os.MkdirAll(path, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -1636,8 +1621,7 @@ func TestExecute_CommandCancellation(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	binDir := t.TempDir()
-	writeExecutable(t, filepath.Join(binDir, "uv"), "#!/bin/sh\nsleep 2\n")
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	writeExecutable(t, filepath.Join(binDir, "uv"), fakeCommand{mode: "sleep"})
 	path := testutil.UVCache(home)
 	os.MkdirAll(path, 0755)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1660,16 +1644,6 @@ func TestExecute_CommandCancellation(t *testing.T) {
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Errorf("path should remain after cancellation; stat err = %v", err)
-	}
-}
-
-func writeExecutable(t *testing.T, path, content string) {
-	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("shell executable fixture is Unix-specific")
-	}
-	if err := os.WriteFile(path, []byte(content), 0755); err != nil {
-		t.Fatal(err)
 	}
 }
 

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/sungjunlee/aibris/internal/testutil"
@@ -28,13 +27,10 @@ func TestExecuteRevalidatesCommandAndFallbackAuthorityAtBarrier(t *testing.T) {
 					t.Fatal(err)
 				}
 				binDir := t.TempDir()
-				if route == "command" {
-					if runtime.GOOS == "windows" {
-						t.Skip("shell executable fixture is Unix-specific")
-					}
-					writeExecutable(t, filepath.Join(binDir, "uv"), "#!/bin/sh\nprintf changed > '"+outside+"'\n")
-				}
 				t.Setenv("PATH", binDir)
+				if route == "command" {
+					writeExecutable(t, filepath.Join(binDir, "uv"), fakeCommand{mode: "write-file", file: outside, content: "changed"})
+				}
 				item := types.DebrisInfo{ID: "uv", Tool: types.ToolPipCache, Category: types.CategoryOtherCache, Path: path,
 					CleanupKind: types.CleanupCommand, CleanupCommand: []string{"uv", "cache", "clean"}}
 				calls := 0
@@ -79,9 +75,6 @@ func TestExecuteRevalidatesCommandAndFallbackAuthorityAtBarrier(t *testing.T) {
 }
 
 func TestExecuteCommandFailurePreservesOutsideSentinel(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell executable fixture is Unix-specific")
-	}
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	path := testutil.UVCache(home)
@@ -96,8 +89,7 @@ func TestExecuteCommandFailurePreservesOutsideSentinel(t *testing.T) {
 		t.Fatal(err)
 	}
 	binDir := t.TempDir()
-	writeExecutable(t, filepath.Join(binDir, "uv"), "#!/bin/sh\nexit 7\n")
-	t.Setenv("PATH", binDir)
+	writeExecutable(t, filepath.Join(binDir, "uv"), fakeCommand{mode: "exit", exitCode: 7})
 	item := types.DebrisInfo{ID: "uv", Tool: types.ToolPipCache, Category: types.CategoryOtherCache, Path: path,
 		CleanupKind: types.CleanupCommand, CleanupCommand: []string{"uv", "cache", "clean"}}
 	if total, err := Execute([]types.DebrisInfo{item}); err == nil || total != 0 {

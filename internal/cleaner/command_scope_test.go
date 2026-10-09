@@ -15,9 +15,6 @@ import (
 )
 
 func TestGoCleanupOnlyRemovesPreviewedCache(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Unix shell executable fixture")
-	}
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	path := testutil.GoBuildCache(home)
@@ -36,8 +33,7 @@ func TestGoCleanupOnlyRemovesPreviewedCache(t *testing.T) {
 	}
 	marker := filepath.Join(home, "go-invoked")
 	binDir := t.TempDir()
-	writeExecutable(t, filepath.Join(binDir, "go"), "#!/bin/sh\nprintf invoked > '"+marker+"'\n")
-	t.Setenv("PATH", binDir)
+	writeExecutable(t, filepath.Join(binDir, "go"), fakeCommand{mode: "write-file", file: marker, content: "invoked"})
 	items, err := (&adapter.BuildCacheAdapter{}).Scan(context.Background(), types.ScanOptions{Roots: []string{path}})
 	if err != nil || len(items) != 1 {
 		t.Fatalf("scan = %+v, %v", items, err)
@@ -76,12 +72,12 @@ func TestOldGoCommandInventoryRefuses(t *testing.T) {
 }
 
 func TestNpmCleanupOnlyRemovesPreviewedCache(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Unix shell executable fixture; Windows requires a .cmd/.bat or test binary")
-	}
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	root := filepath.Join(home, ".npm")
+	if runtime.GOOS == "windows" {
+		root = filepath.Join(os.Getenv("LOCALAPPDATA"), "npm-cache")
+	}
 	path := filepath.Join(root, "_cacache")
 	for _, dir := range []string{path, filepath.Join(root, "_logs"), filepath.Join(root, "_npx")} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -92,12 +88,9 @@ func TestNpmCleanupOnlyRemovesPreviewedCache(t *testing.T) {
 		}
 	}
 	binDir := t.TempDir()
-	// Model npm's documented default logging location. Only this fake can
-	// run: no real package manager is reachable on PATH.
-	writeExecutable(t, filepath.Join(binDir, "npm"), `#!/bin/sh
-printf '%s\n' "$@" "$npm_config_cache" "$PWD" > "$npm_config_cache/_logs/command-record"
-`)
-	t.Setenv("PATH", binDir)
+	// Any npm invocation would write outside the previewed cache into _logs.
+	marker := filepath.Join(root, "_logs", "command-record")
+	writeExecutable(t, filepath.Join(binDir, "npm"), fakeCommand{mode: "write-file", file: marker, content: "invoked"})
 	items, err := (&adapter.BuildCacheAdapter{}).Scan(context.Background(), types.ScanOptions{Roots: []string{path}})
 	if err != nil || len(items) != 1 {
 		t.Fatalf("scan = %+v, %v", items, err)
@@ -132,26 +125,22 @@ printf '%s\n' "$@" "$npm_config_cache" "$PWD" > "$npm_config_cache/_logs/command
 	if _, err := os.Stat(path); err != nil {
 		t.Errorf("refused cache must remain: %v", err)
 	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Errorf("npm subprocess ran for stale inventory: %v", err)
+	}
 }
 
 func TestUvCleanupDoesNotRunInsideCacheRoot(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Unix shell executable fixture; Windows requires a .cmd/.bat or test binary")
-	}
 	home := t.TempDir()
 	testutil.SetHome(t, home)
-	path := filepath.Join(home, ".cache", "uv")
+	path := testutil.UVCache(home)
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	binDir := t.TempDir()
 	// uv removes its cache root; Windows cannot remove a process's current
 	// directory. Model that constraint without running a real uv cleanup.
-	writeExecutable(t, filepath.Join(binDir, "uv"), `#!/bin/sh
-printf '%s\n' "$@" "$UV_CACHE_DIR" "$PWD" > "$UV_CACHE_DIR/command-record"
-if [ "$PWD" = "$UV_CACHE_DIR" ]; then exit 7; fi
-`)
-	t.Setenv("PATH", binDir)
+	writeExecutable(t, filepath.Join(binDir, "uv"), fakeCommand{mode: "uv-record"})
 	items, err := (&adapter.PipCacheAdapter{}).Scan(context.Background(), types.ScanOptions{Roots: []string{path}})
 	if err != nil || len(items) != 1 {
 		t.Fatalf("scan = %+v, %v", items, err)
@@ -171,8 +160,11 @@ if [ "$PWD" = "$UV_CACHE_DIR" ]; then exit 7; fi
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := strings.Join([]string{"cache", "clean", canonical, cwd, ""}, "\n")
-	if string(data) != want {
-		t.Fatalf("uv command argv/env/cwd = %q; want %q", data, want)
+	record := strings.Split(string(data), "\n")
+	if len(record) != 5 || record[0] != "cache" || record[1] != "clean" || record[4] != "" {
+		t.Fatalf("uv command record = %q; want cache/clean/env/cwd with trailing newline", data)
+	}
+	if !sameFakeCommandPath(record[2], canonical) || !sameFakeCommandPath(record[3], cwd) {
+		t.Fatalf("uv command env/cwd = %q/%q; want %q/%q", record[2], record[3], canonical, cwd)
 	}
 }

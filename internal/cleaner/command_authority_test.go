@@ -15,14 +15,11 @@ import (
 )
 
 func TestExecuteRefusesUntrustedCleanupRecipes(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell executable fixture is Unix-specific")
-	}
 	for _, variant := range []string{"argv", "missing executable", "empty argv", "wrong tool", "wrong category", "wrong target", "removed recipe", "changed recipe", "wrong kind", "old Homebrew recipe"} {
 		t.Run(variant, func(t *testing.T) {
 			home := t.TempDir()
 			testutil.SetHome(t, home)
-			path := filepath.Join(home, ".cache", "uv")
+			path := testutil.UVCache(home)
 			if err := os.MkdirAll(path, 0o755); err != nil {
 				t.Fatal(err)
 			}
@@ -32,9 +29,8 @@ func TestExecuteRefusesUntrustedCleanupRecipes(t *testing.T) {
 			}
 			binDir := t.TempDir()
 			// A tampered executable would mutate outside the previewed cache.
-			writeExecutable(t, filepath.Join(binDir, "untrusted"), "#!/bin/sh\nprintf changed > '"+outside+"'\n")
-			writeExecutable(t, filepath.Join(binDir, "uv"), "#!/bin/sh\nprintf changed > '"+outside+"'\n")
-			t.Setenv("PATH", binDir)
+			writeExecutable(t, filepath.Join(binDir, "untrusted"), fakeCommand{mode: "write-file", file: outside, content: "changed"})
+			writeExecutable(t, filepath.Join(binDir, "uv"), fakeCommand{mode: "write-file", file: outside, content: "changed"})
 			item := types.DebrisInfo{ID: "uv", Tool: types.ToolPipCache, Category: types.CategoryOtherCache, Path: path,
 				CleanupKind: types.CleanupCommand, CleanupCommand: []string{"uv", "cache", "clean"}}
 			switch variant {
@@ -64,7 +60,7 @@ func TestExecuteRefusesUntrustedCleanupRecipes(t *testing.T) {
 				item.Path = filepath.Join(home, "Library", "Caches", "Homebrew")
 				item.Tool, item.Category = types.ToolBuildCache, types.CategoryBuildCache
 				item.CleanupCommand = []string{"brew", "cleanup", "--prune=all"}
-				writeExecutable(t, filepath.Join(binDir, "brew"), "#!/bin/sh\nprintf changed > '"+outside+"'\n")
+				writeExecutable(t, filepath.Join(binDir, "brew"), fakeCommand{mode: "write-file", file: outside, content: "changed"})
 			}
 			if err := os.MkdirAll(item.Path, 0o755); err != nil {
 				t.Fatal(err)
@@ -107,8 +103,7 @@ func TestHomebrewCleanupOnlyRemovesPreviewedCache(t *testing.T) {
 		t.Fatal(err)
 	}
 	binDir := t.TempDir()
-	writeExecutable(t, filepath.Join(binDir, "brew"), "#!/bin/sh\nprintf changed > '"+outside+"'\n")
-	t.Setenv("PATH", binDir)
+	writeExecutable(t, filepath.Join(binDir, "brew"), fakeCommand{mode: "write-file", file: outside, content: "changed"})
 	items, err := (&adapter.BuildCacheAdapter{}).Scan(context.Background(), types.ScanOptions{Roots: []string{path}})
 	if err != nil || len(items) != 1 {
 		t.Fatalf("Homebrew scan = %+v, %v", items, err)
