@@ -26,6 +26,8 @@ Pull-request CI uses an amd64 `windows-latest` runner to:
 - test npm `_cacache` junctions in eligibility, JSON and human dry-run previews,
   and at the mutation boundary, using PowerShell junction fixtures that fail
   the test if creation fails;
+- keep native Codex activity unavailable for a `sessions/` junction containing
+  a recent session (`TestWindowsNativeActivityRejectsSessionsJunction`);
 - run the complete deletion-gate, path-identity, and HOME-isolation packages,
   reporting symlink-fixture skips when the runner lacks privilege;
 - run the nested perfharness module tests; and
@@ -40,6 +42,15 @@ GoReleaser cross-builds zip archives for both Windows `amd64` and `arm64`, and
 lists both in `checksums.txt`. The Windows runner builds and runs an amd64
 executable from source. It does not natively run the arm64 archive, which
 remains a cross-built experimental artifact.
+
+Native Codex and Orca activity fail closed on store layout. Both `sessions/`
+and `archived_sessions/` are checked with `Lstat` at Refresh and lookup. Only
+`ErrNotExist` for the archive is allowed; `sessions/` must exist. Real directories
+are accepted. Symlinks require successful directory `Stat` and a canonical
+parent equal to the home. Dangling symlinks, non-directories, `ModeIrregular`
+stores (including Windows junctions and mount-point reparse points), and other
+`Lstat`/`Stat` errors keep `activity_evidence_unavailable`. This prevents a
+relocated store that `WalkDir` does not descend from supplying zero activity.
 
 Native binaries are expected to be invoked directly from PowerShell or Command
 Prompt. A Unix shell, Bash wrapper, or translated Unix path is not part of the

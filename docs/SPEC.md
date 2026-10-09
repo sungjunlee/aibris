@@ -367,9 +367,15 @@ Default guided Codex worktree cleanup:
   `recent_activity` for a recent Codex session, or `activity_evidence_unavailable`
   when any required home is unavailable or unqueried. For both native Codex
   and Orca worktrees, a home needs a readable `sessions/` directory, and each
-  canonical session root's parent must equal the canonical home. Missing or
-  dangling `sessions/`, archive-only homes, and session-root symlinks that
-  split a home's roots keep the unavailable-evidence lock. A symlink of the
+  canonical session root's parent must equal the canonical home. At Refresh
+  and again at lookup, both `sessions/` and `archived_sessions/` are checked
+  with `Lstat`: only a missing archive (`ErrNotExist`) is allowed; `sessions/`
+  must exist. A real directory is accepted. A symlink is accepted only when
+  `Stat` succeeds with a directory and its canonical parent is the home.
+  Dangling symlinks, non-directories, `ModeIrregular` stores (Windows junctions,
+  mount points, or other reparse points), and all other `Lstat`/`Stat` errors
+  keep the unavailable-evidence lock. Archive-only homes and split roots also
+  keep that lock. A symlink of the
   whole home preserves activity when its roots and session CWDs resolve to
   that same canonical home. Only Orca aggregation treats proven absence of
   the unconfigured default `$HOME/.codex` as zero activity: `CODEX_HOME` is

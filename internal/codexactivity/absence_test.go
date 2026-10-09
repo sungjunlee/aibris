@@ -26,7 +26,7 @@ func TestSourceCoverageProvesOnlyUnconfiguredDefaultAbsence(t *testing.T) {
 			}
 			coverage, ok := cache.Sources[canonicalPath(source)]
 			wantAbsent := scenario == "missing" || scenario == "empty"
-			wantAvailable := scenario == "sessions" || scenario == "archive-only"
+			wantAvailable := scenario == "sessions"
 			if !ok || coverage.Absent != wantAbsent || coverage.Available != wantAvailable || coverage.ActiveRoot != (scenario == "sessions") {
 				t.Fatalf("coverage = %+v/%t; want absent=%t available=%t active=%t", coverage, ok, wantAbsent, wantAvailable, scenario == "sessions")
 			}

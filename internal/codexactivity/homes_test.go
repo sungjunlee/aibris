@@ -150,8 +150,12 @@ func TestNativeActivityRequiresCompleteHome(t *testing.T) {
 			for _, expectedSource := range []string{SourceRefresh, SourceCache} {
 				index := LoadWithOptions(context.Background(), opts)
 				activity, available := index.LookupMember(member)
-				if index.Source != expectedSource {
-					t.Fatalf("source = %s; want %s", index.Source, expectedSource)
+				wantSource := expectedSource
+				if scenario == "dangling-sessions" || scenario == "archive-only" || scenario == "split-archive" {
+					wantSource = SourceUnavailable
+				}
+				if index.Source != wantSource {
+					t.Fatalf("source = %s; want %s", index.Source, wantSource)
 				}
 				wantAvailable := scenario == "real" || scenario == "symlink-home"
 				if available != wantAvailable {

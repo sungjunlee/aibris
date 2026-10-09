@@ -4,6 +4,7 @@ package codexactivity
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -65,5 +66,70 @@ func TestUnreadableDefaultStoresCannotProveAbsence(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestStoreLstatPermissionErrorKeepsActivityUnavailable(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses directory permissions")
+	}
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	source := filepath.Join(home, ".codex")
+	now := time.Now()
+	member := filepath.Join(source, "worktrees", "id", "project")
+	writeCodexSession(t, filepath.Join(source, "sessions", "old.jsonl"), now.Add(-90*24*time.Hour), member, "old", "PRIVATE-BODY")
+	opts := IndexOptions{Now: now, CachePath: filepath.Join(home, "activity.json")}
+	index := LoadWithOptions(context.Background(), opts)
+	if _, available := index.LookupMember(member); !available {
+		t.Fatal("initial activity unavailable")
+	}
+	if err := os.Chmod(source, 0000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chmod(source, 0755); err != nil {
+			t.Error(err)
+		}
+	})
+	if _, err := os.Lstat(filepath.Join(source, "archived_sessions")); err == nil || errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("Lstat error = %v; want non-ENOENT", err)
+	}
+	if activity, available := index.LookupMember(member); available {
+		t.Fatalf("blocked stores available: %+v", activity)
+	}
+	cache, err := Refresh(context.Background(), opts, Cache{}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if coverage := cache.Sources[canonicalPath(source)]; coverage.Available || coverage.Absent {
+		t.Fatalf("blocked coverage = %+v", coverage)
+	}
+}
+
+func TestDefaultHomeAbsentRejectsLstatPermissionError(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses directory permissions")
+	}
+	parent := t.TempDir()
+	home := filepath.Join(parent, "profile")
+	if err := os.MkdirAll(home, 0755); err != nil {
+		t.Fatal(err)
+	}
+	testutil.SetHome(t, home)
+	source := filepath.Join(home, ".codex")
+	if err := os.Chmod(home, 0000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chmod(home, 0755); err != nil {
+			t.Error(err)
+		}
+	})
+	if _, err := os.Lstat(source); err == nil || errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("Lstat error = %v; want non-ENOENT", err)
+	}
+	if defaultHomeAbsent(canonicalPath(source)) {
+		t.Fatal("Lstat permission error proved default-home absence")
 	}
 }

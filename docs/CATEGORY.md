@@ -83,8 +83,13 @@ from all homes. A recent session locks the worktree with `recent_activity`;
 any unavailable or unqueried home locks it with `activity_evidence_unavailable`.
 For both native Codex and Orca worktrees, a home needs a readable `sessions/`
 directory, and each canonical session root's parent must equal the canonical
-home. Missing or dangling `sessions/`, archive-only homes, and split roots keep
-that unavailable-evidence lock. A whole-home symlink preserves activity when
+home. Both stores are checked with `Lstat` at Refresh and again at lookup:
+`ErrNotExist` is allowed only for `archived_sessions/`; `sessions/` must exist.
+A real directory is accepted. A symlink requires successful `Stat` as a
+directory and a canonical parent equal to the home. Dangling symlinks,
+non-directories, `ModeIrregular` stores (Windows junctions, mount points, or other
+reparse points), and all other `Lstat`/`Stat` errors keep the unavailable-evidence
+lock, as do archive-only homes and split roots. A whole-home symlink preserves activity when
 roots and session CWDs resolve to the same canonical home.
 Only Orca aggregation accepts proven absence of the unconfigured default
 `$HOME/.codex` as zero activity: `CODEX_HOME` is empty, the home is not explicitly

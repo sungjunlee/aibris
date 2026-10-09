@@ -183,9 +183,15 @@ provider reports `codex` for every tool).
   from every resolved Codex home for their recent-activity lock. Any unavailable
   home or an undiscovered Orca home keeps active Orca worktrees protected.
   Native Codex and Orca activity both require a readable `sessions/` directory
-  and canonical session roots whose parents equal the canonical home. Missing
-  or dangling active roots, archive-only homes, and split roots keep the
-  unavailable-evidence lock; a whole-home symlink preserves matching activity.
+  and canonical session roots whose parents equal the canonical home. Both
+  stores are checked with `Lstat` at Refresh and again at lookup: `ErrNotExist`
+  is allowed only for `archived_sessions/`; `sessions/` must exist. Accept real
+  directories; accept symlinks only if `Stat` succeeds with a directory and the
+  canonical parent equals the home. Dangling symlinks, non-directories,
+  `ModeIrregular` stores (Windows junctions, mount points, or other reparse
+  points), and all other `Lstat`/`Stat` errors keep the unavailable-evidence
+  lock, as do archive-only homes and split roots. A whole-home symlink
+  preserves matching activity.
   Only Orca aggregation accepts proven absence of unconfigured `$HOME/.codex`
   as zero activity: `CODEX_HOME` is empty, the home is not a configured extra,
   and `Lstat` proves the home absent or a real non-symlink directory with both

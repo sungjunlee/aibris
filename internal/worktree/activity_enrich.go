@@ -74,7 +74,7 @@ func EnrichActivity(ctx context.Context, units []WorktreeCleanupUnit, items []ty
 		unit.ActivityAvailable = false
 		rows := scannerRows[unit.TargetPath]
 		tool := worktreeActivityTool(rows, unit.Source)
-		unit.RegisteredActivityAvailable, unit.RegisteredActivitySource, unit.RegisteredActivityError = worktreeActivityAvailability(tool, unit.TargetPath, activity)
+		_, unit.RegisteredActivityAvailable, unit.RegisteredActivitySource, unit.RegisteredActivityError = lookupWorktreeActivity(tool, unit.TargetPath, activity)
 
 		for memberIndex := range unit.Members {
 			member := &unit.Members[memberIndex]
@@ -107,7 +107,8 @@ func collectMemberActivity(ctx context.Context, member *GitWorktreeMember, fallb
 	member.ActivitySource = ""
 	member.ActivityAvailable = false
 	member.ActivityEvidence = nil
-	member.RegisteredActivityAvailable, member.RegisteredActivitySource, member.RegisteredActivityError = worktreeActivityAvailability(tool, member.WorktreePath, activity)
+	matching, available, source, activityError := lookupWorktreeActivity(tool, member.WorktreePath, activity)
+	member.RegisteredActivityAvailable, member.RegisteredActivitySource, member.RegisteredActivityError = available, source, activityError
 
 	session := WorktreeActivityEvidence{
 		Source:    WorktreeActivityCodexSession,
@@ -116,7 +117,6 @@ func collectMemberActivity(ctx context.Context, member *GitWorktreeMember, fallb
 	if !member.RegisteredActivityAvailable {
 		session.Error = member.RegisteredActivityError
 	} else {
-		matching, _ := activity.LookupMember(member.WorktreePath)
 		session.Timestamp = matching.LatestSession
 	}
 
@@ -147,16 +147,23 @@ func collectMemberActivity(ctx context.Context, member *GitWorktreeMember, fallb
 	return nil
 }
 
-// worktreeActivityAvailability reports whether a registered session-activity
-// reader can speak for this unit. Only Codex has one today, so every other
-// tool reports "not registered" — which is distinct from an outage: there is
+// lookupWorktreeActivity returns activity and availability from one lookup.
+// A registered session reader must be able to speak for this unit. Only Codex
+// has one today, so every other tool reports "not registered" — which is distinct from an outage: there is
 // no reader to fail, so the unit is judged on the tool-independent evidence
 // (HEAD reflog, scanner metadata) instead of being locked out of review.
-func worktreeActivityAvailability(tool types.Tool, path string, activity codexactivity.Index) (bool, string, string) {
+func lookupWorktreeActivity(tool types.Tool, path string, activity codexactivity.Index) (codexactivity.Worktree, bool, string, string) {
 	if tool != types.ToolCodex {
-		return false, ActivitySourceNotRegistered, ActivityNotRegisteredReason
+		return codexactivity.Worktree{}, false, ActivitySourceNotRegistered, ActivityNotRegisteredReason
 	}
-	return codexActivityAvailability(path, activity)
+	if activity.Err != nil {
+		return codexactivity.Worktree{}, false, activity.Source, activity.Err.Error()
+	}
+	matching, available := activity.LookupMember(path)
+	if !available {
+		return codexactivity.Worktree{}, false, activity.Source, codexactivity.ErrUnavailable.Error()
+	}
+	return matching, true, activity.Source, ""
 }
 
 // worktreeActivityTool selects the session reader from the scanner rows that
@@ -177,16 +184,6 @@ func worktreeActivityTool(rows []types.DebrisInfo, source string) types.Tool {
 		return types.ToolCodex
 	}
 	return types.ToolUnknown
-}
-
-func codexActivityAvailability(path string, activity codexactivity.Index) (bool, string, string) {
-	if activity.Err != nil {
-		return false, activity.Source, activity.Err.Error()
-	}
-	if _, available := activity.LookupMember(path); !available {
-		return false, activity.Source, codexactivity.ErrUnavailable.Error()
-	}
-	return true, activity.Source, ""
 }
 
 func headReflogActivity(ctx context.Context, worktreePath string, runner GitCommandRunner) (WorktreeActivityEvidence, error) {

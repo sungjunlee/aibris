@@ -1,6 +1,7 @@
 package codexactivity
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -93,7 +94,7 @@ func (i Index) homeAvailable(home string, requireAllRoots bool) bool {
 	if !coverage.Available || !coverage.ActiveRoot || len(coverage.Roots) == 0 {
 		return false
 	}
-	if info, err := os.Stat(filepath.Join(home, "sessions")); err != nil || !info.IsDir() {
+	if !homeStoresAvailable(home) {
 		return false
 	}
 	roots := canonicalRoots([]string{filepath.Join(home, "sessions"), filepath.Join(home, "archived_sessions")})
@@ -105,6 +106,38 @@ func (i Index) homeAvailable(home string, requireAllRoots bool) bool {
 		}
 	}
 	return !requireAllRoots || sameRoots(coverage.Roots, roots)
+}
+
+// homeStoresAvailable checks both store leaves without treating a dangling
+// symlink or a Windows mount-point reparse point as a missing optional archive.
+// Run at coverage time and lookup so cached roots cannot bypass live evidence.
+func homeStoresAvailable(home string) bool {
+	for _, store := range []string{"sessions", "archived_sessions"} {
+		path := filepath.Join(home, store)
+		info, err := os.Lstat(path)
+		if err != nil {
+			if store == "archived_sessions" && errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return false
+		}
+		if info.Mode()&os.ModeIrregular != 0 {
+			return false
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			target, err := os.Stat(path)
+			if err != nil || !target.IsDir() || target.Mode()&os.ModeIrregular != 0 {
+				return false
+			}
+			resolved, err := filepath.EvalSymlinks(path)
+			if err != nil || filepath.Dir(resolved) != home {
+				return false
+			}
+		} else if !info.IsDir() {
+			return false
+		}
+	}
+	return true
 }
 
 func sameRoots(a, b []string) bool { return slices.Equal(a, b) }

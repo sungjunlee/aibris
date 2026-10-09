@@ -17,6 +17,17 @@
   leaves in previews and at the mutation boundary, preserving both the leaf
   and its referent. Skipped bytes are excluded from selected totals; the
   `cache_leaf_symlink` reason code and JSON schema remain unchanged (#611).
+- Native Codex and Orca activity check both stores with `Lstat` at Refresh and
+  lookup. Only a missing `archived_sessions/` (`ErrNotExist`) is allowed;
+  `sessions/` must exist. Real directories are accepted; symlinks require
+  successful directory `Stat` and a canonical parent equal to the home.
+  Dangling symlinks, non-directories, `ModeIrregular` stores (Windows junctions,
+  mount points, or other reparse points), and all other `Lstat`/`Stat` errors
+  keep `activity_evidence_unavailable`, including after cache reuse. Guided
+  member activity uses availability and timestamp from one lookup. Sources
+  containing session records cannot be marked absent. Public JSON is unchanged
+  (#623, #624).
+
 - Native Codex worktrees now share Orca's fail-closed activity coverage rule:
   split session roots, missing or dangling `sessions/`, and archive-only homes
   keep `activity_evidence_unavailable`. Whole-home aliases retain matching

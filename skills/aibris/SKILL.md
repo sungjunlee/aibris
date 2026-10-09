@@ -390,8 +390,13 @@ non-directory, 자체 `.git`이 있는 checkout은 건너뛴다. 각 `<worktree>
 Guided review는 Orca Codex session의 최근 cwd도 activity lock에 반영한다.
 Native Codex와 Orca 모두 읽을 수 있는 `sessions/` directory가 필요하고,
 각 canonical session root의 parent가 canonical home과 같아야 한다.
-`sessions/`가 missing/dangling이거나 archive만 있거나 roots가 symlink로
-분리되면 `activity_evidence_unavailable`로 보호한다. Home 전체의 symlink는
+Refresh와 lookup에서 두 store를 `Lstat`으로 확인한다. `ErrNotExist`는
+`archived_sessions/`에만 허용하며 `sessions/`는 존재해야 한다. 실제 directory는
+허용하고, symlink는 `Stat`이 directory로 성공하며 canonical parent가 home과
+같을 때만 허용한다. Dangling symlink, non-directory, `ModeIrregular` store
+(Windows junction, mount point 등 reparse point), 그 밖의 모든 `Lstat`/`Stat`
+error는 `activity_evidence_unavailable` lock을 유지한다. Archive-only home과
+symlink로 분리된 roots도 lock을 유지한다. Home 전체의 symlink는
 roots와 session cwd가 같은 canonical home으로 해석되면 activity를 유지한다.
 Orca aggregation만 미설정 기본 `$HOME/.codex`의 증명된 부재를 zero activity로
 본다. `CODEX_HOME`이 비어 있고 configured extra도 아닌 home에 대해 `Lstat`으로

@@ -94,21 +94,22 @@ func Refresh(ctx context.Context, opts IndexOptions, previous Cache, previousOK 
 	}
 	records := make(map[string]FileRecord)
 	for home, coverage := range sources {
-		coverage.Absent = defaultHomeAbsent(home)
 		files, err := findSessionFiles(ctx, coverage.Roots)
 		if ctx.Err() != nil {
 			return Cache{}, ctx.Err()
 		}
 		if err != nil {
+			coverage.Absent = defaultHomeAbsent(home)
 			sources[home] = coverage
 			continue
 		}
-		// Available/ActiveRoot still require existing readable stores. Proven
-		// default-home absence is recorded separately for Orca aggregation.
+		// Requested roots must be readable; both live store leaves must also pass
+		// validation below. Proven default-home absence is recorded separately.
+		activeRoot := canonicalPath(filepath.Join(home, "sessions"))
 		for _, root := range coverage.Roots {
 			if info, err := os.Stat(root); err == nil && info.IsDir() {
 				coverage.Available = true
-				if filepath.Base(root) == "sessions" {
+				if root == activeRoot {
 					coverage.ActiveRoot = true
 				}
 			}
@@ -132,6 +133,11 @@ func Refresh(ctx context.Context, opts IndexOptions, previous Cache, previousOK 
 			}
 			homeRecords[file.path] = record
 		}
+		coverage.Available = coverage.Available && homeStoresAvailable(home)
+		// Compute absence after the walk: another root grouped under the default
+		// home may have records even when its two standard stores are absent.
+		ownRoots := canonicalRoots([]string{filepath.Join(home, "sessions"), filepath.Join(home, "archived_sessions")})
+		coverage.Absent = len(homeRecords) == 0 && (!coverage.Available || sameRoots(coverage.Roots, ownRoots)) && defaultHomeAbsent(home)
 		sources[home] = coverage
 		if coverage.Available {
 			for path, record := range homeRecords {
@@ -169,7 +175,7 @@ func defaultHomeAbsent(home string) bool {
 	if err != nil {
 		return errors.Is(err, os.ErrNotExist)
 	}
-	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+	if !info.IsDir() || info.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0 {
 		return false
 	}
 	for _, store := range []string{"sessions", "archived_sessions"} {
