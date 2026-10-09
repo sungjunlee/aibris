@@ -30,7 +30,7 @@ jobs:
           ref: ${{ inputs.commit || github.sha }}
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: "1.26.3"
+          go-version: "1.26.9"
       - run: make check
 
   test:
@@ -46,7 +46,7 @@ jobs:
           ref: ${{ inputs.commit || github.sha }}
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: "1.26.3"
+          go-version: "1.26.9"
       - run: go test -race -count=1 -cover ./...
       - run: go -C tools/perfharness test -race -count=1 -cover ./...
       - run: make lint
@@ -65,7 +65,7 @@ jobs:
           ref: ${{ inputs.commit || github.sha }}
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: "1.26.3"
+          go-version: "1.26.9"
       - name: Build native Windows executable
         run: go build -o aibris.exe .
       - name: Exercise native Windows commands in an isolated profile
@@ -145,7 +145,7 @@ jobs:
           ref: ${{ inputs.commit || github.sha }}
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: "1.26.3"
+          go-version: "1.26.9"
       - name: Cross-compile release targets
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
         with:

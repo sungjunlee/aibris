@@ -73,7 +73,12 @@ The PowerShell installer additionally refuses a locked binary; see
 [WINDOWS.md](WINDOWS.md).
 
 The default install path uses GitHub's `releases/latest/download` URLs for
-prebuilt binaries. `main` builds from source with Go.
+prebuilt binaries. `main` builds from source with Go. Release binaries are
+built with the Go version pinned in CI. When you build from source, use Go
+1.26.9 or later, or 1.27.2 or later on the 1.27 line: `go.mod` sets only a
+minimum, and Go 1.27.0 and 1.27.1 still carry GO-2026-6604 (`os.Root` could
+follow Windows junctions out of the root). `make check` runs `govulncheck`
+against the toolchain in use and fails on an affected one.
 
 By default, aibris installs to `~/.local/bin` and does not require `sudo`. If
 that directory is not on your `PATH`, the installer prints the exact command to
