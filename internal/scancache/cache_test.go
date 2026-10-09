@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -90,11 +91,22 @@ func TestSaveLastScanCacheAtomicReplacement(t *testing.T) {
 	// abort stops every goroutine on timeout so none outlives the test.
 	abort := make(chan struct{})
 	writeErrs := make(chan error, 2)
+	// Writers start only after every reader has read once, and each writer
+	// pauses after its first replacement until a reader observes it. At least
+	// one read therefore lands between replacements, without timing.
+	var readersReady sync.WaitGroup
+	readersReady.Add(4)
+	writersStart := make(chan struct{})
 
 	for i := 0; i < 2; i++ {
 		writers.Add(1)
 		go func() {
 			defer writers.Done()
+			select {
+			case <-writersStart:
+			case <-abort:
+				return
+			}
 			for n := 0; n < replacementsPerWriter; n++ {
 				select {
 				case <-abort:
@@ -104,6 +116,14 @@ func TestSaveLastScanCacheAtomicReplacement(t *testing.T) {
 				if err := saveLastScanCache(replacement); err != nil {
 					writeErrs <- err
 					return
+				}
+				for n == 0 && atomic.LoadInt64(&sawNew) == 0 {
+					select {
+					case <-abort:
+						return
+					default:
+						runtime.Gosched()
+					}
 				}
 			}
 		}()
@@ -128,6 +148,8 @@ func TestSaveLastScanCacheAtomicReplacement(t *testing.T) {
 					atomic.AddInt64(&torn, 1)
 				}
 			}
+			read()
+			readersReady.Done()
 			for {
 				select {
 				case <-writersDone:
@@ -138,7 +160,6 @@ func TestSaveLastScanCacheAtomicReplacement(t *testing.T) {
 						return
 					}
 					atomic.AddInt64(&reads, 1)
-					atomic.AddInt64(&sawNew, 1)
 					return
 				case <-abort:
 					return
@@ -148,6 +169,10 @@ func TestSaveLastScanCacheAtomicReplacement(t *testing.T) {
 			}
 		}()
 	}
+	go func() {
+		readersReady.Wait()
+		close(writersStart)
+	}()
 
 	finished := make(chan struct{})
 	go func() {
@@ -174,7 +199,9 @@ func TestSaveLastScanCacheAtomicReplacement(t *testing.T) {
 	if reads == 0 {
 		t.Fatal("readers observed nothing")
 	}
-	t.Logf("reads=%d sawNew=%d", reads, sawNew)
+	if sawNew == 0 {
+		t.Fatal("no read observed the replacement while writers were running")
+	}
 
 	entries, err := os.ReadDir(filepath.Dir(path))
 	if err != nil {
