@@ -10,8 +10,9 @@
   and file modification time, so resumed or long-running sessions appended in
   place keep worktrees protected. Guided review uses it for the 6h
   `recent_activity` lock, the 3d minimum idle age, and per-repository
-  retention order; an append after review refuses removal with
-  `activity_evidence_changed`, even outside the 6h window. Worktree, member,
+  retention order; an append after review stops removal with
+  `activity_evidence_changed` (a `partial` receipt if a member was already
+  removed), even outside the 6h window. Worktree, member,
   and project aggregates share this activity time; session files are stat'ed directly so Windows
   directory listings cannot hide an open file's writes, and unchanged
   path/mtime/size records are still reused.
