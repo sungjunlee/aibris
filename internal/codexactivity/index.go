@@ -244,7 +244,9 @@ func findSessionFiles(ctx context.Context, roots []string) ([]sessionFileInfo, e
 			if !entry.Type().IsRegular() || !strings.EqualFold(filepath.Ext(entry.Name()), ".jsonl") {
 				return nil
 			}
-			info, err := entry.Info()
+			// Stat the file itself: on Windows a directory listing can report a
+			// stale size and write time while Codex keeps the rollout open.
+			info, err := os.Lstat(path)
 			if err != nil {
 				return err
 			}
