@@ -35,7 +35,16 @@ type FileRecord struct {
 	Valid      bool      `json:"valid"`
 	WorktreeID string    `json:"worktree_id,omitempty"`
 	Project    string    `json:"project,omitempty"`
-	Timestamp  time.Time `json:"timestamp"`
+	Timestamp  time.Time `json:"timestamp"` // first session_meta start time
+}
+
+// activityTime includes work appended to an existing rollout without reading
+// conversation records. Timestamp remains the session's start time.
+func (r FileRecord) activityTime() time.Time {
+	if r.ModTime.After(r.Timestamp) {
+		return r.ModTime
+	}
+	return r.Timestamp
 }
 
 func CachePath() (string, error) {
@@ -219,6 +228,7 @@ func aggregate(files map[string]FileRecord) (map[string]Worktree, map[string]Pro
 		if !record.Valid || record.WorktreeID == "" || record.Project == "" || record.Timestamp.IsZero() {
 			continue
 		}
+		activityTime := record.activityTime()
 
 		worktree := worktrees[WorktreeKey(record.Home, record.WorktreeID)]
 		worktree.WorktreeID = record.WorktreeID
@@ -226,16 +236,16 @@ func aggregate(files map[string]FileRecord) (map[string]Worktree, map[string]Pro
 			worktree.Project = record.Project
 		}
 		worktree.SessionCount++
-		if record.Timestamp.After(worktree.LatestSession) {
-			worktree.LatestSession = record.Timestamp
+		if activityTime.After(worktree.LatestSession) {
+			worktree.LatestSession = activityTime
 		}
 		worktrees[WorktreeKey(record.Home, record.WorktreeID)] = worktree
 
 		project := projects[ProjectKey(record.Home, record.Project)]
 		project.Project = record.Project
 		project.SessionCount++
-		if record.Timestamp.After(project.LatestSession) {
-			project.LatestSession = record.Timestamp
+		if activityTime.After(project.LatestSession) {
+			project.LatestSession = activityTime
 		}
 		projects[ProjectKey(record.Home, record.Project)] = project
 	}
@@ -294,12 +304,13 @@ func aggregateMembers(files map[string]FileRecord) map[string]Worktree {
 			continue
 		}
 		key := MemberKey(record.Home, record.WorktreeID, record.Project)
+		activityTime := record.activityTime()
 		activity := members[key]
 		activity.WorktreeID = record.WorktreeID
 		activity.Project = record.Project
 		activity.SessionCount++
-		if record.Timestamp.After(activity.LatestSession) {
-			activity.LatestSession = record.Timestamp
+		if activityTime.After(activity.LatestSession) {
+			activity.LatestSession = activityTime
 		}
 		members[key] = activity
 	}

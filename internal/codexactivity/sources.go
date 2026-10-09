@@ -109,10 +109,16 @@ func (i Index) homeAvailable(home string, requireAllRoots bool) bool {
 	return !requireAllRoots || sameRoots(coverage.Roots, roots)
 }
 
-// homeStoresAvailable checks both store leaves without treating a dangling
-// symlink or a Windows mount-point reparse point as a missing optional archive.
+// homeStoresAvailable checks the home and both store leaves without treating a
+// dangling symlink or Windows mount-point reparse point as negative evidence.
 // Run at coverage time and lookup so cached roots cannot bypass live evidence.
 func homeStoresAvailable(home string) bool {
+	// EvalSymlinks does not resolve Windows junctions. A junction home could
+	// make target-path CWDs fail to match while its stores appear readable.
+	info, err := os.Lstat(home)
+	if err != nil || info.Mode()&os.ModeIrregular != 0 {
+		return false
+	}
 	for _, store := range []string{"sessions", "archived_sessions"} {
 		path := filepath.Join(home, store)
 		info, err := os.Lstat(path)

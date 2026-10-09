@@ -52,6 +52,9 @@ func TestActivityMetadataReaderContract(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(root, "input.jsonl"), []byte(line), 0600); err != nil {
 				t.Fatal(err)
 			}
+			if err := os.Chtimes(filepath.Join(root, "input.jsonl"), now, now); err != nil {
+				t.Fatal(err)
+			}
 			cachePath := filepath.Join(home, "cache.json")
 			index := LoadWithOptions(context.Background(), IndexOptions{Now: now, CachePath: cachePath, SessionRoots: []string{root}})
 			activity, available := index.LookupMember(member)

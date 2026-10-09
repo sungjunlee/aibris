@@ -152,14 +152,15 @@ JSON field 이름은 유지된다.
 - guided 결과는 `recommended`(기본 선택), `reviewable`(사용자 선택 가능), `locked`(선택 불가)로 해석한다. scan JSON의 project label만으로 active 항목의 안전을 추정하지 않는다
 - `plain-dir` / review-only owner는 절대 선택·삭제·strip 대상이 아니다. metadata를 검사하라고만 안내한다. 빈 leftover member와 등록된 sidecar(`.orca-worktree-trash`)는 mixed marker가 아니다.
 - 삭제하면 안 되는 **protected active** 체크아웃에서 regenerable subtree만 걷어내려면 `aibris clean --strip --dry-run`을 제안한다. strip은 세 번째 disposition이다. unit을 지우지 않는다. cwd가 unit 또는 그 subtree 안이면 거부한다.
-- Codex activity 판단은 session metadata, cwd, timestamp만 사용한다. 대화 본문은 읽거나 요약하지 않는다.
+- Codex activity 판단은 session metadata, cwd, start timestamp, file mtime을 사용한다. Resumed·long-running session은 기존 rollout file에 append하므로 activity time은 start timestamp와 file mtime 중 최신 값이다. Worktree·member·project aggregate와 recent lock·guided barrier 모두 이 값을 사용한다. 대화 본문은 읽거나 요약하지 않는다.
 - Guided review는 15분 cache freshness 안에서도 session stores를 incremental
   Refresh한다. 같은 path·mtime·size의 record는 재파싱하지 않는다. Prepared
-  target은 member별 review-time session timestamp와 availability를 보존하며,
+  target은 member별 review-time session activity timestamp와 availability를 보존하며,
   member loop 전, 각 member 제거 전, owner 제거 전에 Refresh하고 review와
-  같은 lookup·recent lock·unavailable 규칙을 적용한다. 더 새로운 member session
+  같은 lookup·recent lock·unavailable 규칙을 적용한다. 더 새로운 member session activity
   (6시간 밖도 포함), 현재 recent lock, unavailable evidence(Orca의 모든 필수
-  home 포함)는 삭제를 거부한다. Guided `--receipt-file` receipt의
+  home 포함)는 삭제를 거부한다. Review 후 기존 session file에 append해도
+  같은 refusal을 적용한다. Guided `--receipt-file` receipt의
   `activity_evidence_changed`는 이 refusal을 뜻하며 human output에도 거부
   이유가 표시된다. Guided 실행은 `--json`에서 지원하지 않고 JSON plan에는
   이 code가 나오지 않는다. 처음 거부되면 `failed`,
@@ -412,12 +413,14 @@ Refresh와 lookup에서 두 store를 `Lstat`으로 확인한다. `ErrNotExist`�
 error는 `activity_evidence_unavailable` lock을 유지한다. Archive-only home과
 symlink로 분리된 roots도 lock을 유지한다. Home 전체의 symlink는
 roots와 session cwd가 같은 canonical home으로 해석되면 activity를 유지한다.
+Windows junction이나 다른 `ModeIrregular` home은 negative activity evidence를
+제공할 수 없으므로 unavailable lock을 유지한다.
 Orca aggregation만 미설정 기본 `$HOME/.codex`의 증명된 부재를 zero activity로
 본다. `CODEX_HOME`이 비어 있고 configured extra도 아닌 home에 대해 `Lstat`으로
 home 자체의 부재 또는 symlink가 아닌 directory 안의 두 stores 부재를 증명해야
 한다. Native worktree, configured missing home, dangling/symlink home,
 archive-only, I/O error에는 이 예외가 적용되지 않는다. Cached absence도 lookup에서
-다시 확인한다. Activity cache schema 6으로 이전 cache를 rebuild하며 public JSON과
+다시 확인한다. Activity cache schema 7로 이전 cache를 rebuild하며 public JSON과
 reason codes는 유지한다.
 모든 resolved home의 sessions retention은 read-only inventory이고,
 `logs_2.sqlite`와 `archived_sessions/` cleanup에는 계속 `--risky`가 필요하다.

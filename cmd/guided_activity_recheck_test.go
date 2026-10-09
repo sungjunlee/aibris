@@ -65,6 +65,9 @@ func writeGuidedActivitySession(t *testing.T, path, cwd string, timestamp time.T
 	if err := os.WriteFile(path, append(data, '\n'), 0644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Chtimes(path, timestamp, timestamp); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func guidedActivityState(t *testing.T, items []types.DebrisInfo) guidedCleanState {
@@ -92,6 +95,38 @@ func TestGuidedReviewRefreshesFreshActivityCache(t *testing.T) {
 	}
 }
 
+func TestGuidedReviewUsesSessionFileActivity(t *testing.T) {
+	for _, modified := range []bool{false, true} {
+		name := "old untouched session"
+		if modified {
+			name = "old start recent mtime"
+		}
+		t.Run(name, func(t *testing.T) {
+			sessions, items, members := guidedActivityFixture(t, false)
+			if err := os.Remove(filepath.Join(sessions, "second.jsonl")); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(sessions, "first.jsonl")
+			writeGuidedActivitySession(t, path, members[0], time.Now().Add(-10*24*time.Hour))
+			if modified {
+				now := time.Now()
+				if err := os.Chtimes(path, now, now); err != nil {
+					t.Fatal(err)
+				}
+			}
+			state := guidedActivityState(t, items)
+			row := state.Rows[0]
+			if modified {
+				if row.Policy != worktree.DecisionLocked || !slices.Contains(row.ReasonCodes, worktree.DecisionReasonRecentActivity) {
+					t.Fatalf("recent session-file modification lost protection: %+v", row)
+				}
+			} else if row.Policy != worktree.DecisionReviewable {
+				t.Fatalf("old untouched session falsely locked: %+v", row)
+			}
+		})
+	}
+}
+
 func TestGuidedActivityMutationBarrier(t *testing.T) {
 	for _, orca := range []bool{false, true} {
 		name := "native"
@@ -102,13 +137,19 @@ func TestGuidedActivityMutationBarrier(t *testing.T) {
 			if orca && runtime.GOOS != "darwin" {
 				t.Skip("Orca home is macOS-only")
 			}
-			changes := []string{"recent session", "newer old session", "unavailable store", "unchanged records"}
+			changes := []string{"recent session", "newer old session", "appended session", "appended old session", "unavailable store", "unchanged records"}
 			if orca {
 				changes = append(changes, "other home unavailable")
 			}
 			for _, change := range changes {
 				t.Run(change, func(t *testing.T) {
 					sessions, items, members := guidedActivityFixture(t, orca)
+					if change == "appended session" || change == "appended old session" {
+						// The reviewed owner has only one old, untouched session.
+						if err := os.Remove(filepath.Join(sessions, "second.jsonl")); err != nil {
+							t.Fatal(err)
+						}
+					}
 					otherStore := filepath.Join(t.TempDir(), "extra-home", "sessions")
 					if change == "other home unavailable" {
 						if err := os.MkdirAll(otherStore, 0755); err != nil {
@@ -144,6 +185,25 @@ func TestGuidedActivityMutationBarrier(t *testing.T) {
 						t.Fatal(err)
 					}
 					switch change {
+					case "appended session", "appended old session":
+						path := filepath.Join(sessions, "first.jsonl")
+						f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0)
+						if err != nil {
+							t.Fatal(err)
+						}
+						_, writeErr := f.WriteString("{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\"}}\n")
+						closeErr := f.Close()
+						if err := errors.Join(writeErr, closeErr); err != nil {
+							t.Fatal(err)
+						}
+						now := time.Now()
+						if change == "appended old session" {
+							// Outside the recent window: only advancement beyond review refuses.
+							now = now.Add(-10 * 24 * time.Hour)
+						}
+						if err := os.Chtimes(path, now, now); err != nil {
+							t.Fatal(err)
+						}
 					case "recent session", "newer old session":
 						timestamp := time.Now()
 						if change == "newer old session" {
@@ -193,7 +253,7 @@ func TestGuidedActivityMutationBarrier(t *testing.T) {
 						}
 						return
 					}
-					if executionErr == nil || receipt.Totals.Failed != 1 || receipt.Totals.FreedBytes != 0 || !slices.Contains(receipt.PhysicalTargets[0].ReasonCodes, "activity_evidence_changed") {
+					if !errors.Is(executionErr, worktree.ErrActivityEvidenceChanged) || receipt.Totals.Failed != 1 || receipt.Totals.FreedBytes != 0 || !slices.Contains(receipt.PhysicalTargets[0].ReasonCodes, "activity_evidence_changed") {
 						t.Fatalf("activity change allowed removal or lost refusal: %+v, %v", receipt, executionErr)
 					}
 					for _, path := range members {

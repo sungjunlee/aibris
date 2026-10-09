@@ -29,10 +29,13 @@ mutation is ever authorized and in what a timestamp can mean.
 
 ### Age-semantics asymmetry
 
-A modification time is only a meaningful signal for content whose mtime is
-stable. A session transcript's mtime is set once when the session closes and
-is immutable afterward, so UTC-month retention buckets and age presentation
-are meaningful there. A global cache directory's mtime tracks continuous use
+A session transcript's mtime tracks its latest write: resumed and long-running
+Codex sessions append to the existing rollout file, sometimes days after its
+first `session_meta` record. Session activity uses the later of that start
+timestamp and the file modification time for worktree, member, and project
+decisions. UTC-month retention buckets and age presentation describe the
+current file mtime; they do not imply that the transcript is immutable.
+A global cache directory's mtime tracks continuous use
 and can never satisfy a fixed age gate, so age-based cleanup is structurally
 weak for generic build debris. This asymmetry is why agent state never relies
 on age for classification: proof-based recorded-cwd classification remains the
@@ -90,14 +93,16 @@ directory and a canonical parent equal to the home. Dangling symlinks,
 non-directories, `ModeIrregular` stores (Windows junctions, mount points, or other
 reparse points), and all other `Lstat`/`Stat` errors keep the unavailable-evidence
 lock, as do archive-only homes and split roots. A whole-home symlink preserves activity when
-roots and session CWDs resolve to the same canonical home.
+roots and session CWDs resolve to the same canonical home. A Windows junction
+or other `ModeIrregular` home cannot supply negative activity evidence and
+keeps the unavailable-evidence lock.
 Only Orca aggregation accepts proven absence of the unconfigured default
 `$HOME/.codex` as zero activity: `CODEX_HOME` is empty, the home is not explicitly
 listed in `AIBRIS_CODEX_HOMES`, and `Lstat` proves the home is absent or a real
 non-symlink directory with both stores absent. Configured missing homes,
 dangling or symlinked homes, archive-only homes, and I/O errors stay unavailable;
 native worktrees never use this exception. Cached absence is rechecked at lookup.
-Activity cache schema 6 rebuilds older caches without changing public JSON or
+Activity cache schema 7 rebuilds older caches without changing public JSON or
 reason codes. Active Orca worktrees also keep the lock when the Orca home is
 not discovered, including on non-macOS platforms or after a failed layout check.
 
@@ -377,10 +382,11 @@ registered sidecar `.orca-worktree-trash` are not mixed markers.
 
 Guided review incrementally refreshes session activity even inside the
 15-minute cache window, reusing unchanged path/mtime/size records. Prepared
-active targets retain each member's review-time session timestamp and
+active targets retain each member's review-time session activity timestamp and
 availability. Refresh runs before the member loop, before each member removal
 and before the owner removal, applying the same activity lookup and lock policy.
-A newer member session, a current recent lock, or unavailable evidence
+A newer member session activity time (including an append to an existing
+session after review), a current recent lock, or unavailable evidence
 (including any required Orca home) keeps the unit
 with receipt reason `activity_evidence_changed`. Classic and orphaned targets
 are unchanged; `--force` skips confirmation only.

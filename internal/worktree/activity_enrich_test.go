@@ -519,4 +519,7 @@ func writeCodexSession(t *testing.T, path string, timestamp time.Time, cwd, sess
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Chtimes(path, timestamp, timestamp); err != nil {
+		t.Fatal(err)
+	}
 }

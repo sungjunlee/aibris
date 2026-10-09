@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	CacheSchemaVersion = 6 // distinguish proven default-home absence from unavailable evidence
+	CacheSchemaVersion = 7 // session activity includes file modification; reject irregular homes
 	Freshness          = 15 * time.Minute
 
 	SourceCache       = "cache"
