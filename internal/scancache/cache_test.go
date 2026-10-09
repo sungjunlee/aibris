@@ -87,14 +87,22 @@ func TestSaveLastScanCacheAtomicReplacement(t *testing.T) {
 	var writers, readers sync.WaitGroup
 	var reads, torn, sawNew int64
 	writersDone := make(chan struct{})
+	// abort stops every goroutine on timeout so none outlives the test.
+	abort := make(chan struct{})
+	writeErrs := make(chan error, 2)
 
 	for i := 0; i < 2; i++ {
 		writers.Add(1)
 		go func() {
 			defer writers.Done()
 			for n := 0; n < replacementsPerWriter; n++ {
+				select {
+				case <-abort:
+					return
+				default:
+				}
 				if err := saveLastScanCache(replacement); err != nil {
-					t.Errorf("saveLastScanCache: %v", err)
+					writeErrs <- err
 					return
 				}
 			}
@@ -132,6 +140,8 @@ func TestSaveLastScanCacheAtomicReplacement(t *testing.T) {
 					atomic.AddInt64(&reads, 1)
 					atomic.AddInt64(&sawNew, 1)
 					return
+				case <-abort:
+					return
 				default:
 				}
 				read()
@@ -149,7 +159,13 @@ func TestSaveLastScanCacheAtomicReplacement(t *testing.T) {
 	select {
 	case <-finished:
 	case <-time.After(30 * time.Second):
+		close(abort)
+		<-finished
 		t.Fatal("writers and readers did not finish within 30s")
+	}
+	close(writeErrs)
+	for err := range writeErrs {
+		t.Fatalf("saveLastScanCache: %v", err)
 	}
 
 	if torn != 0 {
