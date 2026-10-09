@@ -222,6 +222,22 @@ func TestSaveLastScanCacheAtomicReplacement(t *testing.T) {
 	if _, ok := readLastScanCache(); !ok {
 		t.Fatal("final cache document must be readable")
 	}
+
+	// The concurrent readers above sample replacements but cannot force a
+	// read inside one write. Replacement by rename is checked directly: a save
+	// installs a new file, while an in-place rewrite keeps the old one.
+	if err := saveLastScanCache(replacement); err != nil {
+		t.Fatal(err)
+	}
+	replaced, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Windows FileInfo loads file identity lazily from its path, so both
+	// values would describe the current file there.
+	if runtime.GOOS != "windows" && os.SameFile(info, replaced) {
+		t.Fatal("saveLastScanCache rewrote the cache file in place; want an atomic rename over it")
+	}
 }
 
 func TestReadLastScanCacheRejectsForeignProviderIdentity(t *testing.T) {
