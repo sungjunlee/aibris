@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-09
+
 ### Added
 
 - Scan rows for existing real Go cache directories rejected by their top-level
