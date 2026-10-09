@@ -245,9 +245,9 @@ scanned path. Go and Homebrew cleanup use gated removal of the verified cache
 path without a package-manager cleanup command. Go removal includes fuzz and
 cache metadata; its override signature, live path, and layout are rechecked before
 mutation.
-Catalog path-route caches with symlink leaves are skipped in cleanup previews
-with `cache_leaf_symlink`; execution rechecks the leaf to cover TOCTOU. The uv
-command route retains its policy.
+Catalog path-route caches with a symlink or reparse point (Windows junction)
+leaf are skipped in cleanup previews with `cache_leaf_symlink`; execution
+rechecks the leaf to cover TOCTOU. The uv command route retains its policy.
 
 ## Code rules
 

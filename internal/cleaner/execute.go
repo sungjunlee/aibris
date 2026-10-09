@@ -13,7 +13,7 @@ import (
 var ErrCleanupRecipeChanged = adapter.ErrCleanupRecipeChanged
 
 // ErrCacheLeafSymlink refuses removal that would leave the measured cache behind.
-var ErrCacheLeafSymlink = errors.New("cache leaf is a symlink")
+var ErrCacheLeafSymlink = errors.New("cache leaf is a symlink or reparse point (Windows junction)")
 
 // Execute removes the given worktrees from disk.
 func Execute(worktrees []types.DebrisInfo) (int64, error) {

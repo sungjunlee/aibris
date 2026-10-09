@@ -169,13 +169,13 @@ func executeWithContextOutput(
 				}
 			}
 			if catalogCacheTarget(w) {
-				// Catalog scans measure the referent of a root symlink, but
-				// path removal would delete only the link and reclaim none of it.
+				// Catalog scans measure the referent of a symlink or reparse
+				// point; path removal cannot safely reclaim those bytes.
 				info, err := os.Lstat(w.Path)
 				if err != nil {
 					return false, fmt.Errorf("checking cache leaf %q: %w", w.Path, err)
 				}
-				if info.Mode()&os.ModeSymlink != 0 {
+				if cacheLeafIsLink(info.Mode()) {
 					return false, fmt.Errorf("refusing path removal for %q: %w; target bytes would not be removed", w.Path, ErrCacheLeafSymlink)
 				}
 			}

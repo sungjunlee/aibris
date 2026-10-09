@@ -28,7 +28,7 @@ const (
 	EligibilityReasonAgentStateMinIdleAge   EligibilityReason = "orphaned agent-state within minimum idle age"
 	EligibilityReasonVolumePressure         EligibilityReason = "selected because of volume pressure"
 	EligibilityReasonEligible               EligibilityReason = "eligible for cleanup"
-	EligibilityReasonCacheLeafSymlink       EligibilityReason = "cache leaf is a symlink; removing it would leave target bytes behind"
+	EligibilityReasonCacheLeafSymlink       EligibilityReason = "cache leaf is a symlink or reparse point (Windows junction); removing it would leave target bytes behind"
 )
 
 // EvaluateEligibility is the single cleanup eligibility policy used by
@@ -41,10 +41,11 @@ func EvaluateEligibility(item types.DebrisInfo, opts types.PruneOptions, observe
 		return false, EligibilityReasonFiltered
 	}
 
-	// Path removal deletes a symlink leaf rather than the measured referent.
+	// Path removal of a symlink or reparse-point leaf cannot reclaim the
+	// measured referent.
 	// Command recipes (uv) retain their policy and mutation-boundary checks.
 	if cleanupKind(item) == types.CleanupRemovePath && len(item.CleanupCommand) == 0 && catalogCacheTarget(item) {
-		if info, err := os.Lstat(item.Path); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		if info, err := os.Lstat(item.Path); err == nil && cacheLeafIsLink(info.Mode()) {
 			return false, EligibilityReasonCacheLeafSymlink
 		}
 	}

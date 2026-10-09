@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Catalog cache path removal refuses Windows junctions and other reparse-point
+  leaves in previews and at the mutation boundary, preserving both the leaf
+  and its referent. Skipped bytes are excluded from selected totals; the
+  `cache_leaf_symlink` reason code and JSON schema remain unchanged (#611).
+
 ## [0.15.0] - 2026-10-09
 
 ### Added

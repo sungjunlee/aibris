@@ -20,6 +20,12 @@ Pull-request CI uses an amd64 `windows-latest` runner to:
 - verify that scan results do not escape the isolated profile;
 - exercise Windows recorded-CWD volume lookup and its fail-closed error path;
 - reject reusable cleanup-target identities for Windows reparse points;
+- skip catalog path-removal cache leaves that are a symlink or reparse point
+  (Windows junction), preserving the leaf and referent at execution and using
+  the existing `cache_leaf_symlink` reason code with zero selected bytes;
+- test npm `_cacache` junctions in eligibility, JSON and human dry-run previews,
+  and at the mutation boundary, using PowerShell junction fixtures that fail
+  the test if creation fails;
 - run the complete deletion-gate, path-identity, and HOME-isolation packages,
   reporting symlink-fixture skips when the runner lacks privilege;
 - run the nested perfharness module tests; and
