@@ -281,8 +281,19 @@ Command-backed cleanup:
   [cache implementation](https://go.dev/src/cmd/go/internal/cache/cache.go) and
   [clean implementation](https://go.dev/src/cmd/go/internal/clean/clean.go).
   Any other top-level entry, symlink, wrong file type, or unreadable layout
-  silently excludes the directory from scan and the cleanup allowlist, even
-  under cache-age relaxation. The layout check reads only one directory level.
+  excludes the directory from the cleanup allowlist, even under cache-age
+  relaxation. An existing non-symlink, non-reparse-point directory rejected by
+  layout appears in scan with its measured bytes and specific cause; overrides
+  without the README signature remain hidden. Cleanup reports the row as
+  `skipped` with `go_cache_unverified`, excluding its bytes from `selected_bytes`
+  while retaining them in scan totals. Eligibility rechecks the live catalog,
+  including for cached rows: a still-rejected layout cannot authorize Go cache
+  selection with a minimal age, pressure relaxation, or `--force`; a now-valid
+  layout uses normal eligibility. Existing overlap policy still applies when a
+  different provider independently selects the same physical path: the Go row
+  keeps `policy_decision=skipped` but inherits the selected physical target's
+  `decision`, and that target's bytes count toward `selected_bytes`.
+  The layout check reads only one directory level.
   Execution rechecks the live path, override signature, and layout at the
   mutation boundary; newly added foreign entries refuse removal. Inventories
   with the former Go command refuse as `cleanup_recipe_changed`; scan again.

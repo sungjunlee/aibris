@@ -206,7 +206,7 @@ func headlineFixture(t *testing.T) []types.DebrisInfo {
 	old := time.Now().Add(-30 * 24 * time.Hour)
 	recent := time.Now().Add(-time.Hour)
 	orphaned := filepath.Join(base, "orphaned")
-	cache := filepath.Join(base, "go-build")
+	cache := testutil.GoBuildCache(base)
 	for _, path := range []string{orphaned, cache} {
 		if err := os.MkdirAll(path, 0o755); err != nil {
 			t.Fatal(err)

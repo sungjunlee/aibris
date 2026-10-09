@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -80,7 +81,8 @@ func TestWriteHumanFixtureRendersFromView(t *testing.T) {
 
 func TestWriteHumanNamesOfficialCacheAgeRelax(t *testing.T) {
 	base := t.TempDir()
-	cache := filepath.Join(base, "go-build")
+	testutil.SetHome(t, base)
+	cache := testutil.GoBuildCache(base)
 	node := filepath.Join(base, "node_modules")
 	if err := os.MkdirAll(cache, 0o755); err != nil {
 		t.Fatal(err)

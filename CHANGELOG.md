@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### Added
+
+- Scan rows for existing real Go cache directories rejected by their top-level
+  layout, with measured bytes and the specific cause (foreign entry, symlink,
+  wrong type, or unreadable layout). Standalone cleanup reports `skipped` with the additive
+  reason code `go_cache_unverified`; scan totals include the bytes and
+  `selected_bytes` excludes them. `schema_version` stays 1 (#619).
+
+### Changed
+
+- Go cache eligibility rechecks the live catalog before age or pressure rules,
+  including for cached diagnostic rows. Still-rejected caches cannot authorize
+  Go cache selection with a minimal age, pressure relaxation, or `--force`;
+  now-valid layouts use normal eligibility. Other providers' independently
+  selected targets retain existing overlap decisions and byte accounting.
+  Overrides without Go's README signature remain hidden, and eligible cleanup
+  still removes the whole cache root (#619).
+
 ## [0.15.2] - 2026-10-09
 
 ### Fixed

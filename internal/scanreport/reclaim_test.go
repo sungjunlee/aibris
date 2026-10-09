@@ -17,7 +17,7 @@ func TestReclaimPathsListsNonZeroCommands(t *testing.T) {
 	recent := time.Now().Add(-time.Hour)
 	orphaned := filepath.Join(base, "orphaned")
 	active := filepath.Join(base, "active")
-	cache := filepath.Join(base, "go-build")
+	cache := testutil.GoBuildCache(base)
 	for _, path := range []string{orphaned, active, cache, filepath.Join(active, "node_modules")} {
 		if err := os.MkdirAll(path, 0o755); err != nil {
 			t.Fatal(err)
@@ -107,7 +107,8 @@ func TestStripEstimateMatchesCleanCWDRefusal(t *testing.T) {
 
 func TestReclaimPathsOmitsPressureWhenItAddsNothing(t *testing.T) {
 	base := t.TempDir()
-	cache := filepath.Join(base, "go-build")
+	testutil.SetHome(t, base)
+	cache := testutil.GoBuildCache(base)
 	if err := os.MkdirAll(cache, 0o755); err != nil {
 		t.Fatal(err)
 	}

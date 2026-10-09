@@ -253,8 +253,15 @@ regular files `README`, `trim.txt`, `testexpire.txt`, `log.txt`, and Finder's
 `.DS_Store`; a `fuzz` directory; and directories matching `^[0-9a-f]{2}$`
 (see Go's [cache](https://go.dev/src/cmd/go/internal/cache/cache.go) and
 [clean](https://go.dev/src/cmd/go/internal/clean/clean.go) implementations).
-Foreign entries, symlinks, wrong types, or unreadable layouts silently exclude
-it from scan and the cleanup allowlist, even under cache-age relaxation. Check
+Foreign entries, symlinks, wrong types, or unreadable layouts exclude it from
+the cleanup allowlist, even under cache-age relaxation. An existing real Go
+cache directory with a rejected layout is visible in scan with its measured
+bytes and the specific cause, and standalone cleanup reports it as `skipped` with
+`go_cache_unverified`, excluding its bytes from `selected_bytes`. Overrides
+without the README signature remain hidden. Cached rows use the live catalog
+for eligibility; a now-valid layout may use normal cleanup policy. Independently
+selected targets at the same path retain existing overlap decision/accounting
+behavior; the Go row itself cannot authorize selection. Check
 only one directory level, and repeat the layout check at the mutation boundary.
 Adding a rebuildable cache is one catalog entry; the cleanup allowlist accepts
 every path the catalog resolves to. Never add a cache whose wholesale removal
