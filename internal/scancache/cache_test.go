@@ -127,7 +127,10 @@ func TestSaveLastScanCacheAtomicReplacement(t *testing.T) {
 					data, err := os.ReadFile(path)
 					if err != nil || !bytes.Equal(data, want) {
 						atomic.AddInt64(&torn, 1)
+						return
 					}
+					atomic.AddInt64(&reads, 1)
+					atomic.AddInt64(&sawNew, 1)
 					return
 				default:
 				}
