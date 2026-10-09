@@ -388,6 +388,11 @@ Orca 기본 worktree 위치는 `~/orca/workspaces/<repo>/<worktree>`다.
 non-directory, 자체 `.git`이 있는 checkout은 건너뛴다. 각 `<worktree>`가
 독립 mutation owner이며 `source=orca`, `tool=unknown`으로 보고된다.
 Guided review는 Orca Codex session의 최근 cwd도 activity lock에 반영한다.
+Native Codex와 Orca 모두 읽을 수 있는 `sessions/` directory가 필요하고,
+각 canonical session root의 parent가 canonical home과 같아야 한다.
+`sessions/`가 missing/dangling이거나 archive만 있거나 roots가 symlink로
+분리되면 `activity_evidence_unavailable`로 보호한다. Home 전체의 symlink는
+roots와 session cwd가 같은 canonical home으로 해석되면 activity를 유지한다.
 모든 resolved home의 sessions retention은 read-only inventory이고,
 `logs_2.sqlite`와 `archived_sessions/` cleanup에는 계속 `--risky`가 필요하다.
 Orca home과 container 및 그 ancestors는 whole target으로 삭제할 수 없다.

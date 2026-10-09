@@ -1,6 +1,7 @@
 package codexactivity
 
 import (
+	"os"
 	"path/filepath"
 	"slices"
 
@@ -35,7 +36,7 @@ func (i Index) LookupMember(path string) (Worktree, bool) {
 			selected, id, project = home, worktreeID, name
 		}
 	}
-	if selected == "" || !i.Sources[selected].Available {
+	if selected == "" || !i.homeAvailable(selected, false) {
 		return Worktree{}, false
 	}
 	return i.memberActivity(selected, id, project), true
@@ -62,14 +63,7 @@ func (i Index) lookupOrcaWorkspace(id, project string) (Worktree, bool) {
 	}
 	combined := Worktree{WorktreeID: id, Project: project}
 	for _, home := range canonicalRoots(homes) {
-		coverage := i.Sources[home]
-		roots := canonicalRoots([]string{filepath.Join(home, "sessions"), filepath.Join(home, "archived_sessions")})
-		// A session-root symlink can split this home's roots across source keys.
-		// Partial coverage cannot speak for the whole home, even if it is readable.
-		// Every home must also have its sessions/ root: a missing or dangling
-		// one (for example on an unmounted volume) with only an archive present
-		// would otherwise read as "no recent session".
-		if !coverage.Available || !coverage.ActiveRoot || !sameRoots(coverage.Roots, roots) {
+		if !i.homeAvailable(home, true) {
 			return Worktree{}, false
 		}
 		matching := i.memberActivity(home, id, project)
@@ -79,6 +73,27 @@ func (i Index) lookupOrcaWorkspace(id, project string) (Worktree, bool) {
 		}
 	}
 	return combined, true
+}
+
+// homeAvailable decides whether a home can supply negative activity evidence.
+// Native fixtures may query only sessions; Orca requires both requested roots.
+func (i Index) homeAvailable(home string, requireAllRoots bool) bool {
+	coverage := i.Sources[home]
+	if !coverage.Available || !coverage.ActiveRoot || len(coverage.Roots) == 0 {
+		return false
+	}
+	if info, err := os.Stat(filepath.Join(home, "sessions")); err != nil || !info.IsDir() {
+		return false
+	}
+	roots := canonicalRoots([]string{filepath.Join(home, "sessions"), filepath.Join(home, "archived_sessions")})
+	// Check both indexed and current roots: a symlink may split the home into
+	// different source keys, or change after the index was cached.
+	for _, root := range append(roots, coverage.Roots...) {
+		if filepath.Dir(root) != home {
+			return false
+		}
+	}
+	return !requireAllRoots || sameRoots(coverage.Roots, roots)
 }
 
 func sameRoots(a, b []string) bool { return slices.Equal(a, b) }

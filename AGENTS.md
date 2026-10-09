@@ -182,6 +182,10 @@ provider reports `codex` for every tool).
   Orca rows use `source=orca`, `tool=unknown`; guided review consults sessions
   from every resolved Codex home for their recent-activity lock. Any unavailable
   home or an undiscovered Orca home keeps active Orca worktrees protected.
+  Native Codex and Orca activity both require a readable `sessions/` directory
+  and canonical session roots whose parents equal the canonical home. Missing
+  or dangling active roots, archive-only homes, and split roots keep the
+  unavailable-evidence lock; a whole-home symlink preserves matching activity.
 - The convention fallback looks under `$HOME` for directories named
   `worktrees`, `worktree`, `worktree-*`, `worktrees-*`, `*-worktree`, or
   `*-worktrees`, up to `maxWorktreeContainerDepth = 4`.

@@ -8,6 +8,10 @@
   leaves in previews and at the mutation boundary, preserving both the leaf
   and its referent. Skipped bytes are excluded from selected totals; the
   `cache_leaf_symlink` reason code and JSON schema remain unchanged (#611).
+- Native Codex worktrees now share Orca's fail-closed activity coverage rule:
+  split session roots, missing or dangling `sessions/`, and archive-only homes
+  keep `activity_evidence_unavailable`. Whole-home aliases retain matching
+  recent-session protection (#623).
 
 ## [0.15.0] - 2026-10-09
 

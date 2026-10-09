@@ -81,11 +81,13 @@ Orca workspace CWDs are recognized in sessions from every resolved Codex home.
 Guided review uses their newest session and requires complete activity evidence
 from all homes. A recent session locks the worktree with `recent_activity`;
 any unavailable or unqueried home locks it with `activity_evidence_unavailable`.
-Session-root symlinks that split a home's source coverage also keep that lock.
-Active Orca worktrees keep that unavailable-evidence lock when the Orca home
-is not discovered, including on non-macOS platforms or after a failed layout
-check, and when any resolved home has no `sessions/` directory (missing or a
-dangling symlink), even if `archived_sessions/` exists.
+For both native Codex and Orca worktrees, a home needs a readable `sessions/`
+directory, and each canonical session root's parent must equal the canonical
+home. Missing or dangling `sessions/`, archive-only homes, and split roots keep
+that unavailable-evidence lock. A whole-home symlink preserves activity when
+roots and session CWDs resolve to the same canonical home. Active Orca worktrees
+also keep the lock when the Orca home is not discovered, including on non-macOS
+platforms or after a failed layout check.
 
 ## Protected Retention Is Not a Category
 

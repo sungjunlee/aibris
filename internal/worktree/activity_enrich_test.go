@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/codexactivity"
+	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
 )
 
@@ -455,7 +456,8 @@ func TestBuildWorktreeCleanupUnitsWithActivityRejectsCanceledContext(t *testing.
 
 func availableActivityIndex(t *testing.T, home, worktreeID, project string, timestamp time.Time) codexactivity.Index {
 	t.Helper()
-	if err := os.MkdirAll(home, 0755); err != nil {
+	testutil.SetHome(t, filepath.Dir(home))
+	if err := os.MkdirAll(filepath.Join(home, "sessions"), 0755); err != nil {
 		t.Fatal(err)
 	}
 	home, err := filepath.EvalSymlinks(home)
@@ -471,7 +473,7 @@ func availableActivityIndex(t *testing.T, home, worktreeID, project string, time
 	return codexactivity.Index{
 		Available: true,
 		Source:    codexactivity.SourceCache,
-		Sources:   map[string]codexactivity.SourceCoverage{home: {Available: true}},
+		Sources:   map[string]codexactivity.SourceCoverage{home: {Roots: []string{filepath.Join(home, "sessions")}, Available: true, ActiveRoot: true}},
 		Worktrees: map[string]codexactivity.Worktree{codexactivity.WorktreeKey(home, worktreeID): activity},
 		Members:   map[string]codexactivity.Worktree{codexactivity.MemberKey(home, worktreeID, project): activity},
 	}
