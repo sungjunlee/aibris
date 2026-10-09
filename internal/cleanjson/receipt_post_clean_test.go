@@ -75,8 +75,9 @@ func TestFinishReceiptPostCleanExcludesPhysicallyRemovedOwner(t *testing.T) {
 }
 
 func TestReceiptPreparedOrderUsesPlanOrderAndDoesNotMutateInput(t *testing.T) {
-	first := types.DebrisInfo{ID: "first", Path: filepath.Join(t.TempDir(), "first")}
-	second := types.DebrisInfo{ID: "second", Path: filepath.Join(t.TempDir(), "second")}
+	// Item IDs sort opposite to plan order, so sorting by ID cannot pass.
+	first := types.DebrisInfo{ID: "zeta", Path: filepath.Join(t.TempDir(), "zeta")}
+	second := types.DebrisInfo{ID: "alpha", Path: filepath.Join(t.TempDir(), "alpha")}
 	prepared := []PreparedTarget{
 		{Item: second, ReceiptTargetKey: receiptItemKey(second)},
 		{Item: first, ReceiptTargetKey: receiptItemKey(first)},
@@ -89,10 +90,10 @@ func TestReceiptPreparedOrderUsesPlanOrderAndDoesNotMutateInput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ordered[0].Item.ID != "first" || ordered[1].Item.ID != "second" {
+	if ordered[0].Item.ID != "zeta" || ordered[1].Item.ID != "alpha" {
 		t.Fatalf("ordered prepared targets = %+v", ordered)
 	}
-	if prepared[0].Item.ID != "second" || prepared[1].Item.ID != "first" {
+	if prepared[0].Item.ID != "alpha" || prepared[1].Item.ID != "zeta" {
 		t.Fatalf("ordering mutated caller slice: %+v", prepared)
 	}
 }
