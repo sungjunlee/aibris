@@ -18,7 +18,8 @@
   now-valid layouts use normal eligibility. Other providers' independently
   selected targets retain existing overlap decisions and byte accounting.
   Overrides without Go's README signature remain hidden, and eligible cleanup
-  still removes the whole cache root (#619).
+  still removes the whole cache root. The last-scan cache revision changes, so
+  a snapshot from an earlier version is rescanned (#619).
 
 ## [0.15.2] - 2026-10-09
 
