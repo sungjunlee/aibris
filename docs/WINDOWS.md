@@ -28,6 +28,9 @@ Pull-request CI uses an amd64 `windows-latest` runner to:
   the test if creation fails;
 - keep native Codex activity unavailable for a `sessions/` junction containing
   a recent session (`TestWindowsNativeActivityRejectsSessionsJunction`);
+- keep a worktree locked when the Codex home itself is a junction, for session
+  cwd values using either the target path or the home path
+  (`TestWindowsNativeActivityHomeJunctionKeepsWorktreeLocked`);
 - run the complete deletion-gate, path-identity, and HOME-isolation packages,
   reporting symlink-fixture skips when the runner lacks privilege;
 - run the nested perfharness module tests; and

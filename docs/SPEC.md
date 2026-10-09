@@ -375,8 +375,9 @@ Default guided Codex worktree cleanup:
   timestamps, and session file metadata. A session's activity time is the later
   of its first `session_meta` start timestamp and its file modification time;
   resumed and long-running sessions append in place. Worktree, member, and
-  project aggregates, the recent-activity lock, and the guided barrier all use
-  this activity time. The cached start timestamp remains the start time.
+  project aggregates, the recent-activity lock, the minimum idle age,
+  per-repository retention order, and the guided barrier all use this
+  activity time. The cached start timestamp remains the start time.
   The shared bounded first-record reader
   must not read conversation bodies. Primary and additional Codex homes supply
   session roots; home identity is part of activity/cache keys, so reused

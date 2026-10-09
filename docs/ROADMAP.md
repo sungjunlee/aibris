@@ -18,8 +18,8 @@ behavior is specified in [SPEC.md](SPEC.md), [JSON_SCHEMA.md](JSON_SCHEMA.md),
 
 Next 0.x work:
 
-- Codex activity follow-up: evidence through relocated session stores and
-  Windows junctions above the Codex home (#634).
+- Codex activity follow-up: evidence through relocated session stores, and
+  Windows junctions in a parent of the Codex home (#634).
 - Explain an excluded Go cache instead of omitting it (#619).
 - Coverage for more AI agent stores, each backed by an orphan proof or a
   rebuildable-cache contract (`docs/CATEGORY.md`).
@@ -31,8 +31,9 @@ Next 0.x work:
 ### 0.15.2 Resumed Session Activity
 
 Published 2026-10-09. Work appended to an existing Codex session counts as
-activity in guided review and at the pre-removal check, and a Windows junction
-Codex home fails closed.
+activity in guided review (recent-activity lock, minimum idle age, retention
+order) and at the pre-removal check, and a Codex home that is a Windows
+junction fails closed.
 
 ### 0.15.1 Activity Evidence Fixes
 

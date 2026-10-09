@@ -706,7 +706,7 @@ The mutation-boundary refusal codes are also in the supported reason catalog:
 | `cleanup_recipe_changed` | The current cleanup recipe differs from the prepared recipe; execution is refused before mutation. |
 | `cache_leaf_symlink` | A catalog path-removal cache has a symlink or reparse point (Windows junction) leaf: plan `policy_decision` and `decision` are `skipped`, its bytes are excluded from `selected_bytes`, and execution rechecks/refuses it because link removal would leave the measured referent bytes behind. The uv command route is unchanged. |
 | `worktree_evidence_changed` | Current worktree Git evidence differs from the prepared evidence; execution is refused before mutation. |
-| `activity_evidence_changed` | A guided active unit has a newer member session than reviewed, a current recent-activity lock, unavailable activity evidence (including Orca aggregation), or missing/mismatched review identity; the barrier refuses mutation. |
+| `activity_evidence_changed` | A guided active unit has a later member session activity time than reviewed (a new session, or an append that moves an existing session file's modification time), a current recent-activity lock, unavailable activity evidence (including Orca aggregation), or missing/mismatched review identity; the barrier refuses mutation. |
 
 `cache_leaf_symlink` (added in 0.14.1) is used in plans as well as execution
 receipts. A plan marks the cache `skipped`; an execution that still meets a
