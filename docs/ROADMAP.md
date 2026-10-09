@@ -23,7 +23,6 @@ Next 0.x work:
 - Explain an excluded Go cache instead of omitting it (#619).
 - Windows follow-ups: cleaner command-test coverage (#602) and junction cache
   leaves (#611).
-- perfharness module coupling (#604).
 - Coverage for more AI agent stores, each backed by an orphan proof or a
   rebuildable-cache contract (`docs/CATEGORY.md`).
 - Separate the owning tool from the provider in `--tool` and JSON

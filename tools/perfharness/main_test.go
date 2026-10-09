@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/sungjunlee/aibris/internal/testutil"
 )
 
 // Run the actual CLI in a subprocess so flag parsing and deferred cleanup have
@@ -36,7 +34,7 @@ func lifecycleRepo(t *testing.T) string {
 	for _, key := range []string{"TMPDIR", "TMP", "TEMP"} {
 		t.Setenv(key, root)
 	}
-	testutil.SetHome(t, filepath.Join(root, "home"))
+	isolateHome(t, filepath.Join(root, "home"))
 	// Keep all build and temporary data inside the fixture and disable network
 	// access and operator Go/Git configuration.
 	for key, value := range map[string]string{
