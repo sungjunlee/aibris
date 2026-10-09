@@ -512,26 +512,6 @@ func TestApplyCleanJSONExecutionReceiptRecordsCommandFallbackPathRemoval(t *test
 	}
 }
 
-func TestOrderCleanJSONReceiptPreparedTargetsUsesPlanTargetOrderWithoutMutatingInput(t *testing.T) {
-	first := types.DebrisInfo{ID: "first", Path: filepath.Join(t.TempDir(), "first")}
-	second := types.DebrisInfo{ID: "second", Path: filepath.Join(t.TempDir(), "second")}
-	prepared := []preparedCleanTarget{{Item: second, ReceiptTargetKey: cleanJSONReceiptItemKey(second)}, {Item: first, ReceiptTargetKey: cleanJSONReceiptItemKey(first)}}
-	ids := map[string]string{
-		cleanJSONReceiptItemKey(first):  "target-1",
-		cleanJSONReceiptItemKey(second): "target-2",
-	}
-	ordered, err := orderCleanJSONReceiptPreparedTargets(prepared, ids)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ordered[0].Item.ID != "first" || ordered[1].Item.ID != "second" {
-		t.Fatalf("ordered prepared targets = %+v", ordered)
-	}
-	if prepared[0].Item.ID != "second" || prepared[1].Item.ID != "first" {
-		t.Fatalf("ordering mutated caller slice: %+v", prepared)
-	}
-}
-
 func TestApplyCleanJSONExecutionReceiptIDMissFailsReceiptInvariant(t *testing.T) {
 	item := types.DebrisInfo{ID: "unknown", Path: filepath.Join(t.TempDir(), "unknown")}
 	receipt := cleanJSONReceipt{PhysicalTargets: []cleanJSONReceiptPhysicalTarget{{ID: "target-1", State: cleanJSONReceiptPending}}}

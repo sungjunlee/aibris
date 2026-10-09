@@ -15,9 +15,7 @@ import (
 // Type aliases for backward compatibility
 type (
 	cleanJSONReceipt               = cleanjson.Receipt
-	cleanJSONReceiptTotals         = cleanjson.ReceiptTotals
 	cleanJSONReceiptPhysicalTarget = cleanjson.ReceiptPhysicalTarget
-	cleanJSONPostClean             = cleanjson.ReceiptPostClean
 )
 
 // Const aliases
@@ -29,10 +27,6 @@ const (
 	cleanJSONReceiptPending        = cleanjson.ReceiptStatusPending
 	cleanJSONReceiptSkipped        = cleanjson.ReceiptStatusSkipped
 )
-
-func newCleanJSONReceipt(document cleanJSONPlan) cleanJSONReceipt {
-	return cleanjson.NewReceipt(document, cleanIncludePaths)
-}
 
 func cleanJSONReceiptItemKey(item types.DebrisInfo) string {
 	return cleanjson.RowIdentityKey(item)
