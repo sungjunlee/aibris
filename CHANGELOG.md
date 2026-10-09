@@ -20,8 +20,8 @@
 ### Security
 
 - Build with Go 1.26.9. Earlier Go releases let `os.Root` follow Windows
-  junctions out of the root (GO-2026-6604), which the deletion gate uses for
-  removal (#626).
+  junctions out of the root (GO-2026-6604), which worktree strip uses through
+  `safedelete.RemoveAllIn` (#626).
 
 ## [0.14.1] - 2026-10-08
 
