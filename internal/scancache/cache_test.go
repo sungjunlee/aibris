@@ -83,20 +83,16 @@ func TestSaveLastScanCacheAtomicReplacement(t *testing.T) {
 		t.Fatal("fixture documents must differ")
 	}
 
-	stop := make(chan struct{})
-	var wg sync.WaitGroup
+	const replacementsPerWriter = 10
+	var writers, readers sync.WaitGroup
 	var reads, torn, sawNew int64
+	writersDone := make(chan struct{})
 
 	for i := 0; i < 2; i++ {
-		wg.Add(1)
+		writers.Add(1)
 		go func() {
-			defer wg.Done()
-			for {
-				select {
-				case <-stop:
-					return
-				default:
-				}
+			defer writers.Done()
+			for n := 0; n < replacementsPerWriter; n++ {
 				if err := saveLastScanCache(replacement); err != nil {
 					t.Errorf("saveLastScanCache: %v", err)
 					return
@@ -106,19 +102,14 @@ func TestSaveLastScanCacheAtomicReplacement(t *testing.T) {
 	}
 
 	for i := 0; i < 4; i++ {
-		wg.Add(1)
+		readers.Add(1)
 		go func() {
-			defer wg.Done()
-			for {
-				select {
-				case <-stop:
-					return
-				default:
-				}
+			defer readers.Done()
+			read := func() {
 				data, err := os.ReadFile(path)
 				if err != nil {
 					atomic.AddInt64(&torn, 1)
-					continue
+					return
 				}
 				atomic.AddInt64(&reads, 1)
 				switch {
@@ -129,12 +120,34 @@ func TestSaveLastScanCacheAtomicReplacement(t *testing.T) {
 					atomic.AddInt64(&torn, 1)
 				}
 			}
+			for {
+				select {
+				case <-writersDone:
+					// All replacements finished: the final document must be new.
+					data, err := os.ReadFile(path)
+					if err != nil || !bytes.Equal(data, want) {
+						atomic.AddInt64(&torn, 1)
+					}
+					return
+				default:
+				}
+				read()
+			}
 		}()
 	}
 
-	time.Sleep(500 * time.Millisecond)
-	close(stop)
-	wg.Wait()
+	finished := make(chan struct{})
+	go func() {
+		writers.Wait()
+		close(writersDone)
+		readers.Wait()
+		close(finished)
+	}()
+	select {
+	case <-finished:
+	case <-time.After(30 * time.Second):
+		t.Fatal("writers and readers did not finish within 30s")
+	}
 
 	if torn != 0 {
 		t.Fatalf("readers observed %d partial or missing payloads; want 0", torn)
@@ -142,9 +155,7 @@ func TestSaveLastScanCacheAtomicReplacement(t *testing.T) {
 	if reads == 0 {
 		t.Fatal("readers observed nothing")
 	}
-	if sawNew == 0 {
-		t.Fatal("readers never observed the replacement document; writers may not have run")
-	}
+	t.Logf("reads=%d sawNew=%d", reads, sawNew)
 
 	entries, err := os.ReadDir(filepath.Dir(path))
 	if err != nil {
