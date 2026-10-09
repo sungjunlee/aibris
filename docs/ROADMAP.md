@@ -34,8 +34,8 @@ Next 0.x work:
 ### 0.15.0 Orca Support
 
 Published 2026-10-09. Orca-managed worktrees discovered as independent
-owners, Orca's macOS Codex home as a resolved home for activity, retention and
-logs, Orca activity checked across every Codex home with fail-closed coverage,
+owners, Orca's macOS Codex home as a resolved home for worktrees, activity,
+retention and logs, Orca activity checked across every Codex home with fail-closed coverage,
 and retention across all resolved homes.
 
 ### 0.14.1 Cleanup Scope Fixes
