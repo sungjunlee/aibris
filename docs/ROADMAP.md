@@ -9,24 +9,29 @@ are cut only after the relevant behavior is dogfooded and explicitly approved.
 
 ## Current unreleased work
 
-As of 2026-10-09, the latest tagged release is v0.15.2 (2026-10-09), a patch
-that counts work appended to an existing Codex session as activity and fails
-closed on a Windows junction Codex home. No changes are integrated after that
-tag yet. Tagged history is recorded in [CHANGELOG.md](../CHANGELOG.md); current
-behavior is specified in [SPEC.md](SPEC.md), [JSON_SCHEMA.md](JSON_SCHEMA.md),
-[INSTALL.md](INSTALL.md), and [WINDOWS.md](WINDOWS.md).
+As of 2026-10-09, the latest tagged release is v0.16.0 (2026-10-09), which
+shows a Go build cache rejected by its layout check, with the reason, instead
+of omitting it. No changes are integrated after that tag yet. Tagged history is
+recorded in [CHANGELOG.md](../CHANGELOG.md); current behavior is specified in
+[SPEC.md](SPEC.md), [JSON_SCHEMA.md](JSON_SCHEMA.md), [INSTALL.md](INSTALL.md),
+and [WINDOWS.md](WINDOWS.md).
 
 Next 0.x work:
 
 - Codex activity follow-up: evidence through relocated session stores, and
   Windows junctions in a parent of the Codex home (#634).
-- Explain an excluded Go cache instead of omitting it (#619).
 - Coverage for more AI agent stores, each backed by an orphan proof or a
   rebuildable-cache contract (`docs/CATEGORY.md`).
 - Separate the owning tool from the provider in `--tool` and JSON
   (`owner`, `target_id`) under the 0.x deprecation policy.
 
 ## Shipped
+
+### 0.16.0 Go Cache Diagnostics
+
+Published 2026-10-09. A Go build cache rejected by its layout check appears in
+scan and dry-run with its size and cause (`go_cache_unverified`); that row
+cannot authorize selection.
 
 ### 0.15.2 Resumed Session Activity
 
