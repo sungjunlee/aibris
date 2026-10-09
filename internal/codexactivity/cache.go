@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"time"
 
@@ -99,7 +100,7 @@ func Refresh(ctx context.Context, opts IndexOptions, previous Cache, previousOK 
 			return Cache{}, ctx.Err()
 		}
 		if err != nil {
-			coverage.Absent = defaultHomeAbsent(home)
+			coverage.Absent = ownRootsOnly(home, coverage.Roots) && defaultHomeAbsent(home)
 			sources[home] = coverage
 			continue
 		}
@@ -136,8 +137,7 @@ func Refresh(ctx context.Context, opts IndexOptions, previous Cache, previousOK 
 		coverage.Available = coverage.Available && homeStoresAvailable(home)
 		// Compute absence after the walk: another root grouped under the default
 		// home may have records even when its two standard stores are absent.
-		ownRoots := canonicalRoots([]string{filepath.Join(home, "sessions"), filepath.Join(home, "archived_sessions")})
-		coverage.Absent = len(homeRecords) == 0 && (!coverage.Available || sameRoots(coverage.Roots, ownRoots)) && defaultHomeAbsent(home)
+		coverage.Absent = len(homeRecords) == 0 && ownRootsOnly(home, coverage.Roots) && defaultHomeAbsent(home)
 		sources[home] = coverage
 		if coverage.Available {
 			for path, record := range homeRecords {
@@ -161,6 +161,18 @@ func Refresh(ctx context.Context, opts IndexOptions, previous Cache, previousOK 
 
 // defaultHomeAbsent proves absence without following home or store symlinks.
 // I/O failures and explicit configuration cannot supply negative evidence.
+// ownRootsOnly reports whether every grouped root is one of the home's own two
+// stores, so a foreign root grouped under the home cannot be called absent.
+func ownRootsOnly(home string, roots []string) bool {
+	own := canonicalRoots([]string{filepath.Join(home, "sessions"), filepath.Join(home, "archived_sessions")})
+	for _, root := range roots {
+		if !slices.Contains(own, root) {
+			return false
+		}
+	}
+	return true
+}
+
 func defaultHomeAbsent(home string) bool {
 	defaultHome, err := codexhome.UnconfiguredDefaultHome()
 	if err != nil || defaultHome == "" || canonicalPath(defaultHome) != home {
