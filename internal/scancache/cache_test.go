@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -83,42 +84,60 @@ func TestSaveLastScanCacheAtomicReplacement(t *testing.T) {
 		t.Fatal("fixture documents must differ")
 	}
 
-	stop := make(chan struct{})
-	var wg sync.WaitGroup
+	const replacementsPerWriter = 10
+	var writers, readers sync.WaitGroup
 	var reads, torn, sawNew int64
+	writersDone := make(chan struct{})
+	// abort stops every goroutine on timeout so none outlives the test.
+	abort := make(chan struct{})
+	writeErrs := make(chan error, 2)
+	// Writers start only after every reader has read once, and each writer
+	// pauses after its first replacement until a reader observes it. At least
+	// one read therefore lands between replacements, without timing.
+	var readersReady sync.WaitGroup
+	readersReady.Add(4)
+	writersStart := make(chan struct{})
 
 	for i := 0; i < 2; i++ {
-		wg.Add(1)
+		writers.Add(1)
 		go func() {
-			defer wg.Done()
-			for {
+			defer writers.Done()
+			select {
+			case <-writersStart:
+			case <-abort:
+				return
+			}
+			for n := 0; n < replacementsPerWriter; n++ {
 				select {
-				case <-stop:
+				case <-abort:
 					return
 				default:
 				}
 				if err := saveLastScanCache(replacement); err != nil {
-					t.Errorf("saveLastScanCache: %v", err)
+					writeErrs <- err
 					return
+				}
+				for n == 0 && atomic.LoadInt64(&sawNew) == 0 {
+					select {
+					case <-abort:
+						return
+					default:
+						runtime.Gosched()
+					}
 				}
 			}
 		}()
 	}
 
 	for i := 0; i < 4; i++ {
-		wg.Add(1)
+		readers.Add(1)
 		go func() {
-			defer wg.Done()
-			for {
-				select {
-				case <-stop:
-					return
-				default:
-				}
+			defer readers.Done()
+			read := func() {
 				data, err := os.ReadFile(path)
 				if err != nil {
 					atomic.AddInt64(&torn, 1)
-					continue
+					return
 				}
 				atomic.AddInt64(&reads, 1)
 				switch {
@@ -129,12 +148,50 @@ func TestSaveLastScanCacheAtomicReplacement(t *testing.T) {
 					atomic.AddInt64(&torn, 1)
 				}
 			}
+			read()
+			readersReady.Done()
+			for {
+				select {
+				case <-writersDone:
+					// All replacements finished: the final document must be new.
+					data, err := os.ReadFile(path)
+					if err != nil || !bytes.Equal(data, want) {
+						atomic.AddInt64(&torn, 1)
+						return
+					}
+					atomic.AddInt64(&reads, 1)
+					return
+				case <-abort:
+					return
+				default:
+				}
+				read()
+			}
 		}()
 	}
+	go func() {
+		readersReady.Wait()
+		close(writersStart)
+	}()
 
-	time.Sleep(500 * time.Millisecond)
-	close(stop)
-	wg.Wait()
+	finished := make(chan struct{})
+	go func() {
+		writers.Wait()
+		close(writersDone)
+		readers.Wait()
+		close(finished)
+	}()
+	select {
+	case <-finished:
+	case <-time.After(30 * time.Second):
+		close(abort)
+		<-finished
+		t.Fatal("writers and readers did not finish within 30s")
+	}
+	close(writeErrs)
+	for err := range writeErrs {
+		t.Fatalf("saveLastScanCache: %v", err)
+	}
 
 	if torn != 0 {
 		t.Fatalf("readers observed %d partial or missing payloads; want 0", torn)
@@ -143,7 +200,7 @@ func TestSaveLastScanCacheAtomicReplacement(t *testing.T) {
 		t.Fatal("readers observed nothing")
 	}
 	if sawNew == 0 {
-		t.Fatal("readers never observed the replacement document; writers may not have run")
+		t.Fatal("no read observed the replacement while writers were running")
 	}
 
 	entries, err := os.ReadDir(filepath.Dir(path))
@@ -164,6 +221,22 @@ func TestSaveLastScanCacheAtomicReplacement(t *testing.T) {
 	}
 	if _, ok := readLastScanCache(); !ok {
 		t.Fatal("final cache document must be readable")
+	}
+
+	// The concurrent readers above sample replacements but cannot force a
+	// read inside one write. Replacement by rename is checked directly: a save
+	// installs a new file, while an in-place rewrite keeps the old one.
+	if err := saveLastScanCache(replacement); err != nil {
+		t.Fatal(err)
+	}
+	replaced, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Windows FileInfo loads file identity lazily from its path, so both
+	// values would describe the current file there.
+	if runtime.GOOS != "windows" && os.SameFile(info, replaced) {
+		t.Fatal("saveLastScanCache rewrote the cache file in place; want an atomic rename over it")
 	}
 }
 
