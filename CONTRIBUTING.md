@@ -7,7 +7,8 @@ the bar for new flags is higher; read the product direction in
 ## Getting started
 
 Start with a local checkout and run the commands below from its repository
-root. Required tools are Go 1.26.9 (see `go.mod`), Git, Make, a POSIX shell,
+root. Required tools are Go 1.26.9 or a later patched release (see `go.mod`
+and [docs/INSTALL.md](docs/INSTALL.md)), Git, Make, a POSIX shell,
 and shellcheck. `make check` downloads pinned staticcheck and govulncheck tools
 through Go when missing; initial dependency/tool downloads and vulnerability
 queries need network access. Tests use local fixtures rather than network
