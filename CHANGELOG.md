@@ -2,35 +2,42 @@
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-10-09
+
+### Added
+
+- Receipt reason code `activity_evidence_changed` for a guided active
+  worktree that the pre-mutation barrier keeps because its session activity
+  changed or became unavailable after review. It appears in guided
+  `--receipt-file` receipts; `schema_version` stays 1 (#627).
+
 ### Changed
 
 - Orca activity aggregation treats the proven absence of the unconfigured
-  default `~/.codex` home or both of its session stores as zero activity.
-  Configured missing homes, symlinks, archive-only homes, and I/O errors remain
-  unavailable; native activity does not use the exception. Cached absence is
-  rechecked at lookup. Activity cache schema 6 rebuilds older caches without
-  changing public JSON or reason codes (#624).
+  default `~/.codex` home, or of both its session stores, as zero activity, so
+  Orca-only users can review active Orca worktrees. Configured missing homes,
+  symlinked or archive-only homes, and I/O errors remain unavailable; native
+  worktrees do not use the exception. Absence is re-proven at lookup. The
+  activity cache revision changes, so older caches are rebuilt (#624).
 
 ### Fixed
 
-- Guided review incrementally refreshes Codex session activity even within the
-  15-minute cache window, and active-worktree mutation barriers refresh again.
-  Newer member sessions, recent activity, or unavailable evidence keep native
-  and Orca worktrees; receipts record `activity_evidence_changed`. Unchanged
-  session records are reused, with no new settings or JSON fields (#627).
-- Catalog cache path removal refuses Windows junctions and other reparse-point
-  leaves in previews and at the mutation boundary, preserving both the leaf
-  and its referent. Skipped bytes are excluded from selected totals; the
-  `cache_leaf_symlink` reason code and JSON schema remain unchanged (#611).
+- Guided review refreshes Codex session activity instead of reusing an index
+  up to 15 minutes old, and the guided pre-mutation barrier refreshes again.
+  A member with a newer or recent session, or with unavailable evidence, keeps
+  its worktree. Unchanged session files are not read again (#627).
 - Guided review keeps an active Codex worktree locked with
   `activity_evidence_unavailable` when its home cannot vouch for "no recent
-  session". This now applies to native Codex worktrees as well as Orca ones:
-  `sessions/` must be a directory inside the home, and `archived_sessions/`
-  may be missing but must not be a dangling symlink, a non-directory, a
-  Windows junction or other reparse point, a symlink resolving outside the
-  home, or unreadable. Previously a symlinked or unmounted store could hide a
-  recent session and leave the worktree reviewable. The check repeats at
-  lookup, so a cached index cannot bypass it (#623).
+  session", for native Codex worktrees as well as Orca ones: `sessions/` must
+  be a directory inside the home, and `archived_sessions/` may be missing but
+  must not be a dangling symlink, a non-directory, a Windows junction or other
+  reparse point, a symlink resolving outside the home, or unlistable. Before,
+  a symlinked or unmounted store could hide a recent session and leave the
+  worktree reviewable. The check repeats at lookup (#623).
+- Catalog cache path removal refuses Windows junctions and other
+  reparse-point leaves in previews and at the mutation boundary, preserving
+  both the leaf and its referent, with the existing `cache_leaf_symlink`
+  reason code (#611).
 
 ## [0.15.0] - 2026-10-09
 
