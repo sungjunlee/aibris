@@ -123,6 +123,11 @@ jobs:
         run: go test -race -count=1 -cover ./internal/cleaner -run '^TestIsSafeTarget_GoBuildCacheUnderHome$'
       - name: Test restored cleaner command authority and execution contracts
         run: go test -race -count=1 -cover ./internal/cleaner -run '^(TestExecuteRefusesUntrustedCleanupRecipes|TestExecuteRevalidatesCommandAndFallbackAuthorityAtBarrier|TestExecuteCommandFailurePreservesOutsideSentinel|TestExecute_CommandCleanupZeroReclaimWhenOwnerRemains|TestExecute_PressureUvForceLeavesResidualWithoutInventingFreedBytes|TestExecute_PressureUvForceRejectionReportsResidualWithoutInventingFreedBytes|TestExecute_CommandCleanupSuccess|TestExecute_CommandMissingFallsBackToPathRemoval|TestExecute_CommandFailureDoesNotFallback|TestExecute_CommandCancellationDoesNotCreditRemainingPayload|TestExecute_CommandCancellation|TestUvCleanupDoesNotRunInsideCacheRoot|TestGoCleanupOnlyRemovesPreviewedCache|TestNpmCleanupOnlyRemovesPreviewedCache)$'
+      - name: Test cache leaf symlink and Windows junction refusal
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          go test -race -count=1 -cover ./internal/cleaner -run '^(TestCatalogCacheLeafEligibilityRefusesOnlyPathRouteSymlinks|TestCachePathRemovalRefusesSymlinkIntroducedAtBarrier|TestWindowsCatalogCacheLeafEligibilityRefusesJunction|TestWindowsCachePathRemovalRefusesJunction)$'
+          go test -race -count=1 -cover ./cmd -run '^(TestCatalogCacheLeafPreviewMatchesPathRemovalPolicy|TestCleanJSONReceiptRefusesSymlinkedCacheLeaf|TestWindowsCatalogCacheLeafPreviewRefusesJunction)$'
       # Run whole packages so new deletion-gate tests are included automatically.
       # Symlink fixtures skip only if Windows lacks symlink privilege; their
       # t.Skipf messages report that reason. No test-name exclusions here.

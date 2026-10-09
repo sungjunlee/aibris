@@ -412,14 +412,14 @@ override signature, and layout are rechecked at the mutation boundary; a
 foreign entry added after scan refuses removal.
 
 The npm `_cacache` and Homebrew caches also use gated path removal.
-Catalog cache path removal skips a symlink leaf, excluding its referent size
-from selected bytes. Human dry-run audits explain why it is skipped; JSON plans
-keep the `cache_leaf_symlink` reason code. Removing the link would leave those
-measured bytes behind. Execution
-still rechecks the leaf and refuses symlinks introduced after planning. Ordinary
-directories and the uv command route retain their policy. Cached inventories carrying the
-former Go or npm command recipe are refused as `cleanup_recipe_changed`; run a
-fresh scan before retrying.
+Catalog cache path removal skips a symlink or reparse point (Windows junction)
+leaf, excluding its referent size from selected bytes. Human dry-run audits
+explain why it is skipped; JSON plans keep the `cache_leaf_symlink` reason code.
+Removing the link would leave those measured bytes behind. Execution still rechecks the leaf and refuses symlinks or
+reparse points introduced after planning. Ordinary directories and the uv command
+route retain their policy. Cached inventories carrying the former Go or npm
+command recipe are refused as `cleanup_recipe_changed`; run a fresh scan before
+retrying.
 
 Age values accept human units such as `7d`, `2w`, `1mo`, and `1y`. Use `mo` for
 months; bare `m` keeps the Go duration meaning of minutes.

@@ -287,11 +287,12 @@ Command-backed cleanup:
   mutation boundary; newly added foreign entries refuse removal. Inventories
   with the former Go command refuse as `cleanup_recipe_changed`; scan again.
 - Catalog caches using path removal (including Go, npm, and Homebrew) with a
-  symlink leaf are skipped by cleanup eligibility. Human dry-run audits explain
-  that removing the symlink leaves target bytes behind; JSON plans report
+  symlink or reparse point (Windows junction) leaf are skipped by cleanup
+  eligibility. Human dry-run audits explain that removing the link leaves
+  target bytes behind; JSON plans report
   `cache_leaf_symlink`, with zero selected targets/bytes for that cache. Scan
   inventory still measures the referent. The execution-time leaf check remains
-  authoritative and refuses a symlink introduced after
+  authoritative and refuses a symlink or reparse point introduced after
   planning. Ordinary directories and the uv command route retain their policy.
 - Commands that run and fail do not fall back silently.
 - Context cancellation must stop command execution.
