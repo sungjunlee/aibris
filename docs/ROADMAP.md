@@ -11,7 +11,7 @@ are cut only after the relevant behavior is dogfooded and explicitly approved.
 
 As of 2026-10-09, the latest tagged release is v0.15.1 (2026-10-09), a patch
 that makes guided review refresh Codex session activity, rechecks it before
-removal, and fails closed on relocated or unreadable session stores. No
+each removal step, and fails closed on relocated or unreadable session stores. No
 changes are integrated after that tag yet. Tagged history is recorded in
 [CHANGELOG.md](../CHANGELOG.md); current behavior is specified in
 [SPEC.md](SPEC.md), [JSON_SCHEMA.md](JSON_SCHEMA.md), [INSTALL.md](INSTALL.md),
@@ -32,7 +32,7 @@ Next 0.x work:
 ### 0.15.1 Activity Evidence Fixes
 
 Published 2026-10-09. Guided review refreshes Codex session activity and
-rechecks it right before removal, relocated or unreadable session stores keep
+rechecks it before each removal step, relocated or unreadable session stores keep
 active worktrees locked, Orca-only users can review active Orca worktrees, and
 Windows junction cache leaves are refused.
 
