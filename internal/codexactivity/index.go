@@ -112,9 +112,9 @@ func LoadWithOptions(ctx context.Context, opts IndexOptions) Index {
 		}
 		return Unavailable(err)
 	}
-	if err := Save(opts.CachePath, refreshed); err != nil {
-		return Unavailable(fmt.Errorf("%w: %v", ErrUnavailable, err))
-	}
+	// The refreshed index is complete evidence; persisting it only speeds up
+	// later loads, so a cache that cannot be written must not discard it.
+	_ = Save(opts.CachePath, refreshed)
 	return indexFromCache(refreshed, 0, SourceRefresh, nil)
 }
 
