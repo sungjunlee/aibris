@@ -30,8 +30,8 @@ Next 0.x work:
 ### 0.16.0 Go Cache Diagnostics
 
 Published 2026-10-09. A Go build cache rejected by its layout check appears in
-scan and dry-run with its size and cause (`go_cache_unverified`) and is never
-selectable.
+scan and dry-run with its size and cause (`go_cache_unverified`); that row
+cannot authorize selection.
 
 ### 0.15.2 Resumed Session Activity
 

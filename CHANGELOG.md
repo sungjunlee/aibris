@@ -17,8 +17,10 @@
 - Go cache eligibility rechecks the live catalog before age or pressure rules,
   including for cached diagnostic rows. Still-rejected caches cannot authorize
   Go cache selection with a minimal age, pressure relaxation, or `--force`;
-  now-valid layouts use normal eligibility. Other providers' independently
-  selected targets retain existing overlap decisions and byte accounting.
+  now-valid layouts use normal eligibility. An independently selected target
+  at the same path, including another catalog entry, keeps its decision and
+  byte accounting; the Go row keeps `policy_decision=skipped` but inherits
+  `decision=selected`, and those bytes count once toward `selected_bytes`.
   Overrides without Go's README signature remain hidden, and eligible cleanup
   still removes the whole cache root. The last-scan cache revision changes, so
   a snapshot from an earlier version is rescanned (#619).
