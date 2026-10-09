@@ -31,6 +31,15 @@ func Home() (string, error) {
 	return filepath.Join(home, ".codex"), nil
 }
 
+// UnconfiguredDefaultHome returns ~/.codex only when CODEX_HOME is empty.
+// Explicit settings cannot prove absence: a missing configured path may be a typo.
+func UnconfiguredDefaultHome() (string, error) {
+	if os.Getenv("CODEX_HOME") != "" {
+		return "", nil
+	}
+	return Home()
+}
+
 // ExtraHomes returns the additional Codex homes listed in $AIBRIS_CODEX_HOMES,
 // a PATH-style separator-delimited list of absolute paths. Empty and relative
 // entries are ignored; the list order is preserved.

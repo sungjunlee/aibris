@@ -2,12 +2,30 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Orca activity aggregation treats the proven absence of the unconfigured
+  default `~/.codex` home or both of its session stores as zero activity.
+  Configured missing homes, symlinks, archive-only homes, and I/O errors remain
+  unavailable; native activity does not use the exception. Cached absence is
+  rechecked at lookup. Activity cache schema 6 rebuilds older caches without
+  changing public JSON or reason codes (#624).
+
 ### Fixed
 
 - Catalog cache path removal refuses Windows junctions and other reparse-point
   leaves in previews and at the mutation boundary, preserving both the leaf
   and its referent. Skipped bytes are excluded from selected totals; the
   `cache_leaf_symlink` reason code and JSON schema remain unchanged (#611).
+- Guided review keeps an active Codex worktree locked with
+  `activity_evidence_unavailable` when its home cannot vouch for "no recent
+  session". This now applies to native Codex worktrees as well as Orca ones:
+  `sessions/` must be a directory inside the home, and `archived_sessions/`
+  may be missing but must not be a dangling symlink, a non-directory, a
+  Windows junction or other reparse point, a symlink resolving outside the
+  home, or unreadable. Previously a symlinked or unmounted store could hide a
+  recent session and leave the worktree reviewable. The check repeats at
+  lookup, so a cached index cannot bypass it (#623).
 
 ## [0.15.0] - 2026-10-09
 

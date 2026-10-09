@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	CacheSchemaVersion = 5 // recognize Orca workspace CWDs in every resolved home
+	CacheSchemaVersion = 6 // distinguish proven default-home absence from unavailable evidence
 	Freshness          = 15 * time.Minute
 
 	SourceCache       = "cache"

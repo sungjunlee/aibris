@@ -388,6 +388,23 @@ Orca 기본 worktree 위치는 `~/orca/workspaces/<repo>/<worktree>`다.
 non-directory, 자체 `.git`이 있는 checkout은 건너뛴다. 각 `<worktree>`가
 독립 mutation owner이며 `source=orca`, `tool=unknown`으로 보고된다.
 Guided review는 Orca Codex session의 최근 cwd도 activity lock에 반영한다.
+Native Codex와 Orca 모두 읽을 수 있는 `sessions/` directory가 필요하고,
+각 canonical session root의 parent가 canonical home과 같아야 한다.
+Refresh와 lookup에서 두 store를 `Lstat`으로 확인한다. `ErrNotExist`는
+`archived_sessions/`에만 허용하며 `sessions/`는 존재해야 한다. 실제 directory는
+허용하고, symlink는 `Stat`이 directory로 성공하며 canonical parent가 home과
+같을 때만 허용한다. Dangling symlink, non-directory, `ModeIrregular` store
+(Windows junction, mount point 등 reparse point), 그 밖의 모든 `Lstat`/`Stat`
+error는 `activity_evidence_unavailable` lock을 유지한다. Archive-only home과
+symlink로 분리된 roots도 lock을 유지한다. Home 전체의 symlink는
+roots와 session cwd가 같은 canonical home으로 해석되면 activity를 유지한다.
+Orca aggregation만 미설정 기본 `$HOME/.codex`의 증명된 부재를 zero activity로
+본다. `CODEX_HOME`이 비어 있고 configured extra도 아닌 home에 대해 `Lstat`으로
+home 자체의 부재 또는 symlink가 아닌 directory 안의 두 stores 부재를 증명해야
+한다. Native worktree, configured missing home, dangling/symlink home,
+archive-only, I/O error에는 이 예외가 적용되지 않는다. Cached absence도 lookup에서
+다시 확인한다. Activity cache schema 6으로 이전 cache를 rebuild하며 public JSON과
+reason codes는 유지한다.
 모든 resolved home의 sessions retention은 read-only inventory이고,
 `logs_2.sqlite`와 `archived_sessions/` cleanup에는 계속 `--risky`가 필요하다.
 Orca home과 container 및 그 ancestors는 whole target으로 삭제할 수 없다.

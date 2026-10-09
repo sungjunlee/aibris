@@ -365,14 +365,30 @@ Default guided Codex worktree cleanup:
   resolved homes, requiring complete coverage of every home. Orca's multi-tool
   containers retain `tool=unknown`, but guided review locks them with
   `recent_activity` for a recent Codex session, or `activity_evidence_unavailable`
-  when any required home is unavailable or unqueried. A resolved home whose
-  `sessions/` directory is missing or a dangling symlink counts as unavailable,
-  even when `archived_sessions/` exists (for example, no `~/.codex/sessions`
-  because the Codex CLI was never run directly). Active Orca worktrees
-  also keep that unavailable-evidence lock when the Orca home is not discovered
-  (including non-macOS platforms or missing, invalid, or unavailable layout).
-  Session-root symlinks that split a home's roots across activity source keys
-  leave its coverage incomplete and keep the same unavailable-evidence lock.
+  when any required home is unavailable or unqueried. For both native Codex
+  and Orca worktrees, a home needs a readable `sessions/` directory, and each
+  canonical session root's parent must equal the canonical home. At Refresh
+  and again at lookup, both `sessions/` and `archived_sessions/` are checked
+  with `Lstat`: only a missing archive (`ErrNotExist`) is allowed; `sessions/`
+  must exist. A real directory is accepted. A symlink is accepted only when
+  `Stat` succeeds with a directory and its canonical parent is the home.
+  Dangling symlinks, non-directories, `ModeIrregular` stores (Windows junctions,
+  mount points, or other reparse points), and all other `Lstat`/`Stat` errors
+  keep the unavailable-evidence lock. Archive-only homes and split roots also
+  keep that lock. A symlink of the
+  whole home preserves activity when its roots and session CWDs resolve to
+  that same canonical home. Only Orca aggregation treats proven absence of
+  the unconfigured default `$HOME/.codex` as zero activity: `CODEX_HOME` is
+  empty, the home is not explicitly listed in `AIBRIS_CODEX_HOMES`, and either
+  the home is absent or it is a real non-symlink directory with both `sessions/`
+  and `archived_sessions/` absent, all proven with `Lstat`. A configured missing
+  home, dangling or symlinked home, archive-only home, or any I/O failure stays
+  unavailable. Native worktrees never use this absence exception. Cached
+  absence is rechecked at lookup so configuration or store changes fail closed.
+  Activity cache schema 6 rejects and rebuilds earlier caches; public JSON
+  output and reason codes are unchanged. Active Orca worktrees keep the lock
+  when the Orca home is not discovered (including non-macOS platforms or missing,
+  invalid, or unavailable layout).
 - Git safety protects current working directories, dirty or untracked members,
   unreadable evidence, and detached HEADs not reachable from named refs.
   Missing or gone upstream is explanatory metadata, not a lock. An attached

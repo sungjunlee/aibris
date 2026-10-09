@@ -50,7 +50,7 @@ func TestActivityFreshCacheRejectsChangedRoots(t *testing.T) {
 	}
 }
 
-func TestActivityRejectsOldCacheSchema(t *testing.T) {
+func TestActivityRejectsV5CacheSchema(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	now := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
@@ -58,7 +58,7 @@ func TestActivityRejectsOldCacheSchema(t *testing.T) {
 	writeCodexSession(t, filepath.Join(root, "session.jsonl"), now, filepath.Join(home, ".codex", "worktrees", "new", "project"), "new", "PRIVATE-BODY")
 	path := filepath.Join(home, "cache.json")
 	cache := Cache{
-		SchemaVersion: CacheSchemaVersion - 1,
+		SchemaVersion: 5,
 		CreatedAt:     now,
 		SessionRoots:  []string{canonicalPath(root)},
 		Sources: map[string]SourceCoverage{
@@ -100,5 +100,115 @@ func TestActivityCanonicalHomeAliasReusesCache(t *testing.T) {
 	activity, available := second.LookupMember(filepath.Join(alias, "worktrees", "id", "project"))
 	if !first.Available || second.Source != SourceCache || !available || !activity.LatestSession.Equal(now) {
 		t.Fatalf("canonical alias = %+v / %+v, available = %t", first, second, available)
+	}
+}
+
+func TestNativeActivityRequiresCompleteHome(t *testing.T) {
+	for _, scenario := range []string{"real", "split-sessions-archive", "split-sessions-no-archive", "dangling-sessions", "archive-only", "split-archive", "symlink-home"} {
+		t.Run(scenario, func(t *testing.T) {
+			home := t.TempDir()
+			testutil.SetHome(t, home)
+			source := filepath.Join(home, ".codex")
+			now := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+			member := filepath.Join(source, "worktrees", "id", "project")
+			if scenario == "symlink-home" {
+				realHome := filepath.Join(home, "codex-home")
+				if err := os.MkdirAll(realHome, 0755); err != nil {
+					t.Fatal(err)
+				}
+				activitySymlink(t, realHome, source)
+			}
+			if err := os.MkdirAll(source, 0755); err != nil {
+				t.Fatal(err)
+			}
+			sessions := filepath.Join(source, "sessions")
+			archive := filepath.Join(source, "archived_sessions")
+			switch scenario {
+			case "split-sessions-archive", "split-sessions-no-archive":
+				external := filepath.Join(home, "elsewhere", "sessions")
+				writeCodexSession(t, filepath.Join(external, "recent.jsonl"), now, member, "recent", "PRIVATE-BODY")
+				activitySymlink(t, external, sessions)
+			case "dangling-sessions":
+				activitySymlink(t, filepath.Join(home, "unmounted", "sessions"), sessions)
+			case "archive-only":
+			case "split-archive":
+				external := filepath.Join(home, "elsewhere", "archived_sessions")
+				writeCodexSession(t, filepath.Join(external, "recent.jsonl"), now, member, "recent", "PRIVATE-BODY")
+				activitySymlink(t, external, archive)
+				if err := os.MkdirAll(sessions, 0755); err != nil {
+					t.Fatal(err)
+				}
+			default:
+				writeCodexSession(t, filepath.Join(sessions, "recent.jsonl"), now, member, "recent", "PRIVATE-BODY")
+			}
+			if scenario != "split-sessions-no-archive" && scenario != "split-archive" {
+				if err := os.MkdirAll(archive, 0755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			opts := IndexOptions{Now: now, CachePath: filepath.Join(home, "activity.json")}
+			for _, expectedSource := range []string{SourceRefresh, SourceCache} {
+				index := LoadWithOptions(context.Background(), opts)
+				activity, available := index.LookupMember(member)
+				wantSource := expectedSource
+				if scenario == "dangling-sessions" || scenario == "archive-only" || scenario == "split-archive" {
+					wantSource = SourceUnavailable
+				}
+				if index.Source != wantSource {
+					t.Fatalf("source = %s; want %s", index.Source, wantSource)
+				}
+				wantAvailable := scenario == "real" || scenario == "symlink-home"
+				if available != wantAvailable {
+					t.Fatalf("activity = %+v/%t; want availability %t", activity, available, wantAvailable)
+				}
+				if available && (activity.SessionCount != 1 || !activity.LatestSession.Equal(now)) {
+					t.Fatalf("recent session lost: %+v", activity)
+				}
+			}
+		})
+	}
+}
+
+func activitySymlink(t *testing.T, target, link string) {
+	t.Helper()
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+}
+
+func TestNativeCachedActivityRequiresActiveDirectory(t *testing.T) {
+	for _, change := range []string{"missing", "dangling", "file"} {
+		t.Run(change, func(t *testing.T) {
+			home := t.TempDir()
+			testutil.SetHome(t, home)
+			source := filepath.Join(home, ".codex")
+			sessions := filepath.Join(source, "sessions")
+			now := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+			member := filepath.Join(source, "worktrees", "id", "project")
+			writeCodexSession(t, filepath.Join(sessions, "old.jsonl"), now.Add(-90*24*time.Hour), member, "old", "PRIVATE-BODY")
+			opts := IndexOptions{Now: now, CachePath: filepath.Join(home, "activity.json")}
+			first := LoadWithOptions(context.Background(), opts)
+			if _, available := first.LookupMember(member); !available {
+				t.Fatal("initial sessions directory unavailable")
+			}
+			if err := os.Rename(sessions, filepath.Join(source, "previous-sessions")); err != nil {
+				t.Fatal(err)
+			}
+			switch change {
+			case "dangling":
+				activitySymlink(t, filepath.Join(home, "unmounted", "sessions"), sessions)
+			case "file":
+				if err := os.WriteFile(sessions, nil, 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			cached := LoadWithOptions(context.Background(), opts)
+			if cached.Source != SourceCache {
+				t.Fatalf("source = %s; want cache with unchanged roots", cached.Source)
+			}
+			if activity, available := cached.LookupMember(member); available {
+				t.Fatalf("changed active root has negative authority: %+v", activity)
+			}
+		})
 	}
 }

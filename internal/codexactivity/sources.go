@@ -1,6 +1,9 @@
 package codexactivity
 
 import (
+	"errors"
+	"io"
+	"os"
 	"path/filepath"
 	"slices"
 
@@ -15,6 +18,9 @@ type SourceCoverage struct {
 	// ActiveRoot reports that the home's sessions/ root exists as a directory.
 	// An archive alone cannot vouch for the absence of recent sessions.
 	ActiveRoot bool `json:"active_root"`
+	// Absent is proven absence of the unconfigured default home or both stores.
+	// It supplies zero activity only to Orca's aggregation, never native worktrees.
+	Absent bool `json:"absent"`
 }
 
 // LookupMember returns activity and whether every required source was queried.
@@ -35,7 +41,7 @@ func (i Index) LookupMember(path string) (Worktree, bool) {
 			selected, id, project = home, worktreeID, name
 		}
 	}
-	if selected == "" || !i.Sources[selected].Available {
+	if selected == "" || !i.homeAvailable(selected, false) {
 		return Worktree{}, false
 	}
 	return i.memberActivity(selected, id, project), true
@@ -62,15 +68,11 @@ func (i Index) lookupOrcaWorkspace(id, project string) (Worktree, bool) {
 	}
 	combined := Worktree{WorktreeID: id, Project: project}
 	for _, home := range canonicalRoots(homes) {
-		coverage := i.Sources[home]
-		roots := canonicalRoots([]string{filepath.Join(home, "sessions"), filepath.Join(home, "archived_sessions")})
-		// A session-root symlink can split this home's roots across source keys.
-		// Partial coverage cannot speak for the whole home, even if it is readable.
-		// Every home must also have its sessions/ root: a missing or dangling
-		// one (for example on an unmounted volume) with only an archive present
-		// would otherwise read as "no recent session".
-		if !coverage.Available || !coverage.ActiveRoot || !sameRoots(coverage.Roots, roots) {
+		if !i.homeAvailable(home, true) {
 			return Worktree{}, false
+		}
+		if i.Sources[home].Absent {
+			continue
 		}
 		matching := i.memberActivity(home, id, project)
 		combined.SessionCount += matching.SessionCount
@@ -79,6 +81,87 @@ func (i Index) lookupOrcaWorkspace(id, project string) (Worktree, bool) {
 		}
 	}
 	return combined, true
+}
+
+// homeAvailable decides whether a home can supply negative activity evidence.
+// Native lookups may query only sessions; Orca requires both requested roots.
+// Only Orca aggregation can accept a still-provably-absent default home.
+func (i Index) homeAvailable(home string, requireAllRoots bool) bool {
+	coverage := i.Sources[home]
+	if requireAllRoots && coverage.Absent {
+		// Cached absence must not authorize a now-configured or populated home.
+		return defaultHomeAbsent(home)
+	}
+	if !coverage.Available || !coverage.ActiveRoot || len(coverage.Roots) == 0 {
+		return false
+	}
+	if !homeStoresAvailable(home) {
+		return false
+	}
+	roots := canonicalRoots([]string{filepath.Join(home, "sessions"), filepath.Join(home, "archived_sessions")})
+	// Check both indexed and current roots: a symlink may split the home into
+	// different source keys, or change after the index was cached.
+	for _, root := range append(roots, coverage.Roots...) {
+		if filepath.Dir(root) != home {
+			return false
+		}
+	}
+	return !requireAllRoots || sameRoots(coverage.Roots, roots)
+}
+
+// homeStoresAvailable checks both store leaves without treating a dangling
+// symlink or a Windows mount-point reparse point as a missing optional archive.
+// Run at coverage time and lookup so cached roots cannot bypass live evidence.
+func homeStoresAvailable(home string) bool {
+	for _, store := range []string{"sessions", "archived_sessions"} {
+		path := filepath.Join(home, store)
+		info, err := os.Lstat(path)
+		if err != nil {
+			if store == "archived_sessions" && errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return false
+		}
+		if info.Mode()&os.ModeIrregular != 0 {
+			return false
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			target, err := os.Stat(path)
+			if err != nil || !target.IsDir() || target.Mode()&os.ModeIrregular != 0 {
+				return false
+			}
+			resolved, err := filepath.EvalSymlinks(path)
+			if err != nil || filepath.Dir(resolved) != home {
+				return false
+			}
+		} else if !info.IsDir() {
+			return false
+		}
+		// Metadata survives a permission change; cached negative evidence
+		// needs a store that can still be listed now.
+		if !directoryReadable(path) {
+			return false
+		}
+	}
+	return true
+}
+
+func directoryReadable(path string) bool {
+	dir, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer dir.Close()
+	names, err := dir.Readdirnames(1)
+	if errors.Is(err, io.EOF) {
+		return true
+	}
+	if err != nil || len(names) == 0 {
+		return false
+	}
+	// Listing needs read permission; reaching an entry also needs search.
+	_, err = os.Lstat(filepath.Join(path, names[0]))
+	return err == nil
 }
 
 func sameRoots(a, b []string) bool { return slices.Equal(a, b) }

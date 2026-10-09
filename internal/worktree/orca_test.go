@@ -307,3 +307,45 @@ func TestOrcaCodexLogsRequireRisky(t *testing.T) {
 		}
 	}
 }
+
+func TestOrcaRecentSessionLocksWithAbsentDefaultHome(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("Orca Codex home is macOS-only")
+	}
+	for _, defaultHome := range []string{"missing", "existing"} {
+		t.Run(defaultHome, func(t *testing.T) {
+			home := t.TempDir()
+			testutil.SetHome(t, home)
+			if defaultHome == "existing" {
+				if err := os.MkdirAll(filepath.Join(home, ".codex", "worktrees", "native", "project"), 0755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			orca := testutil.OrcaCodexHome(t, home)
+			now := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+			old, recent := now.Add(-30*24*time.Hour), now.Add(-time.Hour)
+			target := filepath.Join(home, "orca", "workspaces", "project", "member")
+			writeCodexSession(t, filepath.Join(orca, "sessions", "recent.jsonl"), recent, filepath.Join(target, "nested"), "recent", "PRIVATE-BODY")
+			units := []WorktreeCleanupUnit{{TargetPath: target, Source: "orca", Members: []GitWorktreeMember{{WorktreePath: target}}}}
+			items := []types.DebrisInfo{{Category: types.CategoryWorktree, Tool: types.ToolUnknown, Source: "orca", ID: "member", Project: "project", Path: target, ModTime: old}}
+			if err := EnrichActivity(context.Background(), units, items, ActivityOptions{
+				IndexOptions: codexactivity.IndexOptions{Now: now, CachePath: filepath.Join(home, "activity.json")},
+				Runner:       reflogRunner(map[string]time.Time{target: old}),
+			}); err != nil {
+				t.Fatal(err)
+			}
+			m := &units[0].Members[0]
+			m.RepositoryID = filepath.Join(home, "repo", ".git")
+			m.EvidenceAvailable, m.GitEvidenceAvailable, m.Recoverable = true, true, true
+			m.Reason = GitEvidenceReason{Code: GitReasonAttachedBranch}
+			plan := PlanWorktreeCleanup(units, DefaultCleanupPolicy(now))
+			if len(plan.Decisions) != 1 {
+				t.Fatalf("decisions = %d; want 1", len(plan.Decisions))
+			}
+			d := plan.Decisions[0]
+			if !units[0].RegisteredActivityAvailable || d.Class != DecisionLocked || !containsReason(cleanupPolicyReasonCodes(d), DecisionReasonRecentActivity) {
+				t.Fatalf("recent Orca session lost protection: %+v", d)
+			}
+		})
+	}
+}
