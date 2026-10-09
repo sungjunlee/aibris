@@ -49,3 +49,13 @@ func executePreparedCleanTargets(
 ) (cleanExecutionReceipt, error) {
 	return executor.ExecutePreparedTargets(ctx, targets, opts, invalidateLastScanCache)
 }
+
+func prepareGuidedCleanExecutionWithOptions(
+	ctx context.Context,
+	selection cleanupOverlapSafetySelection,
+	runtime cleanupOverlapSafetyRuntime,
+	opts types.PruneOptions,
+	state *guidedCleanState,
+) []preparedCleanTarget {
+	return executor.PrepareGuidedExecutionWithOptions(ctx, selection, runtime, opts, state)
+}

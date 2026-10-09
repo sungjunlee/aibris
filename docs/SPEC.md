@@ -353,6 +353,23 @@ Default guided Codex worktree cleanup:
 - The planner must fail closed when git safety evidence, or a registered
   activity reader that exists and failed, is
   unavailable or unsafe.
+- Guided review requires an incremental session-store Refresh even within the
+  activity cache's 15-minute freshness window. Unchanged session file records
+  (same path, mtime, size) are reused; scan notices retain the cheap cached path.
+  Review-time member session timestamps and availability, scanner fallback
+  rows, and the activity lock policy stay attached to each prepared target.
+  Refresh runs before the member loop, before each member removal and before
+  the owner removal, re-deriving unit and member activity with the same lookup
+  and lock rules.
+  A newer session for any member (even outside the recent window or below
+  another member's timestamp), a current recent-activity lock, or unavailable
+  activity evidence, including Orca aggregation, refuses mutation with
+  `activity_evidence_changed`. Human output explains why the worktree was kept;
+  guided `--receipt-file` receipts preserve the reason code. Guided execution
+  is unavailable with `--json`, and JSON plans never contain this refusal code.
+  No new public field or setting is introduced; `schema_version` stays 1.
+  Classic, non-worktree, and
+  orphaned-worktree paths are unchanged.
 - Codex activity uses metadata only: session metadata, working-directory paths,
   timestamps, and cache file metadata. The shared bounded first-record reader
   must not read conversation bodies. Primary and additional Codex homes supply

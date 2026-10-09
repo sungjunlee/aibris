@@ -12,9 +12,10 @@ import (
 // PreparedActiveWorktreeTarget holds the evidence needed to execute one active
 // worktree cleanup target with overlap safety and snapshot validation.
 type PreparedActiveWorktreeTarget struct {
-	Item     types.DebrisInfo
-	Unit     WorktreeCleanupUnit
-	Snapshot *cleaner.CleanupTargetSnapshot
+	Item           types.DebrisInfo
+	Unit           WorktreeCleanupUnit
+	Snapshot       *cleaner.CleanupTargetSnapshot
+	ActivityReview *ActivityReview
 	// BeforeMutation runs before any physical mutation. A non-nil error refuses
 	// the entire cleanup target.
 	BeforeMutation func(context.Context) error
@@ -60,12 +61,18 @@ func ExecutePreparedActiveWorktreeTarget(
 			if prepared.Snapshot == nil {
 				return fmt.Errorf("pre-mutation safety barrier: cleanup target snapshot unavailable")
 			}
-			// snapshot is an active worktree unit here, so it is never
-			// activity-derived and validate cannot walk the tree per member.
+			// Target snapshot validation stays separate from session evidence.
 			if snapshotErr := prepared.Snapshot.Validate(ctx); snapshotErr != nil {
 				result.BlockingPath = prepared.Item.Path
 				result.BlockingReason = snapshotErr.Error()
 				return fmt.Errorf("pre-mutation safety barrier: %v", snapshotErr)
+			}
+			if prepared.ActivityReview != nil {
+				if err := prepared.ActivityReview.Validate(ctx, prepared.Unit); err != nil {
+					result.BlockingPath = prepared.Item.Path
+					result.BlockingReason = err.Error()
+					return fmt.Errorf("pre-mutation safety barrier: %w", err)
+				}
 			}
 			return nil
 		},

@@ -263,6 +263,7 @@ var supportedReasonCodes = func() map[string]struct{} {
 		"cache_leaf_symlink":               {},
 		"cleanup_recipe_changed":           {},
 		"worktree_evidence_changed":        {},
+		"activity_evidence_changed":        {},
 		"cancelled":                        {},
 		"physical_owner_present":           {},
 		"no_bytes_reclaimed":               {},

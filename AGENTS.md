@@ -121,8 +121,13 @@ These hold for every change. Breaking one is a bug even if tests pass.
   activity evidence. Orphaned worktrees need fresh unchanged member/regular
   `.git` marker evidence, including still-missing gitdirs; symlinked markers
   cannot authorize removal. Prepared typed evidence stays attached to the
-  selected target through execution and receipt projection. Guided and JSON
-  receipts share typed prepared-target identity binding; missing or duplicate
+  selected target through execution and receipt projection. Guided review and
+  active-unit mutation barriers incrementally refresh session activity, reusing
+  only unchanged path/mtime/size records. Each selected member keeps its
+  review-time session timestamp and availability; newer sessions, recent activity
+  locks, or unavailable evidence (including Orca aggregation) refuse mutation.
+  Classic and orphaned routes do not use this guided activity barrier. Guided
+  and JSON receipts share typed prepared-target identity binding; missing or duplicate
   guided outcome identities are invariant errors. Errors found after mutation
   preserve known outcomes in a failed receipt rather than suppressing it.
 - **Never trust inventory for authority.** A path from a scan or cache is a

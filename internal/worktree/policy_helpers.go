@@ -40,19 +40,8 @@ func cleanupUnitHardLockReasonCodes(unit WorktreeCleanupUnit, policy CleanupPoli
 	if unit.HardLocked && !present[DecisionReasonGitEvidenceUnavailable] && !present[DecisionReasonDirtyWorktree] && !present[DecisionReasonDetachedUnreferenced] {
 		present[DecisionReasonGitEvidenceUnavailable] = true
 	}
-	// A missing registered reader is no longer a hard lock on its own: it says
-	// aibris has no session log for this tool, not that the unit is unknown.
-	// A reader that exists and failed still is — an outage means the evidence
-	// we normally rely on is missing rather than absent by design.
-	if !unit.ActivityAvailable ||
-		(cleanupUnitHasRegisteredActivitySource(unit) && !unit.RegisteredActivityAvailable) {
-		present[DecisionReasonActivityUnavailable] = true
-	}
-	// The recent-activity window stays tool-independent. HEAD reflog and
-	// scanner metadata date any worktree, so a unit touched inside the window
-	// is locked whether or not its tool has a registered reader.
-	if unit.ActivityAvailable && unit.LastActivity.After(policy.Now.Add(-policy.RecentActivityWindow)) {
-		present[DecisionReasonRecentActivity] = true
+	for _, code := range cleanupUnitActivityLockReasonCodes(unit, policy) {
+		present[code] = true
 	}
 
 	order := []DecisionReasonCode{
@@ -99,4 +88,20 @@ func cleanupUnitContainsPath(target, path string) bool {
 		return false
 	}
 	return !strings.HasPrefix(relative, ".."+string(filepath.Separator))
+}
+
+// cleanupUnitActivityLockReasonCodes is shared by review and execution.
+func cleanupUnitActivityLockReasonCodes(unit WorktreeCleanupUnit, policy CleanupPolicy) []DecisionReasonCode {
+	var reasons []DecisionReasonCode
+	// The recent window is tool-independent: reflog and scanner timestamps
+	// still protect worktrees without a registered session reader.
+	if unit.ActivityAvailable && unit.LastActivity.After(policy.Now.Add(-policy.RecentActivityWindow)) {
+		reasons = append(reasons, DecisionReasonRecentActivity)
+	}
+	// No reader is distinct from an outage of a registered reader.
+	if !unit.ActivityAvailable ||
+		(cleanupUnitHasRegisteredActivitySource(unit) && !unit.RegisteredActivityAvailable) {
+		reasons = append(reasons, DecisionReasonActivityUnavailable)
+	}
+	return reasons
 }

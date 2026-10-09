@@ -185,7 +185,7 @@ func TestCleanJSONReceiptTypedEvidenceSurvivesOrderingAndInteractiveSelection(t 
 							t.Fatalf("execution received an unprepared target: %+v", target)
 						}
 						original := originals[index]
-						if target.TargetSnapshot != original.TargetSnapshot || target.Component != original.Component || target.MutationSafety != original.MutationSafety || target.ActiveUnit != original.ActiveUnit || target.OrphanSnapshot != original.OrphanSnapshot || target.PreparationError != original.PreparationError {
+						if target.TargetSnapshot != original.TargetSnapshot || target.Component != original.Component || target.MutationSafety != original.MutationSafety || target.ActiveUnit != original.ActiveUnit || target.ActivityReview != original.ActivityReview || target.OrphanSnapshot != original.OrphanSnapshot || target.PreparationError != original.PreparationError {
 							t.Fatalf("typed prepared evidence changed across receipt boundary: got=%+v original=%+v", target, original)
 						}
 						executed = append(executed, target.Item.Path)

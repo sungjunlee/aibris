@@ -177,3 +177,40 @@ func TestStoreUnreadableAfterIndexKeepsActivityUnavailable(t *testing.T) {
 		})
 	}
 }
+
+func TestRequiredRefreshKeepsEvidenceWhenCacheIsReadOnly(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses directory permissions")
+	}
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	source := filepath.Join(home, ".codex")
+	now := time.Now()
+	member := filepath.Join(source, "worktrees", "id", "project")
+	writeCodexSession(t, filepath.Join(source, "sessions", "old.jsonl"), now.Add(-90*24*time.Hour), member, "old", "PRIVATE-BODY")
+	cacheDir := filepath.Join(home, "cache")
+	opts := IndexOptions{Now: now, CachePath: filepath.Join(cacheDir, "activity.json")}
+	if index := LoadWithOptions(context.Background(), opts); !index.Available {
+		t.Fatalf("initial index unavailable: %v", index.Err)
+	}
+	for _, path := range []string{opts.CachePath, cacheDir} {
+		if err := os.Chmod(path, 0555); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			if err := os.Chmod(path, 0755); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	if err := Save(opts.CachePath, Cache{}); err == nil {
+		t.Fatal("cache unexpectedly writable")
+	}
+	writeCodexSession(t, filepath.Join(source, "sessions", "recent.jsonl"), now.Add(-time.Minute), member, "recent", "PRIVATE-BODY")
+	opts.RequireRefresh = true
+	index := LoadWithOptions(context.Background(), opts)
+	activity, available := index.LookupMember(member)
+	if !available || activity.SessionCount != 2 {
+		t.Fatalf("refresh with read-only cache = %+v/%t (err %v); want both sessions available", activity, available, index.Err)
+	}
+}

@@ -147,7 +147,7 @@ func runCleanJSON(cmd *cobra.Command, input *confirminput.Reader) {
 			failCleanJSON(err.Error())
 		}
 	}
-	prepared := prepareCleanExecutionWithOptions(ctx, executionSelection, overlapSafety, opts)
+	prepared := prepareGuidedCleanExecutionWithOptions(ctx, executionSelection, overlapSafety, opts, guidedStatePtr)
 	components := cleanjson.SnapshotComponentsFromCmd(
 		plan,
 		audit.Components,

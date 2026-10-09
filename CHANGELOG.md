@@ -13,6 +13,11 @@
 
 ### Fixed
 
+- Guided review incrementally refreshes Codex session activity even within the
+  15-minute cache window, and active-worktree mutation barriers refresh again.
+  Newer member sessions, recent activity, or unavailable evidence keep native
+  and Orca worktrees; receipts record `activity_evidence_changed`. Unchanged
+  session records are reused, with no new settings or JSON fields (#627).
 - Catalog cache path removal refuses Windows junctions and other reparse-point
   leaves in previews and at the mutation boundary, preserving both the leaf
   and its referent. Skipped bytes are excluded from selected totals; the
