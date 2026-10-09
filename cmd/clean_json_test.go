@@ -102,8 +102,7 @@ func TestCleanJSONRouteProjectsRealOverlapRefusalAsProtected(t *testing.T) {
 
 func TestCleanJSONCLIContractClassicRedactionAndIncludePaths(t *testing.T) {
 	binary := buildCLIContractBinary(t)
-	home := t.TempDir()
-	marker := filepath.Base(home)
+	home, marker := redactionMarkerHome(t)
 	project := "json-secret-project"
 	nodeModules := filepath.Join(home, project, "node_modules")
 	if err := os.MkdirAll(filepath.Join(nodeModules, "pkg"), 0755); err != nil {
@@ -525,8 +524,7 @@ func TestCleanJSONCLIContractPreservesUnregisteredActivityReason(t *testing.T) {
 
 func TestCleanJSONCLIContractExecutionRejectsExplicitGuideBeforeScan(t *testing.T) {
 	binary := buildCLIContractBinary(t)
-	home := t.TempDir()
-	marker := filepath.Base(home)
+	home, marker := redactionMarkerHome(t)
 	modules := filepath.Join(home, "workspace", "guide-rejected", "node_modules")
 	if err := os.MkdirAll(modules, 0o755); err != nil {
 		t.Fatal(err)
@@ -615,8 +613,7 @@ func TestCleanJSONCLIContractExecutionUsesClassicRouteUnderGuidedPressure(t *tes
 
 func TestCleanJSONFlagFailuresArePathFree(t *testing.T) {
 	binary := buildCLIContractBinary(t)
-	home := t.TempDir()
-	marker := filepath.Base(home)
+	home, marker := redactionMarkerHome(t)
 	tests := []struct {
 		name string
 		args []string
@@ -647,4 +644,16 @@ func runCleanJSONProcess(t *testing.T, binary, home string, args ...string) (str
 	command.Stderr = &stderr
 	err := command.Run()
 	return stdout.String(), stderr.String(), err
+}
+
+// redactionMarkerHome returns a home whose base name cannot occur by chance in
+// timestamps, sizes, or IDs, so finding it in output means a path leaked.
+func redactionMarkerHome(t *testing.T) (string, string) {
+	t.Helper()
+	const marker = "aibris-redaction-marker-home"
+	home := filepath.Join(t.TempDir(), marker)
+	if err := os.Mkdir(home, 0755); err != nil {
+		t.Fatal(err)
+	}
+	return home, marker
 }
