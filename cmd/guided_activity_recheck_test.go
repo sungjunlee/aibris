@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -240,6 +241,86 @@ func TestGuidedActivityReviewSnapshotSurvivesStateChanges(t *testing.T) {
 	receipt, err := executePreparedCleanTargets(t.Context(), prepared, quietActiveWorktreeExecutionOptions())
 	if err == nil || receipt.Units[0].MutationAttempted {
 		t.Fatalf("review snapshot rebased: %+v, %v", receipt, err)
+	}
+}
+
+func TestGuidedActivityMutationBarrierRejectsFreshReflog(t *testing.T) {
+	_, items, members := guidedActivityFixture(t, false)
+	state := guidedActivityState(t, items)
+	if state.Rows[0].Policy != worktree.DecisionReviewable {
+		t.Fatalf("expected old activity to be reviewable: %+v", state.Rows[0])
+	}
+
+	now := time.Now().Format(time.RFC3339)
+	t.Setenv("GIT_AUTHOR_DATE", now)
+	t.Setenv("GIT_COMMITTER_DATE", now)
+	runGitFixture(t, members[1], "commit", "--allow-empty", "-m", "activity after review")
+
+	// Prepare Git evidence after the commit so HEAD drift cannot mask the live
+	// activity check. The attached activity evidence still comes from review.
+	state.Rows[0].Selected = true
+	plan, err := unifiedCleanupPlanForClean(t.Context(), &state, nil, CleanupPlanEvidence{}, types.PruneOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	safety := staticOverlapSafetyRuntime(nil, nil)
+	selection, err := applyCleanupOverlapSafety(t.Context(), safety, plan.SelectedPhysicalTargets())
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared := prepareGuidedCleanExecutionWithOptions(t.Context(), selection, safety, types.PruneOptions{}, &state)
+	if len(prepared) != 1 || prepared[0].ActivityReview == nil || prepared[0].PreparationError != nil {
+		t.Fatalf("review evidence not prepared: %+v", prepared)
+	}
+	execution, err := executePreparedCleanTargets(t.Context(), prepared, quietActiveWorktreeExecutionOptions())
+	if !errors.Is(err, worktree.ErrActivityEvidenceChanged) || len(execution.Units) != 1 {
+		t.Fatalf("fresh reflog did not refuse execution: %+v, %v", execution, err)
+	}
+	unit := execution.Units[0]
+	if unit.State != cleanExecutionFailed || unit.MutationAttempted || unit.PhysicalRemoved || unit.FreedBytes != 0 || !strings.Contains(unit.BlockingReason, "activity within recent safety window") {
+		t.Fatalf("recent-activity refusal lost: %+v", unit)
+	}
+	reasons := cleanjson.CleanJSONReceiptStateReasons(string(unit.State), unit.PhysicalRemoved, unit.FreedBytes, false, unit.FailureCause, func(error) bool { return false })
+	if !slices.Contains(reasons, "activity_evidence_changed") {
+		t.Fatalf("activity refusal code lost: %v", reasons)
+	}
+	for _, path := range append([]string{items[0].Path}, members...) {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("reviewed path removed: %s: %v", path, err)
+		}
+	}
+}
+
+func TestGuidedActivityReviewPreservesUnrelatedFailureMapping(t *testing.T) {
+	_, items, _ := guidedActivityFixture(t, false)
+	state := guidedActivityState(t, items)
+	state.Rows[0].Selected = true
+	plan, err := unifiedCleanupPlanForClean(t.Context(), &state, nil, CleanupPlanEvidence{}, types.PruneOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	safety := staticOverlapSafetyRuntime(nil, nil)
+	selection, err := applyCleanupOverlapSafety(t.Context(), safety, plan.SelectedPhysicalTargets())
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared := prepareGuidedCleanExecutionWithOptions(t.Context(), selection, safety, types.PruneOptions{}, &state)
+	if len(prepared) != 1 || prepared[0].ActivityReview == nil || prepared[0].PreparationError != nil {
+		t.Fatalf("review evidence not prepared: %+v", prepared)
+	}
+	opts := quietActiveWorktreeExecutionOptions()
+	opts.Getwd = func() (string, error) { return "", os.ErrPermission }
+	execution, err := executePreparedCleanTargets(t.Context(), prepared, opts)
+	if !errors.Is(err, os.ErrPermission) || len(execution.Units) != 1 {
+		t.Fatalf("unrelated failure lost: %+v, %v", execution, err)
+	}
+	unit := execution.Units[0]
+	if unit.State != cleanExecutionFailed || unit.MutationAttempted || unit.FailureCause != nil {
+		t.Fatalf("activity review changed unrelated failure: %+v", unit)
+	}
+	reasons := cleanjson.CleanJSONReceiptStateReasons(string(unit.State), unit.PhysicalRemoved, unit.FreedBytes, false, unit.FailureCause, func(error) bool { return false })
+	if !slices.Equal(reasons, []string{"execution_failed"}) {
+		t.Fatalf("unrelated failure mapping changed: %v", reasons)
 	}
 }
 

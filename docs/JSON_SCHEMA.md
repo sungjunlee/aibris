@@ -721,8 +721,10 @@ category, canonical target, or argv. It does not trigger a path-removal fallback
 symlinked `.git` markers; it never upgrades an orphan request to active removal.
 `activity_evidence_changed` is additive (#627), with no new JSON field and
 `schema_version` still 1. Review and barriers incrementally refresh session
-stores and reuse unchanged path/mtime/size records. Both JSON execution and
-human guided receipt files record a pre-mutation refusal as `failed`, with
+stores and reuse unchanged path/mtime/size records. The code appears in guided
+`--receipt-file` receipts, and human output explains the refusal. Guided
+execution is unavailable with `--json`; JSON plans never contain this code.
+Guided receipts record a pre-mutation refusal as `failed`, with
 `physical_removed=false` and zero reclaimed bytes. If an earlier member was
 already removed before a later barrier refusal, known progress is retained as
 `partial` with `partial_failure` and `activity_evidence_changed`.

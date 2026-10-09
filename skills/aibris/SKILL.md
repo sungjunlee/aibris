@@ -156,11 +156,13 @@ JSON field 이름은 유지된다.
 - Guided review는 15분 cache freshness 안에서도 session stores를 incremental
   Refresh한다. 같은 path·mtime·size의 record는 재파싱하지 않는다. Prepared
   target은 member별 review-time session timestamp와 availability를 보존하며,
-  active unit의 mutation barrier마다 한 번 Refresh하고 review와 같은
-  lookup·recent lock·unavailable 규칙을 적용한다. 더 새로운 member session
+  member loop 전, 각 member 제거 전, owner 제거 전에 Refresh하고 review와
+  같은 lookup·recent lock·unavailable 규칙을 적용한다. 더 새로운 member session
   (6시간 밖도 포함), 현재 recent lock, unavailable evidence(Orca의 모든 필수
-  home 포함)는 삭제를 거부한다. JSON과 human guided receipt file의
-  `activity_evidence_changed`는 이 refusal을 뜻한다. 처음 거부되면 `failed`,
+  home 포함)는 삭제를 거부한다. Guided `--receipt-file` receipt의
+  `activity_evidence_changed`는 이 refusal을 뜻하며 human output에도 거부
+  이유가 표시된다. Guided 실행은 `--json`에서 지원하지 않고 JSON plan에는
+  이 code가 나오지 않는다. 처음 거부되면 `failed`,
   `physical_removed=false`, freed bytes 0이다. 앞 member 제거 후 다음 barrier에서
   거부되면 `partial`과 `partial_failure`도 남겨 실제 결과를 보존한다. 새 field나
   설정은 없고 `schema_version`은 1이다. 새 scan/review 후 다시 판단하며

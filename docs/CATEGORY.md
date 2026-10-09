@@ -378,9 +378,10 @@ registered sidecar `.orca-worktree-trash` are not mixed markers.
 Guided review incrementally refreshes session activity even inside the
 15-minute cache window, reusing unchanged path/mtime/size records. Prepared
 active targets retain each member's review-time session timestamp and
-availability. Every mutation barrier refreshes once per unit and applies the
-same activity lookup and lock policy. A newer member session, a current recent
-lock, or unavailable evidence (including any required Orca home) keeps the unit
+availability. Refresh runs before the member loop, before each member removal
+and before the owner removal, applying the same activity lookup and lock policy.
+A newer member session, a current recent lock, or unavailable evidence
+(including any required Orca home) keeps the unit
 with receipt reason `activity_evidence_changed`. Classic and orphaned targets
 are unchanged; `--force` skips confirmation only.
 

@@ -32,9 +32,10 @@ func CaptureActivityReview(unit WorktreeCleanupUnit, items []types.DebrisInfo, p
 	return &ActivityReview{unit: unit, items: append([]types.DebrisInfo(nil), rows...), policy: FillCleanupPolicy(policy)}
 }
 
-// Validate refreshes once per unit barrier, never once per member. Enrichment
-// uses review's exact session lookup, source availability, reflog and fallback
-// rules, and the policy helper applies the same activity locks with live time.
+// Validate refreshes before the member loop, before each member removal and
+// before the owner removal. Enrichment uses review's exact session lookup,
+// source availability, reflog and fallback rules, and the policy helper applies
+// the same activity locks with live time.
 func (r *ActivityReview) Validate(ctx context.Context, selected WorktreeCleanupUnit) error {
 	if r == nil || len(r.items) == 0 || r.unit.TargetPath != selected.TargetPath || len(r.unit.Members) == 0 || len(r.unit.Members) != len(selected.Members) {
 		return fmt.Errorf("%w: review identity unavailable for %q", ErrActivityEvidenceChanged, selected.TargetPath)

@@ -381,7 +381,7 @@ func ExecuteActiveWorktreeUnit(
 
 	ApplyPreparedActiveWorktreeExecutionResult(&receipt, result)
 	if err != nil {
-		if preparedTarget.ActivityReview != nil {
+		if errors.Is(err, worktree.ErrActivityEvidenceChanged) {
 			receipt.FailureCause = err
 		}
 		if result.StartedMembers {
