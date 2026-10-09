@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.15.0] - 2026-10-09
 
 ### Added
 
@@ -8,14 +8,20 @@
   each worktree as its own mutation owner. On macOS, a layout-verified Orca
   Codex home supplies worktrees, read-only retention, and `--risky` logs.
   Orca workspace activity uses the newest session across all resolved Codex
-  homes; unavailable home evidence (including a resolved home whose
-  `sessions/` directory is missing or a dangling symlink) or an undiscovered
-  Orca home keeps active worktrees protected. All resolved homes (primary,
-  `$AIBRIS_CODEX_HOMES`, and verified Orca) contribute read-only retention
-  aggregates. Homes, containers,
-  and their ancestors are deletion-protected; explicit roots stay bounded.
-  Skipped Orca symlink targets cannot reappear through convention fallback
-  (#613).
+  homes. In guided review, unavailable home evidence (including a resolved
+  home whose `sessions/` directory is missing or a dangling symlink, or whose
+  session roots are split by a symlink) or an undiscovered Orca home locks
+  active Orca worktrees with `activity_evidence_unavailable`. All resolved
+  homes (primary, `$AIBRIS_CODEX_HOMES`, and verified Orca) contribute
+  read-only retention aggregates. Homes, containers, and their ancestors are
+  deletion-protected; explicit roots stay bounded. Skipped Orca symlink
+  targets cannot reappear through convention fallback (#613).
+
+### Security
+
+- Build with Go 1.26.9. Earlier Go releases let `os.Root` follow Windows
+  junctions out of the root (GO-2026-6604), which worktree strip uses through
+  `safedelete.RemoveAllIn` (#626).
 
 ## [0.14.1] - 2026-10-08
 

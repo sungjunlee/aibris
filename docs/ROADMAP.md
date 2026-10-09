@@ -9,17 +9,18 @@ are cut only after the relevant behavior is dogfooded and explicitly approved.
 
 ## Current unreleased work
 
-As of 2026-10-08, the latest tagged release is v0.14.1 (2026-10-08), a patch
-that keeps cache cleanup inside the previewed target and makes piped answers
-and guided receipts reliable. No changes are integrated after that tag yet.
-Tagged history is recorded in [CHANGELOG.md](../CHANGELOG.md); current
-behavior is specified in [SPEC.md](SPEC.md), [JSON_SCHEMA.md](JSON_SCHEMA.md),
-[INSTALL.md](INSTALL.md), and [WINDOWS.md](WINDOWS.md).
+As of 2026-10-09, the latest tagged release is v0.15.0 (2026-10-09), which
+adds Orca worktree discovery and Orca's Codex home as activity evidence. No
+changes are integrated after that tag yet. Tagged history is recorded in
+[CHANGELOG.md](../CHANGELOG.md); current behavior is specified in
+[SPEC.md](SPEC.md), [JSON_SCHEMA.md](JSON_SCHEMA.md), [INSTALL.md](INSTALL.md),
+and [WINDOWS.md](WINDOWS.md).
 
 Next 0.x work:
 
-- Orca support: discover Orca-managed worktrees and Orca's Codex home as
-  activity evidence (#613).
+- Codex activity evidence gaps: symlinked session roots (#623) and missing
+  session stores (#624).
+- Explain an excluded Go cache instead of omitting it (#619).
 - Windows follow-ups: cleaner command-test coverage (#602) and junction cache
   leaves (#611).
 - perfharness module coupling (#604).
@@ -29,6 +30,13 @@ Next 0.x work:
   (`owner`, `target_id`) under the 0.x deprecation policy.
 
 ## Shipped
+
+### 0.15.0 Orca Support
+
+Published 2026-10-09. Orca-managed worktrees discovered as independent
+owners, Orca's macOS Codex home as a resolved home for worktrees, activity,
+retention and logs, Orca activity checked across every Codex home with fail-closed coverage,
+and retention across all resolved homes.
 
 ### 0.14.1 Cleanup Scope Fixes
 
