@@ -121,6 +121,8 @@ jobs:
           go test -race -count=1 -cover ./cmd -run '^(TestCleanCmd_NegativeAge|TestCleanCmd_GuideNoGuideErrors|TestParseAge|TestCleanCmd_InvalidSelector|TestParseCleanSelectorsTrimAndDeduplicate)$'
       - name: Test native Codex activity rejects sessions junctions
         run: go test -race -count=1 -cover ./internal/codexactivity -run '^TestWindowsNativeActivityRejectsSessionsJunction$'
+      - name: Test native Codex home junction activity lock
+        run: go test -race -count=1 -cover ./internal/worktree -run '^TestWindowsNativeActivityHomeJunctionKeepsWorktreeLocked$'
       - name: Test effective GOCACHE cleanup safety
         run: go test -race -count=1 -cover ./internal/cleaner -run '^TestIsSafeTarget_GoBuildCacheUnderHome$'
       - name: Test restored cleaner command authority and execution contracts

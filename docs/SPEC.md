@@ -356,12 +356,13 @@ Default guided Codex worktree cleanup:
 - Guided review requires an incremental session-store Refresh even within the
   activity cache's 15-minute freshness window. Unchanged session file records
   (same path, mtime, size) are reused; scan notices retain the cheap cached path.
-  Review-time member session timestamps and availability, scanner fallback
+  Review-time member session activity timestamps and availability, scanner fallback
   rows, and the activity lock policy stay attached to each prepared target.
   Refresh runs before the member loop, before each member removal and before
   the owner removal, re-deriving unit and member activity with the same lookup
   and lock rules.
-  A newer session for any member (even outside the recent window or below
+  Newer session activity for any member, including an append to an existing
+  session after review (even outside the recent window or below
   another member's timestamp), a current recent-activity lock, or unavailable
   activity evidence, including Orca aggregation, refuses mutation with
   `activity_evidence_changed`. Human output explains why the worktree was kept;
@@ -371,7 +372,12 @@ Default guided Codex worktree cleanup:
   Classic, non-worktree, and
   orphaned-worktree paths are unchanged.
 - Codex activity uses metadata only: session metadata, working-directory paths,
-  timestamps, and cache file metadata. The shared bounded first-record reader
+  timestamps, and session file metadata. A session's activity time is the later
+  of its first `session_meta` start timestamp and its file modification time;
+  resumed and long-running sessions append in place. Worktree, member, and
+  project aggregates, the recent-activity lock, and the guided barrier all use
+  this activity time. The cached start timestamp remains the start time.
+  The shared bounded first-record reader
   must not read conversation bodies. Primary and additional Codex homes supply
   session roots; home identity is part of activity/cache keys, so reused
   worktree or project IDs in different homes cannot share evidence. A failed
@@ -394,7 +400,9 @@ Default guided Codex worktree cleanup:
   keep the unavailable-evidence lock. Archive-only homes and split roots also
   keep that lock. A symlink of the
   whole home preserves activity when its roots and session CWDs resolve to
-  that same canonical home. Only Orca aggregation treats proven absence of
+  that same canonical home. A Windows junction or other `ModeIrregular` home
+  keeps the unavailable-evidence lock; it cannot prove no matching activity
+  from junction-target CWDs. Only Orca aggregation treats proven absence of
   the unconfigured default `$HOME/.codex` as zero activity: `CODEX_HOME` is
   empty, the home is not explicitly listed in `AIBRIS_CODEX_HOMES`, and either
   the home is absent or it is a real non-symlink directory with both `sessions/`
@@ -402,7 +410,7 @@ Default guided Codex worktree cleanup:
   home, dangling or symlinked home, archive-only home, or any I/O failure stays
   unavailable. Native worktrees never use this absence exception. Cached
   absence is rechecked at lookup so configuration or store changes fail closed.
-  Activity cache schema 6 rejects and rebuilds earlier caches; public JSON
+  Activity cache schema 7 rejects and rebuilds earlier caches; public JSON
   output and reason codes are unchanged. Active Orca worktrees keep the lock
   when the Orca home is not discovered (including non-macOS platforms or missing,
   invalid, or unavailable layout).
