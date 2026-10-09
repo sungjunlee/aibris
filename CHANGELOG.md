@@ -2,13 +2,17 @@
 
 ## [Unreleased]
 
+## [0.15.2] - 2026-10-09
+
 ### Fixed
 
 - Codex session activity uses the later of the first session start timestamp
   and file modification time, so resumed or long-running sessions appended in
   place keep worktrees protected. An append after guided review refuses removal
   with `activity_evidence_changed`. Worktree, member, and project aggregates
-  share this activity time; unchanged path/mtime/size records are still reused.
+  share this activity time; session files are stat'ed directly so Windows
+  directory listings cannot hide an open file's writes, and unchanged
+  path/mtime/size records are still reused.
   Activity cache schema 7 rebuilds older caches; public JSON is unchanged (#636).
 - A Windows junction Codex home keeps activity evidence unavailable instead of
   treating a recent session with a junction-target cwd as no activity. Native

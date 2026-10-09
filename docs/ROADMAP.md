@@ -9,18 +9,17 @@ are cut only after the relevant behavior is dogfooded and explicitly approved.
 
 ## Current unreleased work
 
-As of 2026-10-09, the latest tagged release is v0.15.1 (2026-10-09), a patch
-that makes guided review refresh Codex session activity, rechecks it before
-each removal step, and fails closed on relocated or unreadable session stores. No
-changes are integrated after that tag yet. Tagged history is recorded in
-[CHANGELOG.md](../CHANGELOG.md); current behavior is specified in
-[SPEC.md](SPEC.md), [JSON_SCHEMA.md](JSON_SCHEMA.md), [INSTALL.md](INSTALL.md),
-and [WINDOWS.md](WINDOWS.md).
+As of 2026-10-09, the latest tagged release is v0.15.2 (2026-10-09), a patch
+that counts work appended to an existing Codex session as activity and fails
+closed on a Windows junction Codex home. No changes are integrated after that
+tag yet. Tagged history is recorded in [CHANGELOG.md](../CHANGELOG.md); current
+behavior is specified in [SPEC.md](SPEC.md), [JSON_SCHEMA.md](JSON_SCHEMA.md),
+[INSTALL.md](INSTALL.md), and [WINDOWS.md](WINDOWS.md).
 
 Next 0.x work:
 
-- Codex activity follow-ups: activity appended to an existing session (#636),
-  and evidence through relocated session stores (#634).
+- Codex activity follow-up: evidence through relocated session stores and
+  Windows junctions above the Codex home (#634).
 - Explain an excluded Go cache instead of omitting it (#619).
 - Coverage for more AI agent stores, each backed by an orphan proof or a
   rebuildable-cache contract (`docs/CATEGORY.md`).
@@ -28,6 +27,12 @@ Next 0.x work:
   (`owner`, `target_id`) under the 0.x deprecation policy.
 
 ## Shipped
+
+### 0.15.2 Resumed Session Activity
+
+Published 2026-10-09. Work appended to an existing Codex session counts as
+activity in guided review and at the pre-removal check, and a Windows junction
+Codex home fails closed.
 
 ### 0.15.1 Activity Evidence Fixes
 
