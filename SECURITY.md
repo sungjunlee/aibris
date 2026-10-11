@@ -50,5 +50,5 @@ latest release before reporting or validating a fix.
 
 | Version  | Supported |
 |----------|-----------|
-| 0.12.x   | Yes       |
-| <=0.11.x | No        |
+| 0.16.x   | Yes       |
+| <=0.15.x | No        |
