@@ -66,3 +66,88 @@ func TestCLIContractProtectedLinkReferentPreservesOrphanOwner(t *testing.T) {
 		}
 	}
 }
+
+func TestCLIContractProtectedUnicodeLinkReferentPreservesOrphanOwner(t *testing.T) {
+	spellings := []struct {
+		name      string
+		candidate string
+		protected string
+	}{
+		{name: "NFC-to-NFD", candidate: "caf\u00e9s-orphan", protected: "cafe\u0301s-orphan"},
+		{name: "NFD-to-NFC", candidate: "cafe\u0301s-orphan", protected: "caf\u00e9s-orphan"},
+	}
+	for _, spelling := range spellings {
+		for _, referent := range []string{"unprotected-control", "owner", "descendant"} {
+			t.Run(spelling.name+"/"+referent, func(t *testing.T) {
+				home := t.TempDir()
+				container := filepath.Join(home, ".codex", "worktrees")
+				owner := filepath.Join(container, spelling.candidate)
+				protectedOwner := filepath.Join(container, spelling.protected)
+				const payload = "synthetic protected Unicode sentinel"
+				for _, path := range []string{owner, protectedOwner} {
+					writeCLIContractFixture(t, filepath.Join(path, "notes", "sentinel"), payload)
+				}
+				ownerInfo, err := os.Stat(owner)
+				if err != nil {
+					t.Fatal(err)
+				}
+				protectedInfo, err := os.Stat(protectedOwner)
+				if err != nil {
+					t.Fatal(err)
+				}
+				aliases := os.SameFile(ownerInfo, protectedInfo)
+				t.Logf("NFC/NFD orphan owner identities alias: %t", aliases)
+				writeCLIContractFixture(t, filepath.Join(owner, ".git"),
+					"gitdir: "+filepath.Join(home, "gone-repository", ".git", "worktrees", "orphan")+"\n")
+				makeCLIContractTargetOld(t, owner)
+				if referent != "unprotected-control" {
+					target := protectedOwner
+					if referent == "descendant" {
+						target = filepath.Join(protectedOwner, "notes")
+					}
+					if err := os.Symlink(target, filepath.Join(home, "Documents")); err != nil {
+						t.Skipf("symlinks unavailable: %v", err)
+					}
+				}
+
+				result := runCLIContract(t, home, nil,
+					"clean", "--no-guide", "--force", "--json", "--include-paths", "--age=1h", "--category=worktree")
+				var receipt cleanjson.Receipt
+				if err := json.Unmarshal([]byte(result.Stdout), &receipt); err != nil {
+					t.Fatalf("invalid cleanup receipt: %v\nstdout:\n%s\nstderr:\n%s", err, result.Stdout, result.Stderr)
+				}
+				if receipt.DocumentType != "clean_receipt" || len(receipt.PhysicalTargets) == 0 {
+					t.Fatalf("orphan owner missing from clean receipt: %+v", receipt)
+				}
+				if aliases && referent != "unprotected-control" {
+					if data, err := os.ReadFile(filepath.Join(owner, "notes", "sentinel")); err != nil || string(data) != payload {
+						t.Errorf("protected Unicode sentinel changed: %q, %v", data, err)
+					}
+					if receipt.Totals.Removed != 0 || receipt.Totals.FreedBytes != 0 {
+						t.Errorf("receipt claims protected Unicode removal: %+v", receipt.Totals)
+					}
+					for _, target := range receipt.PhysicalTargets {
+						if target.State == "removed" || target.PhysicalRemoved || target.FreedBytes != 0 {
+							t.Errorf("receipt target claims protected Unicode removal: %+v", target)
+						}
+					}
+				} else {
+					// An unprotected control must actually delete. A filesystem
+					// with distinct NFC/NFD entries also keeps this candidate
+					// eligible even when the other spelling is protected.
+					if result.ExitCode != 0 || receipt.Totals.Removed != 1 || receipt.Totals.FreedBytes <= 0 {
+						t.Errorf("unprotected Unicode owner was not removed: exit=%d totals=%+v stderr=%s", result.ExitCode, receipt.Totals, result.Stderr)
+					}
+					if _, err := os.Lstat(owner); !os.IsNotExist(err) {
+						t.Errorf("unprotected Unicode owner remains: %v", err)
+					}
+				}
+				if !aliases || referent != "unprotected-control" {
+					if data, err := os.ReadFile(filepath.Join(protectedOwner, "notes", "sentinel")); err != nil || string(data) != payload {
+						t.Errorf("other Unicode spelling's sentinel changed: %q, %v", data, err)
+					}
+				}
+			})
+		}
+	}
+}

@@ -667,6 +667,9 @@ deduplicated, and collapsed when one root is nested inside another.
   protects each configured location's lexical name, resolved destination, and
   enclosing deletion owners. Symlinks and Windows junctions do not remove that
   protection; ordinary children remain eligible under their existing policy.
+  Existing protected paths and their ancestors are also compared by filesystem
+  identity, preserving protection across equivalent Unicode spellings without
+  conflating names that the filesystem treats as distinct.
   Missing paths retain lexical protection, including the intended destination
   of a dangling link. Unreadable, cyclic, or otherwise unresolved protection
   evidence refuses deletion. Each removal route, including Git worktree

@@ -93,6 +93,13 @@ func Check(home, path string) error {
 		return refuse(path, err.Error())
 	}
 	key := foldCase(filepath.ToSlash(rel))
+	// Identity is cached only within this Check. A later mutation check must
+	// observe links and directory identities again.
+	identities := make(map[string]os.FileInfo)
+	candidateInfo, candidateTail, err := existingPathIdentity(canonical, identities)
+	if err != nil {
+		return refuse(path, "target identity unavailable: "+err.Error())
+	}
 	locations := relocatedHomes()
 	for _, p := range protected {
 		locations = append(locations, filepath.Join(home, filepath.FromSlash(p)))
@@ -108,11 +115,24 @@ func Check(home, path string) error {
 		if err != nil {
 			return refuse(path, "protected location unavailable: "+err.Error())
 		}
+		physical := filepath.Join(parent, filepath.Base(location))
 		for _, target := range []string{path, canonical} {
-			for _, form := range []string{location, filepath.Join(parent, filepath.Base(location)), resolved} {
+			for _, form := range []string{location, physical, resolved} {
 				if coversProtected(foldCase(filepath.ToSlash(target)), foldCase(filepath.ToSlash(form))) {
 					return refuse(path, "protected location")
 				}
+			}
+		}
+		// Filesystems can treat different Unicode spellings as the same
+		// directory. Compare actual identities without merging distinct names
+		// on filesystems where those spellings name different objects.
+		for _, form := range []string{physical, resolved} {
+			covered, err := coversProtectedIdentity(candidateInfo, candidateTail, form, identities)
+			if err != nil {
+				return refuse(path, "protected identity unavailable: "+err.Error())
+			}
+			if covered {
+				return refuse(path, "protected location")
 			}
 		}
 	}
@@ -143,6 +163,59 @@ func Check(home, path string) error {
 // ancestors. Both are slash-separated and case-folded.
 func coversProtected(target, protected string) bool {
 	return target == protected || strings.HasPrefix(protected, target+"/")
+}
+
+// pathIdentityAt caches successful lookups and proven absence for one Check.
+func pathIdentityAt(path string, identities map[string]os.FileInfo) (os.FileInfo, error) {
+	if info, known := identities[path]; known {
+		return info, nil
+	}
+	info, err := os.Stat(path)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+	identities[path] = info
+	return info, nil
+}
+
+// existingPathIdentity binds a path's existing prefix to its missing suffix.
+// This preserves protection when two aliases reach the same absent child.
+func existingPathIdentity(path string, identities map[string]os.FileInfo) (os.FileInfo, string, error) {
+	tail := ""
+	for current := path; ; current = filepath.Dir(current) {
+		info, err := pathIdentityAt(current, identities)
+		if err != nil {
+			return nil, "", err
+		}
+		if info != nil {
+			return info, tail, nil
+		}
+		if filepath.Dir(current) == current {
+			return nil, "", errors.New("path has no existing ancestor")
+		}
+		tail = filepath.Join(filepath.Base(current), tail)
+	}
+}
+
+// coversProtectedIdentity checks the protected path and its ancestors. A
+// missing candidate suffix must still contain the corresponding protected
+// suffix; sharing an existing parent alone does not authorize protection.
+func coversProtectedIdentity(candidate os.FileInfo, candidateTail, location string, identities map[string]os.FileInfo) (bool, error) {
+	tail := ""
+	for current := location; ; current = filepath.Dir(current) {
+		info, err := pathIdentityAt(current, identities)
+		if err != nil {
+			return false, err
+		}
+		if info != nil && os.SameFile(candidate, info) &&
+			(candidateTail == "" || coversProtected(foldCase(filepath.ToSlash(candidateTail)), foldCase(filepath.ToSlash(tail)))) {
+			return true, nil
+		}
+		if filepath.Dir(current) == current {
+			return false, nil
+		}
+		tail = filepath.Join(filepath.Base(current), tail)
+	}
 }
 
 // relocatedHomes returns configured Codex homes and environment-relocated agent
