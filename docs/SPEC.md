@@ -663,7 +663,14 @@ deduplicated, and collapsed when one root is nested inside another.
 
 - Destructive deletion must reject relative paths.
 - Destructive deletion must reject paths outside `$HOME`.
-- Destructive deletion must pass cleanup safety validation.
+- Destructive deletion must pass cleanup safety validation. The central gate
+  protects each configured location's lexical name, resolved destination, and
+  enclosing deletion owners. Symlinks and Windows junctions do not remove that
+  protection; ordinary children remain eligible under their existing policy.
+  Missing paths retain lexical protection, including the intended destination
+  of a dangling link. Unreadable, cyclic, or otherwise unresolved protection
+  evidence refuses deletion. Each removal route, including Git worktree
+  commands, refreshes the gate immediately before mutation.
 - Worktree deletion may also pass scanner-validated worktree safety: the target
   must resolve under `$HOME`, avoid symlink escape, and carry active/orphaned
   Git worktree metadata from scanning.

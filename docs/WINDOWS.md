@@ -31,6 +31,10 @@ Pull-request CI uses an amd64 `windows-latest` runner to:
 - keep a worktree locked when the Codex home itself is a junction, for session
   cwd values using either the target path or the home path
   (`TestWindowsNativeActivityHomeJunctionKeepsWorktreeLocked`);
+- preserve protected junctions, their referents, and enclosing deletion owners,
+  including a junction retargeted after the initial safety check; ordinary
+  eligible children retain their removal policy (junction fixture creation
+  failures fail the test);
 - run the complete deletion-gate, path-identity, and HOME-isolation packages,
   reporting symlink-fixture skips when the runner lacks privilege;
 - run the nested perfharness module tests; and

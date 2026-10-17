@@ -3,14 +3,25 @@ package worktree
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
 	"github.com/sungjunlee/aibris/internal/cleaner"
+	"github.com/sungjunlee/aibris/internal/safedelete"
 )
 
 // RemoveGitWorktree runs `git worktree remove` without --force.
 func RemoveGitWorktree(ctx context.Context, repositoryID, worktreePath string) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("getting home dir: %w", err)
+	}
+	// Preflight may precede slow Git inspection and mutation callbacks. Refresh
+	// protected aliases at the command boundary just as raw removal does.
+	if err := safedelete.Check(home, worktreePath); err != nil {
+		return err
+	}
 	cmd := exec.CommandContext(ctx, "git", GitWorktreeRemoveArgs(repositoryID, worktreePath)...)
 	output, err := cmd.CombinedOutput()
 	if err == nil {
