@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sungjunlee/aibris/internal/cleaner"
 	worktreepkg "github.com/sungjunlee/aibris/internal/worktree"
 )
 
@@ -308,47 +307,58 @@ func idleCLIContractAgentState(t *testing.T, paths ...string) {
 func TestNestedOverlapBuiltCLIUsesOnePhysicalOwnerAndFailsClosed(t *testing.T) {
 	binary := buildCLIContractBinary(t)
 
-	t.Run("orphan obligation success removes outer owner once", func(t *testing.T) {
+	t.Run("orphan obligation cannot remove relocated protected store", func(t *testing.T) {
 		home := t.TempDir()
 		outer, entry := writeNestedOverlapCLIContractFixture(t, home, false)
-		info, err := os.Stat(filepath.Join(entry, "session.jsonl"))
+		sentinel := filepath.Join(entry, "session.jsonl")
+		before, err := os.ReadFile(sentinel)
 		if err != nil {
 			t.Fatal(err)
 		}
-		wantFreed := cleaner.FormatSize(info.Size())
 
-		output, err := runCLIContract(
-			binary,
-			home,
-			"clean",
-			"--no-guide",
-			"--force",
-			"--age=1h",
-			"--category=build-cache",
-		)
-		if err != nil {
-			t.Fatalf("nested orphan cleanup failed: %v\n%s", err, output)
+		output, err := runCLIContract(binary, home,
+			"clean", "--no-guide", "--force", "--age=1h", "--category=build-cache")
+		if err == nil {
+			t.Fatalf("outer owner containing the whole relocated projects store was removed:\n%s", output)
 		}
 		for _, want := range []string{
 			"matched  1 candidate",
 			"targets    1 item",
-			"removed    1 item",
-			"failed     0 items",
+			"removed    0 items",
+			"failed     1 item",
 			"cleanup component receipt",
-			"physical-removed true",
-			"obligation passed",
-			"freed      " + wantFreed,
+			"physical-removed false",
+			"obligation not-attempted",
+			"refused by the deletion safety gate",
+			"freed      0 B",
 			filepath.Base(entry),
 		} {
 			if !strings.Contains(output, want) {
-				t.Fatalf("successful nested cleanup missing %q:\n%s", want, output)
+				t.Fatalf("protected store refusal missing %q:\n%s", want, output)
 			}
 		}
-		if _, statErr := os.Lstat(outer); !os.IsNotExist(statErr) {
-			t.Fatalf("outer physical owner survived successful cleanup: %v", statErr)
+		if after, err := os.ReadFile(sentinel); err != nil || string(after) != string(before) {
+			t.Fatalf("protected store sentinel changed: %q, %v", after, err)
 		}
-		if strings.Count(output, "physical-removed true") != 1 {
-			t.Fatalf("physical owner was not receipted exactly once:\n%s", output)
+		if _, err := os.Stat(outer); err != nil {
+			t.Fatalf("protected outer owner changed: %v", err)
+		}
+		if strings.Contains(output, "physical-removed true") {
+			t.Fatalf("refusal claimed physical removal:\n%s", output)
+		}
+
+		// Narrow discovery to the relocated store: ordinary orphan entries
+		// remain removable while the store and its enclosing cache survive.
+		output, err = runCLIContract(binary, home,
+			"clean", "--no-guide", "--force", "--root", filepath.Dir(entry), "--category=agent-state")
+		if err != nil || !strings.Contains(output, "removed    1 item") {
+			t.Fatalf("eligible child cleanup failed: %v\n%s", err, output)
+		}
+		if _, err := os.Stat(entry); !os.IsNotExist(err) {
+			t.Fatalf("eligible orphan entry remains: %v", err)
+		}
+		if _, err := os.Stat(filepath.Dir(entry)); err != nil {
+			t.Fatalf("protected store changed after child cleanup: %v", err)
 		}
 	})
 
