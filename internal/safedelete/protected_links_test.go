@@ -157,3 +157,28 @@ func TestProtectedLinksRemovalRechecksRetarget(t *testing.T) {
 		})
 	}
 }
+
+func TestProtectedLinksResolveHomeBeforeJoiningLocations(t *testing.T) {
+	base := t.TempDir()
+	physical := filepath.Join(base, "physical")
+	home := filepath.Join(physical, "home")
+	owner := filepath.Join(home, "orphan")
+	for _, path := range []string{filepath.Join(physical, "deep"), owner} {
+		if err := os.MkdirAll(path, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	alias := filepath.Join(base, "alias")
+	if err := os.Symlink(filepath.Join(physical, "deep"), alias); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	// Preserve the spelling: Join would clean '..' before resolving the link.
+	spelledHome := alias + string(filepath.Separator) + ".." + string(filepath.Separator) + "home"
+	testutil.SetHome(t, spelledHome)
+	if err := os.Symlink(owner, filepath.Join(home, ".ssh")); err != nil {
+		t.Fatal(err)
+	}
+	if err := Check(spelledHome, owner); !errors.Is(err, ErrRefused) {
+		t.Fatalf("resolved HOME protection lost: %v", err)
+	}
+}

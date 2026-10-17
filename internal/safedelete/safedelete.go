@@ -82,6 +82,12 @@ func Check(home, path string) error {
 	if path != filepath.Clean(path) {
 		return refuse(path, "path is not clean")
 	}
+	// Resolve HOME before joining protected locations: cleaning a spelling
+	// such as link/../home first could protect a different directory.
+	home, err := canonicalize(home)
+	if err != nil {
+		return refuse(path, err.Error())
+	}
 	rel, canonical, err := homeRel(home, path)
 	if err != nil {
 		return refuse(path, err.Error())
