@@ -209,6 +209,7 @@ func TestCLIContractCleanHelpMatchesPolicyVocabulary(t *testing.T) {
 	for _, want := range []string{
 		"Minimum idle age",
 		"unknown",
+		"clean accepts flags only",
 		"selected targets enter the cleanup plan",
 		"reviewable targets",
 		"protected targets",
@@ -265,6 +266,88 @@ func TestCLIContractInvalidRoot(t *testing.T) {
 	if !strings.Contains(result.Stderr, "must be under") {
 		t.Errorf("stderr missing root boundary error: %s", result.Stderr)
 	}
+}
+
+func TestCLIContractInvalidPositionals(t *testing.T) {
+	flags := []string{"--json", "--force", "--age=1h", "--category=node_modules"}
+	cases := []struct {
+		name string
+		args func(projectA string) []string
+	}{
+		{
+			name: "word",
+			args: func(string) []string {
+				return append([]string{"clean", "project-a"}, flags...)
+			},
+		},
+		{
+			name: "path",
+			args: func(projectA string) []string {
+				return append(append([]string{"clean"}, flags...), projectA)
+			},
+		},
+		{
+			name: "after double dash",
+			args: func(string) []string {
+				return append(append([]string{"clean"}, flags...), "--", "project-a")
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			projectA := filepath.Join(home, "project-a", "node_modules")
+			projectB := filepath.Join(home, "project-b", "node_modules")
+			writeCLIContractFixture(t, filepath.Join(projectA, "example.txt"), "a\n")
+			writeCLIContractFixture(t, filepath.Join(projectB, "example.txt"), "b\n")
+			makeCLIContractTargetOld(t, projectA)
+			makeCLIContractTargetOld(t, projectB)
+
+			result := runCLIContract(t, home, nil, tc.args(projectA)...)
+			if result.ExitCode == 0 {
+				t.Fatalf("positional clean exited 0\nstdout:\n%s\nstderr:\n%s", result.Stdout, result.Stderr)
+			}
+			for _, path := range []string{projectA, projectB} {
+				if _, err := os.Lstat(path); err != nil {
+					t.Fatalf("positional clean removed %s: %v\nstdout:\n%s\nstderr:\n%s", path, err, result.Stdout, result.Stderr)
+				}
+			}
+			if !strings.Contains(result.Stderr, "clean does not accept positional arguments") || !strings.Contains(result.Stderr, "--root") {
+				t.Errorf("stderr missing scoping guidance: %s", result.Stderr)
+			}
+			if strings.Contains(strings.ToLower(result.Stderr), "target") {
+				t.Errorf("stderr treated the operand as a target: %s", result.Stderr)
+			}
+			for _, marker := range []string{"scanning", "scan summary", "succeeded"} {
+				if strings.Contains(result.Stdout, marker) {
+					t.Errorf("positional clean reached scan or mutation output %q:\n%s", marker, result.Stdout)
+				}
+			}
+		})
+	}
+
+	t.Run("flag only", func(t *testing.T) {
+		home := t.TempDir()
+		projectA := filepath.Join(home, "project-a", "node_modules")
+		projectB := filepath.Join(home, "project-b", "node_modules")
+		writeCLIContractFixture(t, filepath.Join(projectA, "example.txt"), "a\n")
+		writeCLIContractFixture(t, filepath.Join(projectB, "example.txt"), "b\n")
+		makeCLIContractTargetOld(t, projectA)
+		makeCLIContractTargetOld(t, projectB)
+
+		result := runCLIContract(t, home, nil, append([]string{"clean"}, flags...)...)
+		if result.ExitCode != 0 {
+			t.Fatalf("flag-only clean exit = %d\nstdout:\n%s\nstderr:\n%s", result.ExitCode, result.Stdout, result.Stderr)
+		}
+		if !strings.Contains(result.Stdout, "succeeded") {
+			t.Errorf("flag-only clean stdout missing succeeded:\n%s", result.Stdout)
+		}
+		for _, path := range []string{projectA, projectB} {
+			if _, err := os.Lstat(path); !os.IsNotExist(err) {
+				t.Fatalf("flag-only clean kept %s: %v\nstdout:\n%s\nstderr:\n%s", path, err, result.Stdout, result.Stderr)
+			}
+		}
+	})
 }
 
 func TestCLIContractDryRunDoesNotDelete(t *testing.T) {

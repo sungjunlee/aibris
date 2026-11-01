@@ -42,6 +42,9 @@ var cleanCmd = &cobra.Command{
 	Short: "Clean up old AI tool debris",
 	Long: `Clean up old AI tool debris.
 
+clean accepts flags only. Positional arguments are rejected before a scan
+or deletion and are not cleanup targets. Scope the scan with repeatable --root.
+
 With no classic cleanup filters, clean uses guided worktree review by default when useful.
 Guided worktree choices and classic candidates merge into one unified review and execution plan.
 Use --no-guide, or pass an explicit classic selector such as --category, --tool,
@@ -67,9 +70,20 @@ are unchanged. Sibling cache paths are not auto-protected.
 regenerable subtrees (dependency directories and platform build output)
 inventoried inside worktree units that deletion protects, recovering space
 without deleting the unit, its branch, or any uncommitted work.`,
+	Args: rejectCleanPositionals,
 	Run: func(cmd *cobra.Command, args []string) {
 		runCleanCommand(cmd)
 	},
+}
+
+// rejectCleanPositionals applies Cobra's no-positional-arguments check before
+// clean's execution callback. An operand is not a cleanup target; --root is
+// the supported scope.
+func rejectCleanPositionals(cmd *cobra.Command, args []string) error {
+	if err := cobra.NoArgs(cmd, args); err != nil {
+		return fmt.Errorf("clean does not accept positional arguments; scope the scan with --root")
+	}
+	return nil
 }
 
 func init() {

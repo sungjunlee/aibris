@@ -93,7 +93,11 @@ eligibility, or the last-scan cache's debris completeness.
 
 ### FR3 - `aibris clean`
 
-`clean` scans, filters, and then previews or deletes matching targets.
+`clean` scans, filters, and then previews or deletes matching targets. It
+accepts no positional arguments. An unknown word, a path-shaped operand, or an
+operand after `--` is invalid usage and stops the command before scanning or
+deletion. The operand is not a cleanup target. Repeatable `--root` is the
+supported scope.
 
 Flags:
 

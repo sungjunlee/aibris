@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- `clean` rejects positional arguments before it scans or deletes. An extra
+  word, path, or operand after `--` is invalid usage, not a cleanup target;
+  scope the scan with `--root` (#652).
 - `--receipt-file` refuses a symlink or reparse-point leaf before cleanup and
   writes through the directory checked at that point. A receipt path can no
   longer recreate a removed target, and a parent symlink retargeted or a leaf
