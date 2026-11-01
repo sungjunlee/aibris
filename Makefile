@@ -30,7 +30,9 @@ fmt:
 	gofmt -w $(GO_FILES)
 
 fmt-check:
-	@out=$$(gofmt -l $(GO_FILES)); if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi
+	@out=$$(gofmt -l $(GO_FILES)); status=$$?; \
+	if [ $$status -ne 0 ]; then exit $$status; fi; \
+	if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi
 
 lint:
 	go vet ./...

@@ -4,6 +4,14 @@
 
 ### Fixed
 
+- `scan` returns a context cancellation or deadline error when the caller
+  cancels as a provider finishes, during inventory post-processing, or during
+  the protected-content retention inventory. The command no longer reports
+  that aborted scan as a successful complete result. A store-local retention
+  failure still keeps the debris results and a partial retention projection (#655).
+- Claude and Cursor project stores include an entry when `--root` is that
+  entry. Sibling entries stay outside the scan, and a root nested inside an
+  entry does not select the outer store (#656).
 - Go build-cache discovery keeps the last `GOCACHE` assignment in the GOENV
   file, matching `go env`. A final empty value uses the default cache, and a
   final `off` selects no cache. Process `$GOCACHE` still wins, and the live

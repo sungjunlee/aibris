@@ -656,3 +656,10 @@ func TestClaudeProjectAdapter_EscapedCWDDiscoveryAndRevalidation(t *testing.T) {
 		t.Errorf("revalidation = %q; want live", classification)
 	}
 }
+
+func TestClaudeProjectAdapter_ExactEntryRootKeepsThatEntry(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	base := filepath.Join(home, ".claude", "projects")
+	assertAgentStoreEntryRoots(t, &ClaudeProjectAdapter{}, home, base)
+}
