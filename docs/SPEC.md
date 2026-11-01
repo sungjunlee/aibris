@@ -256,8 +256,11 @@ Command-backed cleanup:
   re-derived from the live catalog after matching tool, category, and canonical
   target. Removed or changed recipes refuse execution with
   `cleanup_recipe_changed`, without path fallback.
-- A missing authorized executable may fall back to gated path removal for the
-  scanned item; authorization is rechecked at that boundary too.
+- A missing authorized executable (`exec.ErrNotFound`) may fall back to gated
+  path removal for the scanned item; authorization is rechecked at that
+  boundary too. Other lookup errors, including `exec.ErrDot` when the
+  executable is found relative to the current directory, are command failures
+  and do not remove the path.
 - Homebrew cache cleanup removes only the verified cache path through
   `safedelete`, without running a broader Homebrew cleanup command.
 - npm cleanup likewise removes only the verified `_cacache` path through

@@ -25,21 +25,40 @@ func writeLP(h hash.Hash, b []byte) {
 	h.Write(b)
 }
 
-// hashTree deterministically hashes every regular file under root (relative
-// path, size, mtime seconds, content). Directories are not hashed directly. If
-// skip reports true for a directory, that subtree is omitted; if it reports
-// true for a file, that file is omitted. A missing root hashes to the empty
-// tree. This underpins both the input fingerprint (skip the volatile cache) and
-// the cache-identity check (skip nothing).
+// hashTree deterministically fingerprints root. Regular files contribute their
+// relative path, size, mtime seconds, and content. Symlinks contribute the
+// same metadata plus the link target string and are not followed. Any other
+// non-regular entry fails the measurement without a content read. Directories
+// are not hashed directly. If skip reports true for a directory, that subtree
+// is omitted; if it reports true for a file or symlink, that entry is omitted.
+// A missing root hashes to the empty tree. An existing root that cannot be
+// walked, including a dangling descendant, returns the error instead of the
+// empty-tree result. This underpins both the input fingerprint (skip the
+// volatile cache) and the cache-identity check (skip nothing).
 func hashTree(root string, skip func(path string) bool) (string, int, error) {
+	info, err := os.Lstat(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return emptyTreeHash(), 0, nil
+		}
+		return "", 0, err
+	}
+	// A symlink root is not a directory from Lstat, and following it could read
+	// arbitrary contents. Callers that pass a path which does not exist still
+	// get the empty tree above.
+	if !info.IsDir() {
+		return "", 0, fmt.Errorf("hash root %s is not a directory", root)
+	}
+
 	type rec struct {
 		rel  string
 		size int64
 		mt   int64
+		kind byte
 		sum  [32]byte
 	}
 	var recs []rec
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -56,32 +75,49 @@ func hashTree(root string, skip func(path string) bool) (string, int, error) {
 		if err != nil {
 			return err
 		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
 		rel, err := filepath.Rel(root, path)
 		if err != nil {
 			return err
 		}
+		rel = filepath.ToSlash(rel)
+		mode := info.Mode()
+		var kind byte
+		var sum [32]byte
+		switch {
+		case mode&os.ModeSymlink != 0:
+			target, err := os.Readlink(path)
+			if err != nil {
+				return fmt.Errorf("reading symlink %s: %w", rel, err)
+			}
+			kind = 'l'
+			sum = sha256.Sum256([]byte(target))
+		case mode.IsRegular():
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return fmt.Errorf("reading %s: %w", rel, err)
+			}
+			kind = 'f'
+			sum = sha256.Sum256(data)
+		default:
+			return fmt.Errorf("unverifiable non-regular entry %s", rel)
+		}
 		recs = append(recs, rec{
-			rel:  filepath.ToSlash(rel),
+			rel:  rel,
 			size: info.Size(),
 			mt:   info.ModTime().Unix(),
-			sum:  sha256.Sum256(data),
+			kind: kind,
+			sum:  sum,
 		})
 		return nil
 	})
 	if err != nil {
-		if os.IsNotExist(err) {
-			return emptyTreeHash(), 0, nil
-		}
 		return "", 0, err
 	}
 	sort.Slice(recs, func(i, j int) bool { return recs[i].rel < recs[j].rel })
 	h := sha256.New()
 	var l [8]byte
 	for _, r := range recs {
+		h.Write([]byte{r.kind})
 		writeLP(h, []byte(r.rel))
 		binary.BigEndian.PutUint64(l[:], uint64(r.size))
 		h.Write(l[:])
