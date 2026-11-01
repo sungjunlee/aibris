@@ -412,8 +412,10 @@ Supported command-backed cleanup:
 | ------ | --------- |
 | `uv` | `uv cache clean` (`uv cache clean --force` under `--pressure` or a critical home volume) |
 
-If the command is missing, aibris falls back to safe path removal. If the
-command runs and fails, aibris reports the error and does not remove the path.
+If the command is not found (`exec.ErrNotFound`), aibris falls back to safe
+path removal. If lookup fails for another reason, including a refusal to run
+an executable found relative to the current directory, or the command runs and
+fails, aibris reports the error and does not remove the path.
 
 Go cache cleanup uses gated removal of the verified GOCACHE directory without
 running `go`, so cleanup cannot cause Go telemetry counter writes or uploads,

@@ -65,6 +65,11 @@ type scanResult struct {
 	// (worktrees+summary, excluding retention) and RetSig separately.
 	InventorySig string
 
+	// Partial is true when the top-level scan is partial or a present retention
+	// projection is partial. Scan JSON keeps those flags independent, but an
+	// incomplete retention inventory is not a valid performance sample. A
+	// missing or null retention object leaves only the top-level flag, which
+	// is the base binary's compatibility behavior.
 	Partial bool
 }
 
@@ -171,6 +176,12 @@ func parseScanOutput(data []byte) (*scanResult, error) {
 		}
 		proj.Buckets = sortBuckets(proj.Buckets)
 		res.Retention = &proj
+		// Bucket signatures intentionally ignore partiality and provider_errors.
+		// Fold partiality into sample validity so identical bucket signatures
+		// still cannot accept an incomplete inventory.
+		if proj.Partial {
+			res.Partial = true
+		}
 		// The retention signature covers only the compared bucket quantities
 		// (month row + units/members/apparent bytes + orphan subset), excluding
 		// the volatile provider_errors raw bytes.

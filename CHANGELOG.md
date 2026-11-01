@@ -13,9 +13,27 @@
 - An explicit-root last-scan cache is not reused when one of its targets sits
   outside that root header. Default scans can still reuse targets from extra
   Codex homes that are not part of the recorded root header (#663).
+- `scan` returns a context cancellation or deadline error when the caller
+  cancels as a provider finishes, during inventory post-processing, or during
+  the protected-content retention inventory. The command no longer reports
+  that aborted scan as a successful complete result. A store-local retention
+  failure still keeps the debris results and a partial retention projection (#655).
+- Claude and Cursor project stores include an entry when `--root` is that
+  entry. Sibling entries stay outside the scan, and a root nested inside an
+  entry does not select the outer store (#656).
 - `clean` rejects positional arguments before it scans or deletes. An extra
   word, path, or operand after `--` is invalid usage, not a cleanup target;
   scope the scan with `--root` (#652).
+- Grok session stores whose `prompt_context.json` repeats a top-level
+  `working_directory`, including an escaped or case-insensitive alias, stay
+  undetermined instead of keeping one owner. A single ownership key is
+  unchanged, so an ordinary orphan remains eligible after
+  `--agent-state-grace` (#650).
+- Command-backed cleanup falls back to path removal only when lookup reports
+  the authorized executable is not found (`exec.ErrNotFound`). A relative
+  lookup refusal (`exec.ErrDot`, for example `PATH=.` with a local executable)
+  is reported as a command failure, leaves the cache in place, and credits no
+  freed bytes (#659).
 
 ## [0.16.0] - 2026-10-09
 

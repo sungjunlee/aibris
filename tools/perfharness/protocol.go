@@ -274,6 +274,8 @@ func rejectReason(base, change Invocation, rep *Report) string {
 	if !rep.InputStable {
 		return "input fingerprint changed during run (home not frozen)"
 	}
+	// Partial covers a top-level partial scan and a partial retention projection.
+	// Matching signatures and a zero exit status do not make that sample valid.
 	if base.Partial || change.Partial {
 		return "partial scan output"
 	}
