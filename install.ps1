@@ -325,7 +325,10 @@ function Install-Aibris {
             $Prefix = Get-DefaultInstallDir
         }
 
-        $installDir = $Prefix
+        # Resolve once. The destination, user PATH entry, and PATH hint must
+        # share this absolute directory. A relative -Prefix would otherwise be
+        # stored on PATH as typed and stop resolving after the shell moves.
+        $installDir = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Prefix)
         $destination = Join-Path $installDir $script:Binary
 
         $tag = if ($Version -eq "latest") {

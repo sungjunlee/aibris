@@ -11,6 +11,9 @@
 - The Unix installer refuses a destination that is a directory or a symlink
   to a directory. `mv` previously moved the staged binary inside that
   directory and the script still reported success (#667).
+- The Windows installer resolves `-Prefix` to an absolute directory before
+  installing, updating PATH, or printing the PATH hint. A relative prefix is
+  no longer stored on PATH as typed (#668).
 - `clean` rejects positional arguments before it scans or deletes. An extra
   word, path, or operand after `--` is invalid usage, not a cleanup target;
   scope the scan with `--root` (#652).
