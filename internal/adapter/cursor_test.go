@@ -455,6 +455,13 @@ func TestCursorAdapter_ContextCancellation(t *testing.T) {
 	}
 }
 
+func TestCursorAdapter_ExactEntryRootKeepsThatEntry(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	base := filepath.Join(home, ".cursor", "projects")
+	assertAgentStoreEntryRoots(t, &CursorAdapter{}, home, base)
+}
+
 func writeCursorWorkerLog(t *testing.T, entryPath, content string) {
 	t.Helper()
 	if err := os.MkdirAll(entryPath, 0755); err != nil {

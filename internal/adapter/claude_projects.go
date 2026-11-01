@@ -36,7 +36,7 @@ func (a *ClaudeProjectAdapter) Scan(ctx context.Context, opts types.ScanOptions)
 	if err != nil {
 		return nil, err
 	}
-	if !pathUnderRoots(base, roots) {
+	if !agentStoreVisible(base, roots, opts.ExplicitRoots) {
 		return nil, nil
 	}
 	entries, err := os.ReadDir(base)
@@ -55,12 +55,18 @@ func (a *ClaudeProjectAdapter) Scan(ctx context.Context, opts types.ScanOptions)
 		if !entry.IsDir() {
 			continue
 		}
+		entryPath := filepath.Join(base, entry.Name())
+		// Containment is decided before the entry is read or classified.
+		// A root inside this entry must not select it, and a sibling outside
+		// the roots must not be opened.
+		if !pathUnderRoots(entryPath, roots) {
+			continue
+		}
 
 		info, err := entry.Info()
 		if err != nil {
 			continue
 		}
-		entryPath := filepath.Join(base, entry.Name())
 		classification, reason, project, err := classifyClaudeProjectEntry(ctx, entryPath)
 		if err != nil {
 			return nil, err
