@@ -10,6 +10,9 @@
 - `--protect-path` and `--exclude` honor an existing path whose name contains
   brackets. The brackets stay literal characters when that path exists, and a
   glob that does not name an existing path still expands (#662).
+- An explicit-root last-scan cache is not reused when one of its targets sits
+  outside that root header. Default scans can still reuse targets from extra
+  Codex homes that are not part of the recorded root header (#663).
 - `clean` rejects positional arguments before it scans or deletes. An extra
   word, path, or operand after `--` is invalid usage, not a cleanup target;
   scope the scan with `--root` (#652).

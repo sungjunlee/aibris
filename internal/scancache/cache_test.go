@@ -465,6 +465,80 @@ func TestLastScanCacheIdentityWriteAndReadAgree(t *testing.T) {
 	}
 }
 
+func TestInspectRejectsTargetOutsideExplicitRootHeader(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	workspace := filepath.Join(home, "workspace")
+	outside := filepath.Join(workspace, "outside", "node_modules", "pkg")
+	allowed := filepath.Join(workspace, "allowed")
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(outside, "dep.js"), []byte("payload\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(allowed, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	broad, err := scanner.NormalizeRoots([]string{workspace})
+	if err != nil {
+		t.Fatal(err)
+	}
+	narrow, err := scanner.NormalizeRoots([]string{allowed})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := scanner.ScanWithOptions(context.Background(), types.ScanOptions{
+		Roots:         broad,
+		ExplicitRoots: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var outsidePath string
+	for _, item := range result.Worktrees {
+		if item.Category == types.CategoryNodeModules && filepath.Base(filepath.Dir(item.Path)) == "outside" {
+			outsidePath = item.Path
+			break
+		}
+	}
+	if outsidePath == "" {
+		t.Fatalf("fixture scan missed outside node_modules: %+v", result.Worktrees)
+	}
+	if adapter.IsWithin(narrow[0], outsidePath) {
+		t.Fatalf("fixture target %s is inside narrow root %s", outsidePath, narrow[0])
+	}
+
+	Write(broad, adapter.DefaultProviderIdentity(), result, true)
+	if _, _, reason, ok := Inspect(broad, "", true); !ok {
+		t.Fatalf("matching explicit root and evidence rejected: %s", reason)
+	}
+
+	stored, ok := Read()
+	if !ok {
+		t.Fatal("explicit scan did not write last-scan.json")
+	}
+	stored.Roots = append([]string(nil), narrow...)
+	if err := Save(stored); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, reason, ok := Inspect(narrow, "", true); ok || reason != "cached target outside scan roots" {
+		t.Fatalf("Inspect ok=%v reason=%q; want rejection for a target outside the explicit root header", ok, reason)
+	}
+
+	// Default scans keep targets that live in extra Codex homes outside the
+	// recorded root header. The same outside target must stay reusable when
+	// the document is not an explicit-root scan.
+	stored.ExplicitRoots = false
+	if err := Save(stored); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, reason, ok := Inspect(narrow, "", false); !ok {
+		t.Fatalf("default-scan cache with a target outside the root header was rejected: %s", reason)
+	}
+}
+
 func TestLastScanCacheIdentityMismatchReasons(t *testing.T) {
 	roots := []string{"/tmp/a"}
 	id := lastScanCacheIdentityOf(roots, "sha256:abc", true)

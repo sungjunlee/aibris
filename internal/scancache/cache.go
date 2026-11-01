@@ -206,10 +206,38 @@ func lastScanReuseRefuseReason(cache lastScanCache, roots []string, selector str
 	if reason := lastScanIdentityReason(cache, roots, explicit); reason != "" {
 		return reason
 	}
+	if reason := lastScanTargetContainmentReason(cache); reason != "" {
+		return reason
+	}
 	if !validateLastScanTargetEvidence(cache.Result.Worktrees, cache.TargetEvidence) {
 		return "activity evidence missing"
 	}
 	return lastScanSelectorReason(cache.Selector, selector)
+}
+
+// lastScanTargetContainmentReason rejects an explicit-root snapshot that
+// names a target outside those roots. Default scans leave extra Codex homes
+// out of the recorded root header, so targets outside that header stay reusable.
+func lastScanTargetContainmentReason(cache lastScanCache) string {
+	if !cache.ExplicitRoots {
+		return ""
+	}
+	for _, item := range cache.Result.Worktrees {
+		if !cachedTargetWithinRoots(item.Path, cache.Roots) {
+			return "cached target outside scan roots"
+		}
+	}
+	return ""
+}
+
+func cachedTargetWithinRoots(path string, roots []string) bool {
+	cleanPath := filepath.Clean(path)
+	for _, root := range roots {
+		if adapter.IsWithin(filepath.Clean(root), cleanPath) {
+			return true
+		}
+	}
+	return false
 }
 
 func lastScanFreshnessReason(cache lastScanCache, age time.Duration) string {

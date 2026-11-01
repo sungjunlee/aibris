@@ -35,6 +35,73 @@ func TestExcludeCleanSaysWhyItScansAgain(t *testing.T) {
 	assertReuseLine(t, output, "scanning again: cleanup exclusions requested", home)
 }
 
+func TestCleanDoesNotSelectTargetOutsideRewrittenExplicitRoot(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	workspace := filepath.Join(home, "workspace")
+	outsideModules := filepath.Join(workspace, "outside", "node_modules")
+	allowed := filepath.Join(workspace, "allowed")
+	if err := os.MkdirAll(filepath.Join(outsideModules, "pkg"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(outsideModules, "pkg", "dep.js"), []byte("payload\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	past := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(outsideModules, past, past); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(allowed, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	captureOutput(func() {
+		resetScanFlags()
+		rootCmd.SetArgs([]string{"scan", "--root", workspace})
+		rootCmd.Execute()
+	})
+	control := cleanNodeModulesJSONPlan(t, workspace)
+	if control.Evidence.Source != string(scanSourceCached) {
+		t.Fatalf("control source = %q; want cached reuse for the matching broad root", control.Evidence.Source)
+	}
+	assertCleanJSONSelectedPaths(t, control, outsideModules)
+
+	stored, ok := readLastScanCache()
+	if !ok {
+		t.Fatal("broad scan did not write last-scan.json")
+	}
+	narrow := mustNormalizeRoots(t, allowed)
+	found := false
+	for _, item := range stored.Result.Worktrees {
+		if !testPathsEqual(item.Path, outsideModules) {
+			continue
+		}
+		found = true
+		if adapter.IsWithin(narrow[0], item.Path) {
+			t.Fatalf("cached target %s is inside %s", item.Path, narrow[0])
+		}
+	}
+	if !found {
+		t.Fatalf("cache lost the outside target: %+v", stored.Result.Worktrees)
+	}
+	stored.Roots = append([]string(nil), narrow...)
+	if err := saveLastScanCache(stored); err != nil {
+		t.Fatal(err)
+	}
+
+	filtered := cleanNodeModulesJSONPlan(t, allowed)
+	if filtered.Evidence.Source != string(scanSourceLive) {
+		t.Fatalf("source = %q; want a live scan when cached targets sit outside the explicit root", filtered.Evidence.Source)
+	}
+	assertCleanJSONSelectedPaths(t, filtered)
+	for _, target := range filtered.PhysicalTargets {
+		if target.Path != nil && strings.Contains(*target.Path, "outside") {
+			t.Fatalf("plan includes a target outside the explicit root: %+v", target)
+		}
+	}
+}
+
 func TestDifferentRootsRescansWithReason(t *testing.T) {
 	home, workspace := reuseScanFixture(t)
 	mustSaveReuseCache(t, workspace, "delete")
