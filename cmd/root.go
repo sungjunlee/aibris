@@ -34,7 +34,7 @@ then "aibris clean --dry-run" to preview deletions.
 Safety gates:
   - clean previews with --dry-run and asks for confirmation before deleting
   - AI logs are only touched with --risky
-  - active worktrees are protected unless --include-active-worktrees
+  - active worktrees can be selected in guided review, or included on the classic path with --include-active-worktrees; neither path skips hard locks or other safety checks
   - scans stay under $HOME; deletions outside it are rejected
 
 Exit status:
