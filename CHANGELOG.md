@@ -4,6 +4,13 @@
 
 ### Fixed
 
+- Risky AI log directories (Codex `archived_sessions`, Claude `file-history`,
+  and each Windsurf project directory) use the newest in-tree modification
+  time for `--age`, and the pre-mutation check walks that tree. A write to an
+  existing nested file keeps the directory until it ages out, including a
+  write after the cleanup snapshot is prepared. Standalone log files still use
+  their own modification time. The last-scan cache revision changes, so a
+  snapshot from an earlier version is rescanned (#664).
 - `clean` rejects positional arguments before it scans or deletes. An extra
   word, path, or operand after `--` is invalid usage, not a cleanup target;
   scope the scan with `--root` (#652).

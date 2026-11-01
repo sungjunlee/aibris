@@ -60,13 +60,23 @@ func (a *WindsurfAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([]t
 		if err != nil {
 			continue
 		}
+		// The project directory's own mtime stays in PathModTime. ModTime
+		// follows the newest write in the tree, so an append to an existing
+		// log still counts toward --age and the pre-mutation check.
+		entryPath := filepath.Join(base, entry.Name())
+		activity := estimateDirActivity(ctx, entryPath)
+		modTime := info.ModTime()
+		if activity.NewestModTime.After(modTime) {
+			modTime = activity.NewestModTime
+		}
 		results = append(results, types.DebrisInfo{
-			Tool:     types.ToolWindsurf,
-			Category: types.CategoryAILogs,
-			ID:       entry.Name(),
-			Path:     filepath.Join(base, entry.Name()),
-			Size:     estimateDirSize(ctx, filepath.Join(base, entry.Name())),
-			ModTime:  info.ModTime(),
+			Tool:        types.ToolWindsurf,
+			Category:    types.CategoryAILogs,
+			ID:          entry.Name(),
+			Path:        entryPath,
+			Size:        activity.Size,
+			ModTime:     modTime,
+			PathModTime: info.ModTime(),
 		})
 	}
 	return results, nil

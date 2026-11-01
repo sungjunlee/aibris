@@ -547,6 +547,13 @@ Cross-category containment uses the same physical-component contract:
 | `agent-state` | proof-classified orphaned only; default selection waits for `--agent-state-grace` | `claude`, `cursor` | recorded-cwd project stores; `live` and `undetermined` entries are protected; classic `--age` does not apply |
 | `ai-logs` | no, requires `--risky` | `ai-logs`, `windsurf` | known Codex, Claude, and Windsurf log/cache locations |
 
+For an `ai-logs` directory (Codex `archived_sessions`, Claude `file-history`,
+and each Windsurf project directory), `item.ModTime` is the newest modification
+in the tree and `item.PathModTime` is the directory's own mtime. `--age` and
+the pre-mutation check follow that tree, so a write to an existing nested file
+keeps the directory. Standalone log files keep the file's own mtime and leave
+`PathModTime` unset.
+
 The installed/regenerable/protected store-nature terms used to plan issue #142
 are not supported categories, agent-state classifications, JSON fields, or CLI
 selectors. Installed stores receive no provider; Codex tmp remains a future
