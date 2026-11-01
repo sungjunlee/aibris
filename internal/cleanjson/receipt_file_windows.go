@@ -8,6 +8,10 @@ import (
 	"syscall"
 )
 
+// openReceiptLeaf opens the receipt leaf without following a reparse point.
+// A Windows named-pipe CreateFile returns immediately (a handle or
+// ERROR_PIPE_BUSY) instead of waiting for a peer. A pipe or character
+// device that does open is refused from that handle before anything is written.
 func openReceiptLeaf(dir *os.File, name string, mode receiptLeafMode) (*os.File, error) {
 	if err := receiptParentStillBound(dir); err != nil {
 		return nil, err

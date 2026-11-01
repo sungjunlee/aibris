@@ -17,7 +17,10 @@ func openReceiptLeaf(dir *os.File, name string, mode receiptLeafMode) (*os.File,
 	perm := uint32(0)
 	switch mode {
 	case receiptLeafProbe:
-		flags |= unix.O_RDONLY
+		// O_RDONLY on a FIFO blocks until a writer connects, and this open
+		// ignores cancellation. O_NONBLOCK returns the handle so the fstat
+		// below can reject a non-regular leaf instead of waiting.
+		flags |= unix.O_RDONLY | unix.O_NONBLOCK
 	case receiptLeafCreate:
 		flags |= unix.O_WRONLY | unix.O_CREAT | unix.O_EXCL
 		perm = 0o600
@@ -37,14 +40,20 @@ func openReceiptLeaf(dir *os.File, name string, mode receiptLeafMode) (*os.File,
 	// cleanup command is spawned while this sink is still bound.
 	unix.CloseOnExec(fd)
 	file := os.NewFile(uintptr(leaf), name)
+	// Stat uses fstat on the opened handle. A path stat would race with a
+	// replacement, and a FIFO open above would already have blocked without
+	// O_NONBLOCK.
 	info, statErr := file.Stat()
 	if statErr != nil {
 		file.Close()
 		return nil, statErr
 	}
-	if info.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0 {
+	if !info.Mode().IsRegular() {
 		file.Close()
-		return nil, errReceiptLeafAlias
+		if info.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0 {
+			return nil, errReceiptLeafAlias
+		}
+		return nil, errReceiptLeafNotRegular
 	}
 	return file, nil
 }

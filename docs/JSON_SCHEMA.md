@@ -782,7 +782,8 @@ commands stay out of the file unless `--include-paths` is supplied, and
 `--include-paths` is accepted together with `--receipt-file` on the guided
 route for that reason. Because the document can then contain absolute paths,
 the file is created with mode `0600` and truncated if it already exists.
-A symlink or reparse-point leaf is refused before anything is removed.
+A symlink, reparse-point, or other non-regular leaf is refused before
+anything is removed.
 The sink is bound to the directory checked at that point: a parent symlink
 still resolves, and a later retarget or a leaf alias swapped in before the
 write cannot redirect the document.

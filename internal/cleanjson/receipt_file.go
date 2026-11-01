@@ -17,6 +17,10 @@ import (
 // a target this run is about to remove.
 var errReceiptLeafAlias = errors.New("symlink or reparse point")
 
+// errReceiptLeafNotRegular refuses a leaf that is not a regular file, such
+// as a directory, device, or named pipe.
+var errReceiptLeafNotRegular = errors.New("not a regular file")
+
 type receiptLeafMode int
 
 const (
@@ -39,8 +43,8 @@ type ReceiptSink struct {
 
 // WriteOwnerOnlyJSON stores one JSON value at path. The file is created or
 // truncated and forced to owner-only 0600 so a pre-existing world-readable
-// sink cannot keep its old permissions after gaining the document. A symlink
-// or reparse-point leaf is refused.
+// sink cannot keep its old permissions after gaining the document. A symlink,
+// reparse point, or other non-regular leaf is refused.
 func WriteOwnerOnlyJSON(path string, value any) error {
 	sink, err := PrepareReceiptSink(path, nil)
 	if err != nil {
@@ -50,9 +54,9 @@ func WriteOwnerOnlyJSON(path string, value any) error {
 	return sink.Write(value)
 }
 
-// PrepareReceiptSink resolves path, refuses a leaf alias, and refuses a sink
-// that is or lives inside a target this run is about to remove. The returned
-// sink holds the directory that was checked; Close releases it.
+// PrepareReceiptSink resolves path, refuses a non-regular or aliased leaf, and
+// refuses a sink that is or lives inside a target this run is about to remove.
+// The returned sink holds the directory that was checked; Close releases it.
 func PrepareReceiptSink(path string, targets []types.DebrisInfo) (*ReceiptSink, error) {
 	absolute, err := filepath.Abs(path)
 	if err != nil {
@@ -92,6 +96,10 @@ func PrepareReceiptSink(path string, targets []types.DebrisInfo) (*ReceiptSink, 
 	if receiptLeafAlias(err) {
 		sink.Close()
 		return nil, fmt.Errorf("receipt file %q is a symlink or reparse point", path)
+	}
+	if receiptLeafNotRegular(err) {
+		sink.Close()
+		return nil, fmt.Errorf("receipt file %q is not a regular file", path)
 	}
 	if err != nil && !os.IsNotExist(err) {
 		sink.Close()
@@ -181,6 +189,10 @@ func (s *ReceiptSink) Close() error {
 
 func receiptLeafAlias(err error) bool {
 	return errors.Is(err, errReceiptLeafAlias)
+}
+
+func receiptLeafNotRegular(err error) bool {
+	return errors.Is(err, errReceiptLeafNotRegular)
 }
 
 func encodeJSON(output io.Writer, value any) error {
