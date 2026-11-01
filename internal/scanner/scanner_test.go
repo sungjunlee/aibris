@@ -944,3 +944,192 @@ func TestScanRetentionHonorsExplicitRoots(t *testing.T) {
 		})
 	}
 }
+
+// manualCtx is a parent context whose cancellation is injected after scan
+// work has started. Scan's fast path must observe a live context; the test
+// then expires it from a provider callback.
+type manualCtx struct {
+	context.Context
+	mu   sync.Mutex
+	done chan struct{}
+	err  error
+}
+
+func newManualCtx() *manualCtx {
+	return &manualCtx{Context: context.Background(), done: make(chan struct{})}
+}
+
+func (m *manualCtx) Done() <-chan struct{} { return m.done }
+
+func (m *manualCtx) Err() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.err
+}
+
+func (m *manualCtx) fail(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.err != nil {
+		return
+	}
+	m.err = err
+	close(m.done)
+}
+
+type stubRetentionProvider struct {
+	name types.RetentionStoreID
+	scan func(context.Context, types.ScanOptions) (types.RetentionProjection, error)
+}
+
+func (p stubRetentionProvider) Name() types.RetentionStoreID {
+	if p.name == "" {
+		return "stub"
+	}
+	return p.name
+}
+
+func (p stubRetentionProvider) Scan(ctx context.Context, opts types.ScanOptions) (types.RetentionProjection, error) {
+	if p.scan != nil {
+		return p.scan(ctx, opts)
+	}
+	return types.RetentionProjection{}, nil
+}
+
+func TestScan_ContextCancelAfterProviderDone(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	s := NewWithRetentionProviders(
+		[]adapter.DebrisProvider{
+			&mockProvider{
+				name:      types.ToolCodex,
+				worktrees: []types.DebrisInfo{{ID: "kept", Tool: types.ToolCodex, Size: 10}},
+			},
+		},
+		[]types.RetentionProvider{
+			stubRetentionProvider{
+				scan: func(context.Context, types.ScanOptions) (types.RetentionProjection, error) {
+					return types.RetentionProjection{
+						Buckets: []types.RetentionBucket{{
+							StoreID:  "stub",
+							BucketID: "2026-01",
+						}},
+					}, nil
+				},
+			},
+		},
+	)
+	s.ErrorWriter = io.Discard
+
+	result, err := s.ScanWithOptions(ctx, types.ScanOptions{
+		OnProgress: func(event types.ScanProgressEvent) {
+			if event.State == types.ScanProgressDone {
+				cancel()
+			}
+		},
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v; want context.Canceled", err)
+	}
+	if result != nil {
+		t.Fatalf("result = %+v; cancellation must not return a completed scan", result)
+	}
+}
+
+func TestScan_RetentionContextErrorsAbort(t *testing.T) {
+	t.Parallel()
+
+	t.Run("provider-canceled", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		s := newRetentionProbeScanner(stubRetentionProvider{
+			scan: func(context.Context, types.ScanOptions) (types.RetentionProjection, error) {
+				cancel()
+				return types.RetentionProjection{}, context.Canceled
+			},
+		})
+		assertContextScanError(t, s, ctx, context.Canceled)
+	})
+
+	t.Run("provider-deadline", func(t *testing.T) {
+		t.Parallel()
+		s := newRetentionProbeScanner(stubRetentionProvider{
+			scan: func(context.Context, types.ScanOptions) (types.RetentionProjection, error) {
+				return types.RetentionProjection{}, context.DeadlineExceeded
+			},
+		})
+		assertContextScanError(t, s, context.Background(), context.DeadlineExceeded)
+	})
+
+	t.Run("deadline-on-caller", func(t *testing.T) {
+		t.Parallel()
+		ctx := newManualCtx()
+		s := newRetentionProbeScanner(stubRetentionProvider{
+			scan: func(context.Context, types.ScanOptions) (types.RetentionProjection, error) {
+				ctx.fail(context.DeadlineExceeded)
+				return types.RetentionProjection{
+					Buckets: []types.RetentionBucket{{StoreID: "stub", BucketID: "2026-01"}},
+				}, nil
+			},
+		})
+		assertContextScanError(t, s, ctx, context.DeadlineExceeded)
+	})
+}
+
+func TestScan_RetentionStoreLocalErrorRemainsPartial(t *testing.T) {
+	t.Parallel()
+	s := newRetentionProbeScanner(stubRetentionProvider{
+		name: "codex-sessions",
+		scan: func(context.Context, types.ScanOptions) (types.RetentionProjection, error) {
+			return types.RetentionProjection{}, errors.New("reading store: permission denied")
+		},
+	})
+
+	result, err := s.ScanWithOptions(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result == nil || len(result.Worktrees) != 1 || result.Worktrees[0].ID != "kept" {
+		t.Fatalf("debris = %+v; want the kept item", result)
+	}
+	if result.TotalCount != 1 {
+		t.Fatalf("TotalCount = %d; want 1", result.TotalCount)
+	}
+	if !result.Retention.Partial {
+		t.Fatal("Retention.Partial = false; want a store-local failure to stay partial")
+	}
+	if len(result.Retention.ProviderErrors) != 1 || result.Retention.ProviderErrors[0].StoreID != "codex-sessions" || result.Retention.ProviderErrors[0].Message != "provider failure" {
+		t.Fatalf("provider errors = %+v", result.Retention.ProviderErrors)
+	}
+	if len(result.Retention.Buckets) != 0 {
+		t.Fatalf("buckets = %+v; want none", result.Retention.Buckets)
+	}
+}
+
+func newRetentionProbeScanner(provider types.RetentionProvider) *Scanner {
+	s := NewWithRetentionProviders(
+		[]adapter.DebrisProvider{
+			&mockProvider{
+				name:      types.ToolCodex,
+				worktrees: []types.DebrisInfo{{ID: "kept", Tool: types.ToolCodex, Size: 4}},
+			},
+		},
+		[]types.RetentionProvider{provider},
+	)
+	s.ErrorWriter = io.Discard
+	return s
+}
+
+func assertContextScanError(t *testing.T, s *Scanner, ctx context.Context, want error) {
+	t.Helper()
+	result, err := s.ScanWithOptions(ctx, types.ScanOptions{})
+	if !errors.Is(err, want) {
+		t.Fatalf("err = %v; want %v", err, want)
+	}
+	if result != nil {
+		t.Fatalf("result = %+v; context failure must not return a completed scan", result)
+	}
+}
