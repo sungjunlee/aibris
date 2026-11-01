@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/testutil"
 	worktreepkg "github.com/sungjunlee/aibris/internal/worktree"
 )
 
@@ -451,7 +452,7 @@ func buildCLIContractBinary(t *testing.T) string {
 		if runtime.GOOS == "windows" {
 			binary += ".exe"
 		}
-		command := exec.Command("go", "build", "-o", binary, ".")
+		command := exec.Command("go", testutil.GoBuildArgs(binary, ".")...)
 		command.Dir = ".."
 		cliContractBuild.output, cliContractBuild.err = command.CombinedOutput()
 		cliContractBuild.binary = binary
@@ -460,6 +461,16 @@ func buildCLIContractBinary(t *testing.T) string {
 		t.Fatalf("building CLI contract binary: %v\n%s", cliContractBuild.err, cliContractBuild.output)
 	}
 	return cliContractBuild.binary
+}
+
+func TestCLIContractBinaryMatchesHarnessRaceMode(t *testing.T) {
+	got, err := testutil.BinaryHasRace(buildCLIContractBinary(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != testutil.RaceEnabled() {
+		t.Fatalf("CLI contract binary -race=%v; harness -race=%v", got, testutil.RaceEnabled())
+	}
 }
 
 func TestMain(m *testing.M) {
