@@ -150,10 +150,12 @@ These hold for every change. Breaking one is a bug even if tests pass.
    in `defaultProviders` in `internal/adapter/providers.go`.
 2. `Scan()` honors context cancellation and measures sizes with
    `estimateDirSize()`.
-3. For nested cache trees and agent stores, report the newest in-tree mtime as
-   `ModTime` and always set `PathModTime` to the path's own mtime; otherwise
-   cleanup preflight overwrites `ModTime` with the container mtime. Providers
-   whose container mtime is the activity signal (`node_modules`) skip this.
+3. For nested cache trees, agent stores, and AI log directories, report the
+   newest in-tree mtime as `ModTime` and always set `PathModTime` to the path's
+   own mtime; otherwise cleanup preflight overwrites `ModTime` with the
+   container mtime. Providers whose container mtime is the activity signal
+   (`node_modules`) skip this. Standalone AI log files keep the file mtime and
+   leave `PathModTime` unset.
 4. Projects that are subdirectories of a container use `detectProjectName()`
    (hidden directories excluded). Stores whose recorded cwd names the project
    use `projectNameFromRecordedCWD()` and never touch the filesystem.

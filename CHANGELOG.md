@@ -12,6 +12,17 @@
 - Claude and Cursor project stores include an entry when `--root` is that
   entry. Sibling entries stay outside the scan, and a root nested inside an
   entry does not select the outer store (#656).
+- Risky AI log directories (Codex `archived_sessions`, Claude `file-history`,
+  and each Windsurf project directory) use the newest in-tree modification
+  time for `--age`, and the pre-mutation check walks that tree. A write to an
+  existing nested file keeps the directory until it ages out, including a
+  write after the cleanup snapshot is prepared. Standalone log files still use
+  their own modification time. The last-scan cache revision changes, so a
+  snapshot from an earlier version is rescanned (#664).
+- Recorded-cwd absence proof does not treat a cwd that exists, or that
+  reappears while the ancestor walk runs, as a deleted project. The entry
+  stays undetermined instead of orphaned. A cwd that is missing for the whole
+  proof is unchanged (#665).
 - Go build-cache discovery keeps the last `GOCACHE` assignment in the GOENV
   file, matching `go env`. A final empty value uses the default cache, and a
   final `off` selects no cache. Process `$GOCACHE` still wins, and the live
