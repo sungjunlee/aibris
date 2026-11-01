@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/sungjunlee/aibris/internal/testutil"
 )
 
 var cliContractBinary string
@@ -59,7 +61,7 @@ func TestMain(m *testing.M) {
 		binaryName += ".exe"
 	}
 	cliContractBinary = filepath.Join(buildDir, binaryName)
-	build := exec.Command("go", "build", "-o", cliContractBinary, ".")
+	build := exec.Command("go", testutil.GoBuildArgs(cliContractBinary, ".")...)
 	build.Dir = root
 	if output, err := build.CombinedOutput(); err != nil {
 		fmt.Fprintf(os.Stderr, "build CLI contract binary: %v\n%s", err, output)
@@ -70,6 +72,16 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 	_ = os.RemoveAll(buildDir)
 	os.Exit(code)
+}
+
+func TestCLIContractBinaryMatchesHarnessRaceMode(t *testing.T) {
+	got, err := testutil.BinaryHasRace(cliContractBinary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != testutil.RaceEnabled() {
+		t.Fatalf("CLI contract binary -race=%v; harness -race=%v", got, testutil.RaceEnabled())
+	}
 }
 
 func TestIsAibrisGoModAcceptsWindowsLineEndings(t *testing.T) {

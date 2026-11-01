@@ -17,7 +17,8 @@
 // The path must already be clean: a "link/../x" path would be judged on one
 // location and removed at another once the symlink is resolved.
 //
-// No other package calls os.RemoveAll; an architecture test enforces it.
+// No other package calls os.RemoveAll or (*os.Root).RemoveAll; an
+// architecture test enforces it.
 package safedelete
 
 import (
