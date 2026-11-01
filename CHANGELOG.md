@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- `clean` rejects positional arguments before it scans or deletes. An extra
+  word, path, or operand after `--` is invalid usage, not a cleanup target;
+  scope the scan with `--root` (#652).
 - Command-backed cleanup falls back to path removal only when lookup reports
   the authorized executable is not found (`exec.ErrNotFound`). A relative
   lookup refusal (`exec.ErrDot`, for example `PATH=.` with a local executable)
