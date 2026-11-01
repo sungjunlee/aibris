@@ -110,11 +110,11 @@ check job plus tests on Linux, macOS, and Windows.
 These hold for every change. Breaking one is a bug even if tests pass.
 
 - **One deletion gate.** Only `internal/safedelete` may call `os.RemoveAll`
-  (an architecture test enforces it). Every removal, cleanup command, and
-  `git worktree remove` passes `safedelete.Check`: canonical path strictly
-  inside `$HOME`, not a protected location or its ancestor, not a primary Git
-  repository (a `.git` directory) or Git metadata. Add new protected
-  locations there, not in providers.
+  or `(*os.Root).RemoveAll` (an architecture test enforces it). Every removal,
+  cleanup command, and `git worktree remove` passes `safedelete.Check`:
+  canonical path strictly inside `$HOME`, not a protected location or its
+  ancestor, not a primary Git repository (a `.git` directory) or Git
+  metadata. Add new protected locations there, not in providers.
 - **Re-verify at the mutation boundary.** Scan results can come from a cache.
   Executors re-check identity, age, Git state, agent-state classification,
   and overlap right before mutating, and refuse on drift or incomplete
