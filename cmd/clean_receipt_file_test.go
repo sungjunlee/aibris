@@ -655,3 +655,45 @@ func TestCleanReceiptFileRejectsSinkInsideACleanupTarget(t *testing.T) {
 		t.Fatalf("refused run wrote a receipt file: %v", statErr)
 	}
 }
+
+// TestCleanReceiptFileRejectsLeafAliasOfSelectedTarget is the #653 regression:
+// a receipt leaf that points at a selected file must be refused before removal
+// so the original bytes survive. Following the alias would recreate the target
+// with the receipt document after a successful deletion.
+func TestCleanReceiptFileRejectsLeafAliasOfSelectedTarget(t *testing.T) {
+	binary := buildCLIContractBinary(t)
+	home := t.TempDir()
+	logPath := filepath.Join(home, ".claude", "command-audit.log")
+	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const payload = "original-audit-bytes\n"
+	if err := os.WriteFile(logPath, []byte(payload), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	past := time.Now().Add(-48 * time.Hour)
+	if err := os.Chtimes(logPath, past, past); err != nil {
+		t.Fatal(err)
+	}
+	receiptPath := filepath.Join(home, "receipt.json")
+	if err := os.Symlink(logPath, receiptPath); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	stdout, stderr, err := runCleanJSONProcess(t, binary, home,
+		"clean", "--no-guide", "--json", "--force", "--risky", "--age", "1h",
+		"--category", "ai-logs", "--receipt-file", receiptPath)
+	if err == nil {
+		t.Fatalf("aliased receipt sink succeeded: stdout=%s stderr=%s", stdout, stderr)
+	}
+	if !strings.Contains(stderr, "symlink") && !strings.Contains(stderr, "reparse") {
+		t.Fatalf("aliased receipt sink stderr = %q; want a symlink or reparse refusal", stderr)
+	}
+	got, readErr := os.ReadFile(logPath)
+	if readErr != nil {
+		t.Fatalf("selected log missing after refusal: %v", readErr)
+	}
+	if string(got) != payload {
+		t.Fatalf("selected log = %q; want original bytes preserved", got)
+	}
+}

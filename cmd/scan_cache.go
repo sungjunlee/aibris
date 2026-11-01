@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/sungjunlee/aibris/internal/adapter"
+	"github.com/sungjunlee/aibris/internal/exclude"
 	"github.com/sungjunlee/aibris/internal/scancache"
 	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/types"
@@ -131,7 +132,7 @@ func (s lastScanSession) tryCached() (*types.ScanResult, scanSource, bool) {
 }
 
 func (s lastScanSession) excludedReason() (string, bool) {
-	if len(s.excludes) == 0 {
+	if len(s.excludes) == 0 && !persistentExclusionsConfigured(s.roots) {
 		return "", false
 	}
 	_, _, reason, ok := inspectLastScanCache(s.roots, s.selector, s.explicit)
@@ -139,6 +140,13 @@ func (s lastScanSession) excludedReason() (string, bool) {
 		return "", true
 	}
 	return "cleanup exclusions requested", true
+}
+
+// persistentExclusionsConfigured reports whether an ignore file currently
+// contributes patterns. Live discovery reads those files, and the cache
+// identity does not, so a file added after the scan must not be reused.
+func persistentExclusionsConfigured(roots []string) bool {
+	return len(exclude.IgnoreFilePatterns(roots)) > 0
 }
 
 func cachedScanMissReason(ok bool, reason string) string {

@@ -4,6 +4,17 @@
 
 ### Fixed
 
+- `clean` rescans when a user ignore file or a root `.aibris-ignore` is added
+  after the cached scan, so the new exclusion is honored instead of reusing
+  the unfiltered inventory (#661).
+- `--protect-path` and `--exclude` honor an existing path whose name contains
+  brackets. The brackets stay literal characters when that path exists, and a
+  glob that does not name an existing path still expands (#662).
+- An explicit-root last-scan cache is not reused when one of its targets
+  resolves outside that root header. Symlinked spellings of the same root
+  still match, including a macOS temp dir reached through `/var`. Default
+  scans can still reuse targets from extra Codex homes that are not part of
+  the recorded root header (#663).
 - `scan` returns a context cancellation or deadline error when the caller
   cancels as a provider finishes, during inventory post-processing, or during
   the protected-content retention inventory. The command no longer reports
@@ -12,6 +23,27 @@
 - Claude and Cursor project stores include an entry when `--root` is that
   entry. Sibling entries stay outside the scan, and a root nested inside an
   entry does not select the outer store (#656).
+- Risky AI log directories (Codex `archived_sessions`, Claude `file-history`,
+  and each Windsurf project directory) use the newest in-tree modification
+  time for `--age`, and the pre-mutation check walks that tree. A write to an
+  existing nested file keeps the directory until it ages out, including a
+  write after the cleanup snapshot is prepared. Standalone log files still use
+  their own modification time. The last-scan cache revision changes, so a
+  snapshot from an earlier version is rescanned (#664).
+- Recorded-cwd absence proof does not treat a cwd that exists, or that
+  reappears while the ancestor walk runs, as a deleted project. The entry
+  stays undetermined instead of orphaned. A cwd that is missing for the whole
+  proof is unchanged (#665).
+- Go build-cache discovery keeps the last `GOCACHE` assignment in the GOENV
+  file, matching `go env`. A final empty value uses the default cache, and a
+  final `off` selects no cache. Process `$GOCACHE` still wins, and the live
+  revalidator uses the same path (#666).
+- The Unix installer refuses a destination that is a directory or a symlink
+  to a directory. `mv` previously moved the staged binary inside that
+  directory and the script still reported success (#667).
+- The Windows installer resolves `-Prefix` to an absolute directory before
+  installing, updating PATH, or printing the PATH hint. A relative prefix is
+  no longer stored on PATH as typed (#668).
 - `clean` rejects positional arguments before it scans or deletes. An extra
   word, path, or operand after `--` is invalid usage, not a cleanup target;
   scope the scan with `--root` (#652).
@@ -25,6 +57,20 @@
   lookup refusal (`exec.ErrDot`, for example `PATH=.` with a local executable)
   is reported as a command failure, leaves the cache in place, and credits no
   freed bytes (#659).
+- `--receipt-file` refuses a symlink or reparse-point leaf before cleanup and
+  writes through the directory checked at that point. A receipt path can no
+  longer recreate a removed target, and a parent symlink retargeted or a leaf
+  alias swapped in afterward cannot redirect the write. Ordinary new and
+  existing files stay owner-only `0600` (#653).
+- `--receipt-file` rejects a named pipe or other non-regular leaf before
+  confirmation or cleanup. On Unix the probe opens that path nonblocking and
+  classifies the handle, so a FIFO cannot stall the command waiting for a
+  writer (#653).
+- Guided and JSON `post_clean` debris counts surviving owners. Targets that
+  were not executed keep their pre-clean size, a measured residual replaces
+  that size (including a known zero) without adding freed bytes again, removed
+  owners stay excluded, and a post-mutation residual that was not measured is
+  omitted instead of reported as zero or as the stale size (#654).
 
 ## [0.16.0] - 2026-10-09
 

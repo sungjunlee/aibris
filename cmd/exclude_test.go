@@ -352,6 +352,81 @@ func TestCleanJSONCmd_IgnoreFileReportsExclusionsWithoutAddingTargets(t *testing
 	}
 }
 
+func TestCleanJSONCmd_IgnoreFileAddedAfterUnfilteredScan(t *testing.T) {
+	cases := []struct {
+		name  string
+		write func(t *testing.T, home, workspace, modules string)
+	}{
+		{
+			name: "user ignore file",
+			write: func(t *testing.T, home, _, modules string) {
+				t.Helper()
+				ignoreFile := filepath.Join(home, ".config", "aibris", "ignore")
+				if err := os.MkdirAll(filepath.Dir(ignoreFile), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(ignoreFile, []byte(modules+"\n"), 0644); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+		{
+			name: "root ignore file",
+			write: func(t *testing.T, _, workspace, modules string) {
+				t.Helper()
+				if err := os.WriteFile(filepath.Join(workspace, ".aibris-ignore"), []byte(modules+"\n"), 0644); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			home, workspace := reuseScanFixture(t)
+			t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+			captureOutput(func() {
+				resetScanFlags()
+				rootCmd.SetArgs([]string{"scan", "--root", workspace})
+				rootCmd.Execute()
+			})
+			modules := filepath.Join(workspace, "app", "node_modules")
+
+			control := cleanNodeModulesJSONPlan(t, workspace)
+			if control.Evidence.Source != string(scanSourceCached) {
+				t.Fatalf("control source = %q; want cached reuse before the ignore file exists", control.Evidence.Source)
+			}
+			assertCleanJSONSelectedPaths(t, control, modules)
+			if control.Exclusions != nil {
+				t.Fatalf("control exclusions = %+v; want none without exclusion configuration", control.Exclusions)
+			}
+
+			tc.write(t, home, workspace, modules)
+			filtered := cleanNodeModulesJSONPlan(t, workspace)
+			if filtered.Evidence.Source == string(scanSourceCached) {
+				t.Fatal("clean reused the unfiltered cache after a persistent ignore file was added")
+			}
+			assertCleanJSONSelectedPaths(t, filtered)
+			assertCleanJSONHonoredExclude(t, filtered.Exclusions, modules)
+			if filtered.Exclusions.Scopes[0].Source != "ignore-file" {
+				t.Errorf("scope source = %q; want ignore-file", filtered.Exclusions.Scopes[0].Source)
+			}
+		})
+	}
+}
+
+func cleanNodeModulesJSONPlan(t *testing.T, workspace string) cleanJSONPlan {
+	t.Helper()
+	resetCleanFlags()
+	output := captureOutput(func() {
+		rootCmd.SetArgs([]string{
+			"clean", "--no-guide", "--dry-run", "--json", "--include-paths",
+			"--age", "1h", "--category", "node_modules", "--root", workspace,
+		})
+		rootCmd.Execute()
+	})
+	return parseCleanJSONPlan(t, output)
+}
+
 func TestCleanJSONCmd_ExcludeSkipsLastScanCacheBothDirections(t *testing.T) {
 	_, hidden, kept := exclusionCleanJSONFixture(t)
 

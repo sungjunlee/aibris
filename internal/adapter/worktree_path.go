@@ -26,6 +26,13 @@ func canonicalExistingPath(path string) string {
 	return canonicalPathKey(resolvedExistingPath(path))
 }
 
+// CanonicalExistingPath is the symlink-resolved form compared with IsWithin.
+// Existing symlinks are resolved and the result is case-folded on Windows.
+// A path that cannot be resolved keeps its cleaned spelling.
+func CanonicalExistingPath(path string) string {
+	return canonicalExistingPath(path)
+}
+
 func canonicalPathKey(path string) string {
 	if runtime.GOOS == "windows" {
 		return strings.ToLower(path)

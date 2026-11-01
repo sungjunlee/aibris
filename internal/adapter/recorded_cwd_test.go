@@ -211,6 +211,73 @@ func TestAgentStateStoreClassifiersRecordedCWDAncestorAvailability(t *testing.T)
 		}
 	})
 
+	t.Run("existing cwd is not proven absent", func(t *testing.T) {
+		cwd := filepath.Join(home, "workspace", "restored-project")
+		if err := os.MkdirAll(cwd, 0755); err != nil {
+			t.Fatal(err)
+		}
+		proven, ancestor, err := recordedCWDAbsenceProven(cwd)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if proven {
+			t.Fatalf("recordedCWDAbsenceProven proved absence for existing cwd %q (ancestor %q)", cwd, ancestor)
+		}
+	})
+
+	t.Run("cwd restored during proof is not orphaned", func(t *testing.T) {
+		ancestor := filepath.Join(home, "restored-during-proof")
+		if err := os.MkdirAll(ancestor, 0755); err != nil {
+			t.Fatal(err)
+		}
+		cwd := filepath.Join(ancestor, "project")
+
+		originalVolumeID := recordedCWDVolumeID
+		recordedCWDVolumeID = func(path string, info os.FileInfo) (string, error) {
+			if err := os.MkdirAll(cwd, 0755); err != nil {
+				t.Errorf("restore cwd: %v", err)
+			}
+			return originalVolumeID(path, info)
+		}
+		t.Cleanup(func() {
+			recordedCWDVolumeID = originalVolumeID
+		})
+
+		classification, err := ClassifyRecordedCWDs(context.Background(), []string{cwd}, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(cwd); err != nil {
+			t.Fatalf("cwd after classification: %v", err)
+		}
+		if classification == types.EntryClassOrphaned {
+			t.Fatal("classification = orphaned after the cwd was restored during absence proof")
+		}
+	})
+
+	t.Run("cwd missing throughout proof stays orphaned", func(t *testing.T) {
+		ancestor := filepath.Join(home, "missing-throughout-proof")
+		if err := os.MkdirAll(ancestor, 0755); err != nil {
+			t.Fatal(err)
+		}
+		cwd := filepath.Join(ancestor, "missing-project")
+
+		proven, gotAncestor, err := recordedCWDAbsenceProven(cwd)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !proven {
+			t.Fatalf("recordedCWDAbsenceProven(%q) = false, ancestor %q; want proven absence", cwd, gotAncestor)
+		}
+		classification, err := ClassifyRecordedCWDs(context.Background(), []string{cwd}, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if classification != types.EntryClassOrphaned {
+			t.Fatalf("classification = %q; want orphaned", classification)
+		}
+	})
+
 	t.Run("volume lookup failure is undetermined", func(t *testing.T) {
 		ancestor := filepath.Join(home, "unverifiable-volume")
 		if err := os.MkdirAll(ancestor, 0755); err != nil {

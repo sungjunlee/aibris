@@ -212,11 +212,26 @@ try {
             Write-Host 'injected read-only replacement failure'
         }
     }
-    if ($failure -eq 'relative-prefix') {
+    if ($failure -eq 'relative-prefix' -or $failure -like 'relative-prefix-*') {
         Set-Location (Split-Path -Parent $prefix)
-        $prefix = Split-Path -Leaf $prefix
+        if ($failure -like 'relative-prefix-*') {
+            # Match -Prefix .\bin: a relative path, not only a bare leaf name.
+            $prefix = Join-Path '.' (Split-Path -Leaf $prefix)
+        } else {
+            $prefix = Split-Path -Leaf $prefix
+        }
     }
-    Install-Aibris -Version '0.12.1' -Prefix $prefix -Arch 'amd64'
+    $addToPath = $false
+    if ($failure -eq 'relative-prefix-path' -or $failure -eq 'absolute-prefix-path') {
+        $addToPath = $true
+        # Record the PATH argument. Do not call the real helper: it writes
+        # the user registry.
+        function Add-ToUserPath {
+            param([string]$Dir)
+            Write-Host "recorded-install-dir=$Dir"
+        }
+    }
+    Install-Aibris -Version '0.12.1' -Prefix $prefix -Arch 'amd64' -AddToPath:$addToPath
 }
 catch {
     if ($failure -eq 'replacement') {
@@ -357,5 +372,75 @@ Show-PathHint -InstallDir "` + installDir + `"
 
 	if strings.Contains(output, "not on your PATH yet") {
 		t.Errorf("PATH hint should not be shown when directory is on PATH; output:\n%s", output)
+	}
+}
+
+func recordedInstallDir(t *testing.T, output string) string {
+	t.Helper()
+	const marker = "recorded-install-dir="
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, marker) {
+			return strings.TrimPrefix(line, marker)
+		}
+	}
+	t.Fatalf("installer did not record an Add-ToUserPath argument:\n%s", output)
+	return ""
+}
+
+// TestNativeInstallPowerShellRelativePrefixIsAbsoluteOnPath verifies that
+// -AddToPath receives the absolute prefix for both relative and absolute
+// -Prefix values. The override records the argument and does not touch the
+// user PATH registry.
+func TestNativeInstallPowerShellRelativePrefixIsAbsoluteOnPath(t *testing.T) {
+	for _, tc := range []struct {
+		name, failure string
+	}{
+		{name: "relative", failure: "relative-prefix-path"},
+		{name: "absolute", failure: "absolute-prefix-path"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newInstallFixture(t)
+			binary := f.windowsRelease(t, "")
+			output, err := f.runPowerShell(t, tc.failure)
+			if err != nil {
+				t.Fatalf("install failed: %v\n%s", err, output)
+			}
+			if got := recordedInstallDir(t, output); got != f.prefix {
+				t.Fatalf("Add-ToUserPath dir = %q; want absolute prefix %q\n%s", got, f.prefix, output)
+			}
+			assertInstallContents(t, filepath.Join(f.prefix, "aibris.exe"), binary)
+			f.assertClean(t, "aibris.exe")
+		})
+	}
+}
+
+// TestNativeInstallPowerShellRelativePrefixHintIsAbsolute verifies that the
+// non-AddToPath hint names the absolute prefix, including when -Prefix is relative.
+func TestNativeInstallPowerShellRelativePrefixHintIsAbsolute(t *testing.T) {
+	for _, tc := range []struct {
+		name, failure string
+	}{
+		{name: "relative", failure: "relative-prefix-hint"},
+		{name: "absolute", failure: "absolute-prefix-hint"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newInstallFixture(t)
+			binary := f.windowsRelease(t, "")
+			output, err := f.runPowerShell(t, tc.failure)
+			if err != nil {
+				t.Fatalf("install failed: %v\n%s", err, output)
+			}
+			want := "aibris.exe was installed to " + f.prefix + ", but that directory is not on your PATH yet."
+			if !strings.Contains(output, want) {
+				t.Fatalf("PATH hint missing %q\n%s", want, output)
+			}
+			rel := "aibris.exe was installed to " + filepath.Join(".", filepath.Base(f.prefix)) + ", but that directory is not on your PATH yet."
+			if strings.Contains(output, rel) {
+				t.Fatalf("PATH hint kept relative prefix:\n%s", output)
+			}
+			assertInstallContents(t, filepath.Join(f.prefix, "aibris.exe"), binary)
+			f.assertClean(t, "aibris.exe")
+		})
 	}
 }

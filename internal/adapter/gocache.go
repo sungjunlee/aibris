@@ -84,6 +84,11 @@ func readGoEnvKey(file, key string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
+	// Go's user env file keeps the last assignment, including a final empty
+	// value or "off" (cmd/go/internal/cfg.readEnvFile). The first line is not
+	// the effective setting.
+	var val string
+	found := false
 	for _, line := range strings.Split(string(data), "\n") {
 		i := strings.IndexByte(line, '=')
 		if i < 0 || line[0] < 'A' || 'Z' < line[0] {
@@ -92,9 +97,10 @@ func readGoEnvKey(file, key string) (string, bool) {
 		if line[:i] != key {
 			continue
 		}
-		return line[i+1:], true
+		val = line[i+1:]
+		found = true
 	}
-	return "", false
+	return val, found
 }
 
 func sameCachePath(a, b string) bool {
