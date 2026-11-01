@@ -7,6 +7,11 @@
 - `clean` rejects positional arguments before it scans or deletes. An extra
   word, path, or operand after `--` is invalid usage, not a cleanup target;
   scope the scan with `--root` (#652).
+- Grok session stores whose `prompt_context.json` repeats a top-level
+  `working_directory`, including an escaped or case-insensitive alias, stay
+  undetermined instead of keeping one owner. A single ownership key is
+  unchanged, so an ordinary orphan remains eligible after
+  `--agent-state-grace` (#650).
 
 ## [0.16.0] - 2026-10-09
 
