@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1049,6 +1050,158 @@ func TestExecute_DeletesRevalidatedOrphanedAgentState(t *testing.T) {
 				t.Fatalf("orphaned %s agent-state was not removed; stat err = %v", tt.tool, statErr)
 			}
 		})
+	}
+}
+
+func TestGrokDuplicateOwnershipKeysStayOutOfCleanup(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	live := filepath.Join(home, "work", "live-project")
+	if err := os.MkdirAll(live, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(live, "keep.txt"), []byte("live\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gone := filepath.Join(home, "work", "gone-project")
+	liveJSON, err := json.Marshal(live)
+	if err != nil {
+		t.Fatal(err)
+	}
+	goneJSON, err := json.Marshal(gone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The missing owner is last, which is the value encoding/json keeps, and
+	// it matches the encoded entry name. Three-day-old files are past the
+	// default grace period, so an orphaned reading is selected.
+	body := `{"working_directory":` + string(liveJSON) + `,"working_directory":` + string(goneJSON) + `}`
+	entry := writeGrokSessionStore(t, home, gone, body)
+	backdateTree(t, entry, time.Now().Add(-72*time.Hour))
+
+	scanned := scanGrokStore(t, entry)
+	if scanned.Classification != types.EntryClassUndetermined {
+		t.Fatalf("classification = %s (%s); want undetermined", scanned.Classification, scanned.Reason)
+	}
+	opts := types.PruneOptions{
+		Age:                  7 * 24 * time.Hour,
+		AgentStateMinIdleAge: DefaultAgentStateMinIdleAge,
+	}
+	if selected := Filter([]types.DebrisInfo{scanned}, opts); len(selected) != 0 {
+		t.Fatalf("duplicate-key store selected: %+v", selected)
+	}
+	eligible, reason := EvaluateEligibility(scanned, opts, time.Now())
+	if eligible || reason != EligibilityReasonAgentStateUndetermined {
+		t.Fatalf("eligibility = %t/%q; want false/%q", eligible, reason, EligibilityReasonAgentStateUndetermined)
+	}
+
+	// A stale plan can still claim the store is orphaned. Revalidation must
+	// refuse, and both the store and the live workspace stay on disk.
+	planned := scanned
+	planned.Classification = types.EntryClassOrphaned
+	total, err := Execute([]types.DebrisInfo{planned})
+	if err == nil || !strings.Contains(err.Error(), "classified undetermined") {
+		t.Fatalf("Execute() error = %v; want undetermined revalidation", err)
+	}
+	if total != 0 {
+		t.Fatalf("total = %d; want 0", total)
+	}
+	if _, err := os.Stat(entry); err != nil {
+		t.Fatalf("ambiguous store was removed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(live, "keep.txt")); err != nil {
+		t.Fatalf("live workspace was removed: %v", err)
+	}
+}
+
+func TestGrokSingleKeyOrphanRemainsEligibleAfterGrace(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	if err := os.MkdirAll(filepath.Join(home, "work"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gone := filepath.Join(home, "work", "gone-project")
+	goneJSON, err := json.Marshal(gone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := `{"version":1,"working_directory":` + string(goneJSON) + `}`
+	entry := writeGrokSessionStore(t, home, gone, body)
+
+	fresh := scanGrokStore(t, entry)
+	if fresh.Classification != types.EntryClassOrphaned {
+		t.Fatalf("fresh classification = %s (%s); want orphaned", fresh.Classification, fresh.Reason)
+	}
+	opts := types.PruneOptions{
+		Age:                  7 * 24 * time.Hour,
+		AgentStateMinIdleAge: DefaultAgentStateMinIdleAge,
+	}
+	if eligible, reason := EvaluateEligibility(fresh, opts, time.Now()); eligible || reason != EligibilityReasonAgentStateMinIdleAge {
+		t.Fatalf("fresh eligibility = %t/%q; want held by grace", eligible, reason)
+	}
+
+	backdateTree(t, entry, time.Now().Add(-72*time.Hour))
+	idle := scanGrokStore(t, entry)
+	if idle.Classification != types.EntryClassOrphaned {
+		t.Fatalf("idle classification = %s (%s); want orphaned", idle.Classification, idle.Reason)
+	}
+	if eligible, reason := EvaluateEligibility(idle, opts, time.Now()); !eligible || reason != EligibilityReasonEligible {
+		t.Fatalf("idle eligibility = %t/%q; want eligible", eligible, reason)
+	}
+	if _, err := Execute([]types.DebrisInfo{idle}); err != nil {
+		t.Fatalf("Execute() error = %v; want the idle orphan removed", err)
+	}
+	if _, err := os.Stat(entry); !os.IsNotExist(err) {
+		t.Fatalf("single-key orphan was not removed; stat err = %v", err)
+	}
+}
+
+func writeGrokSessionStore(t *testing.T, home, cwd, contextBody string) string {
+	t.Helper()
+	entry := filepath.Join(home, ".grok", "sessions", url.PathEscape(cwd))
+	session := filepath.Join(entry, "01a0000a")
+	if err := os.MkdirAll(session, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{
+		filepath.Join(entry, "prompt_history.jsonl"),
+		filepath.Join(session, "chat_history.jsonl"),
+	} {
+		if err := os.WriteFile(path, []byte("{}\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(session, "prompt_context.json"), []byte(contextBody), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return entry
+}
+
+func scanGrokStore(t *testing.T, entry string) types.DebrisInfo {
+	t.Helper()
+	results, err := (&adapter.GrokSessionsAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range results {
+		if item.Path == entry {
+			return item
+		}
+	}
+	t.Fatalf("scan did not report %s: %+v", entry, results)
+	return types.DebrisInfo{}
+}
+
+func backdateTree(t *testing.T, root string, modTime time.Time) {
+	t.Helper()
+	err := filepath.WalkDir(root, func(path string, _ os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		return os.Chtimes(path, modTime, modTime)
+	})
+	if err != nil {
+		t.Fatalf("backdate %s: %v", root, err)
 	}
 }
 
