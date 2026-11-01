@@ -15,9 +15,9 @@ build caches, package caches, and AI tool logs.
 The product stance is conservative cleanup for development machines. The CLI
 does four things: discover development debris, report structured data, preview
 filtered targets, and delete only inside conservative safety boundaries. Human
-or AI-guided judgment usually happens outside the CLI; the guided Codex cleanup
-mode is a conservative review surface that still uses the normal preview and
-confirmation path before deletion.
+or AI-guided judgment usually happens outside the CLI. Guided worktree review
+already covers every tool's active units. It remains a conservative review
+surface and still uses the normal preview and confirmation path before deletion.
 
 ## Non-goals
 
@@ -113,11 +113,16 @@ Flags:
 | `--receipt-file` | empty | Write the versioned `clean_receipt` execution document to this path, owner-only and truncating an existing file. Supported on the guided route (stdout stays the human review surface) and on the `--json` route (the file matches the receipt on stdout). It requires an execution run: `--dry-run` and the classic human route are refused, the classic refusal happening before any mutation even when the route settles on classic only after the scan. It does not make non-dry-run `--json --guide` executable, and it never accepts a replayed receipt. A target declined at a guided `--interactive` prompt is reported as a non-requested `skipped` with reason `not_confirmed`, exactly as on the `--json --interactive` route, so a decline changes neither the receipt status nor the run's exit status. |
 | `--interactive`, `-i` | `false` | Confirm each item before deleting. |
 | `--risky` | `false` | Include risky categories such as AI logs. |
-| `--include-active-worktrees` | `false` | Include active Git worktrees in cleanup candidates. |
+| `--include-active-worktrees` | `false` | Classic-route selector that adds active Git worktrees to cleanup candidates. Guided review can select an active unit without this flag. Setting the flag keeps the classic route unless `--guide` is also set. It does not skip hard locks or other safety checks. |
 | `--agent-state-grace` | `24h` | Minimum idle age before a proof-classified orphaned `agent-state` entry joins the default selection. `0` disables the floor; the value must be non-negative. It gates only default selection of orphaned `agent-state` and is independent of `--age`, which never applies to that category. An entry inside the floor is excluded from the candidate set, so cleaning it requires rerunning with a lower or zero value. |
 | `--force`, `-f` | `false` | Skip the final confirmation prompt. It does not bypass hard locks or force Git worktree removal. |
 | `--guide` | `false` | Force the guided worktree cleanup flow. When category/tool filters are omitted, it implies `--category worktree` and leaves the tool filter empty, so every tool's active worktrees are admitted. When age is omitted, guided cleanup uses a 3-day minimum idle age; explicit `--age` changes only that value. With `--json`, it is supported only with `--dry-run`; execution JSON rejects it. |
 | `--no-guide` | `false` | Keep the classic cleanup audit/executor route even when active worktree pressure would open guided review. |
+| `--strip` | `false` | Remove inventoried regenerable subtrees from protected worktree units without deleting the unit, its branch, or uncommitted work. See [CATEGORY.md](CATEGORY.md#filter-semantics). |
+| `--pressure` | `false` | Select official regenerable caches younger than `--age`. The same cache-age relaxation also runs automatically when the home volume is at least 95% used. |
+| `--exclude` | empty | Repeatable path or glob under the scan roots. Hides matches from discovery, never matches ancestors, and never authorizes deletion. The JSON shape is in [JSON_SCHEMA.md](JSON_SCHEMA.md#exclusions-object). |
+| `--protect-path` | empty | Repeatable clean-only path under the scan roots. Protects that path and every outer owner that contains it from delete and strip; protected items stay in the plan. The JSON shape is in [JSON_SCHEMA.md](JSON_SCHEMA.md#protect_paths-object-additive-clean-only). |
+| `--apfs-snapshots` | `false` | Opt-in APFS local-snapshot thinning on macOS. Never the default clean or strip path. Receipt hints are in [JSON_SCHEMA.md](JSON_SCHEMA.md#clean-execution-receipt). |
 
 The planned repeatable `--retention-bucket <store_id>@<YYYY-MM>` spelling is
 reserved by `docs/PROTECTED_RETENTION.md` but remains parked (no execution
@@ -342,27 +347,37 @@ when the scan is partial. Therefore an emitted cleanup plan always reports
 `evidence.complete: true`; partial scan documents remain a `scan --json`
 surface, not cleanup authorization.
 
-Default guided Codex worktree cleanup:
+Default guided worktree cleanup:
 
 - Plain `clean` and `clean --dry-run` build a guided plan when no classic
-  selector is supplied, at least one validated active Codex cleanup unit exists,
-  and pressure is at least 256 MB or three units. Routing does not require an
-  initially recommended row, so protected-only pressure is still reviewable.
+  selector is supplied, at least one validated active cleanup unit exists, and
+  pressure across every tool's active worktrees is at least 256 MB or three
+  units. Routing does not require an initially recommended row, so
+  protected-only pressure is still reviewable. Non-Codex active units already
+  enter this review.
 - Classic selectors such as `--category`, `--tool`, `--risky`,
   `--include-active-worktrees`, `--interactive`, and `--force` keep the classic
   cleanup route unless `--guide` is explicit.
 - `--root` only narrows scan scope; it does not disable default guided routing.
 - `--no-guide` disables the default guided route and keeps the classic audit.
-- `--guide` explicitly forces guided Codex worktree cleanup.
+- `--guide` explicitly forces guided worktree cleanup for every tool's active
+  worktrees. Admission, registered activity evidence, and automatic
+  recommendation stay separate. Every tool's active units can enter review. A
+  registered session-activity reader exists only for Codex; any other tool is
+  `not-registered` with reason `activity_source_not_registered`. A missing
+  reader is not a hard lock. A unit with no registered reader is reviewable and
+  never recommended. A registered reader that failed remains a hard lock. The
+  hard locks in the policy contract below are unchanged and apply to every
+  admitted tool.
 - Non-dry-run `--json` always uses the classic route; `--guide` is rejected
   before scan or mutation, while dry-run JSON can use the deterministic guided
   plan.
 - `recommended` rows start selected. `reviewable` rows are soft-policy holds and
   may be toggled. `locked` rows remain visible and cannot be selected.
-- Guided review owns active Codex worktree rows; when classic candidates also
-  exist, one unified review exposes every category together. Blank input or
-  non-TTY EOF accepts the current selection and continues; `q` aborts the whole
-  cleanup flow.
+- Guided review owns active worktree rows for every admitted tool; when classic
+  candidates also exist, one unified review exposes every category together.
+  Blank input or non-TTY EOF accepts the current selection and continues; `q`
+  aborts the whole cleanup flow.
 - In deletion mode, declining or failing to provide the guided final
   confirmation aborts the whole command before classic targets can execute.
 - Dry-run target normalization treats selected guided cleanup units as parents,
@@ -524,9 +539,11 @@ Cross-category containment uses the same physical-component contract:
 
 1. Run `aibris scan --json`.
 2. Summarize by project, category, size, and age.
-3. For an unscoped active Codex worktree cleanup, use the separate no-selector
-   guided branch: preview with `aibris clean --dry-run`, ask again, and execute
-   with `aibris clean` only after the user approves the guided selection.
+3. For an unscoped active worktree cleanup of any tool, use the separate
+   no-selector guided branch: preview with `aibris clean --dry-run`, ask again,
+   and execute with `aibris clean` only after the user approves the guided
+   selection. `--include-active-worktrees` is the classic opt-in and keeps the
+   classic route unless `--guide` is also set.
 4. For ordinary cleanup groups, ask the user which groups to remove.
 5. For a scoped cleanup, build the command from every approved `--category`,
    `--tool`, repeatable `--root`, and `--age` value and every applicable routing
@@ -544,7 +561,7 @@ Cross-category containment uses the same physical-component contract:
 | `node_modules` | yes | `node_modules` | `$HOME/**/node_modules`, with noisy system/media/cache directories pruned |
 | `build-cache` | yes | `build-cache` | process `$GOCACHE`, else `go env -w` file, else `UserCacheDir/go-build` (Linux `~/.cache/go-build`, Darwin `~/Library/Caches/go-build`, Windows `%LocalAppData%\go-build`); all Go cache paths require the Go-only top-level layout; a configured GOCACHE also requires the regular Go README signature, existence, and containment under requested roots; `~/.gradle/caches`, `~/.npm/_cacache`, `~/.cargo/registry`, `~/Library/Caches/Xcode` |
 | `other-cache` | yes | `pip-cache` | `~/.cache/pip`, `~/.cache/uv` |
-| `agent-state` | proof-classified orphaned only; default selection waits for `--agent-state-grace` | `claude`, `cursor` | recorded-cwd project stores; `live` and `undetermined` entries are protected; classic `--age` does not apply |
+| `agent-state` | proof-classified orphaned only; default selection waits for `--agent-state-grace` | `claude`, `cursor`, `grok` | recorded-cwd project stores and Grok session stores; `live` and `undetermined` entries are protected; classic `--age` does not apply. Locations are in [CATEGORY.md](CATEGORY.md#categories). |
 | `ai-logs` | no, requires `--risky` | `ai-logs`, `windsurf` | known Codex, Claude, and Windsurf log/cache locations |
 
 The installed/regenerable/protected store-nature terms used to plan issue #142
@@ -569,12 +586,13 @@ changes #138 proof-based orphan eligibility or outranks #151 overlap hard locks.
 | `orphaned` | `.git` exists but parent repository metadata is gone. |
 | `plain-dir` | No valid worktree metadata was found, or one physical unit contained any missing/empty/malformed/directory marker. Review-only and never cleanable. |
 
-Cleanup excludes `active` worktrees by default. `orphaned` worktrees remain
-eligible when age/category/tool filters match. Use `--include-active-worktrees`
-to intentionally include active worktrees in classic cleanup. `plain-dir`,
-empty, and unknown statuses remain review-only regardless of age, `--risky`,
-or active-worktree opt-in. The default guided Codex route may recommend linked
-active units only after the cleanup-unit policy passes.
+Classic cleanup excludes `active` worktrees unless `--include-active-worktrees`
+is set. `orphaned` worktrees remain eligible when age/category/tool filters
+match. `plain-dir`, empty, and unknown statuses remain review-only regardless
+of age, `--risky`, or active-worktree opt-in. Default and explicit guided
+review already admit every tool's active units. Recommendation still requires
+the cleanup-unit policy; admission does not recommend a row, and neither route
+skips a hard lock or the deletion gate.
 
 Worktree discovery combines two bounded mechanisms. A finite exact registry
 looks up the resolved Codex home's `worktrees` container (`$CODEX_HOME`,
@@ -690,8 +708,10 @@ deduplicated, and collapsed when one root is nested inside another.
   eligible for cleanup safety checks.
 - Risky categories must be excluded unless `--risky` is set.
 - Classic cleanup must exclude active worktrees unless
-  `--include-active-worktrees` is set. Guided Codex recommendations instead
-  require cleanup-unit hard safety.
+  `--include-active-worktrees` is set. Guided review of every tool's active
+  units still requires the cleanup-unit hard locks. Selecting a row in guided
+  review does not require `--include-active-worktrees`, and neither route skips
+  a hard lock or any other safety check.
 - Active worktree execution must preserve branch refs, revalidate the full
   member set, use non-forced Git worktree removal, and fail closed without raw
   path fallback.
