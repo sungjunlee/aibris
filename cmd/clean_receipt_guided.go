@@ -8,6 +8,7 @@ import (
 // guidedCleanExecutionReceipt wraps cleanjson.GuidedExecutionReceipt for cmd-layer compatibility.
 type guidedCleanExecutionReceipt struct {
 	inner *cleanjson.GuidedExecutionReceipt
+	sink  *cleanjson.ReceiptSink
 }
 
 // newGuidedCleanExecutionReceipt renders the receipt from the plan the guided
@@ -82,11 +83,24 @@ func writeGuidedCleanExecutionReceipt(
 		return
 	}
 
+	// The sink bound before mutation stays the write target. Callers that only
+	// set cleanReceiptFile still emit through that path once the document is
+	// emittable.
 	cleanjson.WriteGuidedExecutionReceipt(
+		pending.sink,
 		cleanReceiptFile,
 		pending.inner,
 		execution,
 		executionErr,
 		listLocalAPFSSnapshots,
 	)
+	pending.closeSink()
+}
+
+func (r *guidedCleanExecutionReceipt) closeSink() {
+	if r == nil || r.sink == nil {
+		return
+	}
+	r.sink.Close()
+	r.sink = nil
 }

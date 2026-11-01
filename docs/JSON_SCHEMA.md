@@ -745,7 +745,12 @@ revalidation.
 Every receipt carries a path-free top-level `post_clean` object. Its `volume`
 uses the same shape as the scan document's `volume` (omitted when volume
 inspection is unavailable), so agents can see post-cleanup pressure on the
-volume that contains `$HOME`. `local_apfs_snapshots` is the number of local
+volume that contains `$HOME`. `volume.debris_bytes` counts owners that
+survived execution. A target that was not mutated keeps its pre-clean size.
+A measured residual, including a known zero, replaces that size, and freed
+bytes are not added again. Physically removed owners are omitted. A target
+whose residual was not measured after a mutation is omitted too, rather than
+reported as zero or as its stale pre-clean size. `local_apfs_snapshots` is the number of local
 APFS snapshots still holding blocks after cleanup, or the string
 `"unavailable"` when they cannot be listed; it never includes snapshot
 identifiers or timestamps. When at least one snapshot remains,
@@ -777,6 +782,11 @@ commands stay out of the file unless `--include-paths` is supplied, and
 `--include-paths` is accepted together with `--receipt-file` on the guided
 route for that reason. Because the document can then contain absolute paths,
 the file is created with mode `0600` and truncated if it already exists.
+A symlink, reparse-point, or other non-regular leaf is refused before
+anything is removed.
+The sink is bound to the directory checked at that point: a parent symlink
+still resolves, and a later retarget or a leaf alias swapped in before the
+write cannot redirect the document.
 
 `--receipt-file` requires an execution run. It is refused with `--dry-run`,
 which performs no execution, and on the classic human route, which already has

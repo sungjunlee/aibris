@@ -173,6 +173,9 @@ func runUnifiedGuidedClean(
 			os.Exit(1)
 		}
 		if !approved {
+			if pendingReceipt != nil {
+				pendingReceipt.closeSink()
+			}
 			return
 		}
 	}
@@ -212,7 +215,8 @@ func prepareGuidedCleanExecutionReceipt(
 	if cleanReceiptFile == "" {
 		return nil
 	}
-	if err := cleanjson.RejectReceiptSinkOverlap(cleanReceiptFile, plan.SelectedPhysicalTargets()); err != nil {
+	sink, err := cleanjson.PrepareReceiptSink(cleanReceiptFile, plan.SelectedPhysicalTargets())
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
@@ -220,9 +224,11 @@ func prepareGuidedCleanExecutionReceipt(
 		source, opts, guidedState, plan, audit, inventory, protections, prepared,
 	)
 	if err != nil {
+		sink.Close()
 		fmt.Fprintf(os.Stderr, "error: preparing cleanup receipt: %v\n", err)
 		os.Exit(1)
 	}
+	pending.sink = sink
 	return &pending
 }
 
