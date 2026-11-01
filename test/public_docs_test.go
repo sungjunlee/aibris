@@ -620,6 +620,83 @@ func TestPublicDocumentationContributorAndHarnessCommands(t *testing.T) {
 	}
 }
 
+// TestSpecDocumentsCurrentGuidedScopeAndFlags pins the public contract an
+// agent would take from SPEC alone: guided review already admits every tool,
+// recommendation is a separate decision, and shipped flags and agent-state
+// tools are listed. It checks meaning, not sentence wrapping.
+func TestSpecDocumentsCurrentGuidedScopeAndFlags(t *testing.T) {
+	raw := readRepoFile(t, "docs/SPEC.md")
+	spec := strings.Join(strings.Fields(raw), " ")
+	for _, stale := range []string{
+		"guided Codex cleanup",
+		"guided Codex worktree",
+		"active Codex cleanup unit",
+		"active Codex worktree",
+		"guided Codex route",
+		"Guided Codex recommendations",
+	} {
+		if strings.Contains(spec, stale) {
+			t.Errorf("SPEC still describes guided review as Codex-only via %q", stale)
+		}
+	}
+
+	guided := betweenMarkers(t, spec, "Default guided worktree cleanup:", "Guided cleanup unit and policy contract:")
+	for _, want := range []string{
+		"every tool's active worktrees",
+		"only for Codex",
+		"activity_source_not_registered",
+		"A missing reader is not a hard lock",
+		"never recommended",
+		"registered reader that failed",
+	} {
+		if !strings.Contains(guided, want) {
+			t.Errorf("default guided contract missing %q", want)
+		}
+	}
+
+	flags := betweenMarkers(t, spec, "| Flag | Default | Behavior |", "The planned repeatable")
+	for _, want := range []string{"--strip", "--pressure", "--exclude", "--protect-path", "--apfs-snapshots"} {
+		if !strings.Contains(flags, want) {
+			t.Errorf("clean flag table missing %q", want)
+		}
+	}
+
+	categories := documentationSection(t, raw, "Supported Categories")
+	if !strings.Contains(categories, "`claude`, `cursor`, `grok`") {
+		t.Errorf("agent-state tools = missing grok: %s", categories)
+	}
+	if !strings.Contains(categories, "CATEGORY.md") {
+		t.Error("agent-state row must link CATEGORY.md instead of copying store paths")
+	}
+
+	health := documentationSection(t, raw, "Worktree Health")
+	for _, want := range []string{"every tool's active units", "--include-active-worktrees", "hard lock"} {
+		if !strings.Contains(health, want) {
+			t.Errorf("worktree health contract missing %q", want)
+		}
+	}
+	safety := documentationSection(t, raw, "Safety Requirements")
+	for _, want := range []string{"every tool's active", "hard lock", "--include-active-worktrees"} {
+		if !strings.Contains(safety, want) {
+			t.Errorf("safety contract missing %q", want)
+		}
+	}
+}
+
+func betweenMarkers(t *testing.T, content, start, end string) string {
+	t.Helper()
+	from := strings.Index(content, start)
+	if from < 0 {
+		t.Fatalf("missing %q", start)
+	}
+	rest := content[from+len(start):]
+	to := strings.Index(rest, end)
+	if to < 0 {
+		t.Fatalf("missing %q after %q", end, start)
+	}
+	return rest[:to]
+}
+
 func documentationSection(t *testing.T, content, title string) string {
 	t.Helper()
 	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")

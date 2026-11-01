@@ -32,3 +32,29 @@ func TestRootHelpListsEveryAgentStateProvider(t *testing.T) {
 		t.Errorf("root help agent-state list = %v, registry = %v", got, want)
 	}
 }
+
+// TestRootHelpExplainsActiveWorktreeRoutes pins the public meaning of root
+// help: guided review can select an active worktree, and
+// --include-active-worktrees is the classic opt-in. It does not pin the
+// sentence or which source line defines it.
+func TestRootHelpExplainsActiveWorktreeRoutes(t *testing.T) {
+	help := strings.Join(strings.Fields(rootCmd.Long), " ")
+	var missing []string
+	for _, want := range []string{
+		"guided review",
+		"classic path",
+		"--include-active-worktrees",
+		"hard locks",
+		"safety checks",
+	} {
+		if !strings.Contains(help, want) {
+			missing = append(missing, want)
+		}
+	}
+	if len(missing) > 0 {
+		t.Errorf("root help missing %q:\n%s", missing, rootCmd.Long)
+	}
+	if strings.Contains(help, "protected unless --include-active-worktrees") {
+		t.Errorf("root help still presents --include-active-worktrees as the only active-worktree route:\n%s", rootCmd.Long)
+	}
+}
