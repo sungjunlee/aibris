@@ -83,8 +83,12 @@ func writeGuidedCleanExecutionReceipt(
 		return
 	}
 
+	// The sink bound before mutation stays the write target. Callers that only
+	// set cleanReceiptFile still emit through that path once the document is
+	// emittable.
 	cleanjson.WriteGuidedExecutionReceipt(
 		pending.sink,
+		cleanReceiptFile,
 		pending.inner,
 		execution,
 		executionErr,

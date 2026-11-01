@@ -232,8 +232,16 @@ func markGuidedIdentityFailure(target *ReceiptPhysicalTarget) {
 // WriteGuidedExecutionReceipt finalizes and stores the guided execution
 // receipt. The cleanup has already run at this point, so a write failure is
 // reported as a receipt failure and never as a failed deletion.
+//
+// sink is the directory bound before mutation. It wins over receiptPath so a
+// leaf swapped in after that check cannot redirect the document. receiptPath
+// is opened only when no sink was bound: guided identity callers name the
+// file after building the receipt and still have to emit an emittable
+// document. An unemittable receipt is not written, and an existing file is
+// left untouched.
 func WriteGuidedExecutionReceipt(
 	sink *ReceiptSink,
+	receiptPath string,
 	pending *GuidedExecutionReceipt,
 	execution ExecutionReceipt,
 	executionErr error,
@@ -254,8 +262,16 @@ func WriteGuidedExecutionReceipt(
 		os.Exit(1)
 	}
 	if sink == nil {
-		fmt.Fprintf(os.Stderr, "error: the cleanup already ran; writing the receipt file failed: receipt sink is not open\n")
-		os.Exit(1)
+		if receiptPath == "" {
+			fmt.Fprintf(os.Stderr, "error: the cleanup already ran; writing the receipt file failed: receipt sink is not open\n")
+			os.Exit(1)
+		}
+		opened, err := PrepareReceiptSink(receiptPath, nil)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: the cleanup already ran; writing the receipt file failed: %v\n", err)
+			os.Exit(1)
+		}
+		sink = opened
 	}
 	if err := sink.Write(receipt); err != nil {
 		sink.Close()
