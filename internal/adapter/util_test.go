@@ -400,10 +400,12 @@ type entryRootScanner interface {
 	Scan(ctx context.Context, opts types.ScanOptions) ([]types.DebrisInfo, error)
 }
 
-// assertAgentStoreEntryRoots checks that an explicit root on one store entry
+// assertAgentStoreEntryRoots checks that an explicit --root on one store entry
 // keeps that entry, leaves siblings out, and does not let a root nested
 // inside an entry select the outer entry. Home-wide scans, the store
-// directory, and multiple roots keep every contained entry.
+// directory, and multiple roots keep every contained entry. A root that is
+// not marked explicit still requires the store directory itself to sit under
+// the roots, so the entry path alone does not select that entry.
 func assertAgentStoreEntryRoots(t *testing.T, scanner entryRootScanner, home, base string) {
 	t.Helper()
 	entryA := filepath.Join(base, "entry-a")
@@ -422,14 +424,15 @@ func assertAgentStoreEntryRoots(t *testing.T, scanner entryRootScanner, home, ba
 		want []string
 	}{
 		{name: "home-wide", opts: types.ScanOptions{}, want: []string{"entry-a", "entry-b"}},
-		{name: "explicit-home", opts: types.ScanOptions{Roots: []string{home}}, want: []string{"entry-a", "entry-b"}},
-		{name: "store-root", opts: types.ScanOptions{Roots: []string{base}}, want: []string{"entry-a", "entry-b"}},
-		{name: "exact-entry", opts: types.ScanOptions{Roots: []string{entryA}}, want: []string{"entry-a"}},
-		{name: "sibling-entry", opts: types.ScanOptions{Roots: []string{entryB}}, want: []string{"entry-b"}},
-		{name: "multiple-entries", opts: types.ScanOptions{Roots: []string{entryB, entryA}}, want: []string{"entry-a", "entry-b"}},
-		{name: "entry-plus-unrelated", opts: types.ScanOptions{Roots: []string{elsewhere, entryA}}, want: []string{"entry-a"}},
-		{name: "nested-inside-entry", opts: types.ScanOptions{Roots: []string{nested}}, want: nil},
-		{name: "outside-store", opts: types.ScanOptions{Roots: []string{elsewhere}}, want: nil},
+		{name: "explicit-home", opts: types.ScanOptions{Roots: []string{home}, ExplicitRoots: true}, want: []string{"entry-a", "entry-b"}},
+		{name: "store-root", opts: types.ScanOptions{Roots: []string{base}, ExplicitRoots: true}, want: []string{"entry-a", "entry-b"}},
+		{name: "exact-entry", opts: types.ScanOptions{Roots: []string{entryA}, ExplicitRoots: true}, want: []string{"entry-a"}},
+		{name: "sibling-entry", opts: types.ScanOptions{Roots: []string{entryB}, ExplicitRoots: true}, want: []string{"entry-b"}},
+		{name: "multiple-entries", opts: types.ScanOptions{Roots: []string{entryB, entryA}, ExplicitRoots: true}, want: []string{"entry-a", "entry-b"}},
+		{name: "entry-plus-unrelated", opts: types.ScanOptions{Roots: []string{elsewhere, entryA}, ExplicitRoots: true}, want: []string{"entry-a"}},
+		{name: "nested-inside-entry", opts: types.ScanOptions{Roots: []string{nested}, ExplicitRoots: true}, want: nil},
+		{name: "outside-store", opts: types.ScanOptions{Roots: []string{elsewhere}, ExplicitRoots: true}, want: nil},
+		{name: "implicit-exact-entry", opts: types.ScanOptions{Roots: []string{entryA}}, want: nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

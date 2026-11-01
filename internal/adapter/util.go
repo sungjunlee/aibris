@@ -116,13 +116,17 @@ func pathUnderRoots(path string, roots []string) bool {
 }
 
 // agentStoreVisible reports whether roots can name entries inside base.
-// A root that contains the store selects the whole store. A root that is an
-// entry inside the store does not contain base, but it still names that
-// entry. Callers keep only entries contained in the roots, so a root nested
+// A root that contains the store selects the whole store. Only an explicit
+// --root may name an entry inside the store when that root does not contain
+// the store directory; a root list without ExplicitRoots keeps the store-parent
+// check. Callers keep only entries contained in the roots, so a root nested
 // under an entry does not authorize the outer entry.
-func agentStoreVisible(base string, roots []string) bool {
+func agentStoreVisible(base string, roots []string, explicit bool) bool {
 	if pathUnderRoots(base, roots) {
 		return true
+	}
+	if !explicit {
+		return false
 	}
 	cleanBase := canonicalExistingPath(base)
 	for _, root := range roots {

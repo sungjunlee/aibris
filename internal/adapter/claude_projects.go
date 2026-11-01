@@ -36,7 +36,7 @@ func (a *ClaudeProjectAdapter) Scan(ctx context.Context, opts types.ScanOptions)
 	if err != nil {
 		return nil, err
 	}
-	if !agentStoreVisible(base, roots) {
+	if !agentStoreVisible(base, roots, opts.ExplicitRoots) {
 		return nil, nil
 	}
 	entries, err := os.ReadDir(base)

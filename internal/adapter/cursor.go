@@ -34,7 +34,7 @@ func (a *CursorAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([]typ
 	if err != nil {
 		return nil, err
 	}
-	if !agentStoreVisible(base, roots) {
+	if !agentStoreVisible(base, roots, opts.ExplicitRoots) {
 		return nil, nil
 	}
 	entries, err := os.ReadDir(base)
