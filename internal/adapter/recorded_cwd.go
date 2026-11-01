@@ -146,11 +146,18 @@ func classifyRecordedCWDEvidence(
 // recordedCWDAbsenceProven accepts ENOENT as deletion evidence only when the
 // closest existing directory is in a container whose surrounding tree is
 // expected to be locally available: the user's home or a temp root.
+// The recorded cwd is not that container. A cwd that exists when this proof
+// observes it, or that reappears before the proof is accepted, is not absent.
+// The recheck narrows that race; it does not make the decision atomic against
+// a later restore.
 func recordedCWDAbsenceProven(cwd string) (bool, string, error) {
 	for ancestor := cwd; ; ancestor = filepath.Dir(ancestor) {
 		info, err := os.Lstat(ancestor)
 		switch {
 		case err == nil:
+			if ancestor == cwd {
+				return false, ancestor, nil
+			}
 			if info.Mode()&os.ModeSymlink != 0 {
 				info, err = os.Stat(ancestor)
 				if err != nil {
@@ -183,7 +190,17 @@ func recordedCWDAbsenceProven(cwd string) (bool, string, error) {
 				}
 			}
 			plausible, err := plausibleRecordedCWDContainer(ancestor)
-			return plausible, ancestor, err
+			if err != nil || !plausible {
+				return plausible, ancestor, err
+			}
+			absent, err := recordedCWDStillAbsent(cwd)
+			if err != nil {
+				return false, cwd, err
+			}
+			if !absent {
+				return false, cwd, nil
+			}
+			return true, ancestor, nil
 		case !errors.Is(err, os.ErrNotExist):
 			return false, ancestor, err
 		}
@@ -192,6 +209,19 @@ func recordedCWDAbsenceProven(cwd string) (bool, string, error) {
 			return false, ancestor, nil
 		}
 	}
+}
+
+// recordedCWDStillAbsent reports whether path has no directory entry.
+// Lstat is intentional: a restored file, directory, or symlink is presence.
+func recordedCWDStillAbsent(path string) (bool, error) {
+	_, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return false, nil
 }
 
 func plausibleRecordedCWDContainer(path string) (bool, error) {
