@@ -90,6 +90,110 @@ func TestGuidedReceiptWireCompatibility(t *testing.T) {
 	}
 }
 
+// Regression for #654: a guided decline is not an execution unit, so the
+// pre-clean size of that owner must still appear in post_clean debris.
+func TestGuidedPostCleanCountsDeclinedSurvivor(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	item := types.DebrisInfo{
+		Path: filepath.Join(home, "declined", "node_modules"), ID: "declined", Project: "declined",
+		Category: types.CategoryNodeModules, Tool: types.ToolNodeModules, Size: 512,
+	}
+	if err := os.MkdirAll(item.Path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	key, ok := cleaner.TargetPathKey(item.Path)
+	if !ok {
+		t.Fatal("fixture path has no identity")
+	}
+	components := []SnapshotComponent{{
+		Key: key, Owner: item, Decision: DecisionSelected, AccountingBytes: item.Size,
+		Rows: []SnapshotRow{{Item: item, Relation: RelationOwner, PolicyDecision: PolicyEligible, Decision: DecisionSelected, ReasonCodes: []string{"classic_eligible"}}},
+	}}
+	plan := UnifiedPlan{Components: []PlanComponent{{
+		Key: key, CanonicalPath: key, Owner: item, Selection: string(cleaner.CleanupPlanSelected),
+	}}}
+	prepared := PreparedTarget{Item: item, ReceiptTargetKey: RowIdentityKey(item)}
+	pending, err := NewGuidedExecutionReceipt(
+		Source{Kind: SourceLive},
+		types.PruneOptions{Age: 7 * 24 * time.Hour},
+		&GuidedPolicy{MinIdleAge: 24 * time.Hour},
+		PlanEvidence{ObservedAt: time.Date(2026, 10, 8, 0, 0, 0, 0, time.UTC)},
+		components,
+		[]PreparedTarget{prepared},
+		plan,
+		false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending.ObserveInteractiveSkip(InteractiveSkipOutcome{Target: prepared, Declined: true})
+	receipt, err := pending.Finish(ExecutionReceipt{}, nil, func() (int, error) { return 0, nil })
+	if err != nil || receipt.Status != ReceiptStatusSucceeded {
+		t.Fatalf("declined receipt status=%q error=%v", receipt.Status, err)
+	}
+	if receipt.PostClean == nil || receipt.PostClean.Volume == nil {
+		t.Fatal("declined receipt has no post_clean volume")
+	}
+	volume := receipt.PostClean.Volume
+	if got := volume.DebrisBytes + volume.OtherVolumeDebrisBytes; got != item.Size {
+		t.Fatalf("post_clean debris = %d; want the declined owner's %d bytes", got, item.Size)
+	}
+}
+
+func TestGuidedPostCleanUsesMeasuredResidual(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	item := types.DebrisInfo{
+		Path: filepath.Join(home, "cache", "node_modules"), ID: "cache", Project: "cache",
+		Category: types.CategoryNodeModules, Tool: types.ToolNodeModules, Size: 1000,
+	}
+	if err := os.MkdirAll(item.Path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	key, ok := cleaner.TargetPathKey(item.Path)
+	if !ok {
+		t.Fatal("fixture path has no identity")
+	}
+	components := []SnapshotComponent{{
+		Key: key, Owner: item, Decision: DecisionSelected, AccountingBytes: item.Size,
+		Rows: []SnapshotRow{{Item: item, Relation: RelationOwner, PolicyDecision: PolicyEligible, Decision: DecisionSelected, ReasonCodes: []string{"classic_eligible"}}},
+	}}
+	plan := UnifiedPlan{Components: []PlanComponent{{
+		Key: key, CanonicalPath: key, Owner: item, Selection: string(cleaner.CleanupPlanSelected),
+	}}}
+	prepared := PreparedTarget{Item: item, ReceiptTargetKey: RowIdentityKey(item)}
+	pending, err := NewGuidedExecutionReceipt(
+		Source{Kind: SourceLive},
+		types.PruneOptions{Age: 7 * 24 * time.Hour},
+		&GuidedPolicy{MinIdleAge: 24 * time.Hour},
+		PlanEvidence{ObservedAt: time.Date(2026, 10, 8, 0, 0, 0, 0, time.UTC)},
+		components,
+		[]PreparedTarget{prepared},
+		plan,
+		false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := pending.Finish(ExecutionReceipt{Units: []ExecutionUnit{{
+		ReceiptTargetKey: prepared.ReceiptTargetKey,
+		State:            "removed",
+		FreedBytes:       700,
+		ResidualBytes:    300,
+	}}}, nil, func() (int, error) { return 0, nil })
+	if err != nil || receipt.Status != ReceiptStatusSucceeded {
+		t.Fatalf("residual receipt status=%q error=%v", receipt.Status, err)
+	}
+	volume := receipt.PostClean.Volume
+	if volume == nil {
+		t.Fatal("missing post_clean volume")
+	}
+	if got := volume.DebrisBytes + volume.OtherVolumeDebrisBytes; got != 300 {
+		t.Fatalf("post_clean debris = %d; want measured residual 300, not pre-clean 1000", got)
+	}
+}
+
 func TestGuidedReceiptIdentityErrorAfterMutationIsPartialFailure(t *testing.T) {
 	newPending := func(t *testing.T) (GuidedExecutionReceipt, PreparedTarget) {
 		t.Helper()

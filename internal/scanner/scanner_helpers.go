@@ -42,12 +42,13 @@ func applyUserExclusions(result *types.ScanResult, opts types.ScanOptions) {
 
 // scanRetention inventories protected-content stores after the debris scan.
 // Store-local failures degrade the retention projection to partial without
-// affecting debris results or cleanup authorization.
+// affecting debris results or cleanup authorization. Caller cancellation and
+// deadline expiry are returned so the scan is not reported as complete.
 func scanRetention(
 	ctx context.Context,
 	opts types.ScanOptions,
 	providers []types.RetentionProvider,
-) types.RetentionProjection {
+) (types.RetentionProjection, error) {
 	projection := types.RetentionProjection{
 		Buckets:        []types.RetentionBucket{},
 		ProviderErrors: []types.RetentionProviderError{},
@@ -55,13 +56,12 @@ func scanRetention(
 	seen := make(map[string]bool)
 	for _, provider := range providers {
 		if err := ctx.Err(); err != nil {
-			break
+			return types.RetentionProjection{}, err
 		}
 		providerProjection, err := provider.Scan(ctx, opts)
 		if err != nil {
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				projection.Partial = true
-				break
+			if isContextError(err) {
+				return types.RetentionProjection{}, err
 			}
 			projection.Partial = true
 			projection.ProviderErrors = append(projection.ProviderErrors, types.RetentionProviderError{
@@ -69,6 +69,10 @@ func scanRetention(
 				Message: "provider failure",
 			})
 			continue
+		}
+		// A provider can cancel the caller without returning that error.
+		if err := ctx.Err(); err != nil {
+			return types.RetentionProjection{}, err
 		}
 		if providerProjection.Partial || len(providerProjection.ProviderErrors) > 0 {
 			projection.Partial = true
@@ -100,7 +104,25 @@ func scanRetention(
 		}
 		return projection.ProviderErrors[i].StoreID < projection.ProviderErrors[j].StoreID
 	})
-	return projection
+	if err := ctx.Err(); err != nil {
+		return types.RetentionProjection{}, err
+	}
+	return projection, nil
+}
+
+// isContextError reports caller cancellation and deadline expiry. Those abort
+// the scan. Other provider failures stay on the partial-result path.
+func isContextError(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
+// preferContextErr keeps an already observed context error, otherwise the
+// caller's current cancellation or deadline.
+func preferContextErr(current error, ctx context.Context) error {
+	if current != nil {
+		return current
+	}
+	return ctx.Err()
 }
 
 func emitProgress(fn func(types.ScanProgressEvent), event types.ScanProgressEvent) {

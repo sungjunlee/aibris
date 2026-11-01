@@ -1,6 +1,7 @@
 package cleanjson
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -71,6 +72,97 @@ func TestFinishReceiptPostCleanExcludesPhysicallyRemovedOwner(t *testing.T) {
 			"post_clean.volume debris = %d on-volume + %d other-volume; want only the surviving owner's %d bytes (physically removed and unmappable owners must not be counted)",
 			volume.DebrisBytes, volume.OtherVolumeDebrisBytes, survivor.Size,
 		)
+	}
+}
+
+// Regression for #654: post-clean debris uses measured residuals for executed
+// survivors, keeps pre-clean sizes for targets that were not mutated, and does
+// not treat an unmeasured post-mutation residual as zero or as the stale size.
+func TestPostCleanDebrisUsesResidualKinds(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+
+	measured := types.DebrisInfo{ID: "measured", Category: types.CategoryOtherCache, Path: filepath.Join(home, "measured"), Size: 1000}
+	knownZero := types.DebrisInfo{ID: "known-zero", Category: types.CategoryOtherCache, Path: filepath.Join(home, "known-zero"), Size: 1000}
+	unknown := types.DebrisInfo{ID: "unknown", Category: types.CategoryOtherCache, Path: filepath.Join(home, "unknown"), Size: 1000}
+	failed := types.DebrisInfo{ID: "failed", Category: types.CategoryOtherCache, Path: filepath.Join(home, "failed"), Size: 40}
+	kept := types.DebrisInfo{ID: "kept", Category: types.CategoryNodeModules, Path: filepath.Join(home, "kept"), Size: 512}
+	for _, owner := range []types.DebrisInfo{measured, knownZero, unknown, failed, kept} {
+		if err := os.MkdirAll(owner.Path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	owners := []types.DebrisInfo{measured, knownZero, unknown, failed, kept}
+	components := make([]SnapshotComponent, len(owners))
+	targets := make([]PhysicalTarget, len(owners))
+	for i, owner := range owners {
+		key, ok := cleaner.TargetPathKey(owner.Path)
+		if !ok {
+			t.Fatalf("no path key for %s", owner.ID)
+		}
+		components[i] = SnapshotComponent{Key: key, Owner: owner}
+		decision := DecisionSelected
+		if owner.ID == "kept" {
+			decision = DecisionProtected
+		}
+		targets[i] = PhysicalTarget{ID: fmt.Sprintf("target-%d", i+1), Decision: decision, Bytes: owner.Size}
+	}
+	receipt := NewReceipt(Plan{PhysicalTargets: targets}, false)
+	receipt.inventory = receiptInventory(components)
+	ids := map[string]string{}
+	for i, owner := range owners {
+		if owner.ID == "kept" {
+			continue
+		}
+		ids[receiptItemKey(owner)] = fmt.Sprintf("target-%d", i+1)
+	}
+	execution := ExecutionReceipt{Units: []ExecutionUnit{
+		{ReceiptTargetKey: receiptItemKey(measured), State: "removed", FreedBytes: 700, ResidualBytes: 300},
+		{ReceiptTargetKey: receiptItemKey(knownZero), State: "removed"},
+		{ReceiptTargetKey: receiptItemKey(unknown), State: "failed", MutationAttempted: true},
+		{ReceiptTargetKey: receiptItemKey(failed), State: "failed"},
+	}}
+	if err := applyExecutionReceipt(&receipt, ids, execution, func(error) bool { return false }); err != nil {
+		t.Fatal(err)
+	}
+	remaining := remainingReceiptOwners(receipt)
+	sizeOf := func(id string) (int64, bool) {
+		for _, owner := range remaining {
+			if owner.ID == id {
+				return owner.Size, true
+			}
+		}
+		return 0, false
+	}
+	if size, ok := sizeOf("measured"); !ok || size != 300 {
+		t.Fatalf("measured survivor = %d present %v; want residual 300", size, ok)
+	}
+	if size, ok := sizeOf("known-zero"); !ok || size != 0 {
+		t.Fatalf("known zero survivor = %d present %v; want size 0", size, ok)
+	}
+	if _, ok := sizeOf("unknown"); ok {
+		t.Fatal("unmeasured post-mutation residual was counted as a known size")
+	}
+	if size, ok := sizeOf("failed"); !ok || size != 40 {
+		t.Fatalf("failed survivor = %d present %v; want pre-clean 40", size, ok)
+	}
+	if size, ok := sizeOf("kept"); !ok || size != 512 {
+		t.Fatalf("unexecuted survivor = %d present %v; want pre-clean 512", size, ok)
+	}
+
+	finalized, err := finalizeReceipt(receipt, func() (int, error) { return 0, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	volume := finalized.PostClean.Volume
+	if volume == nil {
+		t.Fatal("missing post_clean volume")
+	}
+	// 300 measured + 0 known-zero + 40 failed + 512 unexecuted. The unknown
+	// owner is omitted, and freed bytes are not added back onto the residual.
+	const want = int64(300 + 40 + 512)
+	if got := volume.DebrisBytes + volume.OtherVolumeDebrisBytes; got != want {
+		t.Fatalf("post_clean debris = %d; want %d", got, want)
 	}
 }
 

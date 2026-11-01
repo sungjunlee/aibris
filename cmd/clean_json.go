@@ -142,10 +142,14 @@ func runCleanJSON(cmd *cobra.Command, input *confirminput.Reader) {
 	if err != nil {
 		failCleanJSON("cleanup execution safety preparation failed")
 	}
+	var receiptSink *cleanjson.ReceiptSink
 	if cleanReceiptFile != "" {
-		if err := cleanjson.RejectReceiptSinkOverlap(cleanReceiptFile, selected); err != nil {
+		var err error
+		receiptSink, err = cleanjson.PrepareReceiptSink(cleanReceiptFile, selected)
+		if err != nil {
 			failCleanJSON(err.Error())
 		}
+		defer receiptSink.Close()
 	}
 	prepared := prepareGuidedCleanExecutionWithOptions(ctx, executionSelection, overlapSafety, opts, guidedStatePtr)
 	components := cleanjson.SnapshotComponentsFromCmd(
@@ -167,8 +171,8 @@ func runCleanJSON(cmd *cobra.Command, input *confirminput.Reader) {
 	if err := cleanjson.EncodeReceipt(os.Stdout, receipt); err != nil {
 		failCleanJSON("cleanup receipt encoding failed")
 	}
-	if cleanReceiptFile != "" {
-		if err := cleanjson.WriteOwnerOnlyJSON(cleanReceiptFile, receipt); err != nil {
+	if receiptSink != nil {
+		if err := receiptSink.Write(receipt); err != nil {
 			failCleanJSON("cleanup already ran; writing the receipt file failed")
 		}
 	}

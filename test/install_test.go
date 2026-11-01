@@ -480,6 +480,82 @@ func TestInstallReleaseFailuresPreserveExisting(t *testing.T) {
 	}
 }
 
+func TestInstallReleaseRejectsDirectoryDestination(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix installer; native Windows has PowerShell tests")
+	}
+	sentinel := []byte("keep destination\n")
+	for _, version := range []string{"0.12.1", "latest"} {
+		t.Run(version, func(t *testing.T) {
+			t.Run("directory", func(t *testing.T) {
+				f := newInstallFixture(t)
+				f.unixRelease(t, "")
+				dest := filepath.Join(f.prefix, "aibris")
+				if err := os.Mkdir(dest, 0755); err != nil {
+					t.Fatal(err)
+				}
+				writeInstallFile(t, filepath.Join(dest, "sentinel"), sentinel, 0644)
+				assertDirectoryInstallRejected(t, f, version, dest, sentinel)
+			})
+			t.Run("symlink", func(t *testing.T) {
+				f := newInstallFixture(t)
+				f.unixRelease(t, "")
+				target := filepath.Join(f.home, "directory-target")
+				if err := os.Mkdir(target, 0755); err != nil {
+					t.Fatal(err)
+				}
+				writeInstallFile(t, filepath.Join(target, "sentinel"), sentinel, 0644)
+				dest := filepath.Join(f.prefix, "aibris")
+				if err := os.Symlink(target, dest); err != nil {
+					t.Fatal(err)
+				}
+				assertDirectoryInstallRejected(t, f, version, dest, sentinel)
+				got, err := os.Readlink(dest)
+				if err != nil || got != target {
+					t.Fatalf("destination symlink = %q, %v; want %q", got, err, target)
+				}
+			})
+		})
+	}
+}
+
+func assertDirectoryInstallRejected(t *testing.T, f installFixture, version, dest string, sentinel []byte) {
+	t.Helper()
+	output, err := f.runUnix(t, version, "")
+	if err == nil {
+		t.Fatalf("installer succeeded for directory destination %s; output:\n%s", dest, output)
+	} else if _, ok := err.(*exec.ExitError); !ok {
+		t.Fatalf("installer did not run: %v", err)
+	}
+	if !strings.Contains(output, "is a directory") {
+		t.Errorf("failure did not report a directory destination:\n%s", output)
+	}
+	for _, success := range []string{"Installed aibris", "was installed to", "aibris 0.12.1"} {
+		if strings.Contains(output, success) {
+			t.Errorf("output contains installation-success text %q:\n%s", success, output)
+		}
+	}
+	info, err := os.Lstat(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().IsRegular() {
+		t.Fatalf("destination %s was replaced by a regular file", dest)
+	}
+	assertInstallContents(t, filepath.Join(dest, "sentinel"), sentinel)
+	entries, err := os.ReadDir(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if entry.Name() == "sentinel" {
+			continue
+		}
+		t.Errorf("destination %s contains unexpected entry %s", dest, entry.Name())
+	}
+	f.assertClean(t, "aibris")
+}
+
 func TestInstallReleaseFirstInstallAndSameVersionRerun(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix installer; native Windows has PowerShell tests")

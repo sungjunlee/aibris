@@ -67,14 +67,29 @@ func (a *AILogsAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([]typ
 		if err != nil {
 			continue
 		}
-		results = append(results, types.DebrisInfo{
+		item := types.DebrisInfo{
 			Tool:     types.ToolAILogs,
 			Category: types.CategoryAILogs,
 			ID:       c.id,
 			Path:     c.path,
-			Size:     estimateDirSize(ctx, c.path),
 			ModTime:  info.ModTime(),
-		})
+		}
+		if info.IsDir() {
+			// A directory store's own mtime does not move when an existing
+			// nested file is rewritten. Keep that mtime in PathModTime and
+			// report the newest in-tree write as ModTime so --age and the
+			// pre-mutation walk see it. Standalone log files stay on the
+			// file's own mtime with PathModTime unset.
+			activity := estimateDirActivity(ctx, c.path)
+			item.Size = activity.Size
+			item.PathModTime = info.ModTime()
+			if activity.NewestModTime.After(item.ModTime) {
+				item.ModTime = activity.NewestModTime
+			}
+		} else {
+			item.Size = estimateDirSize(ctx, c.path)
+		}
+		results = append(results, item)
 	}
 
 	return results, nil

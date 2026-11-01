@@ -44,6 +44,7 @@ func NewGuidedExecutionReceipt(
 		Plan:         plan,
 	}, components)
 	receipt := NewReceipt(document, pathsIncluded)
+	receipt.inventory = receiptInventory(components)
 
 	bound, err := bindReceiptPreparedTargets(components, prepared)
 	if err != nil {
@@ -191,6 +192,7 @@ func (r *GuidedExecutionReceipt) Finish(
 				*target.ResidualBytes = max(*target.ResidualBytes, unit.ResidualBytes)
 			}
 		}
+		noteReceiptResidual(&r.receipt, target.ID, unit)
 		if errors.Is(unit.FailureCause, worktree.ErrActivityEvidenceChanged) {
 			target.ReasonCodes = uniqueReasonCodes(append(target.ReasonCodes, receiptStateReasons(unit, func(error) bool { return false })...))
 		}
@@ -230,7 +232,15 @@ func markGuidedIdentityFailure(target *ReceiptPhysicalTarget) {
 // WriteGuidedExecutionReceipt finalizes and stores the guided execution
 // receipt. The cleanup has already run at this point, so a write failure is
 // reported as a receipt failure and never as a failed deletion.
+//
+// sink is the directory bound before mutation. It wins over receiptPath so a
+// leaf swapped in after that check cannot redirect the document. receiptPath
+// is opened only when no sink was bound: guided identity callers name the
+// file after building the receipt and still have to emit an emittable
+// document. An unemittable receipt is not written, and an existing file is
+// left untouched.
 func WriteGuidedExecutionReceipt(
+	sink *ReceiptSink,
 	receiptPath string,
 	pending *GuidedExecutionReceipt,
 	execution ExecutionReceipt,
@@ -238,17 +248,37 @@ func WriteGuidedExecutionReceipt(
 	listSnapshots func() (int, error),
 ) {
 	if pending == nil {
+		if sink != nil {
+			sink.Close()
+		}
 		return
 	}
 	receipt, finishErr := pending.Finish(execution, executionErr, listSnapshots)
 	if receipt.SchemaVersion == 0 && finishErr != nil {
+		if sink != nil {
+			sink.Close()
+		}
 		fmt.Fprintf(os.Stderr, "error: the cleanup already ran; preparing the receipt file failed: %v\n", finishErr)
 		os.Exit(1)
 	}
-	if err := WriteOwnerOnlyJSON(receiptPath, receipt); err != nil {
+	if sink == nil {
+		if receiptPath == "" {
+			fmt.Fprintf(os.Stderr, "error: the cleanup already ran; writing the receipt file failed: receipt sink is not open\n")
+			os.Exit(1)
+		}
+		opened, err := PrepareReceiptSink(receiptPath, nil)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: the cleanup already ran; writing the receipt file failed: %v\n", err)
+			os.Exit(1)
+		}
+		sink = opened
+	}
+	if err := sink.Write(receipt); err != nil {
+		sink.Close()
 		fmt.Fprintf(os.Stderr, "error: the cleanup already ran; writing the receipt file failed: %v\n", err)
 		os.Exit(1)
 	}
+	sink.Close()
 	if executionErr != nil {
 		// The caller reports the execution failure and exits non-zero.
 		return

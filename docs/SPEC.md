@@ -242,8 +242,11 @@ incomplete activity evidence or a resumed session refuses cleanup. The
 registered agent-state revalidator must also prove the entry is still orphaned.
 `live` and `undetermined` remain protected.
 
-Absence is proven only when the nearest existing ancestor is inside an
-available home or temporary tree and shares a volume identity with its parent.
+Absence is proven only when the recorded cwd is still missing after the proof
+and the nearest existing ancestor is inside an available home or temporary
+tree and shares a volume identity with its parent. A cwd that exists when the
+proof observes it, or that reappears before the proof is accepted, is not
+absent. That recheck is not atomic against a later restore.
 Unix obtains that identity from filesystem device metadata; Windows obtains the
 volume path with `GetVolumePathNameW`. A volume boundary, unresolvable link, or
 volume lookup failure yields `undetermined` rather than deletion eligibility.
@@ -333,9 +336,13 @@ The audit is human output only. `scan --json` remains the machine-readable
 inventory surface, while `clean --dry-run --json` emits the shipped
 machine-readable cleanup plan and non-dry-run `clean --json` emits the shipped
 execution receipt, including cancellation semantics. `--receipt-file` writes
-that same execution receipt to an explicit sink. Replayable manifests remain
-future work: a receipt, on stdout or on disk, describes only the plan executed
-by its current process and can never authorize a later execution.
+that same execution receipt to an explicit sink. A symlink, reparse-point,
+or other non-regular leaf is refused before mutation. The write stays in
+the directory checked beforehand, so retargeting a parent symlink or
+replacing the leaf with an alias cannot move the document onto a removed
+target. Replayable manifests remain future work: a receipt, on stdout or
+on disk, describes only the plan executed by its current process and can
+never authorize a later execution.
 
 The phase-1 JSON cleanup route also fails closed before emitting `clean_plan`
 when the scan is partial. Therefore an emitted cleanup plan always reports
@@ -546,6 +553,13 @@ Cross-category containment uses the same physical-component contract:
 | `other-cache` | yes | `pip-cache` | `~/.cache/pip`, `~/.cache/uv` |
 | `agent-state` | proof-classified orphaned only; default selection waits for `--agent-state-grace` | `claude`, `cursor` | recorded-cwd project stores; `live` and `undetermined` entries are protected; classic `--age` does not apply |
 | `ai-logs` | no, requires `--risky` | `ai-logs`, `windsurf` | known Codex, Claude, and Windsurf log/cache locations |
+
+For an `ai-logs` directory (Codex `archived_sessions`, Claude `file-history`,
+and each Windsurf project directory), `item.ModTime` is the newest modification
+in the tree and `item.PathModTime` is the directory's own mtime. `--age` and
+the pre-mutation check follow that tree, so a write to an existing nested file
+keeps the directory. Standalone log files keep the file's own mtime and leave
+`PathModTime` unset.
 
 The installed/regenerable/protected store-nature terms used to plan issue #142
 are not supported categories, agent-state classifications, JSON fields, or CLI
