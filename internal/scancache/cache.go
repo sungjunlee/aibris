@@ -216,8 +216,10 @@ func lastScanReuseRefuseReason(cache lastScanCache, roots []string, selector str
 }
 
 // lastScanTargetContainmentReason rejects an explicit-root snapshot that
-// names a target outside those roots. Default scans leave extra Codex homes
-// out of the recorded root header, so targets outside that header stay reusable.
+// names a target outside those roots. Both sides are resolved with the same
+// canonical path scan uses, so a root reached through a symlinked parent
+// still matches. Default scans leave extra Codex homes out of the recorded
+// root header, so targets outside that header stay reusable.
 func lastScanTargetContainmentReason(cache lastScanCache) string {
 	if !cache.ExplicitRoots {
 		return ""
@@ -231,9 +233,9 @@ func lastScanTargetContainmentReason(cache lastScanCache) string {
 }
 
 func cachedTargetWithinRoots(path string, roots []string) bool {
-	cleanPath := filepath.Clean(path)
+	cleanPath := adapter.CanonicalExistingPath(path)
 	for _, root := range roots {
-		if adapter.IsWithin(filepath.Clean(root), cleanPath) {
+		if adapter.IsWithin(adapter.CanonicalExistingPath(root), cleanPath) {
 			return true
 		}
 	}

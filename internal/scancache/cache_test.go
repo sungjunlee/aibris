@@ -539,6 +539,106 @@ func TestInspectRejectsTargetOutsideExplicitRootHeader(t *testing.T) {
 	}
 }
 
+// TestInspectAcceptsExplicitRootReachedThroughSymlinkedParent reproduces the
+// macOS last-scan mismatch on Linux: NormalizeRoots stores the EvalSymlinks
+// spelling of the root, while a catalog target keeps the path built from the
+// unresolved home (TMPDIR /var/folders vs /private/var). Lexical IsWithin
+// rejects that pair. A target that resolves outside the root is still refused.
+func TestInspectAcceptsExplicitRootReachedThroughSymlinkedParent(t *testing.T) {
+	base := t.TempDir()
+	realParent := filepath.Join(base, "private")
+	if err := os.MkdirAll(realParent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	aliasParent := filepath.Join(base, "var")
+	if err := os.Symlink(realParent, aliasParent); err != nil {
+		t.Skipf("symlink not supported: %v", err)
+	}
+	home := filepath.Join(aliasParent, "home")
+	cacheDir := filepath.Join(home, ".gradle", "caches", "8.14")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cacheDir, "artifact.bin"), []byte("payload"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	testutil.SetHome(t, home)
+
+	roots, err := scanner.NormalizeRoots([]string{home})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolvedHome, err := filepath.EvalSymlinks(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolvedHome = filepath.Clean(resolvedHome)
+	if len(roots) != 1 || roots[0] != resolvedHome || roots[0] == filepath.Clean(home) {
+		t.Fatalf("roots = %v; want symlink-resolved %s distinct from %s", roots, resolvedHome, home)
+	}
+
+	result, err := scanner.ScanWithOptions(context.Background(), types.ScanOptions{
+		Roots:         roots,
+		ExplicitRoots: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var aliasPath string
+	for _, item := range result.Worktrees {
+		if item.ID == "gradle" {
+			aliasPath = item.Path
+			break
+		}
+	}
+	if aliasPath == "" {
+		t.Fatalf("scan missed gradle cache: %+v", result.Worktrees)
+	}
+	if adapter.IsWithin(filepath.Clean(roots[0]), filepath.Clean(aliasPath)) {
+		t.Fatalf("lexical IsWithin(%s, %s) = true; fixture does not reproduce the symlinked-root mismatch", roots[0], aliasPath)
+	}
+
+	Write(roots, adapter.DefaultProviderIdentity(), result, true)
+	if _, _, reason, ok := Inspect(roots, "", true); !ok {
+		t.Fatalf("explicit root reached through a symlinked parent rejected: %s", reason)
+	}
+
+	outside := filepath.Join(base, "outside-cache")
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	escape := filepath.Join(roots[0], "escape")
+	if err := os.Symlink(outside, escape); err != nil {
+		t.Fatal(err)
+	}
+	stored, ok := Read()
+	if !ok {
+		t.Fatal("explicit scan did not write last-scan.json")
+	}
+	replaced := false
+	for i := range stored.Result.Worktrees {
+		if stored.Result.Worktrees[i].Path != aliasPath {
+			continue
+		}
+		// Lexically inside the resolved root, but the symlink leaves it.
+		stored.Result.Worktrees[i].Path = escape
+		replaced = true
+		break
+	}
+	if !replaced {
+		t.Fatal("cached gradle row missing")
+	}
+	if !adapter.IsWithin(filepath.Clean(roots[0]), filepath.Clean(escape)) {
+		t.Fatal("escape fixture is not lexically inside the root")
+	}
+	if err := Save(stored); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, reason, ok := Inspect(roots, "", true); ok || reason != "cached target outside scan roots" {
+		t.Fatalf("Inspect ok=%v reason=%q; want rejection for a symlink that resolves outside the root", ok, reason)
+	}
+}
+
 func TestLastScanCacheIdentityMismatchReasons(t *testing.T) {
 	roots := []string{"/tmp/a"}
 	id := lastScanCacheIdentityOf(roots, "sha256:abc", true)
