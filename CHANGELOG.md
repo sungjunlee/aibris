@@ -12,6 +12,9 @@
 - Claude and Cursor project stores include an entry when `--root` is that
   entry. Sibling entries stay outside the scan, and a root nested inside an
   entry does not select the outer store (#656).
+- `clean` rejects positional arguments before it scans or deletes. An extra
+  word, path, or operand after `--` is invalid usage, not a cleanup target;
+  scope the scan with `--root` (#652).
 
 ## [0.16.0] - 2026-10-09
 
