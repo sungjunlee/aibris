@@ -237,6 +237,51 @@ func TestMatcher_SymlinkEscapingRootIsRejected(t *testing.T) {
 	}
 }
 
+func TestMatcher_ProtectMatchLiteralBracketPath(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	root := filepath.Join(home, "workspace")
+	owner := filepath.Join(root, "project[2026]", "node_modules")
+	sibling := filepath.Join(root, "sibling", "node_modules")
+	for _, dir := range []string{owner, sibling} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	resolvedRoot := evalPath(t, root)
+
+	m := New([]Pattern{{Raw: owner, Source: types.ExcludeSourceFlag}}, []string{resolvedRoot})
+	if len(m.Rejected()) != 0 {
+		t.Fatalf("rejected = %+v; want the existing bracket path honored", m.Rejected())
+	}
+	if !m.ProtectMatch(owner) {
+		t.Fatal("ProtectMatch(owner) = false; want the literal bracket directory protected")
+	}
+	if m.ProtectMatch(sibling) {
+		t.Fatal("ProtectMatch(sibling) = true; an unrelated sibling must stay unprotected")
+	}
+
+	// A character class that does not name an existing path stays a glob.
+	for _, name := range []string{"project0", "project1"} {
+		if err := os.MkdirAll(filepath.Join(root, name), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	globbed := New([]Pattern{{
+		Raw:    filepath.Join(root, "project[01]"),
+		Source: types.ExcludeSourceFlag,
+	}}, []string{resolvedRoot})
+	if len(globbed.Rejected()) != 0 || len(globbed.Scopes()) != 2 {
+		t.Fatalf("scopes = %+v rejected = %+v; want two character-class matches", globbed.Scopes(), globbed.Rejected())
+	}
+	if !globbed.ProtectMatch(filepath.Join(root, "project0")) || !globbed.ProtectMatch(filepath.Join(root, "project1")) {
+		t.Fatal("character-class glob stopped matching existing directories")
+	}
+	if globbed.ProtectMatch(owner) {
+		t.Fatal("character-class glob matched the literal bracket directory")
+	}
+}
+
 func TestMatcher_GlobPattern(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)

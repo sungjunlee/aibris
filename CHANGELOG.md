@@ -4,6 +4,17 @@
 
 ### Fixed
 
+- `clean` rescans when a user ignore file or a root `.aibris-ignore` is added
+  after the cached scan, so the new exclusion is honored instead of reusing
+  the unfiltered inventory (#661).
+- `--protect-path` and `--exclude` honor an existing path whose name contains
+  brackets. The brackets stay literal characters when that path exists, and a
+  glob that does not name an existing path still expands (#662).
+- An explicit-root last-scan cache is not reused when one of its targets
+  resolves outside that root header. Symlinked spellings of the same root
+  still match, including a macOS temp dir reached through `/var`. Default
+  scans can still reuse targets from extra Codex homes that are not part of
+  the recorded root header (#663).
 - `scan` returns a context cancellation or deadline error when the caller
   cancels as a provider finishes, during inventory post-processing, or during
   the protected-content retention inventory. The command no longer reports
