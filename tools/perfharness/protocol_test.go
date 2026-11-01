@@ -82,6 +82,76 @@ func TestCorrectnessAB(t *testing.T) {
 	}
 }
 
+func TestRetentionPartialRejectsPairDespiteMatchingSignatures(t *testing.T) {
+	const baseline = `{"partial":false,"worktrees":[],"summary":{"total_count":0,"total_size":0}}`
+	const nullRetention = `{"partial":false,"worktrees":[],"summary":{"total_count":0,"total_size":0},"retention":null}`
+	const completeRetention = `{"partial":false,"worktrees":[],"summary":{"total_count":0,"total_size":0},"retention":{"buckets":[],"partial":false,"provider_errors":[]}}`
+	const partialRetention = `{"partial":false,"worktrees":[],"summary":{"total_count":0,"total_size":0},"retention":{"buckets":[],"partial":true,"provider_errors":[{"store_id":"codex-sessions","message":"read failed"}]}}`
+
+	parse := func(raw string) *scanResult {
+		t.Helper()
+		res, err := parseScanOutput([]byte(raw))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	invoke := func(res *scanResult) Invocation {
+		return Invocation{ExitCode: 0, Partial: res.Partial, InvSig: existingInvSig(res), RetSig: res.RetentionSig}
+	}
+
+	base := parse(baseline)
+	nullBase := parse(nullRetention)
+	if base.Partial || nullBase.Partial || base.Retention != nil || nullBase.Retention != nil || base.RetentionSig != "" || nullBase.RetentionSig != "" {
+		t.Fatalf("baseline partial/retention = %t/%v/%q and %t/%v/%q; want non-partial and no projection",
+			base.Partial, base.Retention, base.RetentionSig, nullBase.Partial, nullBase.Retention, nullBase.RetentionSig)
+	}
+	complete := parse(completeRetention)
+	partial := parse(partialRetention)
+	partialAgain := parse(partialRetention)
+	if complete.Partial {
+		t.Fatal("complete retention projection was marked partial")
+	}
+	if !partial.Partial || !partialAgain.Partial {
+		t.Fatal("retention.partial=true with a complete top-level scan was accepted as a complete sample")
+	}
+	if partial.RetentionSig != complete.RetentionSig || partial.WorktreesSig != partialAgain.WorktreesSig || partial.SummarySig != partialAgain.SummarySig || partial.RetentionSig != partialAgain.RetentionSig {
+		t.Fatal("retention partiality changed the comparable signature")
+	}
+
+	rep := &Report{InputStable: true}
+	if reason := rejectReason(invoke(base), invoke(complete), rep); reason != "" {
+		t.Fatalf("complete samples rejected: %q", reason)
+	}
+	if reason := rejectReason(invoke(base), invoke(nullBase), rep); reason != "" {
+		t.Fatalf("baseline without retention rejected: %q", reason)
+	}
+	reason := rejectReason(invoke(base), invoke(partial), rep)
+	if reason == "" {
+		t.Fatal("retention-partial pair accepted with exit 0 and matching signatures")
+	}
+	if again := rejectReason(invoke(partial), invoke(partialAgain), rep); again == "" {
+		t.Fatal("identical retention-partial samples were accepted")
+	}
+
+	report := &Report{
+		InputStable: true,
+		Correctness: Correctness{NonInterference: true, Additive: true},
+		Pairs:       1,
+		PairResults: []Pair{{
+			Index: 1, OrderLabel: "base->change", Accepted: false, RejectReason: reason,
+		}},
+	}
+	report.Verdict = verdict(report)
+	md := RenderMarkdown(report)
+	if !strings.Contains(md, "discarded: "+reason) {
+		t.Fatalf("report hid the rejected incomplete sample:\n%s", md)
+	}
+	if strings.Contains(report.Verdict, "within threshold") || strings.HasPrefix(report.Verdict, "no regression") || strings.Contains(report.Verdict, "no predeclared threshold") {
+		t.Fatalf("verdict = %q; incomplete sample must not receive a performance verdict", report.Verdict)
+	}
+}
+
 func TestRejectReason(t *testing.T) {
 	clean := func() (*Report, Invocation, Invocation) {
 		return &Report{InputStable: true}, Invocation{ExitCode: 0}, Invocation{ExitCode: 0}

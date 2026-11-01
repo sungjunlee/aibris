@@ -268,8 +268,10 @@ every path the catalog resolves to. Never add a cache whose wholesale removal
 can break installed projects (stores that projects link into). Cleanup commands
 are re-derived from the live catalog (tool, category, canonical target, argv,
 and pinned cache environment); recipe drift refuses execution and fallback.
-A missing authorized executable may fall back only to gated removal of the
-scanned path. Go and Homebrew cleanup use gated removal of the verified cache
+A missing authorized executable (`exec.ErrNotFound`) may fall back only to
+gated removal of the scanned path. Any other lookup error, including a refusal
+to run an executable found relative to the current directory (`exec.ErrDot`),
+is a command failure and does not remove the path. Go and Homebrew cleanup use gated removal of the verified cache
 path without a package-manager cleanup command. Go removal includes fuzz and
 cache metadata; its override signature, live path, and layout are rechecked before
 mutation.

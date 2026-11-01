@@ -279,7 +279,13 @@ func runCleanupCommand(ctx context.Context, argv []string, env []string, beforeS
 		return false, err
 	}
 	if lookupErr != nil {
-		return false, errCleanupCommandNotFound
+		// Only a PATH search that finds nothing selects path-removal fallback.
+		// exec.ErrDot means the executable exists but must not be run from a
+		// relative lookup; that stays on the command-failure path.
+		if errors.Is(lookupErr, exec.ErrNotFound) {
+			return false, errCleanupCommandNotFound
+		}
+		return false, lookupErr
 	}
 	output, err := cmd.CombinedOutput()
 	attempted := cmd.Process != nil
