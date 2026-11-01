@@ -7,6 +7,9 @@
 - `clean` rescans when a user ignore file or a root `.aibris-ignore` is added
   after the cached scan, so the new exclusion is honored instead of reusing
   the unfiltered inventory (#661).
+- `--protect-path` and `--exclude` honor an existing path whose name contains
+  brackets. The brackets stay literal characters when that path exists, and a
+  glob that does not name an existing path still expands (#662).
 - `clean` rejects positional arguments before it scans or deletes. An extra
   word, path, or operand after `--` is invalid usage, not a cleanup target;
   scope the scan with `--root` (#652).

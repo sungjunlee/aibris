@@ -75,6 +75,69 @@ func TestCleanJSONProtectPathNestedCheckoutProtectsOuterOwner(t *testing.T) {
 	_ = home
 }
 
+func TestCleanJSONProtectPathLiteralBracketDirectory(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	root := filepath.Join(home, "workspace")
+	owner := filepath.Join(root, "project[2026]", "node_modules")
+	sibling := filepath.Join(root, "sibling", "node_modules")
+	old := time.Now().Add(-8 * 24 * time.Hour)
+	for _, dir := range []string{owner, sibling} {
+		pkg := filepath.Join(dir, "pkg")
+		if err := os.MkdirAll(pkg, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(pkg, "dep.js"), []byte("payload\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(dir, old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	resetScanFlags()
+	resetCleanFlags()
+	document := parseCleanJSONPlan(t, captureOutput(func() {
+		rootCmd.SetArgs([]string{
+			"clean", "--no-guide", "--dry-run", "--json", "--include-paths",
+			"--category", "node_modules", "--root", root,
+			"--protect-path", owner,
+		})
+		rootCmd.Execute()
+	}))
+	assertCleanJSONNotSelected(t, document, owner)
+	assertCleanJSONProtectedReason(t, document, owner, "protect_path")
+	assertCleanJSONSelectedPaths(t, document, sibling)
+	if document.ProtectPaths == nil {
+		t.Fatal("protect_paths object is missing")
+	}
+	if len(document.ProtectPaths.Rejected) != 0 {
+		t.Fatalf("rejected = %+v; want the literal bracket path honored", document.ProtectPaths.Rejected)
+	}
+	if document.ProtectPaths.ProtectedCount == 0 || len(document.ProtectPaths.Scopes) != 1 {
+		t.Fatalf("protect_paths = %+v; want one honored scope", document.ProtectPaths)
+	}
+	var ownerBytes, siblingBytes int64
+	for _, target := range document.PhysicalTargets {
+		if target.Path == nil {
+			continue
+		}
+		switch {
+		case testPathsEqual(*target.Path, owner):
+			ownerBytes = target.Bytes
+		case testPathsEqual(*target.Path, sibling):
+			siblingBytes = target.Bytes
+		}
+	}
+	if ownerBytes <= 0 {
+		t.Fatal("fixture owner has no bytes; the selected-byte check would be vacuous")
+	}
+	if document.Totals.SelectedBytes != siblingBytes {
+		t.Fatalf("selected_bytes = %d; want %d with the bracket owner contributing 0", document.Totals.SelectedBytes, siblingBytes)
+	}
+}
+
 func TestCleanJSONProtectPathOwnerPathProtectsItself(t *testing.T) {
 	_, owner, _ := nestedProtectPathFixture(t)
 

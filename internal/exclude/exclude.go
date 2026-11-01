@@ -55,6 +55,10 @@ func (m *Matcher) add(raw string, source types.ExcludeSource, home string, roots
 		if strings.ContainsAny(candidate, "*?[") {
 			matches, err := filepath.Glob(candidate)
 			if err != nil {
+				if m.addExistingLiteral(raw, candidate, source, roots) {
+					added = true
+					continue
+				}
 				m.reject(raw, source, "invalid glob pattern")
 				return
 			}
@@ -63,6 +67,12 @@ func (m *Matcher) add(raw string, source types.ExcludeSource, home string, roots
 					m.addScope(raw, resolved, source)
 					added = true
 				}
+			}
+			// An existing directory such as project[2026] is a literal path.
+			// Glob syntax cannot name those brackets, and the path is still
+			// inside the scan roots.
+			if m.addExistingLiteral(raw, candidate, source, roots) {
+				added = true
 			}
 			continue
 		}
@@ -96,6 +106,32 @@ func (m *Matcher) addScope(pattern, resolved string, source types.ExcludeSource)
 		Resolved: resolved,
 		Source:   source,
 	})
+}
+
+// addExistingLiteral records candidate when it names a real path inside the
+// roots. Missing paths stay globs. A path glob already recorded is not added
+// again.
+func (m *Matcher) addExistingLiteral(raw, candidate string, source types.ExcludeSource, roots []string) bool {
+	resolved, ok := existingLiteralScope(candidate, roots)
+	if !ok {
+		return false
+	}
+	for _, scope := range m.scopes {
+		if scope.Pattern == raw && scope.Resolved == resolved && scope.Source == source {
+			return true
+		}
+	}
+	m.addScope(raw, resolved, source)
+	return true
+}
+
+// existingLiteralScope resolves candidate only when that exact path exists.
+// Glob metacharacters in an existing name are filename characters.
+func existingLiteralScope(candidate string, roots []string) (string, bool) {
+	if _, err := os.Lstat(candidate); err != nil {
+		return "", false
+	}
+	return scopeWithinRoots(candidate, roots)
 }
 
 func (m *Matcher) reject(pattern string, source types.ExcludeSource, reason string) {
