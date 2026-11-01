@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `--receipt-file` refuses a symlink or reparse-point leaf before cleanup and
+  writes through the directory checked at that point. A receipt path can no
+  longer recreate a removed target, and a parent symlink retargeted or a leaf
+  alias swapped in afterward cannot redirect the write. Ordinary new and
+  existing files stay owner-only `0600` (#653).
+
 ## [0.16.0] - 2026-10-09
 
 ### Added

@@ -231,24 +231,36 @@ func markGuidedIdentityFailure(target *ReceiptPhysicalTarget) {
 // receipt. The cleanup has already run at this point, so a write failure is
 // reported as a receipt failure and never as a failed deletion.
 func WriteGuidedExecutionReceipt(
-	receiptPath string,
+	sink *ReceiptSink,
 	pending *GuidedExecutionReceipt,
 	execution ExecutionReceipt,
 	executionErr error,
 	listSnapshots func() (int, error),
 ) {
 	if pending == nil {
+		if sink != nil {
+			sink.Close()
+		}
 		return
 	}
 	receipt, finishErr := pending.Finish(execution, executionErr, listSnapshots)
 	if receipt.SchemaVersion == 0 && finishErr != nil {
+		if sink != nil {
+			sink.Close()
+		}
 		fmt.Fprintf(os.Stderr, "error: the cleanup already ran; preparing the receipt file failed: %v\n", finishErr)
 		os.Exit(1)
 	}
-	if err := WriteOwnerOnlyJSON(receiptPath, receipt); err != nil {
+	if sink == nil {
+		fmt.Fprintf(os.Stderr, "error: the cleanup already ran; writing the receipt file failed: receipt sink is not open\n")
+		os.Exit(1)
+	}
+	if err := sink.Write(receipt); err != nil {
+		sink.Close()
 		fmt.Fprintf(os.Stderr, "error: the cleanup already ran; writing the receipt file failed: %v\n", err)
 		os.Exit(1)
 	}
+	sink.Close()
 	if executionErr != nil {
 		// The caller reports the execution failure and exits non-zero.
 		return

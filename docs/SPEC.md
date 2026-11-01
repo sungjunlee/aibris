@@ -326,7 +326,10 @@ The audit is human output only. `scan --json` remains the machine-readable
 inventory surface, while `clean --dry-run --json` emits the shipped
 machine-readable cleanup plan and non-dry-run `clean --json` emits the shipped
 execution receipt, including cancellation semantics. `--receipt-file` writes
-that same execution receipt to an explicit sink. Replayable manifests remain
+that same execution receipt to an explicit sink. A symlink or reparse-point
+leaf is refused before mutation. The write stays in the directory checked
+beforehand, so retargeting a parent symlink or replacing the leaf with an
+alias cannot move the document onto a removed target. Replayable manifests remain
 future work: a receipt, on stdout or on disk, describes only the plan executed
 by its current process and can never authorize a later execution.
 

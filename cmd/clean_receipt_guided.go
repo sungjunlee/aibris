@@ -8,6 +8,7 @@ import (
 // guidedCleanExecutionReceipt wraps cleanjson.GuidedExecutionReceipt for cmd-layer compatibility.
 type guidedCleanExecutionReceipt struct {
 	inner *cleanjson.GuidedExecutionReceipt
+	sink  *cleanjson.ReceiptSink
 }
 
 // newGuidedCleanExecutionReceipt renders the receipt from the plan the guided
@@ -83,10 +84,19 @@ func writeGuidedCleanExecutionReceipt(
 	}
 
 	cleanjson.WriteGuidedExecutionReceipt(
-		cleanReceiptFile,
+		pending.sink,
 		pending.inner,
 		execution,
 		executionErr,
 		listLocalAPFSSnapshots,
 	)
+	pending.closeSink()
+}
+
+func (r *guidedCleanExecutionReceipt) closeSink() {
+	if r == nil || r.sink == nil {
+		return
+	}
+	r.sink.Close()
+	r.sink = nil
 }

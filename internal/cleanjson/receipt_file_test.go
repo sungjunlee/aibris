@@ -103,3 +103,109 @@ func TestResolveReceiptSinkResolvesParentSymlink(t *testing.T) {
 		t.Fatalf("resolved sink = %q; want %q", got, want)
 	}
 }
+
+func TestRejectReceiptSinkOverlapRefusesLeafAlias(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "command-audit.log")
+	const payload = "original-audit-bytes\n"
+	if err := os.WriteFile(target, []byte(payload), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "receipt.json")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	err := RejectReceiptSinkOverlap(link, []types.DebrisInfo{{Path: target}})
+	if err == nil || !strings.Contains(err.Error(), "symlink or reparse point") {
+		t.Fatalf("alias error = %v; want a symlink or reparse refusal", err)
+	}
+	got, readErr := os.ReadFile(target)
+	if readErr != nil || string(got) != payload {
+		t.Fatalf("target after refusal = %q, %v; want original bytes", got, readErr)
+	}
+}
+
+func TestRejectReceiptSinkOverlapFollowsParentSymlink(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "node_modules")
+	if err := os.Mkdir(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	linkParent := filepath.Join(root, "link")
+	if err := os.Symlink(target, linkParent); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	err := RejectReceiptSinkOverlap(filepath.Join(linkParent, "receipt.json"), []types.DebrisInfo{{Path: target}})
+	if err == nil || !strings.Contains(err.Error(), "is inside a cleanup target") {
+		t.Fatalf("parent symlink overlap = %v; want the sink inside the target", err)
+	}
+}
+
+func TestReceiptSinkWriteDoesNotFollowSwappedLeaf(t *testing.T) {
+	root := t.TempDir()
+	victim := filepath.Join(root, "command-audit.log")
+	const payload = "original-audit-bytes\n"
+	if err := os.WriteFile(victim, []byte(payload), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	receiptPath := filepath.Join(root, "receipt.json")
+	sink, err := PrepareReceiptSink(receiptPath, []types.DebrisInfo{{Path: victim}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sink.Close()
+	if err := os.Symlink(victim, receiptPath); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	err = sink.Write(map[string]string{"status": "succeeded"})
+	if err == nil {
+		t.Fatal("write followed a leaf alias created after the check")
+	}
+	got, readErr := os.ReadFile(victim)
+	if readErr != nil || string(got) != payload {
+		t.Fatalf("victim after swapped alias = %q, %v; want original bytes", got, readErr)
+	}
+	info, statErr := os.Lstat(receiptPath)
+	if statErr != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("receipt path = mode %v, err %v; want the alias left unfollowed", info.Mode(), statErr)
+	}
+}
+
+func TestReceiptSinkWriteStaysInBoundParentAfterRetarget(t *testing.T) {
+	root := t.TempDir()
+	realParent := filepath.Join(root, "real")
+	otherParent := filepath.Join(root, "other")
+	if err := os.Mkdir(realParent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(otherParent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	linkParent := filepath.Join(root, "link")
+	if err := os.Symlink(realParent, linkParent); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	sink, err := PrepareReceiptSink(filepath.Join(linkParent, "receipt.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sink.Close()
+	if err := os.Remove(linkParent); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(otherParent, linkParent); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := sink.Write(map[string]string{"status": "succeeded"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(realParent, "receipt.json")); err != nil {
+		t.Fatalf("receipt missing from the directory checked before the retarget: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(otherParent, "receipt.json")); !os.IsNotExist(err) {
+		t.Fatalf("receipt followed the retargeted parent symlink: %v", err)
+	}
+}
