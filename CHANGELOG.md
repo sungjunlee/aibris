@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `scan` returns a context cancellation or deadline error when the caller
+  cancels as a provider finishes, during inventory post-processing, or during
+  the protected-content retention inventory. The command no longer reports
+  that aborted scan as a successful complete result. A store-local retention
+  failure still keeps the debris results and a partial retention projection (#655).
+
 ## [0.16.0] - 2026-10-09
 
 ### Added

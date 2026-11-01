@@ -2,7 +2,6 @@ package scanner
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sort"
 
@@ -11,11 +10,12 @@ import (
 
 // aggregateProviderResults folds providerScanResult values into the inventory:
 // progress, diagnostics, provider errors, ownership, user exclusions, totals,
-// size order, and retention. Cancel/deadline errors abort before inventory
-// post-processing. ctx must be the caller's context, not the dispatch scanCtx:
-// dispatch pairs scanCtx with a cancel that provider goroutines fire on
-// cancel-type errors, and post-loop work must run under the caller's
-// lifetime, not the dispatch-internal one.
+// size order, and retention. Cancel/deadline errors from a provider, from the
+// caller after that provider finishes, or from retention abort the scan.
+// A completed inventory is not returned after cancellation. ctx must be the
+// caller's context, not the dispatch scanCtx: dispatch pairs scanCtx with a
+// cancel that provider goroutines fire on cancel-type errors, and post-loop
+// work must run under the caller's lifetime, not the dispatch-internal one.
 func (s *Scanner) aggregateProviderResults(
 	ctx context.Context,
 	opts types.ScanOptions,
@@ -51,7 +51,7 @@ func (s *Scanner) aggregateProviderResults(
 					Err:      err.Error(),
 				})
 			}
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			if isContextError(err) {
 				cancelErr = err
 			} else {
 				result.ProviderErrors = append(result.ProviderErrors, types.ScanProviderError{
@@ -59,6 +59,7 @@ func (s *Scanner) aggregateProviderResults(
 					Message: err.Error(),
 				})
 			}
+			cancelErr = preferContextErr(cancelErr, ctx)
 			continue
 		}
 		emitProgress(opts.OnProgress, types.ScanProgressEvent{
@@ -77,7 +78,11 @@ func (s *Scanner) aggregateProviderResults(
 			})
 		}
 		result.Worktrees = append(result.Worktrees, worktrees...)
+		// The done callback runs above and may cancel the caller. That is
+		// still a cancelled scan: the provider itself returned success.
+		cancelErr = preferContextErr(cancelErr, ctx)
 	}
+	cancelErr = preferContextErr(cancelErr, ctx)
 	if cancelErr != nil {
 		return nil, cancelErr
 	}
@@ -89,6 +94,9 @@ func (s *Scanner) aggregateProviderResults(
 	})
 
 	result.Worktrees = requireTempDirOwnership(ctx, result.Worktrees, roots)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	applyUserExclusions(result, opts)
 	fillInventoryTotals(result, catByTool)
@@ -96,7 +104,17 @@ func (s *Scanner) aggregateProviderResults(
 	sort.Slice(result.Worktrees, func(i, j int) bool {
 		return result.Worktrees[i].Size > result.Worktrees[j].Size
 	})
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
-	result.Retention = scanRetention(ctx, opts, s.RetentionProviders)
+	retention, err := scanRetention(ctx, opts, s.RetentionProviders)
+	if err != nil {
+		return nil, err
+	}
+	result.Retention = retention
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
