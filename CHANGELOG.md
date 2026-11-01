@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- `clean` rescans when a user ignore file or a root `.aibris-ignore` is added
+  after the cached scan, so the new exclusion is honored instead of reusing
+  the unfiltered inventory (#661).
 - `clean` rejects positional arguments before it scans or deletes. An extra
   word, path, or operand after `--` is invalid usage, not a cleanup target;
   scope the scan with `--root` (#652).
