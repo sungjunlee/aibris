@@ -34,6 +34,16 @@
   reappears while the ancestor walk runs, as a deleted project. The entry
   stays undetermined instead of orphaned. A cwd that is missing for the whole
   proof is unchanged (#665).
+- Go build-cache discovery keeps the last `GOCACHE` assignment in the GOENV
+  file, matching `go env`. A final empty value uses the default cache, and a
+  final `off` selects no cache. Process `$GOCACHE` still wins, and the live
+  revalidator uses the same path (#666).
+- The Unix installer refuses a destination that is a directory or a symlink
+  to a directory. `mv` previously moved the staged binary inside that
+  directory and the script still reported success (#667).
+- The Windows installer resolves `-Prefix` to an absolute directory before
+  installing, updating PATH, or printing the PATH hint. A relative prefix is
+  no longer stored on PATH as typed (#668).
 - `clean` rejects positional arguments before it scans or deletes. An extra
   word, path, or operand after `--` is invalid usage, not a cleanup target;
   scope the scan with `--root` (#652).
