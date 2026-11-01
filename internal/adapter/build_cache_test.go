@@ -337,6 +337,105 @@ func TestBuildCacheAdapter_ProcessEnvWinsOverGOENVFile(t *testing.T) {
 	}
 }
 
+// TestBuildCacheAdapter_DuplicateGOENVGOCACHEUsesFinalAssignment matches Go's
+// user env file: the last GOCACHE assignment is effective, a final empty
+// value is unset, and a final off selects no cache. Process GOCACHE still
+// wins. Expected values are Go's, encoded here without calling go env.
+func TestBuildCacheAdapter_DuplicateGOENVGOCACHEUsesFinalAssignment(t *testing.T) {
+	t.Run("final path", func(t *testing.T) {
+		home := t.TempDir()
+		testutil.SetHome(t, home)
+		first := filepath.Join(home, "first-cache")
+		final := filepath.Join(home, "final-cache")
+		writeGoBuildFixture(t, first)
+		writeGoBuildFixture(t, final)
+		writeDuplicateGOENV(t, home, "GOCACHE="+first+"\n"+
+			"# GOCACHE="+first+"\n"+
+			"GOPROXY=https://proxy.golang.org,direct\n"+
+			"\n"+
+			"GOCACHE="+final+"\n")
+
+		results := scanGoBuild(t)
+		if results[0].Path != final {
+			t.Fatalf("Path = %q; want final GOCACHE %q", results[0].Path, final)
+		}
+		if err := RefuseStaleGoCache(first); err == nil {
+			t.Fatal("first GOCACHE assignment was accepted; want stale")
+		}
+		if err := RefuseStaleGoCache(final); err != nil {
+			t.Fatalf("final GOCACHE refused: %v", err)
+		}
+	})
+
+	t.Run("final off", func(t *testing.T) {
+		home := t.TempDir()
+		testutil.SetHome(t, home)
+		first := filepath.Join(home, "first-cache")
+		fallback := testutil.GoBuildCache(home)
+		writeGoBuildFixture(t, first)
+		writeGoBuildFixture(t, fallback)
+		writeDuplicateGOENV(t, home, "GOCACHE="+first+"\nGOCACHE=off\n")
+
+		if got := goBuildPaths(t); len(got) != 0 {
+			t.Fatalf("go-build paths = %q; want none when the final assignment is off", got)
+		}
+		if err := RefuseStaleGoCache(first); err == nil {
+			t.Fatal("first GOCACHE assignment was accepted after a final off")
+		}
+		if err := RefuseStaleGoCache(fallback); err == nil {
+			t.Fatal("default GOCACHE was accepted after a final off")
+		}
+	})
+
+	t.Run("final empty", func(t *testing.T) {
+		home := t.TempDir()
+		testutil.SetHome(t, home)
+		first := filepath.Join(home, "first-cache")
+		fallback := testutil.GoBuildCache(home)
+		writeGoBuildFixture(t, first)
+		writeGoBuildFixture(t, fallback)
+		writeDuplicateGOENV(t, home, "GOCACHE="+first+"\nGOCACHE=\n")
+
+		results := scanGoBuild(t)
+		if results[0].Path != fallback {
+			t.Fatalf("Path = %q; want default GOCACHE %q after a final empty assignment", results[0].Path, fallback)
+		}
+		if err := RefuseStaleGoCache(first); err == nil {
+			t.Fatal("first GOCACHE assignment was accepted after a final empty assignment")
+		}
+		if err := RefuseStaleGoCache(fallback); err != nil {
+			t.Fatalf("default GOCACHE refused after a final empty assignment: %v", err)
+		}
+	})
+
+	t.Run("process env wins", func(t *testing.T) {
+		home := t.TempDir()
+		testutil.SetHome(t, home)
+		first := filepath.Join(home, "first-cache")
+		final := filepath.Join(home, "final-cache")
+		processCache := filepath.Join(home, "process-cache")
+		writeGoBuildFixture(t, first)
+		writeGoBuildFixture(t, final)
+		writeGoBuildFixture(t, processCache)
+		writeDuplicateGOENV(t, home, "GOCACHE="+first+"\nGOCACHE="+final+"\n")
+		t.Setenv("GOCACHE", processCache)
+
+		results := scanGoBuild(t)
+		if results[0].Path != processCache {
+			t.Fatalf("Path = %q; want process GOCACHE %q", results[0].Path, processCache)
+		}
+		if err := RefuseStaleGoCache(first); err == nil {
+			t.Fatal("first GOENV GOCACHE was accepted over process GOCACHE")
+		}
+		if err := RefuseStaleGoCache(final); err == nil {
+			t.Fatal("final GOENV GOCACHE was accepted over process GOCACHE")
+		}
+		if err := RefuseStaleGoCache(processCache); err != nil {
+			t.Fatalf("process GOCACHE refused: %v", err)
+		}
+	})
+}
+
 func TestBuildCacheAdapter_GOCACHEEnv(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
@@ -619,6 +718,30 @@ func scanGoBuild(t *testing.T) []types.DebrisInfo {
 		t.Fatalf("go-build count = %d; want 1", len(found))
 	}
 	return found
+}
+
+func goBuildPaths(t *testing.T) []string {
+	t.Helper()
+	results, err := (&BuildCacheAdapter{}).Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var paths []string
+	for _, item := range results {
+		if item.ID == "go-build" {
+			paths = append(paths, item.Path)
+		}
+	}
+	return paths
+}
+
+func writeDuplicateGOENV(t *testing.T, home, body string) {
+	t.Helper()
+	goenv := filepath.Join(home, "goenv")
+	if err := os.WriteFile(goenv, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GOENV", goenv)
 }
 
 func writeGoBuildFixture(t *testing.T, path string) {

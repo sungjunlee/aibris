@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- Go build-cache discovery keeps the last `GOCACHE` assignment in the GOENV
+  file, matching `go env`. A final empty value uses the default cache, and a
+  final `off` selects no cache. Process `$GOCACHE` still wins, and the live
+  revalidator uses the same path (#666).
 - `clean` rejects positional arguments before it scans or deletes. An extra
   word, path, or operand after `--` is invalid usage, not a cleanup target;
   scope the scan with `--root` (#652).
