@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/sungjunlee/aibris/internal/types"
 )
@@ -103,8 +105,10 @@ const maxGrokPromptContextBytes = 1 << 20
 // recordedCWDFromGrokSessions takes the cwd from two independent records: the
 // entry name, which is the URL-encoded absolute cwd, and working_directory in
 // every session's prompt_context.json. Absence can only be proven when every
-// session agrees with the name; a disagreement, an unreadable session, or an
-// entry with no session to corroborate the name leaves it undetermined.
+// session agrees with the name; a disagreement, an unreadable or ambiguous
+// session, or an entry with no session to corroborate the name leaves it
+// undetermined. A repeated top-level ownership key is ambiguous: encoding/json
+// would keep one value and drop the other.
 func recordedCWDFromGrokSessions(ctx context.Context, entryPath string) (recordedCWDEvidence, error) {
 	var evidence recordedCWDEvidence
 	name := filepath.Base(entryPath)
@@ -171,6 +175,12 @@ func grokPromptContextCWD(path string) (string, error) {
 	if len(data) > maxGrokPromptContextBytes {
 		return "", errors.New("prompt_context.json too large")
 	}
+	// Reject before Unmarshal. A second top-level key that the decoder binds
+	// to working_directory — a repeated literal, an equivalent escape, or a
+	// case-insensitive alias — would otherwise become the only owner.
+	if err := grokRejectDuplicateOwnershipKeys(data); err != nil {
+		return "", err
+	}
 	var context struct {
 		WorkingDirectory string `json:"working_directory"`
 	}
@@ -181,4 +191,42 @@ func grokPromptContextCWD(path string) (string, error) {
 		return "", errors.New("working_directory missing or not absolute")
 	}
 	return context.WorkingDirectory, nil
+}
+
+// grokRejectDuplicateOwnershipKeys reports when data has more than one
+// top-level key that encoding/json would bind to working_directory.
+// Token text is already unescaped. Nested keys are not owners. A value that
+// is not a JSON object is left for Unmarshal to accept or reject.
+func grokRejectDuplicateOwnershipKeys(data []byte) error {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	token, err := dec.Token()
+	if err != nil {
+		return err
+	}
+	delim, ok := token.(json.Delim)
+	if !ok || delim != '{' {
+		return nil
+	}
+	seen := 0
+	for dec.More() {
+		keyToken, err := dec.Token()
+		if err != nil {
+			return err
+		}
+		key, ok := keyToken.(string)
+		if !ok {
+			return errors.New("prompt_context.json key is not a string")
+		}
+		if strings.EqualFold(key, "working_directory") {
+			seen++
+			if seen > 1 {
+				return errors.New("duplicate working_directory")
+			}
+		}
+		var skip json.RawMessage
+		if err := dec.Decode(&skip); err != nil {
+			return err
+		}
+	}
+	return nil
 }

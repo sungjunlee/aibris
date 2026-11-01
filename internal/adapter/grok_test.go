@@ -2,9 +2,11 @@ package adapter
 
 import (
 	"context"
+	"encoding/json"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/sungjunlee/aibris/internal/testutil"
@@ -136,5 +138,242 @@ func TestGrokSessionsRegisteredAsAgentStateStore(t *testing.T) {
 	}
 	if _, err := NewAgentStateRevalidators(DefaultProviders()).Registration(types.ToolGrok); err != nil {
 		t.Fatalf("grok revalidator not registered: %v", err)
+	}
+}
+
+// grokContextJSON builds one prompt_context.json object. Keys are raw JSON
+// key text, so callers can pass unicode escapes; values are Go strings.
+func grokContextJSON(t *testing.T, kv ...string) string {
+	t.Helper()
+	if len(kv)%2 != 0 {
+		t.Fatal("odd key/value count")
+	}
+	var b strings.Builder
+	b.WriteByte('{')
+	for i := 0; i < len(kv); i += 2 {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteByte('"')
+		b.WriteString(kv[i])
+		b.WriteString(`":`)
+		encoded, err := json.Marshal(kv[i+1])
+		if err != nil {
+			t.Fatal(err)
+		}
+		b.Write(encoded)
+	}
+	b.WriteByte('}')
+	return b.String()
+}
+
+func TestGrokPromptContextCWDRejectsDuplicateOwnershipKeys(t *testing.T) {
+	dir := t.TempDir()
+	live := filepath.Join(dir, "live")
+	gone := filepath.Join(dir, "gone")
+	note := strings.Repeat("x", 8192)
+
+	accept := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"single key", grokContextJSON(t, "working_directory", gone), gone},
+		{"version plus one key", `{"version":1,"working_directory":` + quoteJSON(gone) + `}`, gone},
+		{"escaped single key", grokContextJSON(t, `\u0077orking_directory`, gone), gone},
+		{"case-alias single key", grokContextJSON(t, "Working_Directory", gone), gone},
+		{"duplicate non-ownership keys", grokContextJSON(t, "version", "1", "version", "2", "working_directory", gone), gone},
+		{
+			"ownership key named inside a string",
+			grokContextJSON(t, "note", "working_directory", "working_directory", gone),
+			gone,
+		},
+		{
+			"nested duplicate does not count",
+			`{"extra":{"working_directory":` + quoteJSON(live) + `,"working_directory":` + quoteJSON(live) + `},"working_directory":` + quoteJSON(gone) + `}`,
+			gone,
+		},
+	}
+	for _, tt := range accept {
+		t.Run("accept/"+tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "prompt_context.json")
+			if err := os.WriteFile(path, []byte(tt.body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			got, err := grokPromptContextCWD(path)
+			if err != nil || got != tt.want {
+				t.Fatalf("grokPromptContextCWD() = %q, %v; want %q", got, err, tt.want)
+			}
+		})
+	}
+
+	reject := []struct {
+		name string
+		body string
+	}{
+		{"live then missing", grokContextJSON(t, "working_directory", live, "working_directory", gone)},
+		{"missing then live", grokContextJSON(t, "working_directory", gone, "working_directory", live)},
+		{"same value twice", grokContextJSON(t, "working_directory", gone, "working_directory", gone)},
+		{"escaped then literal", grokContextJSON(t, `\u0077orking_directory`, live, "working_directory", gone)},
+		{"literal then escaped", grokContextJSON(t, "working_directory", live, `\u0077orking_directory`, gone)},
+		{"fully escaped duplicate", grokContextJSON(t, `\u0077orking_directory`, live, `\u0077orking_directory`, gone)},
+		{"case alias then canonical", grokContextJSON(t, "Working_Directory", live, "working_directory", gone)},
+		{"canonical then case alias", grokContextJSON(t, "working_directory", live, "WORKING_DIRECTORY", gone)},
+		{"two case aliases", grokContextJSON(t, "Working_Directory", live, "WORKING_DIRECTORY", gone)},
+		{"escaped case alias", grokContextJSON(t, `\u0057orking_directory`, live, "working_directory", gone)},
+		{"kelvin alias", grokContextJSON(t, `wor\u212Aing_directory`, live, "working_directory", gone)},
+		{"relative then absolute", grokContextJSON(t, "working_directory", "relative", "working_directory", gone)},
+		{"number then absolute", `{"working_directory":1,"working_directory":` + quoteJSON(gone) + `}`},
+		{
+			"long string between duplicates",
+			`{"working_directory":` + quoteJSON(live) + `,"note":"` + note + `","working_directory":` + quoteJSON(gone) + `}`,
+		},
+	}
+	for _, tt := range reject {
+		t.Run("reject/"+tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "prompt_context.json")
+			if err := os.WriteFile(path, []byte(tt.body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			got, err := grokPromptContextCWD(path)
+			if err == nil {
+				t.Fatalf("duplicate ownership accepted as %q", got)
+			}
+		})
+	}
+}
+
+func TestGrokDuplicateOwnershipKeysStayUndetermined(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	if err := os.MkdirAll(filepath.Join(home, "work"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	type ownershipCase struct {
+		name        string
+		nameMatches string
+		body        func(live, gone string) string
+		want        types.EntryClass
+	}
+	cases := []ownershipCase{
+		{
+			name:        "live then missing, name is missing",
+			nameMatches: "gone",
+			body: func(live, gone string) string {
+				return grokContextJSON(t, "working_directory", live, "working_directory", gone)
+			},
+			want: types.EntryClassUndetermined,
+		},
+		{
+			name:        "missing then live, name is missing",
+			nameMatches: "gone",
+			body: func(live, gone string) string {
+				return grokContextJSON(t, "working_directory", gone, "working_directory", live)
+			},
+			want: types.EntryClassUndetermined,
+		},
+		{
+			name:        "missing then live, name is live",
+			nameMatches: "live",
+			body: func(live, gone string) string {
+				return grokContextJSON(t, "working_directory", gone, "working_directory", live)
+			},
+			want: types.EntryClassUndetermined,
+		},
+		{
+			name:        "live then missing, name is live",
+			nameMatches: "live",
+			body: func(live, gone string) string {
+				return grokContextJSON(t, "working_directory", live, "working_directory", gone)
+			},
+			want: types.EntryClassUndetermined,
+		},
+		{
+			name:        "escaped duplicate",
+			nameMatches: "gone",
+			body: func(live, gone string) string {
+				return grokContextJSON(t, "working_directory", live, `\u0077orking_directory`, gone)
+			},
+			want: types.EntryClassUndetermined,
+		},
+		{
+			name:        "case-alias duplicate",
+			nameMatches: "gone",
+			body: func(live, gone string) string {
+				return grokContextJSON(t, "WORKING_DIRECTORY", live, "working_directory", gone)
+			},
+			want: types.EntryClassUndetermined,
+		},
+		{
+			name:        "identical duplicate values",
+			nameMatches: "gone",
+			body: func(_, gone string) string {
+				return grokContextJSON(t, "working_directory", gone, "working_directory", gone)
+			},
+			want: types.EntryClassUndetermined,
+		},
+		{
+			name:        "single key orphan",
+			nameMatches: "gone",
+			body: func(_, gone string) string {
+				return grokContextJSON(t, "version", "1", "working_directory", gone)
+			},
+			want: types.EntryClassOrphaned,
+		},
+		{
+			name:        "single escaped key orphan",
+			nameMatches: "gone",
+			body: func(_, gone string) string {
+				return grokContextJSON(t, `\u0077orking_directory`, gone)
+			},
+			want: types.EntryClassOrphaned,
+		},
+	}
+
+	adapter := &GrokSessionsAdapter{}
+	entries := make([]string, len(cases))
+	for i, tt := range cases {
+		live := filepath.Join(home, "work", "live-"+tt.name)
+		gone := filepath.Join(home, "work", "gone-"+tt.name)
+		if err := os.MkdirAll(live, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		encoded := gone
+		if tt.nameMatches == "live" {
+			encoded = live
+		}
+		entry := grokEntry(t, home, encoded, encoded)
+		matches, err := filepath.Glob(filepath.Join(entry, "*", "prompt_context.json"))
+		if err != nil || len(matches) != 1 {
+			t.Fatalf("%s: prompt contexts = %v, %v", tt.name, matches, err)
+		}
+		if err := os.WriteFile(matches[0], []byte(tt.body(live, gone)), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		entries[i] = entry
+	}
+
+	results, err := adapter.Scan(context.Background(), types.ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	byPath := map[string]types.DebrisInfo{}
+	for _, item := range results {
+		byPath[item.Path] = item
+	}
+	for i, tt := range cases {
+		item, ok := byPath[entries[i]]
+		if !ok {
+			t.Errorf("%s: entry not scanned", tt.name)
+			continue
+		}
+		if item.Classification != tt.want {
+			t.Errorf("%s: classification = %s (%s); want %s", tt.name, item.Classification, item.Reason, tt.want)
+		}
+		revalidated, err := adapter.RevalidateAgentState(context.Background(), entries[i])
+		if err != nil || revalidated != tt.want {
+			t.Errorf("%s: revalidated = %s, %v; want %s", tt.name, revalidated, err, tt.want)
+		}
 	}
 }

@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Grok session stores whose `prompt_context.json` repeats a top-level
+  `working_directory`, including an escaped or case-insensitive alias, stay
+  undetermined instead of keeping one owner. A single ownership key is
+  unchanged, so an ordinary orphan remains eligible after
+  `--agent-state-grace` (#650).
+
 ## [0.16.0] - 2026-10-09
 
 ### Added
