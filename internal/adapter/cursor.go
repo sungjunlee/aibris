@@ -34,7 +34,7 @@ func (a *CursorAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([]typ
 	if err != nil {
 		return nil, err
 	}
-	if !pathUnderRoots(base, roots) {
+	if !agentStoreVisible(base, roots) {
 		return nil, nil
 	}
 	entries, err := os.ReadDir(base)
@@ -55,11 +55,17 @@ func (a *CursorAdapter) Scan(ctx context.Context, opts types.ScanOptions) ([]typ
 		if !entry.IsDir() {
 			continue
 		}
+		entryPath := filepath.Join(base, entry.Name())
+		// Containment is decided before the entry is read or classified.
+		// A root inside this entry must not select it, and a sibling outside
+		// the roots must not be opened.
+		if !pathUnderRoots(entryPath, roots) {
+			continue
+		}
 		info, err := entry.Info()
 		if err != nil {
 			continue
 		}
-		entryPath := filepath.Join(base, entry.Name())
 		classification, reason, project, err := classifyCursorProjectEntry(ctx, entryPath)
 		if err != nil {
 			return nil, err

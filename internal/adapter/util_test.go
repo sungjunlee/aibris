@@ -395,6 +395,71 @@ func TestUncoveredCodexHomeWarning_ExplicitRoot(t *testing.T) {
 	}
 }
 
+// entryRootScanner is the Scan surface shared by agent-store adapters.
+type entryRootScanner interface {
+	Scan(ctx context.Context, opts types.ScanOptions) ([]types.DebrisInfo, error)
+}
+
+// assertAgentStoreEntryRoots checks that an explicit root on one store entry
+// keeps that entry, leaves siblings out, and does not let a root nested
+// inside an entry select the outer entry. Home-wide scans, the store
+// directory, and multiple roots keep every contained entry.
+func assertAgentStoreEntryRoots(t *testing.T, scanner entryRootScanner, home, base string) {
+	t.Helper()
+	entryA := filepath.Join(base, "entry-a")
+	entryB := filepath.Join(base, "entry-b")
+	nested := filepath.Join(entryA, "nested", "deep")
+	elsewhere := filepath.Join(home, "elsewhere")
+	for _, dir := range []string{nested, entryB, elsewhere} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cases := []struct {
+		name string
+		opts types.ScanOptions
+		want []string
+	}{
+		{name: "home-wide", opts: types.ScanOptions{}, want: []string{"entry-a", "entry-b"}},
+		{name: "explicit-home", opts: types.ScanOptions{Roots: []string{home}}, want: []string{"entry-a", "entry-b"}},
+		{name: "store-root", opts: types.ScanOptions{Roots: []string{base}}, want: []string{"entry-a", "entry-b"}},
+		{name: "exact-entry", opts: types.ScanOptions{Roots: []string{entryA}}, want: []string{"entry-a"}},
+		{name: "sibling-entry", opts: types.ScanOptions{Roots: []string{entryB}}, want: []string{"entry-b"}},
+		{name: "multiple-entries", opts: types.ScanOptions{Roots: []string{entryB, entryA}}, want: []string{"entry-a", "entry-b"}},
+		{name: "entry-plus-unrelated", opts: types.ScanOptions{Roots: []string{elsewhere, entryA}}, want: []string{"entry-a"}},
+		{name: "nested-inside-entry", opts: types.ScanOptions{Roots: []string{nested}}, want: nil},
+		{name: "outside-store", opts: types.ScanOptions{Roots: []string{elsewhere}}, want: nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			results, err := scanner.Scan(context.Background(), tc.opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := map[string]string{}
+			for _, item := range results {
+				if _, ok := got[item.ID]; ok {
+					t.Fatalf("duplicate id %s", item.ID)
+				}
+				wantPath := filepath.Join(base, item.ID)
+				if item.Path != wantPath {
+					t.Errorf("path = %s; want entry %s", item.Path, wantPath)
+				}
+				got[item.ID] = item.Path
+			}
+			if len(got) != len(tc.want) {
+				t.Fatalf("ids = %v; want %v", got, tc.want)
+			}
+			for _, id := range tc.want {
+				if _, ok := got[id]; !ok {
+					t.Fatalf("ids = %v; want %v", got, tc.want)
+				}
+			}
+		})
+	}
+}
+
 func containsPath(paths []string, want string) bool {
 	want = canonicalExistingPath(want)
 	for _, path := range paths {

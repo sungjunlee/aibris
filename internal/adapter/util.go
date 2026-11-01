@@ -115,6 +115,24 @@ func pathUnderRoots(path string, roots []string) bool {
 	return false
 }
 
+// agentStoreVisible reports whether roots can name entries inside base.
+// A root that contains the store selects the whole store. A root that is an
+// entry inside the store does not contain base, but it still names that
+// entry. Callers keep only entries contained in the roots, so a root nested
+// under an entry does not authorize the outer entry.
+func agentStoreVisible(base string, roots []string) bool {
+	if pathUnderRoots(base, roots) {
+		return true
+	}
+	cleanBase := canonicalExistingPath(base)
+	for _, root := range roots {
+		if IsWithin(cleanBase, canonicalExistingPath(root)) {
+			return true
+		}
+	}
+	return false
+}
+
 // applyCodexHomeScanRoots extends roots with uncovered Codex homes only for
 // the default $HOME scan. Explicit --root is a hard boundary and is returned
 // unchanged, including --root $HOME.
