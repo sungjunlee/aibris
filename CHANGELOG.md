@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `clean` rejects positional arguments before it scans or deletes. An extra
+  word, path, or operand after `--` is invalid usage, not a cleanup target;
+  scope the scan with `--root` (#652).
+
 ## [0.16.0] - 2026-10-09
 
 ### Added
