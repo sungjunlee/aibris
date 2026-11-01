@@ -242,8 +242,11 @@ incomplete activity evidence or a resumed session refuses cleanup. The
 registered agent-state revalidator must also prove the entry is still orphaned.
 `live` and `undetermined` remain protected.
 
-Absence is proven only when the nearest existing ancestor is inside an
-available home or temporary tree and shares a volume identity with its parent.
+Absence is proven only when the recorded cwd is still missing after the proof
+and the nearest existing ancestor is inside an available home or temporary
+tree and shares a volume identity with its parent. A cwd that exists when the
+proof observes it, or that reappears before the proof is accepted, is not
+absent. That recheck is not atomic against a later restore.
 Unix obtains that identity from filesystem device metadata; Windows obtains the
 volume path with `GetVolumePathNameW`. A volume boundary, unresolvable link, or
 volume lookup failure yields `undetermined` rather than deletion eligibility.

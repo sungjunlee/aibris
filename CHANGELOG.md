@@ -11,6 +11,10 @@
   write after the cleanup snapshot is prepared. Standalone log files still use
   their own modification time. The last-scan cache revision changes, so a
   snapshot from an earlier version is rescanned (#664).
+- Recorded-cwd absence proof does not treat a cwd that exists, or that
+  reappears while the ancestor walk runs, as a deleted project. The entry
+  stays undetermined instead of orphaned. A cwd that is missing for the whole
+  proof is unchanged (#665).
 - `clean` rejects positional arguments before it scans or deletes. An extra
   word, path, or operand after `--` is invalid usage, not a cleanup target;
   scope the scan with `--root` (#652).
