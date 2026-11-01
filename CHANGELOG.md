@@ -8,6 +8,9 @@
   file, matching `go env`. A final empty value uses the default cache, and a
   final `off` selects no cache. Process `$GOCACHE` still wins, and the live
   revalidator uses the same path (#666).
+- The Unix installer refuses a destination that is a directory or a symlink
+  to a directory. `mv` previously moved the staged binary inside that
+  directory and the script still reported success (#667).
 - `clean` rejects positional arguments before it scans or deletes. An extra
   word, path, or operand after `--` is invalid usage, not a cleanup target;
   scope the scan with `--root` (#652).

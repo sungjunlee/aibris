@@ -190,15 +190,29 @@ sha256() {
 
 install_binary() {
   local source="$1"
+  local dest="${INSTALL_DIR}/${BINARY}"
+  # mv treats a directory destination, including a symlink to a directory, as
+  # a container: the stage is moved inside it and mv still exits 0. Reject
+  # that collision before creating a stage or reporting success. GNU mv -T
+  # keeps the rename itself from doing the same if the path becomes a
+  # directory after this check. BSD mv has no -T; the check is the guard.
+  if [[ -d "$dest" ]]; then
+    err "refusing to install: ${dest} is a directory"
+    exit 1
+  fi
   log "Installing ${BINARY} to ${INSTALL_DIR}"
   mkdir -p "$INSTALL_DIR" 2>/dev/null || run_install_command mkdir -p "$INSTALL_DIR"
   # Prepare on the destination filesystem so replacement is a rename, and
   # a failed write cannot truncate the existing binary.
   STAGED_BINARY="$(run_install_command mktemp "${INSTALL_DIR}/.${BINARY}-install.XXXXXX")"
   run_install_command install -m 0755 "$source" "$STAGED_BINARY"
-  run_install_command mv -f "$STAGED_BINARY" "${INSTALL_DIR}/${BINARY}"
+  if command mv --version >/dev/null 2>&1; then
+    run_install_command mv -fT "$STAGED_BINARY" "$dest"
+  else
+    run_install_command mv -f "$STAGED_BINARY" "$dest"
+  fi
   STAGED_BINARY=""
-  log "Installed ${BINARY} to ${INSTALL_DIR}/${BINARY}"
+  log "Installed ${BINARY} to ${dest}"
 }
 
 install_one_completion() {
