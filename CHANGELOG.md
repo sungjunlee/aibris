@@ -12,6 +12,11 @@
   undetermined instead of keeping one owner. A single ownership key is
   unchanged, so an ordinary orphan remains eligible after
   `--agent-state-grace` (#650).
+- Command-backed cleanup falls back to path removal only when lookup reports
+  the authorized executable is not found (`exec.ErrNotFound`). A relative
+  lookup refusal (`exec.ErrDot`, for example `PATH=.` with a local executable)
+  is reported as a command failure, leaves the cache in place, and credits no
+  freed bytes (#659).
 
 ## [0.16.0] - 2026-10-09
 

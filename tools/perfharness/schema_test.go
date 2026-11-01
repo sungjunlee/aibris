@@ -45,6 +45,9 @@ func TestParseScanOutputBaseHasNoRetention(t *testing.T) {
 	if res.Retention != nil || res.RetentionSig != "" {
 		t.Fatalf("base should have no retention; got %+v sig=%q", res.Retention, res.RetentionSig)
 	}
+	if res.Partial {
+		t.Fatal("baseline without a retention projection must stay non-partial")
+	}
 	if res.Items != 1 || res.Bytes != 4096 {
 		t.Fatalf("base scale = items %d bytes %d; want 1/4096", res.Items, res.Bytes)
 	}
@@ -78,6 +81,9 @@ func TestParseScanOutputAdditiveNonInterference(t *testing.T) {
 	}
 	if base.InventorySig == change.InventorySig {
 		t.Fatalf("inventory sig should differ once retention is added")
+	}
+	if base.Partial || change.Partial {
+		t.Fatal("complete base and change samples must stay non-partial")
 	}
 	b := change.Retention.Buckets[0]
 	if b.BucketID != "2024-03" || b.UnitCount != 2 || b.OrphanedCount != 1 || b.OrphanedBytes != 4096 {

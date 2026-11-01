@@ -168,3 +168,68 @@ func TestHashTreeMissingRootIsEmpty(t *testing.T) {
 		t.Fatalf("missing root = (%s,%d); want empty tree", h, n)
 	}
 }
+
+func TestHashTreeDanglingDescendantDoesNotMasqueradeAsAbsentRoot(t *testing.T) {
+	root := t.TempDir()
+	mt := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	writeFile(t, filepath.Join(root, "keep.txt"), "alpha", mt)
+	if err := os.Symlink("missing-target", filepath.Join(root, "dangling")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	before, n, err := hashTree(root, nil)
+	if err == nil && n == 0 && before == emptyTreeHash() {
+		t.Fatal("populated directory with a dangling descendant masqueraded as an absent root")
+	}
+	writeFile(t, filepath.Join(root, "keep.txt"), "changed", mt)
+	after, nAfter, errAfter := hashTree(root, nil)
+	if err == nil && errAfter == nil && before == after {
+		t.Fatal("editing a regular file did not change the fingerprint")
+	}
+	if errAfter == nil && nAfter == 0 && after == emptyTreeHash() {
+		t.Fatal("edited directory with a dangling descendant masqueraded as an absent root")
+	}
+	if errAfter == nil {
+		again, _, againErr := hashTree(root, nil)
+		if againErr != nil || again != after {
+			t.Fatalf("fingerprint not stable after edit: %v %s vs %s", againErr, again, after)
+		}
+	}
+}
+
+func TestHashTreeSymlinkRootDoesNotMasqueradeAsAbsentRoot(t *testing.T) {
+	parent := t.TempDir()
+	link := filepath.Join(parent, "home")
+	if err := os.Symlink(filepath.Join(parent, "missing"), link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	h, n, err := hashTree(link, nil)
+	if err == nil && n == 0 && h == emptyTreeHash() {
+		t.Fatal("dangling symlink root masqueraded as an absent root")
+	}
+}
+
+func TestHashTreeDoesNotFollowSymlinkContents(t *testing.T) {
+	outside := t.TempDir()
+	mt := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	target := filepath.Join(outside, "secret")
+	writeFile(t, target, "one", mt)
+	root := t.TempDir()
+	if err := os.Symlink(target, filepath.Join(root, "link")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	writeFile(t, filepath.Join(root, "keep.txt"), "keep", mt)
+
+	first, _, err := hashTree(root, nil)
+	if err != nil {
+		t.Fatalf("symlink input: %v", err)
+	}
+	writeFile(t, target, strings.Repeat("two", 4096), mt)
+	second, _, err := hashTree(root, nil)
+	if err != nil {
+		t.Fatalf("symlink input after target edit: %v", err)
+	}
+	if first != second {
+		t.Fatal("fingerprint followed a symlink into outside content")
+	}
+}
