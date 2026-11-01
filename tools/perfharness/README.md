@@ -43,7 +43,12 @@ Criteria DC19-21 or authorize cleanup, publication, or a merge.
    with no retention object (or `retention: null`) is judged only by its
    top-level `partial` flag, preserving the base binary's compatibility.
    On a frozen synthetic home drift is zero by construction, so this validates
-   the harness mechanics; on a real home it is the quiescence guard.
+   the harness mechanics; on a real home it is the quiescence guard. The
+   input fingerprint records symlinks without following them. A dangling
+   descendant cannot collapse an existing directory to the empty-tree
+   fingerprint, and any other non-regular entry fails the measurement
+   instead of being read. A path that does not exist still hashes as an
+   empty tree.
 5. **Correctness A/B**: asserts the change is *additive and non-interfering* —
    the existing inventory (`worktrees`+`summary`) is byte-identical between base
    and change, and the retention projection is present only on the change.
