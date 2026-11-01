@@ -14,20 +14,28 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	if mode := os.Getenv("AIBRIS_FAKE_CMD"); mode != "" {
-		code, err := runFakeCommand(mode)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(99)
+	// Distinguish the test binary from a copied fake tool before reading
+	// AIBRIS_FAKE_CMD. The variable is how the copy selects its behavior; if
+	// the suite honored it, a leaked value would exit 0 without running tests.
+	name := strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe")
+	if strings.HasSuffix(name, ".test") {
+		if mode := os.Getenv("AIBRIS_FAKE_CMD"); mode != "" {
+			fmt.Fprintf(os.Stderr, "cleaner tests refuse AIBRIS_FAKE_CMD=%s: fake mode on the test binary would skip the suite\n", mode)
+			os.Exit(1)
 		}
-		os.Exit(code)
+		os.Exit(m.Run())
 	}
-	// A fake tool copy launched without its mode must not rerun the suite.
-	if name := strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe"); !strings.HasSuffix(name, ".test") {
+	mode := os.Getenv("AIBRIS_FAKE_CMD")
+	if mode == "" {
 		fmt.Fprintf(os.Stderr, "fake command %q started without AIBRIS_FAKE_CMD\n", name)
 		os.Exit(99)
 	}
-	os.Exit(m.Run())
+	code, err := runFakeCommand(mode)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(99)
+	}
+	os.Exit(code)
 }
 
 // The copied test binary acts as a tool before testing parses the tool's argv.
