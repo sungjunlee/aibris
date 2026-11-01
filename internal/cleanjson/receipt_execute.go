@@ -46,6 +46,12 @@ type Receipt struct {
 	// target identity; only owners whose targets were not physically removed
 	// feed the path-free post_clean volume split. It is never serialized.
 	inventory []receiptInventoryOwner
+
+	// knownResidual is the measured post-clean size of a surviving executed
+	// target, including zero. unknownResidual is a surviving target whose
+	// residual was not measured after mutation. Neither map is serialized.
+	knownResidual   map[string]int64
+	unknownResidual map[string]struct{}
 }
 
 // ReceiptPostClean reports post-cleanup host state: whether reclaimed blocks
@@ -199,7 +205,10 @@ func BuildReceiptPostClean(owners []types.DebrisInfo, listSnapshots func() (int,
 // remainingReceiptOwners keeps only owners whose targets survived
 // execution. A physically removed path can no longer be stat'ed, so counting
 // it would report debris that no longer exists; an unmappable owner is omitted
-// for the same reason.
+// for the same reason. Surviving executed targets contribute their measured
+// residual, including a known zero. A post-mutation residual that was not
+// measured is omitted: it is neither the stale pre-clean size nor zero.
+// Targets that were never mutated keep the pre-clean size.
 func remainingReceiptOwners(receipt Receipt) []types.DebrisInfo {
 	removed := make(map[string]bool, len(receipt.PhysicalTargets))
 	for _, target := range receipt.PhysicalTargets {
@@ -212,9 +221,72 @@ func remainingReceiptOwners(receipt Receipt) []types.DebrisInfo {
 		if entry.TargetID == "" || removed[entry.TargetID] {
 			continue
 		}
-		owners = append(owners, entry.Owner)
+		if _, unknown := receipt.unknownResidual[entry.TargetID]; unknown {
+			continue
+		}
+		owner := entry.Owner
+		if residual, ok := receipt.knownResidual[entry.TargetID]; ok {
+			owner.Size = residual
+		}
+		owners = append(owners, owner)
 	}
 	return owners
+}
+
+// noteReceiptResidual records one executed target's contribution to post-clean
+// debris. Known measurements replace the pre-clean size. A later duplicate
+// keeps the larger measurement so the same owner is not counted twice.
+func noteReceiptResidual(receipt *Receipt, id string, unit ExecutionUnit) {
+	if receipt.knownResidual == nil {
+		receipt.knownResidual = make(map[string]int64)
+	}
+	if receipt.unknownResidual == nil {
+		receipt.unknownResidual = make(map[string]struct{})
+	}
+	if unit.PhysicalRemoved {
+		delete(receipt.knownResidual, id)
+		delete(receipt.unknownResidual, id)
+		return
+	}
+	if residual, known := measuredResidual(unit); known {
+		if prev, exists := receipt.knownResidual[id]; !exists || residual > prev {
+			receipt.knownResidual[id] = residual
+		}
+		delete(receipt.unknownResidual, id)
+		return
+	}
+	if residualUnknown(unit) {
+		if _, known := receipt.knownResidual[id]; !known {
+			receipt.unknownResidual[id] = struct{}{}
+		}
+	}
+}
+
+// measuredResidual reports a residual the executor actually observed.
+// Zero is real when a removal attempt freed bytes or left the container in
+// place after a successful cleanup. The zero value of an untouched unit is
+// not a measurement.
+func measuredResidual(unit ExecutionUnit) (int64, bool) {
+	if unit.PhysicalRemoved || unit.ResidualBytes < 0 {
+		return 0, false
+	}
+	if unit.ResidualBytes > 0 || unit.FreedBytes > 0 || string(unit.State) == "removed" {
+		return unit.ResidualBytes, true
+	}
+	return 0, false
+}
+
+// residualUnknown reports a mutation that did not produce a residual
+// measurement. That owner must not be published as empty or as its pre-clean
+// size.
+func residualUnknown(unit ExecutionUnit) bool {
+	if unit.PhysicalRemoved {
+		return false
+	}
+	if _, known := measuredResidual(unit); known {
+		return false
+	}
+	return unit.MutationAttempted || string(unit.State) == "partial" || unit.ResidualBytes < 0
 }
 
 // EncodeReceipt encodes a receipt as JSON to the given writer.
@@ -631,6 +703,7 @@ func applyExecutionReceipt(
 				target.FreedBytes = 0
 			}
 			target.ResidualBytes = residualBytesJSON(unit)
+			noteReceiptResidual(receipt, target.ID, unit)
 			target.ReasonCodes = uniqueReasonCodes(
 				append(target.ReasonCodes, receiptStateReasons(unit, isMinimumAgeError)...),
 			)

@@ -44,6 +44,7 @@ func NewGuidedExecutionReceipt(
 		Plan:         plan,
 	}, components)
 	receipt := NewReceipt(document, pathsIncluded)
+	receipt.inventory = receiptInventory(components)
 
 	bound, err := bindReceiptPreparedTargets(components, prepared)
 	if err != nil {
@@ -191,6 +192,7 @@ func (r *GuidedExecutionReceipt) Finish(
 				*target.ResidualBytes = max(*target.ResidualBytes, unit.ResidualBytes)
 			}
 		}
+		noteReceiptResidual(&r.receipt, target.ID, unit)
 		if errors.Is(unit.FailureCause, worktree.ErrActivityEvidenceChanged) {
 			target.ReasonCodes = uniqueReasonCodes(append(target.ReasonCodes, receiptStateReasons(unit, func(error) bool { return false })...))
 		}

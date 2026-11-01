@@ -745,7 +745,12 @@ revalidation.
 Every receipt carries a path-free top-level `post_clean` object. Its `volume`
 uses the same shape as the scan document's `volume` (omitted when volume
 inspection is unavailable), so agents can see post-cleanup pressure on the
-volume that contains `$HOME`. `local_apfs_snapshots` is the number of local
+volume that contains `$HOME`. `volume.debris_bytes` counts owners that
+survived execution. A target that was not mutated keeps its pre-clean size.
+A measured residual, including a known zero, replaces that size, and freed
+bytes are not added again. Physically removed owners are omitted. A target
+whose residual was not measured after a mutation is omitted too, rather than
+reported as zero or as its stale pre-clean size. `local_apfs_snapshots` is the number of local
 APFS snapshots still holding blocks after cleanup, or the string
 `"unavailable"` when they cannot be listed; it never includes snapshot
 identifiers or timestamps. When at least one snapshot remains,

@@ -9,6 +9,11 @@
   longer recreate a removed target, and a parent symlink retargeted or a leaf
   alias swapped in afterward cannot redirect the write. Ordinary new and
   existing files stay owner-only `0600` (#653).
+- Guided and JSON `post_clean` debris counts surviving owners. Targets that
+  were not executed keep their pre-clean size, a measured residual replaces
+  that size (including a known zero) without adding freed bytes again, removed
+  owners stay excluded, and a post-mutation residual that was not measured is
+  omitted instead of reported as zero or as the stale size (#654).
 
 ## [0.16.0] - 2026-10-09
 
