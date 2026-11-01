@@ -5,6 +5,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/sungjunlee/aibris/internal/testutil"
 )
 
 func newGitFixtureRepo(t *testing.T) string {
@@ -43,6 +45,7 @@ func writeGitFixtureFile(t testing.TB, repo, name, content string) {
 
 func runGitFixture(t testing.TB, dir string, args ...string) {
 	t.Helper()
+	testutil.IsolateGitFixture(t)
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(),

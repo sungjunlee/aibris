@@ -965,6 +965,7 @@ func assertRepositoryDoesNotListWorktree(t *testing.T, repository, worktree stri
 
 func runGitFixtureOutput(t *testing.T, dir string, args ...string) string {
 	t.Helper()
+	testutil.IsolateGitFixture(t)
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
 	output, err := cmd.CombinedOutput()
