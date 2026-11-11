@@ -102,36 +102,40 @@ jobs:
           Get-Content -Raw (Join-Path $profileRoot "scan.json") |
             ConvertFrom-Json |
             Out-Null
+      - name: Build selected-test result checker
+        run: go build -o citestjson.exe ./tools/citestjson
+      - name: Test Windows clean JSON path redaction
+        run: .\.github\scripts\go-test-json.ps1 -race -count=1 -cover ./internal/cleanjson -run '^TestWindowsPathRedaction$'
       - name: Test Windows binary and home-containment contracts
-        run: go test -race -count=1 -cover ./test -run '^(TestWindowsCLIContractBinaryCommands|TestWindowsCLIContractRootContainmentAndHomeIsolation|TestCLIContractDestructiveCommandIsolatesWindowsUserCache|TestWindowsScanToDryRunContractPreservesClassification|TestWindowsDryRunPlanJSONMatchesScanReasons)$'
+        run: .\.github\scripts\go-test-json.ps1 -race -count=1 -cover ./test -run '^(TestWindowsCLIContractBinaryCommands|TestWindowsCLIContractRootContainmentAndHomeIsolation|TestCLIContractDestructiveCommandIsolatesWindowsUserCache|TestWindowsScanToDryRunContractPreservesClassification|TestWindowsDryRunPlanJSONMatchesScanReasons)$'
       - name: Test Windows worktree and agent-state reproduction fixtures
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
-          go test -race -count=1 -cover ./test -run '^(TestWindowsLinkedWorktreeFixture|TestWindowsOrphanedWorktreeFixture|TestWindowsPlainDirWorktreeFixture|TestWindowsWorktreeFixtureRequiresGit)$'
-          go test -race -count=1 -cover ./test -run '^(TestWindowsClaudeAgentStateFixture|TestWindowsCursorAgentStateFixture|TestWindowsAgentStateCleanupEndToEndUnaudited|TestWindowsRecordedCWDVolumeAmbiguity)$'
+          .\.github\scripts\go-test-json.ps1 -race -count=1 -cover ./test -run '^(TestWindowsLinkedWorktreeFixture|TestWindowsOrphanedWorktreeFixture|TestWindowsPlainDirWorktreeFixture|TestWindowsWorktreeFixtureRequiresGit)$'
+          .\.github\scripts\go-test-json.ps1 -race -count=1 -cover ./test -run '^(TestWindowsClaudeAgentStateFixture|TestWindowsCursorAgentStateFixture|TestWindowsAgentStateCleanupEndToEndUnaudited|TestWindowsRecordedCWDVolumeAmbiguity)$'
       - name: Test PowerShell native installer
-        run: go test -race -count=1 -cover ./test -run '^TestNativeInstallPowerShell'
+        run: .\.github\scripts\go-test-json.ps1 -race -count=1 -cover ./test -run '^TestNativeInstallPowerShell'
       - name: Test recorded-cwd volume safety
-        run: go test -race -count=1 -cover ./internal/adapter -run '^(TestRecordedCWDVolumeIDUsesWindowsVolumePath|TestAgentStateStoreClassifiersRecordedCWDAncestorAvailability|TestBuildCacheAdapter_GoBuild$|TestBuildCacheAdapter_GOCACHEEnv|TestBuildCacheAdapter_GOCACHEOutsideRoots|TestBuildCacheAdapter_GOENVFile)$'
+        run: .\.github\scripts\go-test-json.ps1 -race -count=1 -cover ./internal/adapter -run '^(TestWorktreeAdapter_WindowsMixedCaseRegisteredIdentity|TestWorktreeAdapter_WindowsBlockedAliasIsNotReintroduced|TestRecordedCWDVolumeIDUsesWindowsVolumePath|TestAgentStateStoreClassifiersRecordedCWDAncestorAvailability|TestBuildCacheAdapter_GoBuild$|TestBuildCacheAdapter_GOCACHEEnv|TestBuildCacheAdapter_GOCACHEOutsideRoots|TestBuildCacheAdapter_GOENVFile)$'
       - name: Test cross-platform CLI contracts
-        run: go test -race -count=1 -cover ./test -run '^(TestCLIContractInvalidFlag|TestCLIContractCleanHelpMatchesPolicyVocabulary)$'
+        run: .\.github\scripts\go-test-json.ps1 -race -count=1 -cover ./test -run '^(TestCLIContractInvalidFlag|TestCLIContractCleanHelpMatchesPolicyVocabulary)$'
       - name: Test platform-safe command and cleanup identity behavior
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
-          go test -race -count=1 -cover ./cmd -run '^(TestCleanCmd_NegativeAge|TestCleanCmd_GuideNoGuideErrors|TestParseAge|TestCleanCmd_InvalidSelector|TestParseCleanSelectorsTrimAndDeduplicate)$'
+          .\.github\scripts\go-test-json.ps1 -race -count=1 -cover ./cmd -run '^(TestCleanCmd_NegativeAge|TestCleanCmd_GuideNoGuideErrors|TestParseAge|TestCleanCmd_InvalidSelector|TestParseCleanSelectorsTrimAndDeduplicate)$'
       - name: Test native Codex activity rejects sessions junctions
-        run: go test -race -count=1 -cover ./internal/codexactivity -run '^TestWindowsNativeActivityRejectsSessionsJunction$'
+        run: .\.github\scripts\go-test-json.ps1 -race -count=1 -cover ./internal/codexactivity -run '^TestWindowsNativeActivityRejectsSessionsJunction$'
       - name: Test native Codex home junction activity lock
-        run: go test -race -count=1 -cover ./internal/worktree -run '^TestWindowsNativeActivityHomeJunctionKeepsWorktreeLocked$'
+        run: .\.github\scripts\go-test-json.ps1 -race -count=1 -cover ./internal/worktree -run '^TestWindowsNativeActivityHomeJunctionKeepsWorktreeLocked$'
       - name: Test effective GOCACHE cleanup safety
-        run: go test -race -count=1 -cover ./internal/cleaner -run '^TestIsSafeTarget_GoBuildCacheUnderHome$'
+        run: .\.github\scripts\go-test-json.ps1 -race -count=1 -cover ./internal/cleaner -run '^TestIsSafeTarget_GoBuildCacheUnderHome$'
       - name: Test restored cleaner command authority and execution contracts
-        run: go test -race -count=1 -cover ./internal/cleaner -run '^(TestExecuteRefusesUntrustedCleanupRecipes|TestExecuteRevalidatesCommandAndFallbackAuthorityAtBarrier|TestExecuteCommandFailurePreservesOutsideSentinel|TestExecute_CommandCleanupZeroReclaimWhenOwnerRemains|TestExecute_PressureUvForceLeavesResidualWithoutInventingFreedBytes|TestExecute_PressureUvForceRejectionReportsResidualWithoutInventingFreedBytes|TestExecute_CommandCleanupSuccess|TestExecute_CommandMissingFallsBackToPathRemoval|TestExecute_ErrDotDoesNotFallbackToPathRemoval|TestExecute_CommandFailureDoesNotFallback|TestExecute_CommandCancellationDoesNotCreditRemainingPayload|TestExecute_CommandCancellation|TestUvCleanupDoesNotRunInsideCacheRoot|TestGoCleanupOnlyRemovesPreviewedCache|TestNpmCleanupOnlyRemovesPreviewedCache)$'
+        run: .\.github\scripts\go-test-json.ps1 -race -count=1 -cover ./internal/cleaner -run '^(TestExecuteRefusesUntrustedCleanupRecipes|TestExecuteRevalidatesCommandAndFallbackAuthorityAtBarrier|TestExecuteCommandFailurePreservesOutsideSentinel|TestExecute_CommandCleanupZeroReclaimWhenOwnerRemains|TestExecute_PressureUvForceLeavesResidualWithoutInventingFreedBytes|TestExecute_PressureUvForceRejectionReportsResidualWithoutInventingFreedBytes|TestExecute_CommandCleanupSuccess|TestExecute_CommandMissingFallsBackToPathRemoval|TestExecute_ErrDotDoesNotFallbackToPathRemoval|TestExecute_CommandFailureDoesNotFallback|TestExecute_CommandCancellationDoesNotCreditRemainingPayload|TestExecute_CommandCancellation|TestUvCleanupDoesNotRunInsideCacheRoot|TestGoCleanupOnlyRemovesPreviewedCache|TestNpmCleanupOnlyRemovesPreviewedCache)$'
       - name: Test cache leaf symlink and Windows junction refusal
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
-          go test -race -count=1 -cover ./internal/cleaner -run '^(TestCatalogCacheLeafEligibilityRefusesOnlyPathRouteSymlinks|TestCachePathRemovalRefusesSymlinkIntroducedAtBarrier|TestWindowsCatalogCacheLeafEligibilityRefusesJunction|TestWindowsCachePathRemovalRefusesJunction)$'
-          go test -race -count=1 -cover ./cmd -run '^(TestCatalogCacheLeafPreviewMatchesPathRemovalPolicy|TestCleanJSONReceiptRefusesSymlinkedCacheLeaf|TestWindowsCatalogCacheLeafPreviewRefusesJunction)$'
+          .\.github\scripts\go-test-json.ps1 -race -count=1 -cover ./internal/cleaner -run '^(TestCatalogCacheLeafEligibilityRefusesOnlyPathRouteSymlinks|TestCachePathRemovalRefusesSymlinkIntroducedAtBarrier|TestWindowsCatalogCacheLeafEligibilityRefusesJunction|TestWindowsCachePathRemovalRefusesJunction)$'
+          .\.github\scripts\go-test-json.ps1 -race -count=1 -cover ./cmd -run '^(TestCatalogCacheLeafPreviewMatchesPathRemovalPolicy|TestCleanJSONReceiptRefusesSymlinkedCacheLeaf|TestWindowsCatalogCacheLeafPreviewRefusesJunction)$'
       # Run whole packages so new deletion-gate tests are included automatically.
       # Symlink fixtures skip only if Windows lacks symlink privilege; their
       # t.Skipf messages report that reason. No test-name exclusions here.
@@ -140,8 +144,8 @@ jobs:
       - name: Test HOME hermeticity under isolated profile
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
-          go test -race -count=1 -cover ./cmd -run '^TestAgentStateEntryFingerprintTracksEntrySet$'
-          go test -race -count=1 -cover ./internal/scanner -run '^(TestScan_Default|TestNormalizeRoots_DefaultHome)$'
+          .\.github\scripts\go-test-json.ps1 -race -count=1 -cover ./cmd -run '^TestAgentStateEntryFingerprintTracksEntrySet$'
+          .\.github\scripts\go-test-json.ps1 -race -count=1 -cover ./internal/scanner -run '^(TestScan_Default|TestNormalizeRoots_DefaultHome)$'
       - name: Test nested perfharness module environment
         run: go -C tools/perfharness test -race -count=1 -cover ./...
       - run: go vet ./...

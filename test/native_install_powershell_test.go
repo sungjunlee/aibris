@@ -133,7 +133,7 @@ Normalize-Version -Ver "v0.12.1"
 
 func (f installFixture) windowsRelease(t *testing.T, failure string) []byte {
 	t.Helper()
-	binary, err := os.ReadFile(cliContractBinary)
+	binary, err := os.ReadFile(installContractBinary)
 	if err != nil {
 		t.Fatal(err)
 	}
