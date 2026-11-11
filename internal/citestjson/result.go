@@ -37,6 +37,18 @@ func (s Summary) String() string {
 // Summarize consumes `go test -json` events. A non-JSON line is an error so
 // a build failure that leaked onto stdout cannot look like an empty success.
 func Summarize(r io.Reader) (Summary, error) {
+	return summarize(r, io.Discard)
+}
+
+// SummarizeWithOutput consumes test events while replaying their human-readable
+// output. This keeps failing names, assertion details, race reports, panic
+// stacks, and skip reasons visible when go test -json is piped through a
+// selected-test checker.
+func SummarizeWithOutput(r io.Reader, output io.Writer) (Summary, error) {
+	return summarize(r, output)
+}
+
+func summarize(r io.Reader, output io.Writer) (Summary, error) {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
 	var summary Summary
@@ -55,6 +67,11 @@ func Summarize(r io.Reader) (Summary, error) {
 		}
 		if err := json.Unmarshal(line, &event); err != nil {
 			return summary, fmt.Errorf("citestjson: %w", err)
+		}
+		if event.Output != "" {
+			if _, err := io.WriteString(output, event.Output); err != nil {
+				return summary, err
+			}
 		}
 		if strings.Contains(event.Output, "no tests to run") {
 			summary.NoTestsToRun = true

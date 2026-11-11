@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	summary, err := citestjson.Summarize(os.Stdin)
+	summary, err := citestjson.SummarizeWithOutput(os.Stdin, os.Stdout)
 	fmt.Println(summary)
 	if err == nil {
 		return

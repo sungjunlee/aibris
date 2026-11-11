@@ -12,7 +12,10 @@ import (
 	"github.com/sungjunlee/aibris/internal/testutil"
 )
 
-var cliContractBinary string
+var (
+	cliContractBinary     string
+	installContractBinary string
+)
 
 func repoRoot() (string, error) {
 	_, file, _, ok := runtime.Caller(0)
@@ -68,6 +71,21 @@ func TestMain(m *testing.M) {
 		_ = os.RemoveAll(buildDir)
 		os.Exit(1)
 	}
+	installContractBinary = cliContractBinary
+	if testutil.RaceEnabled() {
+		// Installer fixtures model release assets, which are not race-linked.
+		// Keep the shared CLI contract binary instrumented for the commands
+		// those tests exercise, but do not make Windows replacement behavior
+		// depend on the race runtime embedded in an installer payload.
+		installContractBinary = filepath.Join(buildDir, "aibris-install"+filepath.Ext(cliContractBinary))
+		build := exec.Command("go", "build", "-o", installContractBinary, ".")
+		build.Dir = root
+		if output, err := build.CombinedOutput(); err != nil {
+			fmt.Fprintf(os.Stderr, "build installer contract binary: %v\n%s", err, output)
+			_ = os.RemoveAll(buildDir)
+			os.Exit(1)
+		}
+	}
 
 	code := m.Run()
 	_ = os.RemoveAll(buildDir)
@@ -81,6 +99,16 @@ func TestCLIContractBinaryMatchesHarnessRaceMode(t *testing.T) {
 	}
 	if got != testutil.RaceEnabled() {
 		t.Fatalf("CLI contract binary -race=%v; harness -race=%v", got, testutil.RaceEnabled())
+	}
+}
+
+func TestInstallContractBinaryMatchesRelease(t *testing.T) {
+	got, err := testutil.BinaryHasRace(installContractBinary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got {
+		t.Fatal("installer contract binary is race-linked; release assets are not")
 	}
 }
 

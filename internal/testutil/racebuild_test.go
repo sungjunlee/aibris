@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -29,6 +30,9 @@ func main() {
 		t.Fatal(err)
 	}
 	bin := filepath.Join(dir, "child")
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
 	cmd := exec.Command("go", GoBuildArgs(bin, "main.go")...)
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {

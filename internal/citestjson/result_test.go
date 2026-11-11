@@ -1,6 +1,7 @@
 package citestjson
 
 import (
+	"bytes"
 	"errors"
 	"strings"
 	"testing"
@@ -84,5 +85,29 @@ func TestSummarizeRejectsNonJSON(t *testing.T) {
 	_, err := Summarize(strings.NewReader("# pkg\n./file.go:1:1: syntax error\n"))
 	if err == nil {
 		t.Fatal("non-JSON stdout was accepted")
+	}
+}
+
+func TestSummarizeWithOutputReplaysTestDiagnostics(t *testing.T) {
+	t.Parallel()
+	input := strings.Join([]string{
+		`{"Action":"run","Test":"TestFailure"}`,
+		`{"Action":"output","Test":"TestFailure","Output":"=== RUN   TestFailure\n"}`,
+		`{"Action":"output","Test":"TestFailure","Output":"    example_test.go:12: got false, want true\n"}`,
+		`{"Action":"fail","Test":"TestFailure"}`,
+		`{"Action":"fail","Package":"example.com/pkg"}`,
+	}, "\n")
+	var output bytes.Buffer
+	summary, err := SummarizeWithOutput(strings.NewReader(input), &output)
+	if !errors.Is(err, ErrFailed) {
+		t.Fatalf("SummarizeWithOutput error = %v; want %v", err, ErrFailed)
+	}
+	if summary.Failed != 1 {
+		t.Fatalf("summary = %+v", summary)
+	}
+	for _, want := range []string{"=== RUN   TestFailure", "example_test.go:12: got false, want true"} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("output missing %q:\n%s", want, output.String())
+		}
 	}
 }
