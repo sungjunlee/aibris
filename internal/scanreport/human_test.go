@@ -228,6 +228,57 @@ func TestWriteHumanRetentionAndDiagnostics(t *testing.T) {
 	}
 }
 
+func TestWriteRetentionTotalsMultipleBuckets(t *testing.T) {
+	projection := types.RetentionProjection{
+		Buckets: []types.RetentionBucket{
+			{
+				StoreID:       types.RetentionStoreCodexSessions,
+				BucketID:      "2026-02",
+				ApparentBytes: 1 << 20,
+				OrphanedBytes: 1 << 10,
+			},
+			{
+				StoreID:       types.RetentionStoreCodexSessions,
+				BucketID:      "2026-03",
+				ApparentBytes: 2 << 20,
+				OrphanedBytes: 2 << 10,
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	WriteRetention(&buf, projection)
+	got := buf.String()
+	want := "retention (protected content, read-only)  3.0 MB in 2 buckets, orphaned 3.0 KB"
+	if !strings.Contains(got, want) {
+		t.Fatalf("retention output missing aggregate header %q:\n%s", want, got)
+	}
+}
+
+func TestWriteRetentionMarksPartialTotal(t *testing.T) {
+	projection := types.RetentionProjection{
+		Buckets: []types.RetentionBucket{{
+			StoreID:       types.RetentionStoreCodexSessions,
+			BucketID:      "2026-03",
+			ApparentBytes: 2 << 20,
+			OrphanedBytes: 1 << 20,
+		}},
+		Partial: true,
+		ProviderErrors: []types.RetentionProviderError{{
+			StoreID: types.RetentionStoreCodexSessions,
+			Message: "reading store: permission denied",
+		}},
+	}
+
+	var buf bytes.Buffer
+	WriteRetention(&buf, projection)
+	got := buf.String()
+	want := "retention (protected content, read-only)  2.0 MB in 1 bucket, orphaned 1.0 MB (partial)"
+	if !strings.Contains(got, want) {
+		t.Fatalf("retention output missing partial aggregate header %q:\n%s", want, got)
+	}
+}
+
 func TestFitColumnUsesDisplayCells(t *testing.T) {
 	tests := []struct {
 		in    string

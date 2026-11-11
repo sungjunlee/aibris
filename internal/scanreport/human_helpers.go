@@ -173,7 +173,22 @@ func WriteRetention(w io.Writer, projection types.RetentionProjection) {
 		return
 	}
 
-	fmt.Fprintln(w, "\nretention (protected content, read-only)")
+	var apparentBytes, orphanedBytes int64
+	for _, bucket := range projection.Buckets {
+		apparentBytes += bucket.ApparentBytes
+		orphanedBytes += bucket.OrphanedBytes
+	}
+	partial := ""
+	if projection.Partial {
+		partial = " (partial)"
+	}
+	fmt.Fprintf(w, "\nretention (protected content, read-only)  %s in %d %s, orphaned %s%s\n",
+		cleaner.FormatSize(apparentBytes),
+		len(projection.Buckets),
+		retentionBucketNoun(len(projection.Buckets)),
+		cleaner.FormatSize(orphanedBytes),
+		partial,
+	)
 	if projection.Partial {
 		fmt.Fprintln(w, "  completeness partial (retention inventory only)")
 		for _, providerErr := range projection.ProviderErrors {
@@ -191,6 +206,13 @@ func WriteRetention(w io.Writer, projection types.RetentionProjection) {
 			cleaner.FormatSize(bucket.OrphanedBytes),
 		)
 	}
+}
+
+func retentionBucketNoun(count int) string {
+	if count == 1 {
+		return "bucket"
+	}
+	return "buckets"
 }
 
 func writeDiagnostics(w io.Writer, diagnostics []types.ProviderDiagnostic) {
