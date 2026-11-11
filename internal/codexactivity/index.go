@@ -217,6 +217,23 @@ type sessionFileInfo struct {
 	size    int64
 }
 
+// sessionCoverageFromInfo refuses leaves that may hide an unwalked session
+// subtree: a directory, or a symlink that is dangling or points at a directory.
+// Symlinks to non-directory leaves stay no-follow skips and do not fail the source.
+func sessionCoverageFromInfo(path string, info fs.FileInfo) error {
+	if info.Mode()&os.ModeSymlink != 0 {
+		target, err := os.Stat(path)
+		if err == nil && !target.IsDir() {
+			return nil
+		}
+		return fmt.Errorf("%w: incomplete session store coverage", ErrUnavailable)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("%w: incomplete session store coverage", ErrUnavailable)
+	}
+	return nil
+}
+
 func findSessionFiles(ctx context.Context, roots []string) ([]sessionFileInfo, error) {
 	seen := make(map[string]bool)
 	var files []sessionFileInfo
@@ -242,12 +259,12 @@ func findSessionFiles(ctx context.Context, roots []string) ([]sessionFileInfo, e
 				return err
 			}
 			if entry.Type()&os.ModeSymlink != 0 {
-				// Session-file symlinks remain no-follow leaves. A directory-like
-				// or unresolved link could hide an unwalked session subtree, so this
-				// source cannot supply complete negative activity evidence.
-				target, err := os.Stat(path)
-				if err != nil || target.IsDir() {
+				info, err := os.Lstat(path)
+				if err != nil {
 					return fmt.Errorf("%w: incomplete session store coverage", ErrUnavailable)
+				}
+				if err := sessionCoverageFromInfo(path, info); err != nil {
+					return err
 				}
 				return nil
 			}
@@ -258,6 +275,9 @@ func findSessionFiles(ctx context.Context, roots []string) ([]sessionFileInfo, e
 			// stale size and write time while Codex keeps the rollout open.
 			info, err := os.Lstat(path)
 			if err != nil {
+				return err
+			}
+			if err := sessionCoverageFromInfo(path, info); err != nil {
 				return err
 			}
 			files = appendSessionFileInfo(files, seen, path, info)
@@ -296,6 +316,9 @@ func readSessionFileRecord(ctx context.Context, file sessionFileInfo) (FileRecor
 	}
 	before, err := os.Lstat(file.path)
 	if err != nil {
+		return record, err
+	}
+	if err := sessionCoverageFromInfo(file.path, before); err != nil {
 		return record, err
 	}
 	if !before.Mode().IsRegular() {

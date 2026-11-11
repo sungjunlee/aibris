@@ -169,6 +169,36 @@ func TestActivityIncompleteNestedCoverageIsSourceScoped(t *testing.T) {
 	}
 }
 
+func TestReadSessionFileRecordRefusesReplacedDirectoryLink(t *testing.T) {
+	home := t.TempDir()
+	testutil.SetHome(t, home)
+	now := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
+	path := filepath.Join(home, "sessions", "old.jsonl")
+	writeCodexSession(t, path, now.Add(-time.Hour), filepath.Join(home, "worktrees", "id", "project"), "old", "PRIVATE-REPLACED")
+	info, err := os.Lstat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(home, "unresolved", "2026")
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, path); err != nil {
+		t.Skipf("session path symlink unavailable: %v", err)
+	}
+	_, err = readSessionFileRecord(context.Background(), sessionFileInfo{
+		path:    path,
+		modTime: info.ModTime(),
+		size:    info.Size(),
+	})
+	if !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("replaced directory link = %v; want ErrUnavailable", err)
+	}
+}
+
 func TestActivityRejectsPreviousReaderSchema(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
