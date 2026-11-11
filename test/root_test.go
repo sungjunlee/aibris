@@ -78,7 +78,7 @@ func TestMain(m *testing.M) {
 		// those tests exercise, but do not make Windows replacement behavior
 		// depend on the race runtime embedded in an installer payload.
 		installContractBinary = filepath.Join(buildDir, "aibris-install"+filepath.Ext(cliContractBinary))
-		build := exec.Command("go", "build", "-o", installContractBinary, ".")
+		build := exec.Command("go", "build", "-race=false", "-o", installContractBinary, ".")
 		build.Dir = root
 		if output, err := build.CombinedOutput(); err != nil {
 			fmt.Fprintf(os.Stderr, "build installer contract binary: %v\n%s", err, output)
