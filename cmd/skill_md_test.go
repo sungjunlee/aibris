@@ -39,14 +39,17 @@ func TestSkillJSONWorkflowContract(t *testing.T) {
 	var jsonCommands []string
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "aibris clean ") &&
-			strings.Contains(line, "--json") &&
-			strings.Contains(line, "--include-paths") {
+		if strings.HasPrefix(line, "aibris clean ") && hasCLIFlag(line, "--json") {
 			jsonCommands = append(jsonCommands, line)
 		}
 	}
 	if len(jsonCommands) != 4 {
 		t.Fatalf("JSON workflow command count = %d; want two preview/execute pairs", len(jsonCommands))
+	}
+	for _, command := range jsonCommands {
+		if !hasCLIFlag(command, "--include-paths") {
+			t.Errorf("JSON command must include --include-paths: %q", command)
+		}
 	}
 	assertPreviewExecutePairs(t, "JSON", jsonCommands)
 
