@@ -19,7 +19,7 @@ func TestSkillJSONWorkflowContract(t *testing.T) {
 		"--include-paths",
 		"target-N",
 		"snapshot_thinning_recommended",
-		"aibris clean --apfs-snapshots --dry-run",
+		"aibris clean --apfs-snapshots --force --dry-run",
 		"aibris clean --apfs-snapshots --force",
 		"--root <project> --category node_modules --age",
 		"hard boundary",
@@ -48,16 +48,45 @@ func TestSkillJSONWorkflowContract(t *testing.T) {
 	if len(jsonCommands) != 4 {
 		t.Fatalf("JSON workflow command count = %d; want two preview/execute pairs", len(jsonCommands))
 	}
-	for i := 0; i < len(jsonCommands); i += 2 {
-		preview, execute := jsonCommands[i], jsonCommands[i+1]
-		if !strings.Contains(preview, " --force") || !strings.HasSuffix(preview, " --dry-run") {
-			t.Errorf("JSON preview must include --force and end in --dry-run: %q", preview)
+	assertPreviewExecutePairs(t, "JSON", jsonCommands)
+
+	var apfsCommands []string
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "aibris clean ") && hasCLIFlag(line, "--apfs-snapshots") {
+			apfsCommands = append(apfsCommands, line)
 		}
-		if strings.Contains(execute, " --dry-run") {
-			t.Errorf("JSON execution must not include --dry-run: %q", execute)
+	}
+	if len(apfsCommands) != 4 {
+		t.Fatalf("APFS workflow command count = %d; want two preview/execute pairs", len(apfsCommands))
+	}
+	assertPreviewExecutePairs(t, "APFS", apfsCommands)
+}
+
+func hasCLIFlag(command, flag string) bool {
+	for _, field := range strings.Fields(command) {
+		if field == flag {
+			return true
+		}
+	}
+	return false
+}
+
+func assertPreviewExecutePairs(t *testing.T, kind string, commands []string) {
+	t.Helper()
+	if len(commands)%2 != 0 {
+		t.Fatalf("%s workflow command count = %d; want preview/execute pairs", kind, len(commands))
+	}
+	for i := 0; i < len(commands); i += 2 {
+		preview, execute := commands[i], commands[i+1]
+		if !hasCLIFlag(preview, "--force") || !strings.HasSuffix(preview, " --dry-run") {
+			t.Errorf("%s preview must include --force and end in --dry-run: %q", kind, preview)
+		}
+		if hasCLIFlag(execute, "--dry-run") {
+			t.Errorf("%s execution must not include --dry-run: %q", kind, execute)
 		}
 		if want := strings.TrimSuffix(preview, " --dry-run"); execute != want {
-			t.Errorf("JSON execution must remove only --dry-run\npreview: %q\nexecute: %q", preview, execute)
+			t.Errorf("%s execution must remove only --dry-run\npreview: %q\nexecute: %q", kind, preview, execute)
 		}
 	}
 }

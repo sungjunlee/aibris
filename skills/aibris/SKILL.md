@@ -293,7 +293,7 @@ JSON receipt의 `post_clean.snapshot_thinning_recommended`가 true이면
 별도 명령으로만 진행한다:
 
 ```bash
-aibris clean --apfs-snapshots --dry-run
+aibris clean --apfs-snapshots --force --dry-run
 aibris clean --apfs-snapshots --force
 ```
 
@@ -456,7 +456,7 @@ aibris clean --no-guide --json --include-paths --force --dry-run
 aibris clean --no-guide --json --include-paths --force
 
 # JSON receipt가 snapshot_thinning_recommended이면 별도 승인 후
-aibris clean --apfs-snapshots --dry-run
+aibris clean --apfs-snapshots --force --dry-run
 aibris clean --apfs-snapshots --force
 
 # age: guided에서는 minimum idle, classic에서는 필터
