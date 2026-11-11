@@ -2,12 +2,14 @@ package worktree
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
 
+	"github.com/sungjunlee/aibris/internal/cleaner"
 	"github.com/sungjunlee/aibris/internal/codexactivity"
 	"github.com/sungjunlee/aibris/internal/testutil"
 	"github.com/sungjunlee/aibris/internal/types"
@@ -242,6 +244,83 @@ func TestActivityStoreValidationProtectsGuidedWorktree(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestIncompleteNestedActivityCoverageProtectsReviewAndBarrier(t *testing.T) {
+	now := time.Now()
+	old := now.Add(-30 * 24 * time.Hour)
+	t.Setenv("GIT_AUTHOR_DATE", old.Format(time.RFC3339))
+	t.Setenv("GIT_COMMITTER_DATE", old.Format(time.RFC3339))
+	home, repository, target := newExecutorWorktree(t, "activity-completeness")
+	testutil.SetHome(t, home)
+	source := filepath.Join(home, ".codex")
+	t.Setenv("CODEX_HOME", source)
+	member := target
+	root := filepath.Join(source, "sessions")
+	writeCodexSession(t, filepath.Join(root, "old.jsonl"), old, member, "old", "PRIVATE-REVIEW")
+
+	item := executorWorktreeItem(target, 321)
+	item.Source = ".codex"
+	item.Project = filepath.Base(target)
+	item.ModTime = old
+	items := []types.DebrisInfo{item}
+	unit := buildExecutorUnit(t, item)
+	units := []WorktreeCleanupUnit{unit}
+	if err := EnrichActivity(context.Background(), units, items, ActivityOptions{
+		IndexOptions: codexactivity.IndexOptions{Now: now, CachePath: filepath.Join(home, "activity.json")},
+		Runner:       reflogRunner(map[string]time.Time{member: old}),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	policy := DefaultCleanupPolicy(now)
+	if locks := cleanupUnitActivityLockReasonCodes(units[0], policy); len(locks) != 0 {
+		t.Fatalf("healthy old activity locked review: %v", locks)
+	}
+	review := CaptureActivityReview(units[0], items, policy)
+
+	external := filepath.Join(home, "unresolved", "2026")
+	writeCodexSession(t, filepath.Join(external, "recent.jsonl"), now, member, "unfollowed", "PRIVATE-UNFOLLOWED")
+	if err := os.Symlink(external, filepath.Join(root, "2026")); err != nil {
+		t.Skipf("session directory symlink unavailable: %v", err)
+	}
+
+	refreshed := []WorktreeCleanupUnit{unit}
+	if err := EnrichActivity(context.Background(), refreshed, items, ActivityOptions{
+		IndexOptions: codexactivity.IndexOptions{Now: now, CachePath: filepath.Join(home, "activity.json"), RequireRefresh: true},
+		Runner:       reflogRunner(map[string]time.Time{member: old}),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	plan := PlanWorktreeCleanup(refreshed, policy)
+	if len(plan.Decisions) != 1 || plan.Decisions[0].Class != DecisionLocked || !containsReason(cleanupPolicyReasonCodes(plan.Decisions[0]), DecisionReasonActivityUnavailable) {
+		t.Fatalf("incomplete review coverage lost unavailable-activity lock: %+v", plan.Decisions)
+	}
+
+	snapshot, err := cleaner.CaptureCleanupTargetSnapshot(item, types.PruneOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutationCalls := 0
+	opts := fixtureExecutionOptions(home)
+	opts.RemoveWorktree = func(context.Context, string, string) error {
+		mutationCalls++
+		return errors.New("unexpected worktree removal")
+	}
+	opts.RemoveAll = func(string) error {
+		mutationCalls++
+		return errors.New("unexpected owner removal")
+	}
+	result, err := ExecutePreparedActiveWorktreeTarget(context.Background(), PreparedActiveWorktreeTarget{
+		Item:           item,
+		Unit:           units[0],
+		Snapshot:       snapshot,
+		ActivityReview: review,
+	}, opts)
+	if !errors.Is(err, ErrActivityEvidenceChanged) || result.MutationAttempted || mutationCalls != 0 {
+		t.Fatalf("guided activity barrier accepted incomplete coverage: result=%+v calls=%d err=%v", result, mutationCalls, err)
+	}
+	assertPathExists(t, target)
+	assertRepositoryListsWorktree(t, repository, target)
 }
 
 func assertStoreUnavailableGuidedLock(t *testing.T, home, target, member, source string, now time.Time, index codexactivity.Index) {

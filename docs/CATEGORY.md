@@ -96,6 +96,9 @@ lock, as do archive-only homes and split roots. A whole-home symlink preserves a
 roots and session CWDs resolve to the same canonical home. A Windows junction
 or other `ModeIrregular` home cannot supply negative activity evidence and
 keeps the unavailable-evidence lock.
+Nested session-file symlinks remain excluded no-follow leaves. A nested symlink
+that resolves to a directory, or whose target cannot be resolved, makes that
+source unavailable because it may hide an unwalked session subtree.
 Only Orca aggregation accepts proven absence of the unconfigured default
 `$HOME/.codex` as zero activity: `CODEX_HOME` is empty, the home is not explicitly
 listed in `AIBRIS_CODEX_HOMES`, and `Lstat` proves the home is absent or a real
