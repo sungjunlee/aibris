@@ -59,6 +59,9 @@ surface and still uses the normal preview and confirmation path before deletion.
   lines suitable for logs.
 - Print a human-readable summary, category breakdown, largest items, and next
   command suggestions after scanning.
+- On Darwin, when the home volume is tight or critical and local APFS snapshots
+  exist, include an opt-in `clean --apfs-snapshots` planning warning in `next`;
+  snapshot listing failure stays silent and scan never thins snapshots.
 - For empty scans, print an explicit zero-item summary and exit 0.
 - Support `--json` for machine-readable agent workflows.
 - Support repeated `--root` flags. Roots default to `$HOME`, may use `~`, must

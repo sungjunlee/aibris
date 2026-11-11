@@ -167,7 +167,9 @@ debris, matching `summary.physical_total_bytes`.
     "used_percent": 95.0,
     "band": "critical",
     "debris_bytes": 30000000000,
-    "other_volume_debris_bytes": 2000000000
+    "other_volume_debris_bytes": 2000000000,
+    "local_apfs_snapshots": 2,
+    "snapshot_thinning_recommended": true
   }
 }
 ```
@@ -175,6 +177,15 @@ debris, matching `summary.physical_total_bytes`.
 `id` is filesystem type plus a hashed device token. It is not a mount path and
 must not include a username. Bands are `ok` (used &lt; 85%), `low` (85–95%),
 and `critical` (≥ 95%). Volume pressure never deletes anything.
+
+On Darwin, `local_apfs_snapshots` and `snapshot_thinning_recommended: true`
+appear together only when the home-volume band is `low` or `critical` and at
+least one local APFS snapshot exists. The count means those snapshots will hold
+blocks freed by cleanup until they are thinned; the matching opt-in command is
+`aibris clean --apfs-snapshots`. The fields are omitted when the volume is not
+under pressure, no snapshots exist, snapshot listing fails, or the platform is
+not Darwin. No snapshot identifier, timestamp, mount path, or username is
+included. These fields are additive and do not change `schema_version: 1`.
 
 ## Fields
 

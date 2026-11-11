@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"syscall"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/sungjunlee/aibris/internal/scanner"
 	"github.com/sungjunlee/aibris/internal/scanreport"
 	"github.com/sungjunlee/aibris/internal/types"
+	"github.com/sungjunlee/aibris/internal/volume"
 )
 
 const scanJSONSchemaVersion = scanreport.JSONSchemaVersion
@@ -94,7 +96,9 @@ var scanCmd = &cobra.Command{
 }
 
 func printJSON(r *types.ScanResult) {
-	scanreport.WriteJSON(os.Stdout, scanreport.FromResultJSON(r))
+	view := scanreport.FromResultJSON(r)
+	addScanAPFSSnapshotWarning(&view, runtime.GOOS, listLocalAPFSSnapshots)
+	scanreport.WriteJSON(os.Stdout, view)
 }
 
 func printScanHeader(roots []string) {
@@ -112,8 +116,21 @@ func isTerminal(file *os.File) bool {
 
 func printHumanScanResult(ctx context.Context, r *types.ScanResult) {
 	view := scanreport.FromResult(r, scanreport.DefaultCleanPolicy())
+	addScanAPFSSnapshotWarning(&view, runtime.GOOS, listLocalAPFSSnapshots)
 	view.CodexActivity = codexActivityNotice(ctx, r.Worktrees)
 	scanreport.WriteHuman(os.Stdout, view)
+}
+
+func addScanAPFSSnapshotWarning(view *scanreport.View, goos string, list func() (int, error)) {
+	if view == nil || goos != "darwin" || view.Volume == nil ||
+		(view.Volume.Band != volume.BandLow && view.Volume.Band != volume.BandCritical) {
+		return
+	}
+	count, err := list()
+	if err != nil || count < 1 {
+		return
+	}
+	view.LocalAPFSSnapshots = count
 }
 
 func codexActivityNotice(ctx context.Context, items []types.DebrisInfo) *scanreport.CodexActivityNotice {
