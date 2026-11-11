@@ -45,7 +45,10 @@ type View struct {
 	StripEstimate    int64
 	PressureEstimate int64
 	Volume           *volume.Report
-	ReviewOnly       ReviewOnly
+	// LocalAPFSSnapshots is non-zero only when a pressured Darwin home volume
+	// has local snapshots that can hold blocks freed by cleanup.
+	LocalAPFSSnapshots int
+	ReviewOnly         ReviewOnly
 
 	debris []types.DebrisInfo
 }

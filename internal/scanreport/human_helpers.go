@@ -25,8 +25,21 @@ func WriteNext(w io.Writer, view View) {
 	} else {
 		writeReclaimLadder(w, view.ReclaimPaths)
 	}
+	writeAPFSSnapshotWarning(w, view.LocalAPFSSnapshots)
 	WriteReviewOnlyLine(w, view.ReviewOnly.Count, view.ReviewOnly.Size)
 	fmt.Fprintln(w, "  aibris scan --json           machine-readable inventory")
+}
+
+func writeAPFSSnapshotWarning(w io.Writer, count int) {
+	if count < 1 {
+		return
+	}
+	noun := "snapshots"
+	if count == 1 {
+		noun = "snapshot"
+	}
+	fmt.Fprintf(w, "  aibris clean --apfs-snapshots  %d local APFS %s will hold freed blocks until thinned\n",
+		count, noun)
 }
 
 // WriteReviewOnlyLine prints the next-section review-only worktree summary.

@@ -91,6 +91,10 @@ func EncodeJSON(view View) JSONOutput {
 	}
 	if view.Volume != nil {
 		out.Volume = JSONVolumeFromReport(*view.Volume)
+		if view.LocalAPFSSnapshots > 0 {
+			out.Volume.LocalAPFSSnapshots = view.LocalAPFSSnapshots
+			out.Volume.SnapshotThinningRecommended = true
+		}
 	}
 	for cat, s := range view.ByCategory {
 		out.Summary.ByCategory[string(cat)] = JSONSummaryEntry{

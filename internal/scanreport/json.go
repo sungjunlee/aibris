@@ -126,16 +126,18 @@ type JSONProtectPaths struct {
 
 // JSONVolume is the encode-only home-volume pressure object.
 type JSONVolume struct {
-	Role                   string  `json:"role"`
-	FSType                 string  `json:"fs_type"`
-	ID                     string  `json:"id"`
-	TotalBytes             uint64  `json:"total_bytes"`
-	UsedBytes              uint64  `json:"used_bytes"`
-	AvailableBytes         uint64  `json:"available_bytes"`
-	UsedPercent            float64 `json:"used_percent"`
-	Band                   string  `json:"band"`
-	DebrisBytes            int64   `json:"debris_bytes"`
-	OtherVolumeDebrisBytes int64   `json:"other_volume_debris_bytes,omitempty"`
+	Role                        string  `json:"role"`
+	FSType                      string  `json:"fs_type"`
+	ID                          string  `json:"id"`
+	TotalBytes                  uint64  `json:"total_bytes"`
+	UsedBytes                   uint64  `json:"used_bytes"`
+	AvailableBytes              uint64  `json:"available_bytes"`
+	UsedPercent                 float64 `json:"used_percent"`
+	Band                        string  `json:"band"`
+	DebrisBytes                 int64   `json:"debris_bytes"`
+	OtherVolumeDebrisBytes      int64   `json:"other_volume_debris_bytes,omitempty"`
+	LocalAPFSSnapshots          int     `json:"local_apfs_snapshots,omitempty"`
+	SnapshotThinningRecommended bool    `json:"snapshot_thinning_recommended,omitempty"`
 }
 
 // JSONOutput is the encode-only top-level scan --json document. Field names,
