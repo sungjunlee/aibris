@@ -241,6 +241,16 @@ func findSessionFiles(ctx context.Context, roots []string) ([]sessionFileInfo, e
 			if err := ctx.Err(); err != nil {
 				return err
 			}
+			if entry.Type()&os.ModeSymlink != 0 {
+				// Session-file symlinks remain no-follow leaves. A directory-like
+				// or unresolved link could hide an unwalked session subtree, so this
+				// source cannot supply complete negative activity evidence.
+				target, err := os.Stat(path)
+				if err != nil || target.IsDir() {
+					return fmt.Errorf("%w: incomplete session store coverage", ErrUnavailable)
+				}
+				return nil
+			}
 			if !entry.Type().IsRegular() || !strings.EqualFold(filepath.Ext(entry.Name()), ".jsonl") {
 				return nil
 			}

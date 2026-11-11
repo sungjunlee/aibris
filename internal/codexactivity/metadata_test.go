@@ -102,6 +102,73 @@ func TestActivitySessionSymlinksSkipped(t *testing.T) {
 	}
 }
 
+func TestActivityIncompleteNestedCoverageIsSourceScoped(t *testing.T) {
+	for _, scenario := range []string{"directory", "dangling"} {
+		t.Run(scenario, func(t *testing.T) {
+			home := t.TempDir()
+			testutil.SetHome(t, home)
+			now := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
+			old, recent := now.Add(-30*24*time.Hour), now.Add(-time.Hour)
+			incomplete := filepath.Join(home, "incomplete")
+			healthy := filepath.Join(home, "healthy")
+			incompleteRoot := filepath.Join(incomplete, "sessions")
+			healthyRoot := filepath.Join(healthy, "sessions")
+			incompleteMember := filepath.Join(incomplete, "worktrees", "id", "project")
+			healthyMember := filepath.Join(healthy, "worktrees", "id", "project")
+			writeCodexSession(t, filepath.Join(incompleteRoot, "old.jsonl"), old, incompleteMember, "old", "PRIVATE-INCOMPLETE")
+			writeCodexSession(t, filepath.Join(healthyRoot, "2026", "10", "10", "recent.jsonl"), recent, healthyMember, "recent", "PRIVATE-HEALTHY")
+
+			opts := IndexOptions{
+				Now:          now,
+				CachePath:    filepath.Join(home, "activity.json"),
+				SessionRoots: []string{incompleteRoot, healthyRoot},
+			}
+			first := LoadWithOptions(context.Background(), opts)
+			if _, available := first.LookupMember(incompleteMember); !available {
+				t.Fatal("initial incomplete-source fixture unavailable")
+			}
+
+			target := filepath.Join(home, "unresolved", "2026")
+			if scenario == "directory" {
+				writeCodexSession(t, filepath.Join(target, "recent.jsonl"), now, incompleteMember, "unfollowed", "PRIVATE-UNFOLLOWED")
+			}
+			if err := os.Symlink(target, filepath.Join(incompleteRoot, "2026")); err != nil {
+				t.Skipf("session directory symlink unavailable: %v", err)
+			}
+
+			opts.Now = now.Add(time.Minute)
+			opts.RequireRefresh = true
+			refreshed := LoadWithOptions(context.Background(), opts)
+			if refreshed.Source != SourceRefresh {
+				t.Fatalf("source = %s; want refresh", refreshed.Source)
+			}
+			if activity, available := refreshed.LookupMember(incompleteMember); available {
+				t.Fatalf("incomplete source retained cached authority: %+v", activity)
+			}
+			activity, available := refreshed.LookupMember(healthyMember)
+			if !available || activity.SessionCount != 1 || !activity.LatestSession.Equal(recent) {
+				t.Fatalf("healthy normal layout = %+v/%t; want recent source-scoped activity", activity, available)
+			}
+			if refreshed.Sources[canonicalPath(incomplete)].Available {
+				t.Fatalf("incomplete coverage remained available: %+v", refreshed.Sources)
+			}
+			if !refreshed.Sources[canonicalPath(healthy)].Available {
+				t.Fatalf("healthy coverage became unavailable: %+v", refreshed.Sources)
+			}
+
+			cached, err := os.ReadFile(opts.CachePath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, private := range []string{"PRIVATE-INCOMPLETE", "PRIVATE-HEALTHY", "PRIVATE-UNFOLLOWED"} {
+				if strings.Contains(string(cached), private) {
+					t.Fatalf("cache retained private content %q", private)
+				}
+			}
+		})
+	}
+}
+
 func TestActivityRejectsPreviousReaderSchema(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
