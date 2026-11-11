@@ -35,13 +35,14 @@ command -v aibris
 aibris --version
 ```
 
-최소 버전은 **v0.12.0**이다. 이 스킬이 쓰는 flag/field(`scan --json`,
-`clean --json`, `--include-paths`, `--strip`, `--exclude`, `--protect-path`, `--pressure`)는
+최소 버전은 **v0.12.1**이다. 이 스킬이 쓰는 flag/field(`scan --json`,
+`clean --json`, `--include-paths`, `--strip`, `--exclude`, `--protect-path`, `--pressure`,
+`exclusions`)는
 그 미만 버전의 stale binary에 없을 수 있다. 버전 게이트는 로컬 binary의
 `--version`과 필요 시 `aibris clean --help` capability probe만 사용한다.
 GitHub releases를 scrape해서 게이트하지 않는다.
 
-`aibris --version`이 v0.12.0 미만이거나 `--help`에서 이 스킬이 쓰는 flag가
+`aibris --version`이 v0.12.1 미만이거나 `--help`에서 이 스킬이 쓰는 flag가
 없으면 사용자에게 아래 documented install path로 재설치를 요청하고,
 재설치 전에는 guided cleanup을 진행하지 않는다.
 
@@ -233,6 +234,8 @@ JSON field 이름은 유지된다.
   `--exclude`, `--protect-path`, `--pressure` 같은
   적용 가능한 routing/safety flag도 동일하게 유지한다
 - 실제 실행에서는 preview 명령에서 `--dry-run`만 제거한다
+- non-interactive JSON 실행에 필요한 `--force`는 dry-run에서도 허용되므로
+  preview와 실제 실행에 모두 붙인다
 - scoped preview 뒤에 plain `aibris clean`을 실행해서는 안 된다
 - 에이전트가 로컬에서 `clean --json`을 쓰면 preview와 execute 모두
   `--include-paths`를 다른 selector와 함께 유지한다. 기본 JSON은
@@ -261,7 +264,7 @@ aibris clean --no-guide --root ~/path/to/project --category node_modules --tool 
 execute에 같이 붙인다:
 
 ```bash
-aibris clean --no-guide --json --include-paths --root ~/path/to/project --category node_modules --age 7d --dry-run
+aibris clean --no-guide --json --include-paths --force --root ~/path/to/project --category node_modules --age 7d --dry-run
 aibris clean --no-guide --json --include-paths --force --root ~/path/to/project --category node_modules --age 7d
 ```
 
@@ -290,7 +293,7 @@ JSON receipt의 `post_clean.snapshot_thinning_recommended`가 true이면
 별도 명령으로만 진행한다:
 
 ```bash
-aibris clean --apfs-snapshots --dry-run
+aibris clean --apfs-snapshots --force --dry-run
 aibris clean --apfs-snapshots --force
 ```
 
@@ -449,11 +452,11 @@ aibris clean --category worktree --tool codex --dry-run
 aibris clean --root ~/path/to/project --category node_modules --dry-run
 
 # 에이전트 JSON: 경로를 읽으려면 --include-paths. preview/execute 동일
-aibris clean --no-guide --json --include-paths --dry-run
+aibris clean --no-guide --json --include-paths --force --dry-run
 aibris clean --no-guide --json --include-paths --force
 
 # JSON receipt가 snapshot_thinning_recommended이면 별도 승인 후
-aibris clean --apfs-snapshots --dry-run
+aibris clean --apfs-snapshots --force --dry-run
 aibris clean --apfs-snapshots --force
 
 # age: guided에서는 minimum idle, classic에서는 필터
