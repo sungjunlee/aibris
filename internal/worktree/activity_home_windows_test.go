@@ -89,11 +89,8 @@ func TestWindowsNativeActivityHomeJunctionKeepsWorktreeLocked(t *testing.T) {
 					if err != nil || !ok {
 						t.Fatalf("read activity cache: ok=%t err=%v", ok, err)
 					}
-					key := canonicalHomeKey(t, cache.Sources, source)
-					coverage, found := cache.Sources[key]
-					if !found {
-						t.Fatalf("stale cache missing home %s: %+v", key, cache.Sources)
-					}
+					key := onlyHomeKey(t, cache.Sources)
+					coverage := cache.Sources[key]
 					coverage.Available, coverage.ActiveRoot = true, true
 					cache.Sources[key] = coverage
 					if err := codexactivity.Save(opts.CachePath, cache); err != nil {
@@ -101,10 +98,7 @@ func TestWindowsNativeActivityHomeJunctionKeepsWorktreeLocked(t *testing.T) {
 					}
 				}
 				index := codexactivity.LoadWithOptions(context.Background(), opts)
-				homeKey := canonicalHomeKey(t, index.Sources, source)
-				if homeKey == "" {
-					t.Fatalf("%s: home %s not queried: %+v", phase, source, index.Sources)
-				}
+				onlyHomeKey(t, index.Sources)
 				activity, available := index.LookupMember(member)
 				switch {
 				case tc.plain:
@@ -154,14 +148,15 @@ func TestWindowsNativeActivityHomeJunctionKeepsWorktreeLocked(t *testing.T) {
 	}
 }
 
-func canonicalHomeKey(t *testing.T, sources map[string]codexactivity.SourceCoverage, home string) string {
+// onlyHomeKey returns the sole queried Codex home. EvalSymlinks cannot name a
+// directory reached through an ancestor junction, which is the path under test.
+func onlyHomeKey(t *testing.T, sources map[string]codexactivity.SourceCoverage) string {
 	t.Helper()
-	resolved, err := filepath.EvalSymlinks(home)
-	if err != nil {
-		t.Fatal(err)
+	if len(sources) != 1 {
+		t.Fatalf("sources = %+v; want exactly one Codex home", sources)
 	}
-	if _, ok := sources[resolved]; ok {
-		return resolved
+	for key := range sources {
+		return key
 	}
 	return ""
 }
