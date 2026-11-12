@@ -95,7 +95,12 @@ reparse points), and all other `Lstat`/`Stat` errors keep the unavailable-eviden
 lock, as do archive-only homes and split roots. A whole-home symlink preserves activity when
 roots and session CWDs resolve to the same canonical home. A Windows junction
 or other `ModeIrregular` home cannot supply negative activity evidence and
-keeps the unavailable-evidence lock.
+keeps the unavailable-evidence lock. On Windows, a home whose final path
+(`GetFinalPathNameByHandle`) differs from its canonical path keeps that lock
+too: a junction, mount point, or subst drive in an ancestor can make session
+cwd values use the target path while the home and its stores still look
+readable. A final-path lookup failure keeps the lock. Refresh and lookup both
+check, so a cached available home cannot bypass it.
 Nested session-file symlinks remain excluded no-follow leaves. A nested symlink
 that resolves to a directory, or whose target cannot be resolved, makes that
 source unavailable because it may hide an unwalked session subtree.

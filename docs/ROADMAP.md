@@ -18,8 +18,8 @@ and [WINDOWS.md](WINDOWS.md).
 
 Next 0.x work:
 
-- Codex activity follow-up: evidence through relocated session stores, and
-  Windows junctions in a parent of the Codex home (#634).
+- Codex activity follow-up: evidence through relocated session stores (#634).
+  Deferred until there is user demand; a relocated store stays unavailable.
 - Coverage for more AI agent stores, each backed by an orphan proof or a
   rebuildable-cache contract (`docs/CATEGORY.md`).
 - Separate the owning tool from the provider in `--tool` and JSON

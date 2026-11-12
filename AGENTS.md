@@ -198,7 +198,10 @@ provider reports `codex` for every tool).
   `ModeIrregular` stores (Windows junctions, mount points, or other reparse
   points), and all other `Lstat`/`Stat` errors keep the unavailable-evidence
   lock, as do archive-only homes and split roots. A whole-home symlink
-  preserves matching activity.
+  preserves matching activity. On Windows, a home whose final path differs
+  from its canonical path stays unavailable. That includes a junction, mount
+  point, or subst drive in an ancestor, and a cached index that still marks
+  the home available.
   Only Orca aggregation accepts proven absence of unconfigured `$HOME/.codex`
   as zero activity: `CODEX_HOME` is empty, the home is not a configured extra,
   and `Lstat` proves the home absent or a real non-symlink directory with both

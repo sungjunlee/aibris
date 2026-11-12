@@ -446,7 +446,12 @@ Default guided worktree cleanup:
   whole home preserves activity when its roots and session CWDs resolve to
   that same canonical home. A Windows junction or other `ModeIrregular` home
   keeps the unavailable-evidence lock; it cannot prove no matching activity
-  from junction-target CWDs. Only Orca aggregation treats proven absence of
+  from junction-target CWDs. On Windows the same lock applies when the home's
+  final path (`GetFinalPathNameByHandle`) differs from its canonical path, so
+  a junction, mount point, or subst drive in an ancestor cannot look like a
+  readable store with no activity. A final-path lookup failure stays
+  unavailable. The check runs at refresh and again at lookup, so a cached
+  available home cannot bypass it. Only Orca aggregation treats proven absence of
   the unconfigured default `$HOME/.codex` as zero activity: `CODEX_HOME` is
   empty, the home is not explicitly listed in `AIBRIS_CODEX_HOMES`, and either
   the home is absent or it is a real non-symlink directory with both `sessions/`
