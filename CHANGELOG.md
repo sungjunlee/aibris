@@ -4,6 +4,13 @@
 
 ### Fixed
 
+- A Codex home whose Windows final path differs from its canonical path is
+  unavailable at refresh and at lookup. A junction, mount point, or subst
+  drive in an ancestor can no longer look like a readable store with no
+  activity when a session cwd uses the target path. A final-path lookup
+  failure stays unavailable. A cache that still marks the home available is
+  refused at lookup. Public JSON and the activity cache schema are unchanged
+  (#634).
 - `clean` rescans when a user ignore file or a root `.aibris-ignore` is added
   after the cached scan, so the new exclusion is honored instead of reusing
   the unfiltered inventory (#661).

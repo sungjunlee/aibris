@@ -31,6 +31,11 @@ Pull-request CI uses an amd64 `windows-latest` runner to:
 - keep a worktree locked when the Codex home itself is a junction, for session
   cwd values using either the target path or the home path
   (`TestWindowsNativeActivityHomeJunctionKeepsWorktreeLocked`);
+- keep a worktree locked when an ancestor of the Codex home is a junction and
+  a recent session cwd uses the target path, including a cache that still
+  marks the home available (same test, `ancestor junction target cwd`);
+- keep recent activity for a plain Codex home whose final path matches its
+  canonical path (same test, `plain home recent session`);
 - preserve protected junctions, their referents, and enclosing deletion owners,
   including a junction retargeted after the initial safety check; ordinary
   eligible children retain their removal policy (junction fixture creation
@@ -58,6 +63,12 @@ parent equal to the home. Dangling symlinks, non-directories, `ModeIrregular`
 stores (including Windows junctions and mount-point reparse points), and other
 `Lstat`/`Stat` errors keep `activity_evidence_unavailable`. This prevents a
 relocated store that `WalkDir` does not descend from supplying zero activity.
+A home that is itself a junction or other reparse point stays unavailable.
+On Windows, so does a home whose final path (`GetFinalPathNameByHandle`)
+differs from its canonical path: a junction, mount point, or subst drive in
+an ancestor is not `ModeIrregular` on the home, but session cwd values can
+use the target path while the stores still look readable. A final-path
+lookup failure stays unavailable. The comparison runs at refresh and lookup.
 
 Native binaries are expected to be invoked directly from PowerShell or Command
 Prompt. A Unix shell, Bash wrapper, or translated Unix path is not part of the

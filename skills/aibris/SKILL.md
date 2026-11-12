@@ -410,7 +410,11 @@ error는 `activity_evidence_unavailable` lock을 유지한다. Archive-only home
 symlink로 분리된 roots도 lock을 유지한다. Home 전체의 symlink는
 roots와 session cwd가 같은 canonical home으로 해석되면 activity를 유지한다.
 Windows junction이나 다른 `ModeIrregular` home은 negative activity evidence를
-제공할 수 없으므로 unavailable lock을 유지한다.
+제공할 수 없으므로 unavailable lock을 유지한다. Windows에서는 home의 최종 경로
+(`GetFinalPathNameByHandle`)가 canonical path와 다르면 unavailable이다. 상위
+경로의 junction, mount point, subst는 home 자체에 `ModeIrregular`가 없어도
+대상 경로 cwd를 빠뜨릴 수 있다. 최종 경로 조회 실패도 unavailable이며, 이
+비교는 refresh와 lookup에서 다시 한다.
 Orca aggregation만 미설정 기본 `$HOME/.codex`의 증명된 부재를 zero activity로
 본다. `CODEX_HOME`이 비어 있고 configured extra도 아닌 home에 대해 `Lstat`으로
 home 자체의 부재 또는 symlink가 아닌 directory 안의 두 stores 부재를 증명해야
