@@ -89,7 +89,7 @@ func TestWindowsNativeActivityHomeJunctionKeepsWorktreeLocked(t *testing.T) {
 					if err != nil || !ok {
 						t.Fatalf("read activity cache: ok=%t err=%v", ok, err)
 					}
-					key := onlyHomeKey(t, cache.Sources)
+					key := onlyHomeKey(t, cache.Sources, member)
 					coverage := cache.Sources[key]
 					coverage.Available, coverage.ActiveRoot = true, true
 					cache.Sources[key] = coverage
@@ -98,7 +98,7 @@ func TestWindowsNativeActivityHomeJunctionKeepsWorktreeLocked(t *testing.T) {
 					}
 				}
 				index := codexactivity.LoadWithOptions(context.Background(), opts)
-				onlyHomeKey(t, index.Sources)
+				onlyHomeKey(t, index.Sources, member)
 				activity, available := index.LookupMember(member)
 				switch {
 				case tc.plain:
@@ -148,15 +148,22 @@ func TestWindowsNativeActivityHomeJunctionKeepsWorktreeLocked(t *testing.T) {
 	}
 }
 
-// onlyHomeKey returns the sole queried Codex home. EvalSymlinks cannot name a
-// directory reached through an ancestor junction, which is the path under test.
-func onlyHomeKey(t *testing.T, sources map[string]codexactivity.SourceCoverage) string {
+// onlyHomeKey returns the sole queried Codex home and checks that it is the
+// home of member. EvalSymlinks cannot name a directory reached through an
+// ancestor junction, which is the path under test.
+func onlyHomeKey(t *testing.T, sources map[string]codexactivity.SourceCoverage, member string) string {
 	t.Helper()
 	if len(sources) != 1 {
 		t.Fatalf("sources = %+v; want exactly one Codex home", sources)
 	}
-	for key := range sources {
-		return key
+	var key string
+	for candidate := range sources {
+		key = candidate
+		break
 	}
-	return ""
+	id, project, ok := codexactivity.WorktreeFromCWD(member, key)
+	if !ok || id != "id" || project != "project" {
+		t.Fatalf("WorktreeFromCWD(%q, %q) = %q, %q, %t; want id, project, true", member, key, id, project, ok)
+	}
+	return key
 }
